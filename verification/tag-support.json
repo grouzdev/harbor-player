@@ -1,0 +1,53 @@
+{
+  "date": "2026-09-10T22:32:07.009Z",
+  "writerVersion": "1.0.4",
+  "platform": "win32",
+  "node": "v24.20.0",
+  "checks": [
+    "independent metadata read",
+    "unchanged native tags",
+    "encoded audio SHA256",
+    "decoded PCM SHA256 via FFmpeg",
+    "multiple values",
+    "cover add/remove",
+    "file handle release",
+    "ID3v2.3 and ID3v2.4"
+  ],
+  "formats": [
+    {
+      "format": "mp3",
+      "passed": true,
+      "bytes": 28415
+    },
+    {
+      "format": "flac",
+      "passed": true,
+      "bytes": 44682
+    },
+    {
+      "format": "m4a",
+      "passed": true,
+      "bytes": 36612
+    },
+    {
+      "format": "aac",
+      "passed": true,
+      "bytes": 31134
+    },
+    {
+      "format": "ogg",
+      "passed": true,
+      "bytes": 9075
+    },
+    {
+      "format": "opus",
+      "passed": true,
+      "bytes": 27997
+    },
+    {
+      "format": "wav",
+      "passed": true,
+      "bytes": 269024
+    }
+  ]
+}

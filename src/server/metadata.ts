@@ -1,5 +1,5 @@
 import { parseFile, type IAudioMetadata } from 'music-metadata';
-import { File, Picture, PictureType, ByteVector } from '@digimezzo/node-taglib-sharp';
+import { File, Picture, PictureType, ByteVector, StringType, TagTypes, Mpeg4AppleTag, Mpeg4BoxType, Mpeg4AppleDataBoxFlagType } from '@digimezzo/node-taglib-sharp';
 import { createHash } from 'node:crypto';
 import { stat, readFile, mkdir, writeFile, lstat } from 'node:fs/promises';
 import path from 'node:path';
@@ -29,7 +29,7 @@ export async function readTrack(file: string, libraryId: string, root: string, i
   let albumFolder = path.dirname(path.relative(root, file));
   if (/^(cd|disc|disk|диск)[\s_-]*\d+$/i.test(path.basename(albumFolder))) albumFolder = path.dirname(albumFolder);
   // Folder identity separates editions; albumArtist (not track artist) keeps compilations together.
-  const albumArtists = clean(c.albumartist ? [c.albumartist] : []);
+  const albumArtists = clean(c.albumartists || (c.albumartist ? [c.albumartist] : []));
   const albumKey = createHash('sha256').update(JSON.stringify([libraryId, albumFolder, c.album || '', albumArtists, c.musicbrainz_albumid || c.year || ''])).digest('hex');
   return {
     id, libraryId, relativePath: path.relative(root, file), title: c.title || path.basename(file, path.extname(file)),
@@ -40,7 +40,7 @@ export async function readTrack(file: string, libraryId: string, root: string, i
   };
 }
 
-const fields: Record<string, string[]> = { title: ['title'], artists: ['artist', 'artists'], albumTitle: ['album'], albumArtists: ['albumartist'], genres: ['genre'], year: ['year', 'date'], trackNumber: ['track'], discNumber: ['disk'], cover: ['picture'] };
+const fields: Record<string, string[]> = { title: ['title'], artists: ['artist', 'artists'], albumTitle: ['album'], albumArtists: ['albumartist', 'albumartists'], genres: ['genre'], year: ['year', 'date'], trackNumber: ['track'], discNumber: ['disk'], cover: ['picture'] };
 function unchangedCommon(meta: IAudioMetadata, patch: TagPatch): Record<string, unknown> {
   const result = { ...meta.common } as Record<string, unknown>;
   for (const key of Object.keys(patch)) for (const common of fields[key] || []) {
@@ -49,12 +49,17 @@ function unchangedCommon(meta: IAudioMetadata, patch: TagPatch): Record<string, 
   }
   // Tag writers may add a container encoder marker; it is not user metadata.
   delete result.encodedby; delete result.encodersettings;
+  if (!result.year) delete result.year;
+  if (Array.isArray(result.comment)) result.comment = result.comment.map((c: any) => ({ text: c.text, language: c.language && c.language !== 'XXX' ? c.language : '', descriptor: c.descriptor || '' }));
   return result;
 }
 export async function writeTags(file: string, patch: TagPatch): Promise<void> {
   const before = await parseFile(file, { duration: true }); const digest = await audioDigest(file);
   const tagged = File.createFromPath(file);
   try {
+    // RIFF tags may omit totals in the writer's common view; preserve independently parsed totals.
+    if (before.common.track.of && tagged.tag.trackCount !== before.common.track.of) tagged.tag.trackCount = before.common.track.of;
+    if (before.common.disk.of && tagged.tag.discCount !== before.common.disk.of) tagged.tag.discCount = before.common.disk.of;
     if (patch.title !== undefined) tagged.tag.title = patch.title;
     if (patch.artists !== undefined) tagged.tag.performers = patch.artists;
     if (patch.albumTitle !== undefined) tagged.tag.album = patch.albumTitle;
@@ -63,6 +68,11 @@ export async function writeTags(file: string, patch: TagPatch): Promise<void> {
     if (patch.year !== undefined) tagged.tag.year = patch.year || 0;
     if (patch.trackNumber !== undefined) tagged.tag.track = patch.trackNumber || 0;
     if (patch.discNumber !== undefined) tagged.tag.disc = patch.discNumber || 0;
+    if (path.extname(file).toLowerCase() === '.m4a') {
+      const apple = tagged.getTag(TagTypes.Apple, true) as Mpeg4AppleTag;
+      for (const [values, box] of [[patch.artists, Mpeg4BoxType.ART], [patch.albumArtists, Mpeg4BoxType.AART], [patch.genres, Mpeg4BoxType.GEN]] as const)
+        if (values !== undefined) apple.setQuickTimeData(box, values.map(s => ByteVector.fromString(s, StringType.UTF8)), Mpeg4AppleDataBoxFlagType.ContainsText);
+    }
     if (patch.cover !== undefined) {
       const other = tagged.tag.pictures.filter(p => p.type !== PictureType.FrontCover);
       tagged.tag.pictures = patch.cover === null ? [] : [...other, Picture.fromFullData(ByteVector.fromByteArray(Buffer.from(patch.cover.data, 'base64')), PictureType.FrontCover, patch.cover.mime, '')];
@@ -73,7 +83,7 @@ export async function writeTags(file: string, patch: TagPatch): Promise<void> {
   if (digest !== await audioDigest(file)) throw new Error('Запись отклонена: изменились аудиоданные');
   if (!isDeepStrictEqual(unchangedCommon(before, patch), unchangedCommon(after, patch))) throw new Error('Запись отклонена: изменились невыбранные теги');
   const c = after.common;
-  const actual: Record<string, unknown> = { title: c.title || '', artists: c.artists || (c.artist ? [c.artist] : []), albumTitle: c.album || '', albumArtists: c.albumartist ? c.albumartist.split(';').map(s => s.trim()) : [], genres: c.genre || [], year: c.year || null, trackNumber: c.track.no || null, discNumber: c.disk.no || null };
+  const actual: Record<string, unknown> = { title: c.title || '', artists: c.artists || (c.artist ? [c.artist] : []), albumTitle: c.album || '', albumArtists: c.albumartists || (c.albumartist ? [c.albumartist] : []), genres: c.genre || [], year: c.year || null, trackNumber: c.track.no || null, discNumber: c.disk.no || null };
   for (const [key, value] of Object.entries(patch)) {
     if (key === 'cover') {
       if (value === null && c.picture?.length) throw new Error('Не удалось удалить обложку');
@@ -81,7 +91,7 @@ export async function writeTags(file: string, patch: TagPatch): Promise<void> {
     } else if (!isDeepStrictEqual(actual[key], value === 0 ? null : value)) throw new Error(`Не удалось точно сохранить поле ${key}`);
   }
   // Native unknown/custom tags must survive. Ignore only frames for fields the user changed.
-  const changed = Object.keys(patch).flatMap(key => ({ title: ['TIT2', 'TITLE', '©nam', 'INAM'], artists: ['TPE1', 'ARTIST', '©ART', 'IART'], albumTitle: ['TALB', 'ALBUM', '©alb', 'IPRD'], albumArtists: ['TPE2', 'ALBUMARTIST', 'ALBUM ARTIST', 'aART'], genres: ['TCON', 'GENRE', '©gen', 'gnre', 'IGNR'], year: ['TYER', 'TDRC', 'DATE', 'YEAR', '©day', 'ICRD'], trackNumber: ['TRCK', 'TRACKNUMBER', 'TRACK', 'trkn', 'ITRK'], discNumber: ['TPOS', 'DISCNUMBER', 'DISC', 'disk'], cover: ['APIC', 'METADATA_BLOCK_PICTURE', 'covr'] } as Record<string, string[]>)[key] || []);
+  const changed = Object.keys(patch).flatMap(key => ({ title: ['TIT2', 'TITLE', '©nam', 'INAM'], artists: ['TPE1', 'ARTIST', '©ART', 'IART'], albumTitle: ['TALB', 'ALBUM', '©alb', 'IPRD'], albumArtists: ['TPE2', 'ALBUMARTIST', 'ALBUM ARTIST', 'aART'], genres: ['TCON', 'GENRE', '©gen', 'gnre', 'IGNR'], year: ['TYER', 'TDRC', 'DATE', 'YEAR', '©day', 'ICRD'], trackNumber: ['TRCK', 'TRACKNUMBER', 'TRACK', 'trkn', 'ITRK', 'IPRT'], discNumber: ['TPOS', 'DISCNUMBER', 'DISC', 'disk'], cover: ['APIC', 'METADATA_BLOCK_PICTURE', 'covr'] } as Record<string, string[]>)[key] || []);
   for (const [format, tags] of Object.entries(before.native)) {
     if (format === 'ID3v1') continue; // The rich tag is checked above; ID3v1 is intrinsically lossy.
     for (const tag of tags) {
