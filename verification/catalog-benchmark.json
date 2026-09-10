@@ -1,0 +1,19 @@
+{
+  "date": "2026-09-10T23:06:15.400Z",
+  "platform": "win32",
+  "node": "v24.20.0",
+  "syntheticCatalog": true,
+  "tracks": 100000,
+  "albums": 10000,
+  "seedMs": 3905,
+  "queryMs": {
+    "tracks": 32,
+    "albums": 85,
+    "genres": 76,
+    "queueSnapshot": 117
+  },
+  "renderedTracks": 18,
+  "renderedAlbums": 24,
+  "renderedTracksAfterScroll": 26,
+  "note": "Synthetic database benchmark; not a measurement of scanning 100000 real files."
+}

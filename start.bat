@@ -16,6 +16,8 @@ if not exist "node_modules\.bin\vite.cmd" (
   )
 )
 echo Starting MyMusicLib...
+call node scripts\open-running.mjs
+if not errorlevel 1 exit /b 0
 echo Browser: http://127.0.0.1:5173
 echo Close this window or press Ctrl+C to stop.
 call npm.cmd run dev

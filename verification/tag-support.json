@@ -1,5 +1,5 @@
 {
-  "date": "2026-09-10T22:32:07.009Z",
+  "date": "2026-09-10T23:02:25.769Z",
   "writerVersion": "1.0.4",
   "platform": "win32",
   "node": "v24.20.0",
@@ -17,37 +17,37 @@
     {
       "format": "mp3",
       "passed": true,
-      "bytes": 28415
+      "bytes": 3809266
     },
     {
       "format": "flac",
       "passed": true,
-      "bytes": 44682
+      "bytes": 3820829
     },
     {
       "format": "m4a",
       "passed": true,
-      "bytes": 36612
+      "bytes": 3817463
     },
     {
       "format": "aac",
       "passed": true,
-      "bytes": 31134
+      "bytes": 3811985
     },
     {
       "format": "ogg",
       "passed": true,
-      "bytes": 9075
+      "bytes": 9453
     },
     {
       "format": "opus",
       "passed": true,
-      "bytes": 27997
+      "bytes": 28024
     },
     {
       "format": "wav",
       "passed": true,
-      "bytes": 269024
+      "bytes": 4049876
     }
   ]
 }
