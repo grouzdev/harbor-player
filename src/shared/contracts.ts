@@ -37,6 +37,7 @@ export interface OperationItem {
   size: number; mtimeMs: number; hash: string; title: string; error?: string;
   phase: 'preview' | 'prepared' | 'copied' | 'done' | 'error' | 'interrupted';
   companion?: boolean; result?: string;
+  before?: Partial<TagPatch>;
 }
 export interface OperationPreview {
   id: string; kind: OperationKind; createdAt: string; status: 'preview' | 'running' | 'done' | 'interrupted';
@@ -47,4 +48,6 @@ export interface Job {
   completed: number; total: number; errors: string[]; createdAt: string; operationId?: string;
 }
 export interface Capabilities { writableFormats: string[]; verificationDate: string | null }
+export interface SelectionSummary { count: number; formats: string[]; fields: Record<string, { mixed: boolean; value: string | string[] | number | null }> }
+export interface OperationSummary { id: string; kind: OperationKind; createdAt: string; status: OperationPreview['status']; total: number; completed: number; errors: string[] }
 export const emptyFilter: CatalogFilter = { libraryIds: [], genres: [], albumIds: [], search: '' };

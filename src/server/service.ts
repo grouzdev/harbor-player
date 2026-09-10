@@ -133,6 +133,7 @@ export class MusicService extends EventEmitter {
       const library = this.catalog.library(track.libraryId); const source = path.join(library.path, track.relativePath);
       const destination = kind === 'move' ? path.join(target!.path, track.relativePath) : kind === 'trash' ? path.join(this.dataDir, 'recovery', op.id, track.id + path.extname(source)) : source;
       const item: OperationItem = { id: randomUUID(), trackId: track.id, title: track.title, source, destination, size: track.size, mtimeMs: track.mtimeMs, hash: '', phase: 'preview' };
+      if (kind === 'tags') item.before = Object.fromEntries(Object.keys(patch || {}).filter(k => k !== 'cover').map(k => [k, track[k as keyof Track]]));
       try {
         await this.safePath(source);
         const fingerprint = await this.fingerprint(source);

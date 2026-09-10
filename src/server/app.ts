@@ -94,6 +94,15 @@ export async function createApp(options: { dataDir: string; port?: number; dev?:
     reply.raw.on('close', () => { clearInterval(heartbeat); service.off('change', send); });
   });
   app.get('/api/jobs', async () => service.catalog.jobs());
+  app.post('/api/selection-summary', async request => {
+    const tracks = service.catalog.selected(selectionSchema.parse(request.body));
+    const fields: Record<string, { mixed: boolean; value: unknown }> = {};
+    for (const key of ['title', 'artists', 'albumTitle', 'albumArtists', 'genres', 'year', 'trackNumber', 'discNumber'] as const) {
+      const value = tracks[0]?.[key] ?? null;
+      fields[key] = { value, mixed: tracks.some(t => JSON.stringify(t[key]) !== JSON.stringify(value)) };
+    }
+    return { count: tracks.length, formats: [...new Set(tracks.map(t => t.format))], fields };
+  });
   app.get('/api/operations', async () => service.catalog.history().filter(o => o.status !== 'preview').map(o => ({ id: o.id, kind: o.kind, createdAt: o.createdAt, status: o.status, total: o.items.length, completed: o.items.filter(i => i.phase === 'done').length, errors: o.items.filter(i => i.error).map(i => `${i.title}: ${i.error}`) })));
   app.get('/api/operations/:id', async request => service.catalog.operation(idParam.parse(request.params).id));
   app.post('/api/operations/preview', async request => {
