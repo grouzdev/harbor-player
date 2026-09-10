@@ -1,0 +1,50 @@
+{
+  "name": "mymusiclib",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "scripts": {
+    "build:server": "tsc -p tsconfig.server.json",
+    "build": "npm run typecheck && npm run build:server && vite build",
+    "start": "npm run build && node dist/server/index.js",
+    "serve": "node dist/server/index.js",
+    "dev": "npm run build:server && concurrently -k \"cross-env MYMUSICLIB_DEV=1 node --watch dist/server/index.js --no-open\" \"vite --host 127.0.0.1\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json",
+    "test": "npm run build:server && vitest run",
+    "test:e2e": "npm run build && playwright test",
+    "fixtures": "node scripts/generate-fixtures.mjs",
+    "verify:tags": "npm run build:server && node scripts/verify-tags.mjs"
+  },
+  "dependencies": {
+    "@digimezzo/node-taglib-sharp": "^1.0.4",
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/static": "^10.1.3",
+    "@tanstack/react-query": "^5.102.8",
+    "@tanstack/react-virtual": "^3.14.11",
+    "better-sqlite3": "^13.0.3",
+    "fastify": "^5.12.3",
+    "lucide-react": "^1.44.0",
+    "music-metadata": "^11.15.0",
+    "open": "^11.0.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "^4.6.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^22.20.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.5",
+    "cross-env": "^10.1.0",
+    "ffmpeg-static": "^5.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.0"
+  }
+}
