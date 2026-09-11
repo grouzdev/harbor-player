@@ -20,6 +20,12 @@ const fromRow = (r: Row): Track =>
     artists: JSON.parse(r.artists),
     albumArtists: JSON.parse(r.albumArtists),
     genres: JSON.parse(r.genres),
+    missingTagFields: r.missingTagFields
+      ? JSON.parse(r.missingTagFields)
+      : undefined,
+    musicBrainzRecordingId: r.musicBrainzRecordingId || null,
+    musicBrainzReleaseId: r.musicBrainzReleaseId || null,
+    musicBrainzReleaseGroupId: r.musicBrainzReleaseGroupId || null,
     available: Boolean(r.available),
   }) as Track;
 
@@ -57,6 +63,37 @@ export class Catalog {
           "INSERT OR IGNORE INTO track_artists(trackId,artist) SELECT t.id,j.value FROM tracks t,json_each(t.artists) j",
         );
         this.db.pragma("user_version = 2");
+      })();
+    if (version < 3)
+      this.db.transaction(() => {
+        const columns = new Set(
+          (this.db.pragma("table_info(tracks)") as { name: string }[]).map(
+            (column) => column.name,
+          ),
+        );
+        if (!columns.has("missingTagFields"))
+          this.db.exec("ALTER TABLE tracks ADD COLUMN missingTagFields TEXT");
+        if (!columns.has("musicBrainzRecordingId"))
+          this.db.exec(
+            "ALTER TABLE tracks ADD COLUMN musicBrainzRecordingId TEXT",
+          );
+        if (!columns.has("musicBrainzReleaseId"))
+          this.db.exec(
+            "ALTER TABLE tracks ADD COLUMN musicBrainzReleaseId TEXT",
+          );
+        if (!columns.has("musicBrainzReleaseGroupId"))
+          this.db.exec(
+            "ALTER TABLE tracks ADD COLUMN musicBrainzReleaseGroupId TEXT",
+          );
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS http_cache (
+            key TEXT PRIMARY KEY,
+            status INTEGER NOT NULL,
+            payload TEXT NOT NULL,
+            expiresAt INTEGER NOT NULL
+          )
+        `);
+        this.db.pragma("user_version = 3");
       })();
   }
   libraries(): Library[] {
@@ -271,15 +308,19 @@ export class Catalog {
     this.db.transaction(() => {
       this.db
         .prepare(
-          `INSERT INTO tracks (id,libraryId,relativePath,title,artists,albumTitle,albumArtists,albumKey,genres,year,trackNumber,discNumber,duration,format,size,mtimeMs,coverId,available,scanId)
-        VALUES (@id,@libraryId,@relativePath,@title,@artists,@albumTitle,@albumArtists,@albumKey,@genres,@year,@trackNumber,@discNumber,@duration,@format,@size,@mtimeMs,@coverId,@available,@scanId)
-        ON CONFLICT(id) DO UPDATE SET libraryId=excluded.libraryId, relativePath=excluded.relativePath, title=excluded.title,artists=excluded.artists,albumTitle=excluded.albumTitle,albumArtists=excluded.albumArtists,albumKey=excluded.albumKey,genres=excluded.genres,year=excluded.year,trackNumber=excluded.trackNumber,discNumber=excluded.discNumber,duration=excluded.duration,format=excluded.format,size=excluded.size,mtimeMs=excluded.mtimeMs,coverId=excluded.coverId,available=excluded.available,scanId=excluded.scanId`,
+          `INSERT INTO tracks (id,libraryId,relativePath,title,artists,albumTitle,albumArtists,albumKey,genres,year,trackNumber,discNumber,duration,format,size,mtimeMs,coverId,available,scanId,missingTagFields,musicBrainzRecordingId,musicBrainzReleaseId,musicBrainzReleaseGroupId)
+        VALUES (@id,@libraryId,@relativePath,@title,@artists,@albumTitle,@albumArtists,@albumKey,@genres,@year,@trackNumber,@discNumber,@duration,@format,@size,@mtimeMs,@coverId,@available,@scanId,@missingTagFields,@musicBrainzRecordingId,@musicBrainzReleaseId,@musicBrainzReleaseGroupId)
+        ON CONFLICT(id) DO UPDATE SET libraryId=excluded.libraryId, relativePath=excluded.relativePath, title=excluded.title,artists=excluded.artists,albumTitle=excluded.albumTitle,albumArtists=excluded.albumArtists,albumKey=excluded.albumKey,genres=excluded.genres,year=excluded.year,trackNumber=excluded.trackNumber,discNumber=excluded.discNumber,duration=excluded.duration,format=excluded.format,size=excluded.size,mtimeMs=excluded.mtimeMs,coverId=excluded.coverId,available=excluded.available,scanId=excluded.scanId,missingTagFields=excluded.missingTagFields,musicBrainzRecordingId=excluded.musicBrainzRecordingId,musicBrainzReleaseId=excluded.musicBrainzReleaseId,musicBrainzReleaseGroupId=excluded.musicBrainzReleaseGroupId`,
         )
         .run({
           ...track,
           artists: JSON.stringify(track.artists),
           albumArtists: JSON.stringify(track.albumArtists),
           genres: JSON.stringify(track.genres),
+          missingTagFields: JSON.stringify(track.missingTagFields || []),
+          musicBrainzRecordingId: track.musicBrainzRecordingId || null,
+          musicBrainzReleaseId: track.musicBrainzReleaseId || null,
+          musicBrainzReleaseGroupId: track.musicBrainzReleaseGroupId || null,
           available: Number(track.available),
           scanId,
         });

@@ -27,6 +27,10 @@ export interface Track {
   size: number;
   mtimeMs: number;
   coverId: string | null;
+  missingTagFields?: TagField[];
+  musicBrainzRecordingId?: string | null;
+  musicBrainzReleaseId?: string | null;
+  musicBrainzReleaseGroupId?: string | null;
   available: boolean;
 }
 export interface Album {
@@ -70,6 +74,9 @@ export const tagPatchSchema = z
   })
   .strict();
 export type TagPatch = z.infer<typeof tagPatchSchema>;
+export type TagField = keyof TagPatch;
+export const perTrackTagPatchSchema = tagPatchSchema.omit({ cover: true });
+export type PerTrackTagPatch = z.infer<typeof perTrackTagPatchSchema>;
 export const selectionSchema = z.union([
   z.object({ trackIds: z.array(z.string()).min(1).max(100000) }).strict(),
   z
@@ -95,6 +102,7 @@ export interface OperationItem {
   companion?: boolean;
   result?: string;
   before?: Partial<TagPatch>;
+  patch?: PerTrackTagPatch;
 }
 export interface OperationPreview {
   id: string;
@@ -103,6 +111,7 @@ export interface OperationPreview {
   status: "preview" | "running" | "done" | "interrupted";
   items: OperationItem[];
   patch?: TagPatch;
+  coverTrackIds?: string[];
   targetLibraryId?: string;
   restoreOf?: string;
 }
@@ -131,6 +140,51 @@ export interface SelectionSummary {
     string,
     { mixed: boolean; value: string | string[] | number | null }
   >;
+  musicBrainz: MusicBrainzSearchContext;
+}
+
+export interface MusicBrainzSearchContext {
+  supported: boolean;
+  mode: "track" | "album" | null;
+  title: string;
+  artist: string;
+  reason?: string;
+}
+export interface MusicBrainzCandidate {
+  id: string;
+  releaseId: string;
+  recordingId?: string;
+  title: string;
+  artists: string[];
+  date: string | null;
+  country: string | null;
+  status: string | null;
+  formats: string[];
+  discCount: number;
+  trackCount: number;
+  score: number;
+  hasCover: boolean;
+  thumbnailUrl?: string;
+}
+export interface MetadataProposalItem {
+  trackId: string;
+  title: string;
+  patch?: PerTrackTagPatch;
+  missingFields: TagField[];
+  changedFields: TagField[];
+  match: "position" | "title-duration" | "order" | "recording" | "none";
+  warning?: string;
+}
+export interface MetadataProposal {
+  releaseId: string;
+  recordingId?: string;
+  releaseTitle: string;
+  items: MetadataProposalItem[];
+  cover?: {
+    id: string;
+    source: "release" | "release-group";
+    warning?: string;
+  };
 }
 export interface OperationSummary {
   id: string;

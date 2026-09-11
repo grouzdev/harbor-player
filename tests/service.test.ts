@@ -238,6 +238,40 @@ describe("catalog and safe filesystem operations", () => {
     ).toBeUndefined();
     expect(await readFile(file)).toEqual(bytes);
   });
+  it("applies a different safe tag patch to every selected track", async () => {
+    const lib = await library("Per track", "flac");
+    await copyFile(
+      path.join(fixtures, "sample.flac"),
+      path.join(lib.path, "Album", "second.flac"),
+    );
+    await service.scan(lib.id, true);
+    await service.idle();
+    const selected = tracks();
+    const patches = Object.fromEntries(
+      selected.map((track, index) => [
+        track.id,
+        { title: `MusicBrainz ${index + 1}`, trackNumber: index + 1 },
+      ]),
+    );
+    const op = await service.preview(
+      "tags",
+      { trackIds: selected.map((track) => track.id) },
+      undefined,
+      undefined,
+      false,
+      patches,
+    );
+    service.execute(op.id);
+    await service.idle();
+    expect(
+      service.catalog
+        .tracks(emptyFilter)
+        .items.map((track) => [track.title, track.trackNumber]),
+    ).toEqual([
+      ["MusicBrainz 1", 1],
+      ["MusicBrainz 2", 2],
+    ]);
+  });
   it("serializes a tag batch in isolated processes and preserves every audio stream", async () => {
     const lib = await library("Music", "mp3");
     const folder = path.join(lib.path, "Album");

@@ -60,6 +60,17 @@ export async function readTrack(
       if (e.code !== "EEXIST") throw e;
     });
   }
+  const missingTagFields: NonNullable<Track["missingTagFields"]> = [];
+  if (!c.title) missingTagFields.push("title");
+  if (!(c.artists?.length || c.artist)) missingTagFields.push("artists");
+  if (!c.album) missingTagFields.push("albumTitle");
+  if (!(c.albumartists?.length || c.albumartist))
+    missingTagFields.push("albumArtists");
+  if (!c.genre?.length) missingTagFields.push("genres");
+  if (!c.year) missingTagFields.push("year");
+  if (!c.track.no) missingTagFields.push("trackNumber");
+  if (!c.disk.no) missingTagFields.push("discNumber");
+  if (!coverId) missingTagFields.push("cover");
   let albumFolder = path.dirname(path.relative(root, file));
   if (/^(cd|disc|disk|диск)[\s_-]*\d+$/i.test(path.basename(albumFolder)))
     albumFolder = path.dirname(albumFolder);
@@ -96,6 +107,10 @@ export async function readTrack(
     size: info.size,
     mtimeMs: info.mtimeMs,
     coverId,
+    missingTagFields,
+    musicBrainzRecordingId: c.musicbrainz_recordingid || null,
+    musicBrainzReleaseId: c.musicbrainz_albumid || null,
+    musicBrainzReleaseGroupId: c.musicbrainz_releasegroupid || null,
     available: true,
   };
 }

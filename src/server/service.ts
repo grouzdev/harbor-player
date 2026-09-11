@@ -21,6 +21,7 @@ import { acquireInstanceLock } from "./instance-lock.js";
 import { writeTagsIsolated } from "./isolated-tag-writer.js";
 import { audioExtensions, errorMessage, inside } from "./config.js";
 import { readTrack } from "./metadata.js";
+import { MusicBrainzService, type MusicBrainzOptions } from "./musicbrainz.js";
 import type {
   Capabilities,
   Job,
@@ -29,6 +30,7 @@ import type {
   OperationPreview,
   Selection,
   TagPatch,
+  PerTrackTagPatch,
   Track,
 } from "../shared/contracts.js";
 
@@ -59,18 +61,27 @@ const flushFile = async (file: string) => {
 export class MusicService extends EventEmitter {
   readonly catalog: Catalog;
   readonly workers: Workers;
+  readonly musicBrainz: MusicBrainzService;
   private readonly unlock: () => void;
   private pending = Promise.resolve();
   private active = new Set<string>();
   private stopping = false;
   capabilities: Capabilities = { writableFormats: [], verificationDate: null };
   closeStreams: (trackIds: string[]) => Promise<void> = async () => {};
-  constructor(readonly dataDir: string) {
+  constructor(
+    readonly dataDir: string,
+    musicBrainzOptions: MusicBrainzOptions = {},
+  ) {
     super();
     this.unlock = acquireInstanceLock(dataDir);
     try {
       this.catalog = new Catalog(dataDir);
       this.workers = new Workers(2);
+      this.musicBrainz = new MusicBrainzService(
+        this.catalog,
+        dataDir,
+        musicBrainzOptions,
+      );
     } catch (e) {
       this.unlock();
       throw e;
@@ -212,17 +223,24 @@ export class MusicService extends EventEmitter {
           const relative = path.relative(library.path, file);
           const old = this.catalog.db
             .prepare(
-              "SELECT id,size,mtimeMs FROM tracks WHERE libraryId=? AND relativePath=?",
+              "SELECT id,size,mtimeMs,missingTagFields FROM tracks WHERE libraryId=? AND relativePath=?",
             )
             .get(libraryId, relative) as
-            { id: string; size: number; mtimeMs: number } | undefined;
+            | {
+                id: string;
+                size: number;
+                mtimeMs: number;
+                missingTagFields: string | null;
+              }
+            | undefined;
           try {
             const info = await stat(file);
             if (
               !force &&
               old &&
               old.size === info.size &&
-              old.mtimeMs === info.mtimeMs
+              old.mtimeMs === info.mtimeMs &&
+              old.missingTagFields !== null
             )
               this.catalog.db
                 .prepare("UPDATE tracks SET scanId=?,available=1 WHERE id=?")
@@ -350,6 +368,8 @@ export class MusicService extends EventEmitter {
     targetLibraryId?: string,
     patch?: TagPatch,
     companions = false,
+    itemPatches: Record<string, PerTrackTagPatch> = {},
+    coverTrackIds?: string[],
   ): Promise<OperationPreview> {
     const tracks = this.catalog.selected(selection);
     if (!tracks.length) throw new Error("Выберите треки");
@@ -358,8 +378,20 @@ export class MusicService extends EventEmitter {
       : undefined;
     if (kind === "move" && !target)
       throw new Error("Выберите целевую библиотеку");
-    if (kind === "tags" && (!patch || !Object.keys(patch).length))
+    if (
+      kind === "tags" &&
+      (!patch || !Object.keys(patch).length) &&
+      !Object.values(itemPatches).some(
+        (itemPatch) => Object.keys(itemPatch).length,
+      )
+    )
       throw new Error("Нет изменений тегов");
+    const selectedIds = new Set(tracks.map((track) => track.id));
+    if (
+      Object.keys(itemPatches).some((id) => !selectedIds.has(id)) ||
+      coverTrackIds?.some((id) => !selectedIds.has(id))
+    )
+      throw new Error("Изменения содержат трек вне текущего выбора");
     const op: OperationPreview = {
       id: randomUUID(),
       kind,
@@ -368,6 +400,7 @@ export class MusicService extends EventEmitter {
       items: [],
       targetLibraryId,
       patch,
+      coverTrackIds,
     };
     await mkdir(path.join(this.dataDir, "recovery", op.id), {
       recursive: true,
@@ -396,13 +429,22 @@ export class MusicService extends EventEmitter {
         mtimeMs: track.mtimeMs,
         hash: "",
         phase: "preview",
+        patch: itemPatches[track.id],
       };
-      if (kind === "tags")
+      const effectivePatch =
+        kind === "tags" ? this.effectiveTagPatch(op, item) : undefined;
+      if (
+        kind === "tags" &&
+        effectivePatch &&
+        Object.keys(effectivePatch).length
+      )
         item.before = Object.fromEntries(
-          Object.keys(patch || {})
+          Object.keys(effectivePatch)
             .filter((k) => k !== "cover")
             .map((k) => [k, track[k as keyof Track]]),
         );
+      else if (kind === "tags")
+        item.error = "Для трека нет выбранных изменений";
       try {
         await this.safePath(source);
         const fingerprint = await this.fingerprint(source, "source");
@@ -548,7 +590,7 @@ export class MusicService extends EventEmitter {
       throw new Error(
         "Повторный просмотр доступен только для завершённой операции тегов",
       );
-    if (!original.patch)
+    if (!original.patch && !original.items.some((item) => item.patch))
       throw new Error("В исходной операции отсутствуют данные тегов");
     const trackIds = [
       ...new Set(
@@ -558,7 +600,23 @@ export class MusicService extends EventEmitter {
       ),
     ];
     if (!trackIds.length) throw new Error("Нет незавершённых файлов");
-    return this.preview("tags", { trackIds }, undefined, original.patch);
+    const itemPatches = Object.fromEntries(
+      original.items
+        .filter(
+          (item) =>
+            item.trackId && item.patch && trackIds.includes(item.trackId),
+        )
+        .map((item) => [item.trackId!, item.patch!]),
+    );
+    return this.preview(
+      "tags",
+      { trackIds },
+      undefined,
+      original.patch,
+      false,
+      itemPatches,
+      original.coverTrackIds?.filter((trackId) => trackIds.includes(trackId)),
+    );
   }
   async retry(id: string) {
     const original = this.catalog.operation(id);
@@ -721,7 +779,8 @@ export class MusicService extends EventEmitter {
       }
       await copyFile(item.source, stage, constants.COPYFILE_EXCL);
       try {
-        if (op.kind === "tags") await writeTagsIsolated(stage, op.patch!);
+        if (op.kind === "tags")
+          await writeTagsIsolated(stage, this.effectiveTagPatch(op, item));
         item.producedHash = (await this.fingerprint(stage, "stage")).hash;
         if (op.kind === "tags") await this.assertOriginal(item);
         else if (
@@ -766,6 +825,19 @@ export class MusicService extends EventEmitter {
       await unlink(item.source);
     }
     await this.reindexItem(op, item);
+  }
+  private effectiveTagPatch(
+    op: OperationPreview,
+    item: OperationItem,
+  ): TagPatch {
+    const patch: TagPatch = { ...(item.patch || {}), ...(op.patch || {}) };
+    if (
+      patch.cover !== undefined &&
+      op.coverTrackIds &&
+      (!item.trackId || !op.coverTrackIds.includes(item.trackId))
+    )
+      delete patch.cover;
+    return patch;
   }
   private async reindexItem(op: OperationPreview, item: OperationItem) {
     if (!item.trackId) return;

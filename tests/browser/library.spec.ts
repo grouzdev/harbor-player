@@ -213,6 +213,22 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(page.getByRole("dialog")).toContainText(
     `Выбрано треков: ${albumTrackCount}`,
   );
+  await expect(
+    page.getByRole("dialog").getByText("MusicBrainz", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "Найти" }).click();
+  const candidate = page
+    .getByRole("dialog")
+    .getByRole("listitem")
+    .filter({ hasText: "Тестовый альбом MusicBrainz" });
+  await expect(candidate).toBeVisible();
+  await candidate.click();
+  await expect(page.getByRole("dialog")).toContainText(
+    `Сопоставлено: ${albumTrackCount} из ${albumTrackCount}`,
+  );
+  await expect(
+    page.getByRole("dialog").getByLabel("заменить заполненные").first(),
+  ).toBeVisible();
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Закрыть" })

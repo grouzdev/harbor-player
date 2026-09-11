@@ -3,19 +3,21 @@ import cookie from "@fastify/cookie";
 import staticFiles from "@fastify/static";
 import { randomBytes, randomUUID } from "node:crypto";
 import { createReadStream, existsSync, type ReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import {
   emptyFilter,
   filterSchema,
+  perTrackTagPatchSchema,
   selectionSchema,
   tagPatchSchema,
 } from "../shared/contracts.js";
 import { MusicService } from "./service.js";
 import { errorMessage } from "./config.js";
 import { openInExplorer, type ExplorerLauncher } from "./explorer.js";
+import type { MusicBrainzOptions } from "./musicbrainz.js";
 
 const pageSchema = z.object({
   offset: z.coerce.number().int().min(0).max(100000).default(0),
@@ -53,13 +55,14 @@ export async function createApp(options: {
   dev?: boolean;
   logger?: boolean;
   openExplorer?: ExplorerLauncher;
+  musicBrainz?: MusicBrainzOptions;
 }) {
   const app = Fastify({
     logger: options.logger || false,
     bodyLimit: 16 * 1024 * 1024,
     requestTimeout: 120000,
   });
-  const service = new MusicService(options.dataDir);
+  const service = new MusicService(options.dataDir, options.musicBrainz);
   const openExplorer = options.openExplorer || openInExplorer;
   await service.initialize();
   const port = options.port || 4317;
@@ -324,9 +327,8 @@ export async function createApp(options: {
   });
   app.get("/api/jobs", async () => service.catalog.jobs());
   app.post("/api/selection-summary", async (request) => {
-    const tracks = service.catalog.selected(
-      selectionSchema.parse(request.body),
-    );
+    const selection = selectionSchema.parse(request.body);
+    const tracks = service.catalog.selected(selection);
     const fields: Record<string, { mixed: boolean; value: unknown }> = {};
     for (const key of [
       "title",
@@ -350,7 +352,46 @@ export async function createApp(options: {
       count: tracks.length,
       formats: [...new Set(tracks.map((t) => t.format))],
       fields,
+      musicBrainz: service.musicBrainz.context(selection),
     };
+  });
+  app.post("/api/metadata/musicbrainz/search", async (request) => {
+    const body = z
+      .object({
+        selection: selectionSchema,
+        title: z.string().max(1000),
+        artist: z.string().max(1000).default(""),
+      })
+      .strict()
+      .parse(request.body);
+    return service.musicBrainz.search(body.selection, {
+      title: body.title,
+      artist: body.artist,
+    });
+  });
+  app.post("/api/metadata/musicbrainz/proposal", async (request) => {
+    const body = z
+      .object({
+        selection: selectionSchema,
+        releaseId: z.string().uuid(),
+        recordingId: z.string().uuid().optional(),
+      })
+      .strict()
+      .parse(request.body);
+    return service.musicBrainz.proposal(
+      body.selection,
+      body.releaseId,
+      body.recordingId,
+    );
+  });
+  app.get("/api/metadata/musicbrainz/thumbnail/:id", async (request, reply) => {
+    const id = z.object({ id: z.string().uuid() }).parse(request.params).id;
+    const image = await service.musicBrainz.thumbnail(id);
+    if (!image) return reply.code(404).send();
+    return reply
+      .header("Cache-Control", "private, max-age=86400")
+      .type(image.mime)
+      .send(image.data);
   });
   app.get("/api/operations", async () =>
     service.catalog
@@ -378,9 +419,31 @@ export async function createApp(options: {
         selection: selectionSchema,
         targetLibraryId: z.string().optional(),
         patch: tagPatchSchema.optional(),
+        itemPatches: z
+          .record(z.string().min(1).max(100), perTrackTagPatchSchema)
+          .optional(),
+        coverId: z
+          .string()
+          .regex(/^[a-f0-9]{64}\.(jpg|png)$/)
+          .optional(),
+        coverTrackIds: z.array(z.string()).max(100000).optional(),
         companions: z.boolean().default(false),
       })
       .parse(request.body);
+    if (body.patch?.cover && body.coverId)
+      throw new Error("Выберите только один источник обложки");
+    if (body.coverId) {
+      const file = path.join(service.dataDir, "covers", body.coverId);
+      if (!existsSync(file)) throw new Error("Обложка больше недоступна");
+      const data = await readFile(file);
+      body.patch = {
+        ...(body.patch || {}),
+        cover: {
+          data: data.toString("base64"),
+          mime: body.coverId.endsWith(".png") ? "image/png" : "image/jpeg",
+        },
+      };
+    }
     if (body.patch?.cover) {
       const b = Buffer.from(body.patch.cover.data, "base64");
       const png = b
@@ -400,6 +463,8 @@ export async function createApp(options: {
       body.targetLibraryId,
       body.patch,
       body.companions,
+      body.itemPatches,
+      body.coverId ? body.coverTrackIds : undefined,
     );
   });
   app.post("/api/operations/:id/execute", async (request) =>

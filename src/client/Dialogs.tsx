@@ -7,6 +7,8 @@ import {
   FolderInput,
   History,
   ImagePlus,
+  LoaderCircle,
+  Search,
   RotateCcw,
   TriangleAlert,
 } from "lucide-react";
@@ -16,8 +18,12 @@ import type {
   OperationPreview,
   OperationRetryResult,
   OperationSummary,
+  MetadataProposal,
+  MusicBrainzCandidate,
+  PerTrackTagPatch,
   Selection,
   SelectionSummary,
+  TagField,
   TagPatch,
 } from "../shared/contracts";
 import { api, count, fieldLabels, operationLabels } from "./api";
@@ -126,8 +132,21 @@ export function ActionDialog({
   const [coverName, setCoverName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [musicBrainzTitle, setMusicBrainzTitle] = useState("");
+  const [musicBrainzArtist, setMusicBrainzArtist] = useState("");
+  const [musicBrainzCandidates, setMusicBrainzCandidates] = useState<
+    MusicBrainzCandidate[] | null
+  >(null);
+  const [musicBrainzProposal, setMusicBrainzProposal] =
+    useState<MetadataProposal | null>(null);
+  const [musicBrainzBusy, setMusicBrainzBusy] = useState(false);
+  const [musicBrainzError, setMusicBrainzError] = useState("");
+  const [proposalFields, setProposalFields] = useState<Set<TagField>>(
+    new Set(),
+  );
+  const [replaceFields, setReplaceFields] = useState<Set<TagField>>(new Set());
   useEffect(() => {
-    if (summary.data)
+    if (summary.data) {
       setValues(
         Object.fromEntries(
           Object.entries(summary.data.fields).map(([key, f]) => [
@@ -140,6 +159,9 @@ export function ActionDialog({
           ]),
         ),
       );
+      setMusicBrainzTitle(summary.data.musicBrainz.title);
+      setMusicBrainzArtist(summary.data.musicBrainz.artist);
+    }
   }, [summary.data]);
   const edit = (key: string, value: string) => {
     setValues((v) => ({ ...v, [key]: value }));
@@ -166,12 +188,45 @@ export function ActionDialog({
               : null
             : values[key];
       if (cover !== undefined) patch.cover = cover;
+      const itemPatches: Record<string, PerTrackTagPatch> = {};
+      if (musicBrainzProposal)
+        for (const item of musicBrainzProposal.items) {
+          if (!item.patch) continue;
+          const proposed: Record<string, unknown> = {};
+          for (const field of proposalFields) {
+            if (field === "cover" || touched.has(field)) continue;
+            if (item.missingFields.includes(field) || replaceFields.has(field))
+              proposed[field] = item.patch[field as keyof PerTrackTagPatch];
+          }
+          if (Object.keys(proposed).length)
+            itemPatches[item.trackId] = proposed as PerTrackTagPatch;
+        }
+      const remoteCover =
+        cover === undefined &&
+        proposalFields.has("cover") &&
+        musicBrainzProposal?.cover;
+      const coverTrackIds = remoteCover
+        ? musicBrainzProposal.items
+            .filter(
+              (item) =>
+                item.patch &&
+                (item.missingFields.includes("cover") ||
+                  replaceFields.has("cover")),
+            )
+            .map((item) => item.trackId)
+        : undefined;
       const preview = await api<OperationPreview>("/operations/preview", {
         kind,
         selection,
         targetLibraryId: kind === "move" ? target : undefined,
         companions,
         patch: kind === "tags" ? patch : undefined,
+        itemPatches:
+          kind === "tags" && Object.keys(itemPatches).length
+            ? itemPatches
+            : undefined,
+        coverId: kind === "tags" && remoteCover ? remoteCover.id : undefined,
+        coverTrackIds: kind === "tags" ? coverTrackIds : undefined,
       });
       onPreview(preview);
     } catch (e) {
@@ -180,6 +235,20 @@ export function ActionDialog({
       setBusy(false);
     }
   };
+  const selectedProposalCount = musicBrainzProposal
+    ? musicBrainzProposal.items.reduce(
+        (count, item) =>
+          count +
+          [...proposalFields].filter(
+            (field) =>
+              (field === "cover"
+                ? !!musicBrainzProposal.cover && !!item.patch
+                : !!item.patch?.[field as keyof PerTrackTagPatch]) &&
+              (item.missingFields.includes(field) || replaceFields.has(field)),
+          ).length,
+        0,
+      )
+    : 0;
   return (
     <Modal
       title={
@@ -203,6 +272,267 @@ export function ActionDialog({
             Применяются только отмеченные поля. Несколько исполнителей и жанров
             разделяйте точкой с запятой.
           </p>
+          <section className="musicbrainz-panel">
+            <div className="musicbrainz-heading">
+              <div>
+                <Search size={18} />
+                <strong>MusicBrainz</strong>
+              </div>
+              <span className="muted">Метаданные и Cover Art Archive</span>
+            </div>
+            {summary.data?.musicBrainz.supported ? (
+              <>
+                <div className="musicbrainz-query">
+                  <label>
+                    {summary.data.musicBrainz.mode === "album"
+                      ? "Альбом"
+                      : "Трек"}
+                    <input
+                      aria-label="Название для поиска MusicBrainz"
+                      value={musicBrainzTitle}
+                      onChange={(event) =>
+                        setMusicBrainzTitle(event.target.value)
+                      }
+                    />
+                  </label>
+                  <label>
+                    Исполнитель
+                    <input
+                      aria-label="Исполнитель для поиска MusicBrainz"
+                      value={musicBrainzArtist}
+                      onChange={(event) =>
+                        setMusicBrainzArtist(event.target.value)
+                      }
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="button secondary"
+                    disabled={musicBrainzBusy || !musicBrainzTitle.trim()}
+                    onClick={async () => {
+                      setMusicBrainzBusy(true);
+                      setMusicBrainzError("");
+                      setMusicBrainzCandidates(null);
+                      setMusicBrainzProposal(null);
+                      setProposalFields(new Set());
+                      setReplaceFields(new Set());
+                      try {
+                        const result = await api<{
+                          candidates: MusicBrainzCandidate[];
+                        }>("/metadata/musicbrainz/search", {
+                          selection,
+                          title: musicBrainzTitle,
+                          artist: musicBrainzArtist,
+                        });
+                        setMusicBrainzCandidates(result.candidates);
+                      } catch (e) {
+                        setMusicBrainzError((e as Error).message);
+                      } finally {
+                        setMusicBrainzBusy(false);
+                      }
+                    }}
+                  >
+                    {musicBrainzBusy ? (
+                      <LoaderCircle className="spin" size={16} />
+                    ) : (
+                      <Search size={16} />
+                    )}
+                    {musicBrainzBusy ? "Ищем…" : "Найти"}
+                  </button>
+                </div>
+                {musicBrainzCandidates?.length === 0 && (
+                  <p className="hint">Подходящих вариантов не найдено.</p>
+                )}
+                {!!musicBrainzCandidates?.length && !musicBrainzProposal && (
+                  <div className="musicbrainz-results" role="list">
+                    {musicBrainzCandidates.map((candidate) => (
+                      <button
+                        type="button"
+                        className="musicbrainz-candidate"
+                        role="listitem"
+                        key={candidate.id}
+                        disabled={musicBrainzBusy}
+                        onClick={async () => {
+                          setMusicBrainzBusy(true);
+                          setMusicBrainzError("");
+                          try {
+                            const proposal = await api<MetadataProposal>(
+                              "/metadata/musicbrainz/proposal",
+                              {
+                                selection,
+                                releaseId: candidate.releaseId,
+                                recordingId: candidate.recordingId,
+                              },
+                            );
+                            const defaults = new Set<TagField>();
+                            for (const item of proposal.items) {
+                              if (!item.patch) continue;
+                              for (const field of item.missingFields)
+                                if (
+                                  field === "cover"
+                                    ? proposal.cover
+                                    : item.patch?.[
+                                        field as keyof PerTrackTagPatch
+                                      ] !== undefined
+                                )
+                                  defaults.add(field);
+                            }
+                            setProposalFields(defaults);
+                            setReplaceFields(new Set());
+                            setMusicBrainzProposal(proposal);
+                          } catch (e) {
+                            setMusicBrainzError((e as Error).message);
+                          } finally {
+                            setMusicBrainzBusy(false);
+                          }
+                        }}
+                      >
+                        {candidate.thumbnailUrl ? (
+                          <img
+                            src={candidate.thumbnailUrl}
+                            alt=""
+                            loading="lazy"
+                          />
+                        ) : (
+                          <span className="musicbrainz-no-cover">
+                            Нет обложки
+                          </span>
+                        )}
+                        <span className="musicbrainz-candidate-copy">
+                          <strong>{candidate.title}</strong>
+                          <span>
+                            {candidate.artists.join("; ") ||
+                              "Исполнитель не указан"}
+                          </span>
+                          <small>
+                            {[
+                              candidate.date,
+                              candidate.country,
+                              candidate.formats.join(", "),
+                              candidate.status,
+                              candidate.trackCount
+                                ? `${candidate.trackCount} тр.`
+                                : null,
+                              `${candidate.score}%`,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </small>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {musicBrainzProposal && (
+                  <div className="musicbrainz-proposal">
+                    <div className="musicbrainz-selected">
+                      {musicBrainzProposal.cover && (
+                        <img
+                          src={`/api/covers/${musicBrainzProposal.cover.id}`}
+                          alt="Предложенная обложка"
+                        />
+                      )}
+                      <div>
+                        <strong>{musicBrainzProposal.releaseTitle}</strong>
+                        <span>
+                          Сопоставлено:{" "}
+                          {
+                            musicBrainzProposal.items.filter(
+                              (item) => item.patch,
+                            ).length
+                          }{" "}
+                          из {musicBrainzProposal.items.length}
+                        </span>
+                        {musicBrainzProposal.cover?.warning && (
+                          <small>{musicBrainzProposal.cover.warning}</small>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => setMusicBrainzProposal(null)}
+                      >
+                        Другой вариант
+                      </button>
+                    </div>
+                    <div className="musicbrainz-fields">
+                      {(Object.keys(fieldLabels) as TagField[]).map((field) => {
+                        const available =
+                          field === "cover"
+                            ? !!musicBrainzProposal.cover
+                            : musicBrainzProposal.items.some(
+                                (item) =>
+                                  item.patch?.[
+                                    field as keyof PerTrackTagPatch
+                                  ] !== undefined,
+                              );
+                        if (!available) return null;
+                        const selected = proposalFields.has(field);
+                        return (
+                          <div className="musicbrainz-field" key={field}>
+                            <label>
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={(event) =>
+                                  setProposalFields((fields) => {
+                                    const next = new Set(fields);
+                                    event.target.checked
+                                      ? next.add(field)
+                                      : next.delete(field);
+                                    return next;
+                                  })
+                                }
+                              />
+                              {fieldLabels[field]}
+                            </label>
+                            <label className="replace-existing">
+                              <input
+                                type="checkbox"
+                                disabled={!selected}
+                                checked={replaceFields.has(field)}
+                                onChange={(event) =>
+                                  setReplaceFields((fields) => {
+                                    const next = new Set(fields);
+                                    event.target.checked
+                                      ? next.add(field)
+                                      : next.delete(field);
+                                    return next;
+                                  })
+                                }
+                              />
+                              заменить заполненные
+                            </label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {musicBrainzProposal.items.some((item) => item.warning) && (
+                      <details className="musicbrainz-warnings">
+                        <summary>Проблемы сопоставления</summary>
+                        {musicBrainzProposal.items
+                          .filter((item) => item.warning)
+                          .map((item) => (
+                            <p key={item.trackId}>
+                              {item.title}: {item.warning}
+                            </p>
+                          ))}
+                      </details>
+                    )}
+                  </div>
+                )}
+              </>
+            ) : (
+              summary.data && (
+                <p className="hint">{summary.data.musicBrainz.reason}</p>
+              )
+            )}
+            {musicBrainzError && (
+              <p className="error-text" role="alert">
+                {musicBrainzError}
+              </p>
+            )}
+          </section>
           {!!unsupported.length && (
             <p className="error-text">
               Запись {unsupported.join(", ").toUpperCase()} не прошла проверку
@@ -355,7 +685,10 @@ export function ActionDialog({
           disabled={
             busy ||
             !summary.data ||
-            (kind === "tags" && !touched.size && cover === undefined)
+            (kind === "tags" &&
+              !touched.size &&
+              cover === undefined &&
+              !selectedProposalCount)
           }
           onClick={submit}
         >
@@ -432,16 +765,18 @@ export function PreviewDialog({
                 )}
                 {preview.kind === "tags" && (
                   <div className="tag-diff">
-                    {Object.entries(preview.patch || {}).map(([key, value]) => (
-                      <span key={key}>
-                        <b>{fieldLabels[key]}:</b>{" "}
-                        {key === "cover"
-                          ? value === null
-                            ? "удалить"
-                            : "новая обложка"
-                          : `${display(item.before?.[key as keyof TagPatch])} → ${display(value)}`}
-                      </span>
-                    ))}
+                    {Object.entries(effectivePreviewPatch(preview, item)).map(
+                      ([key, value]) => (
+                        <span key={key}>
+                          <b>{fieldLabels[key]}:</b>{" "}
+                          {key === "cover"
+                            ? value === null
+                              ? "удалить"
+                              : "новая обложка"
+                            : `${display(item.before?.[key as keyof TagPatch])} → ${display(value)}`}
+                        </span>
+                      ),
+                    )}
                   </div>
                 )}
                 {item.error && <p className="error-text">{item.error}</p>}
@@ -488,6 +823,20 @@ function display(value: unknown) {
     : value === null || value === undefined || value === ""
       ? "∅"
       : String(value);
+}
+
+function effectivePreviewPatch(
+  preview: OperationPreview,
+  item: OperationPreview["items"][number],
+): TagPatch {
+  const patch: TagPatch = { ...(item.patch || {}), ...(preview.patch || {}) };
+  if (
+    patch.cover !== undefined &&
+    preview.coverTrackIds &&
+    (!item.trackId || !preview.coverTrackIds.includes(item.trackId))
+  )
+    delete patch.cover;
+  return patch;
 }
 
 export function HistoryDialog({
