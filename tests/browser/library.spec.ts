@@ -175,8 +175,27 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(
     page.getByRole("menuitem", { name: "Открыть в проводнике" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Редактировать теги" }),
+  ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).not.toBeVisible();
+  await firstAlbum.dispatchEvent("contextmenu", { clientX: 300, clientY: 300 });
+  await page.getByRole("menuitem", { name: "Редактировать теги" }).click();
+  await expect(page.getByRole("dialog")).toContainText("Редактировать теги");
+  const albumTrackCount = Number(
+    (await firstAlbum.locator(".album-track-count").textContent())?.match(
+      /\d+/,
+    )?.[0],
+  );
+  await expect(page.getByRole("dialog")).toContainText(
+    `Выбрано треков: ${albumTrackCount}`,
+  );
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Закрыть" })
+    .click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
   await firstAlbum.dispatchEvent("contextmenu", { clientX: 300, clientY: 300 });
   await page.getByRole("menuitem", { name: "Открыть в проводнике" }).click();
   await expect(page.getByRole("menu")).not.toBeVisible();

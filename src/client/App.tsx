@@ -83,6 +83,7 @@ export function App() {
   const [modal, setModal] = useState<
     "add" | "move" | "trash" | "tags" | "history" | null
   >(null);
+  const [modalSelection, setModalSelection] = useState<Selection | null>(null);
   const [preview, setPreview] = useState<OperationPreview | null>(null);
   const [toast, setToast] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -94,6 +95,20 @@ export function App() {
         x: event.clientX,
         y: event.clientY,
         items: [
+          ...(kind === "album"
+            ? [
+                {
+                  label: "Редактировать теги",
+                  icon: <Tag size={16} />,
+                  onSelect: () => {
+                    setModalSelection({
+                      filter: { ...emptyFilter, albumIds: [id] },
+                    });
+                    setModal("tags");
+                  },
+                },
+              ]
+            : []),
           {
             label: "Открыть в проводнике",
             icon: <FolderOpen size={16} />,
@@ -341,6 +356,7 @@ export function App() {
     jobs.data?.filter((j) => ["queued", "running"].includes(j.status)) || [];
   const showPreview = (p: OperationPreview) => {
     setModal(null);
+    setModalSelection(null);
     setPreview(p);
   };
   const resize = (index: number, e: React.PointerEvent<HTMLDivElement>) => {
@@ -731,7 +747,10 @@ export function App() {
                 aria-label="Редактировать теги"
                 title="Редактировать теги"
                 disabled={!selectionCount}
-                onClick={() => setModal("tags")}
+                onClick={() => {
+                  setModalSelection(null);
+                  setModal("tags");
+                }}
               >
                 <Tag size={16} />
               </button>
@@ -740,7 +759,10 @@ export function App() {
                 aria-label="Перенести треки"
                 title="Перенести в библиотеку"
                 disabled={!selectionCount}
-                onClick={() => setModal("move")}
+                onClick={() => {
+                  setModalSelection(null);
+                  setModal("move");
+                }}
               >
                 <FolderInput size={17} />
               </button>
@@ -749,7 +771,10 @@ export function App() {
                 aria-label="Удалить треки"
                 title="Удалить с возможностью восстановления"
                 disabled={!selectionCount}
-                onClick={() => setModal("trash")}
+                onClick={() => {
+                  setModalSelection(null);
+                  setModal("trash");
+                }}
               >
                 <Trash2 size={16} />
               </button>
@@ -859,10 +884,13 @@ export function App() {
       {modal && ["move", "trash", "tags"].includes(modal) && (
         <ActionDialog
           kind={modal as "move" | "trash" | "tags"}
-          selection={selection}
+          selection={modalSelection || selection}
           libraries={libraries.data || []}
           capabilities={capabilities}
-          onClose={() => setModal(null)}
+          onClose={() => {
+            setModal(null);
+            setModalSelection(null);
+          }}
           onPreview={showPreview}
         />
       )}
