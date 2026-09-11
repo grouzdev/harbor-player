@@ -117,6 +117,9 @@ export interface Job {
   createdAt: string;
   operationId?: string;
 }
+export type OperationRetryResult =
+  | { action: "resume"; job: Job }
+  | { action: "preview"; preview: OperationPreview };
 export interface Capabilities {
   writableFormats: string[];
   verificationDate: string | null;

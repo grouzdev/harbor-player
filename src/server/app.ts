@@ -404,6 +404,9 @@ export async function createApp(options: {
   app.post("/api/operations/:id/execute", async (request) =>
     service.execute(idParam.parse(request.params).id),
   );
+  app.post("/api/operations/:id/retry", async (request) =>
+    service.retry(idParam.parse(request.params).id),
+  );
   app.post("/api/operations/:id/restore", async (request) =>
     service.previewRestore(idParam.parse(request.params).id),
   );

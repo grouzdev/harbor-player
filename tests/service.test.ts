@@ -8,6 +8,7 @@ import {
   rename,
   rm,
   stat,
+  utimes,
 } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -236,6 +237,120 @@ describe("catalog and safe filesystem operations", () => {
       service.catalog.operation(restore.id).items[0].error,
     ).toBeUndefined();
     expect(await readFile(file)).toEqual(bytes);
+  });
+  it("serializes a tag batch in isolated processes and preserves every audio stream", async () => {
+    const lib = await library("Music", "mp3");
+    const folder = path.join(lib.path, "Album");
+    for (let index = 1; index < 10; index++)
+      await copyFile(
+        path.join(fixtures, "sample.mp3"),
+        path.join(folder, `track-${index}.mp3`),
+      );
+    service.scan(lib.id);
+    await service.idle();
+    const selected = tracks().filter((track) => track.libraryId === lib.id);
+    const audio = new Map(
+      await Promise.all(
+        selected.map(
+          async (track) =>
+            [
+              track.id,
+              await audioDigest(path.join(lib.path, track.relativePath)),
+            ] as const,
+        ),
+      ),
+    );
+    const op = await service.preview(
+      "tags",
+      { trackIds: selected.map((t) => t.id) },
+      undefined,
+      {
+        genres: ["Isolated batch"],
+      },
+    );
+    service.execute(op.id);
+    await service.idle();
+    expect(
+      service.catalog
+        .operation(op.id)
+        .items.every((item) => item.phase === "done"),
+    ).toBe(true);
+    for (const track of selected)
+      expect(await audioDigest(path.join(lib.path, track.relativePath))).toBe(
+        audio.get(track.id),
+      );
+  });
+  it("resumes copied tag replacements by reindexing without writing the file again", async () => {
+    const lib = await library("Music", "mp3");
+    const track = tracks()[0];
+    const file = path.join(lib.path, track.relativePath);
+    const audio = await audioDigest(file);
+    const op = await service.preview(
+      "tags",
+      { trackIds: [track.id] },
+      undefined,
+      { genres: ["Reconciled"] },
+    );
+    const upsert = service.catalog.upsert.bind(service.catalog);
+    service.catalog.upsert = (() => {
+      throw new Error("test catalog failure");
+    }) as typeof service.catalog.upsert;
+    service.execute(op.id);
+    await service.idle();
+    const interrupted = service.catalog.operation(op.id);
+    expect(interrupted.items[0].phase).toBe("copied");
+    expect(interrupted.items[0].error).toContain("Теги записаны");
+    const bytesAfterWrite = await readFile(file);
+    service.catalog.upsert = upsert;
+
+    const retry = await service.retry(op.id);
+    expect(retry.action).toBe("resume");
+    await service.idle();
+    const completed = service.catalog.operation(op.id);
+    expect(completed.items[0].phase).toBe("done");
+    expect(completed.items[0].error).toBeUndefined();
+    expect(await readFile(file)).toEqual(bytesAfterWrite);
+    expect(await audioDigest(file)).toBe(audio);
+    expect(service.catalog.track(track.id)?.genres).toEqual(["Reconciled"]);
+  });
+  it("accepts a timestamp-only source change and creates a fresh retry preview", async () => {
+    const lib = await library("Music");
+    const track = tracks()[0];
+    const file = path.join(lib.path, track.relativePath);
+    const original = await readFile(file);
+    const timestampOnly = await service.preview(
+      "tags",
+      { trackIds: [track.id] },
+      undefined,
+      { title: "По времени" },
+    );
+    const info = await stat(file);
+    await utimes(file, new Date(info.atimeMs), new Date(info.mtimeMs + 60_000));
+    service.execute(timestampOnly.id);
+    await service.idle();
+    expect(service.catalog.operation(timestampOnly.id).items[0].phase).toBe(
+      "done",
+    );
+
+    const stale = await service.preview(
+      "tags",
+      { trackIds: [track.id] },
+      undefined,
+      { title: "Повтор" },
+    );
+    await writeFile(file, "external edit");
+    service.execute(stale.id);
+    await service.idle();
+    expect(service.catalog.operation(stale.id).items[0].error).toContain(
+      "изменился",
+    );
+    await writeFile(file, original);
+    const retry = await service.previewRetry(stale.id);
+    expect(retry.id).not.toBe(stale.id);
+    expect(retry.items[0].error).toBeUndefined();
+    service.execute(retry.id);
+    await service.idle();
+    expect(service.catalog.operation(retry.id).items[0].phase).toBe("done");
   });
   it("blocks unverified formats and preserves source after invalid tag write", async () => {
     const lib = await library("Music");

@@ -1,7 +1,7 @@
 import { parentPort } from "node:worker_threads";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { readTrack, writeTags } from "./metadata.js";
+import { readTrack } from "./metadata.js";
 import { errorMessage } from "./config.js";
 
 parentPort!.on("message", async ({ id, task, args }) => {
@@ -15,7 +15,6 @@ parentPort!.on("message", async ({ id, task, args }) => {
         args.id,
         args.dataDir,
       );
-    else if (task === "tags") result = await writeTags(args.file, args.patch);
     else if (task === "hash") {
       const hash = createHash("sha256");
       for await (const chunk of createReadStream(args.file)) hash.update(chunk);

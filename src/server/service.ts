@@ -18,7 +18,9 @@ import path from "node:path";
 import { Catalog } from "./database.js";
 import { Workers } from "./workers.js";
 import { acquireInstanceLock } from "./instance-lock.js";
+import { writeTagsIsolated } from "./isolated-tag-writer.js";
 import { audioExtensions, errorMessage, inside } from "./config.js";
+import { readTrack } from "./metadata.js";
 import type {
   Capabilities,
   Job,
@@ -311,13 +313,36 @@ export class MusicService extends EventEmitter {
       }
     }
   }
-  async fingerprint(file: string) {
-    const before = await stat(file);
-    const hash = await this.workers.run<string>("hash", { file });
-    const after = await stat(file);
-    if (before.size !== after.size || before.mtimeMs !== after.mtimeMs)
-      throw new Error("Файл изменился при проверке");
-    return { size: after.size, mtimeMs: after.mtimeMs, hash };
+  async fingerprint(
+    file: string,
+    purpose: "source" | "stage" | "other" = "other",
+  ) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const before = await stat(file);
+      const hash = await this.workers.run<string>("hash", { file });
+      const after = await stat(file);
+      if (before.size === after.size && before.mtimeMs === after.mtimeMs)
+        return { size: after.size, mtimeMs: after.mtimeMs, hash };
+      // A timestamp-only touch is not a content conflict. Confirm the bytes once more.
+      if (purpose === "source" && before.size === after.size) {
+        const confirmed = await this.workers.run<string>("hash", { file });
+        const settled = await stat(file);
+        if (settled.size === after.size && confirmed === hash)
+          return {
+            size: settled.size,
+            mtimeMs: settled.mtimeMs,
+            hash: confirmed,
+          };
+      }
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 30));
+    }
+    if (purpose === "stage")
+      throw new Error("Временный файл записи нестабилен; исходник сохранён");
+    if (purpose === "source")
+      throw new Error(
+        "Исходный файл изменяется при проверке; повторите операцию",
+      );
+    throw new Error("Файл изменился при проверке");
   }
   async preview(
     kind: Exclude<OperationKind, "restore">,
@@ -380,11 +405,8 @@ export class MusicService extends EventEmitter {
         );
       try {
         await this.safePath(source);
-        const fingerprint = await this.fingerprint(source);
-        if (
-          fingerprint.size !== track.size ||
-          fingerprint.mtimeMs !== track.mtimeMs
-        )
+        const fingerprint = await this.fingerprint(source, "source");
+        if (fingerprint.size !== track.size)
           throw new Error("Файл изменился извне. Сначала обновите библиотеку.");
         Object.assign(item, fingerprint);
         if (
@@ -520,6 +542,38 @@ export class MusicService extends EventEmitter {
     this.catalog.saveOperation(op);
     return op;
   }
+  async previewRetry(id: string): Promise<OperationPreview> {
+    const original = this.catalog.operation(id);
+    if (original.kind !== "tags" || original.status === "running")
+      throw new Error(
+        "Повторный просмотр доступен только для завершённой операции тегов",
+      );
+    if (!original.patch)
+      throw new Error("В исходной операции отсутствуют данные тегов");
+    const trackIds = [
+      ...new Set(
+        original.items
+          .filter((item) => item.phase !== "done" && item.trackId)
+          .map((item) => item.trackId!),
+      ),
+    ];
+    if (!trackIds.length) throw new Error("Нет незавершённых файлов");
+    return this.preview("tags", { trackIds }, undefined, original.patch);
+  }
+  async retry(id: string) {
+    const original = this.catalog.operation(id);
+    if (original.kind === "tags" && original.status !== "running") {
+      // `copied` means the atomic replacement already happened. Resume only the
+      // catalog reconciliation; creating another preview would write tags twice.
+      if (original.items.some((item) => item.phase === "copied"))
+        return { action: "resume" as const, job: this.execute(id) };
+      return {
+        action: "preview" as const,
+        preview: await this.previewRetry(id),
+      };
+    }
+    return { action: "resume" as const, job: this.execute(id) };
+  }
   execute(id: string): Job {
     const op = this.catalog.operation(id);
     if (this.active.has(id) || op.status === "running")
@@ -582,12 +636,8 @@ export class MusicService extends EventEmitter {
     );
   }
   private async assertOriginal(item: JournalItem) {
-    const actual = await this.fingerprint(item.source);
-    if (
-      actual.hash !== item.hash ||
-      actual.size !== item.size ||
-      actual.mtimeMs !== item.mtimeMs
-    )
+    const actual = await this.fingerprint(item.source, "source");
+    if (actual.hash !== item.hash || actual.size !== item.size)
       throw new Error(
         "Исходный файл изменился после предварительного просмотра",
       );
@@ -671,9 +721,8 @@ export class MusicService extends EventEmitter {
       }
       await copyFile(item.source, stage, constants.COPYFILE_EXCL);
       try {
-        if (op.kind === "tags")
-          await this.workers.run("tags", { file: stage, patch: op.patch });
-        item.producedHash = (await this.fingerprint(stage)).hash;
+        if (op.kind === "tags") await writeTagsIsolated(stage, op.patch!);
+        item.producedHash = (await this.fingerprint(stage, "stage")).hash;
         if (op.kind === "tags") await this.assertOriginal(item);
         else if (
           (await this.fingerprint(item.destination)).hash !==
@@ -730,14 +779,28 @@ export class MusicService extends EventEmitter {
       const lib = this.catalog.library(
         op.kind === "move" ? op.targetLibraryId! : old.libraryId,
       );
-      const track = await this.workers.run<Track>("read", {
-        file: item.destination,
-        libraryId: lib.id,
-        root: lib.path,
-        id: old.id,
-        dataDir: this.dataDir,
-      });
-      this.catalog.upsert(track);
+      try {
+        // This final, serialized read must not depend on the worker result
+        // channel: a completed replacement is recoverable by reindexing only.
+        const track = await readTrack(
+          item.destination,
+          lib.id,
+          lib.path,
+          old.id,
+          this.dataDir,
+        );
+        if (!track) throw new Error("Обработчик не вернул данные трека");
+        this.catalog.upsert(track);
+      } catch (error) {
+        const restoringTags =
+          op.kind === "restore" &&
+          this.catalog.operation(op.restoreOf!).kind === "tags";
+        if (op.kind === "tags" || restoringTags)
+          throw new Error(
+            `Теги записаны, но каталог не обновлён; повторите завершение операции (${errorMessage(error)})`,
+          );
+        throw error;
+      }
     }
   }
   async idle() {

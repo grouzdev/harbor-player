@@ -14,6 +14,7 @@ import type {
   Capabilities,
   Library,
   OperationPreview,
+  OperationRetryResult,
   OperationSummary,
   Selection,
   SelectionSummary,
@@ -585,8 +586,18 @@ export function HistoryDialog({
                   onClick={async () => {
                     setBusy(op.id);
                     try {
-                      await api(`/operations/${op.id}/execute`, {});
-                      await history.refetch();
+                      if (op.kind === "tags") {
+                        const retry = await api<OperationRetryResult>(
+                          `/operations/${op.id}/retry`,
+                          {},
+                        );
+                        if (retry.action === "preview")
+                          onPreview(retry.preview);
+                        else await history.refetch();
+                      } else {
+                        await api(`/operations/${op.id}/execute`, {});
+                        await history.refetch();
+                      }
                     } catch (e) {
                       setError((e as Error).message);
                     } finally {
