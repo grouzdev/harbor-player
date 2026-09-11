@@ -54,7 +54,7 @@ export function duration(seconds: number) {
 export const count = (n: number) => n.toLocaleString("ru-RU");
 export const fieldLabels: Record<string, string> = {
   title: "Название",
-  artists: "Исполнители",
+  artists: "Артисты",
   albumTitle: "Альбом",
   albumArtists: "Исполнители альбома",
   genres: "Жанры",

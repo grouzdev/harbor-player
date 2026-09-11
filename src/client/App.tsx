@@ -22,7 +22,6 @@ import {
   FolderOpen,
   FolderInput,
   History,
-  LibraryBig,
   ListMusic,
   Music2,
   Plus,
@@ -126,21 +125,23 @@ export function App() {
     [notify],
   );
   const player = usePlayer(notify);
-  const [widths, setWidths] = useState<number[]>(() => {
+  const workspaceRef = useRef<HTMLElement>(null);
+  const [panelWeights, setPanelWeights] = useState<number[]>(() => {
     try {
-      const w = JSON.parse(
-        localStorage.getItem("mml-widths-v2") || "[200,160,170,500]",
+      const weights = JSON.parse(
+        localStorage.getItem("mml-panel-weights-v1") ||
+          "[1.05,0.9,1,1.45,1.6]",
       );
-      return Array.isArray(w) &&
-        w.length === 4 &&
-        w.every(
+      return Array.isArray(weights) &&
+        weights.length === 5 &&
+        weights.every(
           (n: unknown) =>
-            typeof n === "number" && Number.isFinite(n) && n >= 150 && n <= 600,
+            typeof n === "number" && Number.isFinite(n) && n > 0,
         )
-        ? w
-        : [200, 160, 170, 500];
+        ? weights
+        : [1.05, 0.9, 1, 1.45, 1.6];
     } catch {
-      return [200, 160, 170, 500];
+      return [1.05, 0.9, 1, 1.45, 1.6];
     }
   });
   const pendingRefresh = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -361,27 +362,34 @@ export function App() {
   };
   const resize = (index: number, e: React.PointerEvent<HTMLDivElement>) => {
     const start = e.clientX;
-    const initial = widths[index];
+    const initial = panelWeights;
     e.currentTarget.setPointerCapture(e.pointerId);
-    const move = (event: PointerEvent) =>
-      setWidths((current) =>
-        current.map((n, i) =>
-          i === index
-            ? Math.max(
-                index === 3 ? 400 : 150,
-                Math.min(
-                  index === 3 ? 750 : 320,
-                  initial + event.clientX - start,
-                ),
-              )
-            : n,
-        ),
+    const move = (event: PointerEvent) => {
+      const available = Math.max(
+        1,
+        (workspaceRef.current?.getBoundingClientRect().width || 1) - 16,
       );
+      const total = initial.reduce((sum, weight) => sum + weight, 0);
+      const pairWeight = initial[index] + initial[index + 1];
+      const pairPixels = (pairWeight / total) * available;
+      const leftPixels = Math.max(
+        110,
+        Math.min(pairPixels - 110, (initial[index] / total) * available + event.clientX - start),
+      );
+      setPanelWeights(
+        initial.map((weight, currentIndex) => {
+          if (currentIndex === index) return (leftPixels / available) * total;
+          if (currentIndex === index + 1)
+            return ((pairPixels - leftPixels) / available) * total;
+          return weight;
+        }),
+      );
+    };
     const stop = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
-      setWidths((current) => {
-        localStorage.setItem("mml-widths-v2", JSON.stringify(current));
+      setPanelWeights((current) => {
+        localStorage.setItem("mml-panel-weights-v1", JSON.stringify(current));
         return current;
       });
     };
@@ -427,7 +435,7 @@ export function App() {
           <Search size={18} />
           <input
             aria-label="Поиск музыки"
-            placeholder="Треки, исполнители, альбомы"
+            placeholder="Треки, артисты, альбомы"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -455,30 +463,24 @@ export function App() {
         </div>
       </header>
       <main
+        ref={workspaceRef}
         className="workspace"
         style={
           {
-            "--library-width": `${widths[0]}px`,
-            "--genre-width": `${widths[1]}px`,
-            "--artist-width": `${widths[2]}px`,
-            "--album-width": `${widths[3]}px`,
+            "--library-weight": `${panelWeights[0]}fr`,
+            "--genre-weight": `${panelWeights[1]}fr`,
+            "--artist-weight": `${panelWeights[2]}fr`,
+            "--album-weight": `${panelWeights[3]}fr`,
+            "--track-weight": `${panelWeights[4]}fr`,
           } as CSSProperties
         }
       >
         <aside className="panel libraries-panel">
           <div className="panel-heading">
             <h2>Библиотеки</h2>
-            <button
-              className="icon-button"
-              aria-label="Добавить библиотеку"
-              title="Добавить библиотеку"
-              onClick={() => setModal("add")}
-            >
-              <Plus size={17} />
-            </button>
           </div>
           <button
-            className={`library-row all-libraries ${filter.libraryIds.length === 0 ? "selected" : ""}`}
+            className={`list-all-action ${filter.libraryIds.length === 0 ? "selected" : ""}`}
             onClick={() =>
               setFilter((f) => ({
                 ...f,
@@ -489,15 +491,8 @@ export function App() {
               }))
             }
           >
-            <LibraryBig size={19} />
             <span>Вся музыка</span>
-            <small>
-              {count(
-                libraries.data?.reduce((n, l) => n + l.trackCount, 0) || 0,
-              )}
-            </small>
           </button>
-          <div className="section-label">ПОДКЛЮЧЁННЫЕ ПАПКИ</div>
           <div className="library-list">
             {libraries.data?.map((library) => (
               <div key={library.id} className="library-container">
@@ -539,9 +534,9 @@ export function App() {
             <Plus size={16} />
             Подключить папку
           </button>
-          <div className="sidebar-bottom">
-            {activeJobs.length ? (
-              activeJobs.slice(0, 3).map((job) => (
+          {activeJobs.length > 0 && (
+            <div className="sidebar-bottom">
+              {activeJobs.slice(0, 3).map((job) => (
                 <div className="scan-status" key={job.id}>
                   <RefreshCw size={14} className="spinning" />
                   <div>
@@ -553,21 +548,9 @@ export function App() {
                     </small>
                   </div>
                 </div>
-              ))
-            ) : (
-              <>
-                <span className="offline-label">
-                  <span />
-                  Всё хранится у вас
-                </span>
-                <p>
-                  Музыка и теги остаются
-                  <br />
-                  на вашем компьютере.
-                </p>
-              </>
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </aside>
         <div
           className="resizer"
@@ -581,7 +564,7 @@ export function App() {
             <span className="panel-count">{genres.data?.length || 0}</span>
           </div>
           <button
-            className={`genre-row ${!filter.genres.length ? "selected" : ""}`}
+            className={`list-all-action ${!filter.genres.length ? "selected" : ""}`}
             onClick={() =>
               setFilter((f) => ({
                 ...f,
@@ -601,20 +584,33 @@ export function App() {
                 <div
                   key={g.name}
                   className={`genre-row facet-row ${checked ? "selected" : ""}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={(event) => chooseGenre(g.name, event.ctrlKey)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      chooseGenre(g.name, event.ctrlKey);
+                    }
+                  }}
                 >
-                  <label className="facet-checkbox-zone">
+                  <div className="facet-checkbox-zone">
                     <input
                       className="facet-checkbox"
                       type="checkbox"
                       aria-label={`Выбрать жанр: ${label}`}
                       checked={checked}
+                      onClick={(event) => event.stopPropagation()}
                       onChange={() => chooseGenre(g.name, true)}
                     />
-                  </label>
+                  </div>
                   <button
                     className="facet-main"
                     aria-pressed={checked}
-                    onClick={(event) => chooseGenre(g.name, event.ctrlKey)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      chooseGenre(g.name, event.ctrlKey);
+                    }}
                   >
                     <span>{label}</span>
                     <small>{count(g.count)}</small>
@@ -632,18 +628,18 @@ export function App() {
         />
         <section className="panel artists-panel">
           <div className="panel-heading">
-            <h2>Исполнители</h2>
+            <h2>Артисты</h2>
             <span className="panel-count">
               {count(artists.data?.pages[0]?.total || 0)}
             </span>
           </div>
           <button
-            className={`genre-row ${!filter.artists.length ? "selected" : ""}`}
+            className={`list-all-action ${!filter.artists.length ? "selected" : ""}`}
             onClick={() =>
               setFilter((f) => ({ ...f, artists: [], albumIds: [] }))
             }
           >
-            Все исполнители
+            Все артисты
           </button>
           <ArtistList
             items={artistItems}
@@ -675,12 +671,10 @@ export function App() {
             <span className="panel-count">{count(albumTotal)}</span>
           </div>
           <button
-            className={`all-albums ${!filter.albumIds.length ? "selected" : ""}`}
+            className={`list-all-action ${!filter.albumIds.length ? "selected" : ""}`}
             onClick={() => setFilter((f) => ({ ...f, albumIds: [] }))}
           >
-            <Disc3 size={16} />
             <span>Все альбомы</span>
-            {!filter.albumIds.length && <Check size={14} />}
           </button>
           <AlbumGrid
             albums={albumItems}
@@ -698,6 +692,7 @@ export function App() {
             }}
             loading={albums.isFetching}
             onContextMenu={showExplorerMenu}
+            onPlay={(id) => void player.startAlbum(id)}
           />
         </section>
         <div
@@ -724,23 +719,18 @@ export function App() {
             </button>
           </div>
           <div className="track-toolbar">
-            <label className="select-all">
-              <input
-                type="checkbox"
-                aria-label="Выбрать все треки"
-                checked={allSelected && !selected.size && total > 0}
-                disabled={!total}
-                onChange={(e) => {
-                  setAllSelected(e.target.checked);
-                  setSelected(new Set());
-                }}
-              />
-              <span>
-                {selectionCount
-                  ? `${count(selectionCount)} выбрано`
-                  : "Выбрать все"}
-              </span>
-            </label>
+            <button
+              className={`list-all-action ${allSelected && !selected.size ? "selected" : ""}`}
+              aria-label="Выбрать все треки"
+              aria-pressed={allSelected && !selected.size}
+              disabled={!total}
+              onClick={() => {
+                setAllSelected((current) => !current);
+                setSelected(new Set());
+              }}
+            >
+              Выбрать все
+            </button>
             <div className="toolbar-actions">
               <button
                 className="icon-button"
@@ -954,6 +944,15 @@ function ArtistList({
               key={item.name}
               className={`genre-row facet-row artist-row ${checked ? "selected" : ""}`}
               title={label}
+              role="button"
+              tabIndex={0}
+              onClick={(event) => onSelect(item.name, event.ctrlKey)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelect(item.name, event.ctrlKey);
+                }
+              }}
               style={{
                 position: "absolute",
                 top: 0,
@@ -961,19 +960,23 @@ function ArtistList({
                 height: 44,
               }}
             >
-              <label className="facet-checkbox-zone">
+              <div className="facet-checkbox-zone">
                 <input
                   className="facet-checkbox"
                   type="checkbox"
                   aria-label={`Выбрать исполнителя: ${label}`}
                   checked={checked}
+                  onClick={(event) => event.stopPropagation()}
                   onChange={() => onSelect(item.name, true)}
                 />
-              </label>
+              </div>
               <button
                 className="facet-main"
                 aria-pressed={checked}
-                onClick={(event) => onSelect(item.name, event.ctrlKey)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSelect(item.name, event.ctrlKey);
+                }}
               >
                 <span>{label}</span>
                 <small>{count(item.count)}</small>
@@ -994,6 +997,7 @@ function AlbumGrid({
   onMore,
   loading,
   onContextMenu,
+  onPlay,
 }: {
   albums: Album[];
   total: number;
@@ -1006,6 +1010,7 @@ function AlbumGrid({
     kind: "album" | "track",
     id: string,
   ) => void;
+  onPlay: (id: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(330);
@@ -1071,6 +1076,10 @@ function AlbumGrid({
                     >
                       <div
                         className="album-cover"
+                        onDoubleClick={(event) => {
+                          event.stopPropagation();
+                          onPlay(album.id);
+                        }}
                         style={
                           {
                             "--cover-hue":
@@ -1098,6 +1107,7 @@ function AlbumGrid({
                       <small>
                         {album.artists.join(", ") || "Неизвестный исполнитель"}
                       </small>
+                      {album.year && <small className="album-year">{album.year}</small>}
                     </button>
                     <label className="album-selection">
                       <input
@@ -1223,11 +1233,6 @@ function TrackList({
                   <small>
                     {track.albumArtists.join(", ") || "Неизвестный исполнитель"}
                     {track.year ? ` · ${track.year}` : ""}
-                  </small>
-                  <small className="album-formats">
-                    {(track.albumFormats || [track.format])
-                      .join(" · ")
-                      .toUpperCase()}
                   </small>
                 </div>
                 <ChevronRight size={15} />

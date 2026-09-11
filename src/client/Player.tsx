@@ -88,6 +88,18 @@ export function usePlayer(notify: (message: string) => void) {
       notify((e as Error).message);
     }
   };
+  const startAlbum = async (albumId: string) => {
+    const sequence = ++transition.current;
+    try {
+      const q = await api<Queue>("/queue", { albumId });
+      if (sequence !== transition.current) return;
+      shouldPlay.current = true;
+      seekAfterLoad.current = 0;
+      setQueue(q);
+    } catch (e) {
+      notify((e as Error).message);
+    }
+  };
   const step = async (direction: number, ended = false) => {
     if (!queue) return;
     if (direction < 0 && position > 3) {
@@ -246,6 +258,7 @@ export function usePlayer(notify: (message: string) => void) {
     audioElement,
     events,
     start,
+    startAlbum,
     toggle,
     step,
     setVolume,

@@ -8,6 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import {
+  emptyFilter,
   filterSchema,
   selectionSchema,
   tagPatchSchema,
@@ -411,12 +412,22 @@ export async function createApp(options: {
     service.previewRestore(idParam.parse(request.params).id),
   );
   app.post("/api/queue", async (request) => {
-    const { filter, startId } = z
-      .object({ filter: filterSchema, startId: z.string() })
+    const body = z
+      .union([
+        z.object({ filter: filterSchema, startId: z.string() }),
+        z.object({ albumId: z.string() }),
+      ])
       .parse(request.body);
-    const ids = service.catalog.trackIds(filter);
-    const position = ids.indexOf(startId);
-    if (position < 0) throw new Error("Трек больше не входит в результат");
+    const ids = "albumId" in body
+      ? service.catalog.trackIds({ ...emptyFilter, albumIds: [body.albumId] })
+      : service.catalog.trackIds(body.filter);
+    const position = "albumId" in body ? 0 : ids.indexOf(body.startId);
+    if (position < 0 || !ids.length)
+      throw new Error(
+        "albumId" in body
+          ? "В альбоме нет доступных треков"
+          : "Трек больше не входит в результат",
+      );
     const id = randomUUID();
     service.catalog.db
       .prepare("INSERT INTO queues VALUES (?,?,?)")

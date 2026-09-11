@@ -13,9 +13,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(page.getByLabel("Поиск музыки")).toBeVisible();
   await expect(page.locator(".brand, .page-heading")).toHaveCount(0);
   await expect(page.locator(".topbar")).toHaveCSS("height", "65px");
-  await page
-    .getByRole("button", { name: "Добавить библиотеку", exact: true })
-    .click();
+  await page.locator(".add-library").click();
   const addLibraryDialog = page.getByRole("dialog");
   await expect(addLibraryDialog).toBeVisible();
   await page.mouse.click(10, 10);
@@ -45,14 +43,27 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
       .evaluate((e) => e.getBoundingClientRect().width),
   ).toBeGreaterThan(
     await page
-      .locator(".tracks-panel")
+      .locator(".artists-panel")
       .evaluate((e) => e.getBoundingClientRect().width),
   );
+  const initialPanelWidths = await page.locator(".panel").evaluateAll((panels) =>
+    panels.map((panel) => panel.getBoundingClientRect().width),
+  );
+  await page.setViewportSize({ width: 1200, height: 1000 });
+  const resizedPanelWidths = await page.locator(".panel").evaluateAll((panels) =>
+    panels.map((panel) => panel.getBoundingClientRect().width),
+  );
+  expect(
+    resizedPanelWidths.every((width, index) => width < initialPanelWidths[index]),
+  ).toBe(true);
+  expect(
+    await page.locator(".workspace").evaluate((workspace) =>
+      workspace.scrollWidth <= workspace.clientWidth,
+    ),
+  ).toBe(true);
   await page.screenshot({ path: `.test-data/empty-${browser}.png` });
   async function add(name: string, folder: string) {
-    await page
-      .getByRole("button", { name: "Добавить библиотеку", exact: true })
-      .click();
+    await page.locator(".add-library").click();
     await page.getByLabel("Путь к папке", { exact: true }).fill(folder);
     await page.getByLabel("Название библиотеки").fill(name);
     await page.getByRole("button", { name: "Подключить", exact: true }).click();
@@ -84,6 +95,8 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await genreCheckbox.focus();
   await expect(genreCheckbox).toHaveCSS("opacity", "1");
   await genreButton.click();
+  await expect(genreCheckbox).toBeChecked();
+  await genreRow.click({ position: { x: 4, y: 22 } });
   await expect(genreCheckbox).toBeChecked();
 
   const artistRow = page
@@ -118,7 +131,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await artistCheckbox.check();
   await page
     .locator(".artists-panel")
-    .getByRole("button", { name: "Все исполнители" })
+    .getByRole("button", { name: "Все артисты" })
     .click();
   await expect(artistCheckbox).not.toBeChecked();
 
@@ -138,6 +151,15 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(secondAlbumCheckbox).not.toBeChecked();
   await firstAlbumButton.dispatchEvent("click", { ctrlKey: true });
   await expect(firstAlbumCheckbox).not.toBeChecked();
+
+  await expect(firstAlbum.locator(".album-main > small")).toHaveCount(2);
+  await expect(firstAlbum.locator(".album-year")).toHaveCount(1);
+  await firstAlbum.locator(".album-cover").dblclick();
+  await expect
+    .poll(() =>
+      page.locator("audio").evaluate((a: HTMLAudioElement) => a.readyState),
+    )
+    .toBeGreaterThanOrEqual(2);
   await firstAlbum.hover();
   await firstAlbumCheckbox.check();
   await secondAlbumButton.dispatchEvent("click", { ctrlKey: true });
@@ -239,11 +261,12 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     page.locator('[data-testid="track-row"][data-format="flac"]');
   await expect(page.locator(".track-copy small")).toHaveCount(0);
   await expect(page.locator(".track-format")).toHaveCount(0);
+  await expect(page.locator(".album-formats")).toHaveCount(0);
   const taggedAlbumHeader = page
     .locator(".track-album-header")
     .filter({ hasText: "Исполнитель альбома" });
   await expect(taggedAlbumHeader).toContainText("Исполнитель альбома");
-  await expect(taggedAlbumHeader).toContainText("FLAC");
+  await expect(taggedAlbumHeader).not.toContainText("FLAC");
   await page
     .locator(".artists-panel")
     .getByRole("button", { name: "Исполнитель", exact: false })

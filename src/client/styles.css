@@ -1642,6 +1642,68 @@ body {
 }
 .workspace {
   grid-template-columns:
-    var(--library-width) 4px var(--genre-width) 4px var(--artist-width)
-    4px minmax(var(--album-width), 1.45fr) 4px minmax(320px, 1fr);
+    minmax(110px, var(--library-weight)) 4px minmax(110px, var(--genre-weight))
+    4px minmax(110px, var(--artist-weight)) 4px minmax(150px, var(--album-weight))
+    4px minmax(180px, var(--track-weight));
+}
+
+/* Shared facet actions and proportional workspace layout. */
+.topbar {
+  position: relative;
+}
+.search {
+  position: absolute;
+  left: 50%;
+  width: min(350px, calc(100% - 150px));
+  margin: 0;
+  transform: translateX(-50%);
+}
+.history-button {
+  margin-left: auto;
+}
+.workspace {
+  grid-template-columns:
+    minmax(110px, var(--library-weight)) 4px minmax(110px, var(--genre-weight))
+    4px minmax(110px, var(--artist-weight)) 4px minmax(150px, var(--album-weight))
+    4px minmax(180px, var(--track-weight));
+}
+.list-all-action {
+  display: flex;
+  align-items: center;
+  width: calc(100% - 16px);
+  min-height: 44px;
+  margin: 0 8px 10px;
+  padding: 10px 12px;
+  border: 1px solid #ffffff09;
+  border-radius: 5px;
+  color: #a2aeb5;
+  font-size: var(--type-caption);
+  text-align: left;
+}
+.list-all-action:hover:not(:disabled) {
+  background: #ffffff04;
+}
+.list-all-action.selected {
+  border-color: #afcbae20;
+  background: #c0d6bb12;
+  color: #c5ddc4;
+}
+.libraries-panel .list-all-action {
+  margin-bottom: 14px;
+}
+.track-toolbar .list-all-action {
+  width: auto;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px 12px;
+}
+.facet-row {
+  cursor: pointer;
+}
+.album-year {
+  color: #647681 !important;
+  margin-top: 4px !important;
+}
+.track-copy strong {
+  cursor: pointer;
 }

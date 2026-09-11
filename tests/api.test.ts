@@ -194,6 +194,26 @@ describe("Explorer endpoint", () => {
       { directory: path.dirname(first.file) },
     ]);
   });
+  it("starts an album queue with every album track in playback order", async () => {
+    await addTrack("Album/02-second.flac", "second");
+    await addTrack("Album/01-first.flac", "first");
+    const headers = await sessionHeaders();
+    const started = await context.app.inject({
+      method: "POST",
+      url: "/api/queue",
+      headers,
+      payload: { albumId: "album" },
+    });
+    expect(started.statusCode).toBe(200);
+    expect(started.json()).toMatchObject({ position: 0, total: 2 });
+    expect(started.json().track.id).toBe("first");
+    const queue = await context.app.inject({
+      url: `/api/queue/${started.json().id}?position=1`,
+      headers: { host: headers.host, cookie: headers.cookie },
+    });
+    expect(queue.statusCode).toBe(200);
+    expect(queue.json().track.id).toBe("second");
+  });
   it("builds Windows Explorer arguments for folders and selected files", () => {
     expect(explorerArgs({ directory: "C:\\Music\\Album" })).toEqual([
       "C:\\Music\\Album",
