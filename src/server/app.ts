@@ -14,6 +14,7 @@ import {
 } from "../shared/contracts.js";
 import { MusicService } from "./service.js";
 import { errorMessage } from "./config.js";
+import { openInExplorer, type ExplorerLauncher } from "./explorer.js";
 
 const pageSchema = z.object({
   offset: z.coerce.number().int().min(0).max(100000).default(0),
@@ -50,6 +51,7 @@ export async function createApp(options: {
   port?: number;
   dev?: boolean;
   logger?: boolean;
+  openExplorer?: ExplorerLauncher;
 }) {
   const app = Fastify({
     logger: options.logger || false,
@@ -57,6 +59,7 @@ export async function createApp(options: {
     requestTimeout: 120000,
   });
   const service = new MusicService(options.dataDir);
+  const openExplorer = options.openExplorer || openInExplorer;
   await service.initialize();
   const port = options.port || 4317;
   const hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
@@ -187,6 +190,33 @@ export async function createApp(options: {
       service.catalog.track(idParam.parse(request.params).id) ||
       reply.code(404).send({ error: "Трек не найден" }),
   );
+  app.post("/api/explorer", async (request) => {
+    const body = z
+      .object({
+        kind: z.enum(["album", "track"]),
+        id: z.string().min(1).max(100),
+      })
+      .strict()
+      .parse(request.body);
+    const track =
+      body.kind === "track"
+        ? service.catalog.track(body.id)
+        : service.catalog.firstAlbumTrack(body.id);
+    if (!track || !track.available)
+      throw new Error(
+        body.kind === "track" ? "Трек не найден" : "Альбом не найден",
+      );
+    const library = service.catalog.library(track.libraryId);
+    if (!library.available) throw new Error("Библиотека недоступна");
+    const file = path.join(library.path, track.relativePath);
+    await service.safePath(file);
+    await openExplorer(
+      body.kind === "track"
+        ? { directory: path.dirname(file), selectFile: file }
+        : { directory: path.dirname(file) },
+    );
+    return { ok: true };
+  });
   app.get("/api/covers/:id", async (request, reply) => {
     const id = z
       .object({ id: z.string().regex(/^[a-f0-9]{64}\.(jpg|png)$/) })

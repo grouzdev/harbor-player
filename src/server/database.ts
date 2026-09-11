@@ -85,6 +85,14 @@ export class Catalog {
       Row | undefined;
     return row ? fromRow(row) : undefined;
   }
+  firstAlbumTrack(id: string): Track | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT t.* FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE t.albumKey=? AND t.available=1 AND l.available=1 ORDER BY t.albumTitle COLLATE NOCASE, t.albumKey, coalesce(t.discNumber,0), coalesce(t.trackNumber,0), t.relativePath LIMIT 1`,
+      )
+      .get(id) as Row | undefined;
+    return row ? fromRow(row) : undefined;
+  }
   where(filter: CatalogFilter): { sql: string; args: any[] } {
     const clauses = ["t.available=1", "l.available=1"];
     const args: any[] = [];

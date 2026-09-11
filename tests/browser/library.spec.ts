@@ -144,8 +144,46 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(firstAlbumCheckbox).not.toBeChecked();
   await expect(secondAlbumCheckbox).not.toBeChecked();
 
+  const explorerRequests: { kind: string; id: string }[] = [];
+  await page.route("**/api/explorer", async (route) => {
+    explorerRequests.push(route.request().postDataJSON());
+    await route.fulfill({ json: { ok: true } });
+  });
+  expect(
+    await firstAlbum.evaluate((element) => {
+      const event = new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        clientX: 300,
+        clientY: 300,
+      });
+      return !element.dispatchEvent(event);
+    }),
+  ).toBe(true);
+  await expect(
+    page.getByRole("menu", { name: "Контекстное меню" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Открыть в проводнике" }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).not.toBeVisible();
+  await firstAlbum.dispatchEvent("contextmenu", { clientX: 300, clientY: 300 });
+  await page.getByRole("menuitem", { name: "Открыть в проводнике" }).click();
+  await expect(page.getByRole("menu")).not.toBeVisible();
+
   await page.screenshot({ path: `.test-data/library-${browser}.png` });
   const rows = page.getByTestId("track-row");
+  await rows
+    .first()
+    .dispatchEvent("contextmenu", { clientX: 900, clientY: 400 });
+  await expect(page.getByRole("menu")).toBeVisible();
+  await page.getByRole("menuitem", { name: "Открыть в проводнике" }).click();
+  await expect(page.getByRole("menu")).not.toBeVisible();
+  expect(explorerRequests.map((request) => request.kind)).toEqual([
+    "album",
+    "track",
+  ]);
   // Exercise every browser decoder, seeking, and range responses with actual audio bytes.
   for (const format of ["mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"]) {
     const row = page.locator(

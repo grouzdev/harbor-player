@@ -19,6 +19,7 @@ import {
   Clock3,
   Disc3,
   Folder,
+  FolderOpen,
   FolderInput,
   History,
   LibraryBig,
@@ -60,6 +61,7 @@ import {
 } from "./Dialogs";
 import { selectFacetValue } from "./facet-selection";
 import { Player, usePlayer } from "./Player";
+import { ContextMenu, type ContextMenuState } from "./ContextMenu";
 
 function toggle(values: string[], value: string) {
   return values.includes(value)
@@ -83,7 +85,31 @@ export function App() {
   >(null);
   const [preview, setPreview] = useState<OperationPreview | null>(null);
   const [toast, setToast] = useState("");
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const notify = useCallback((message: string) => setToast(message), []);
+  const showExplorerMenu = useCallback(
+    (event: React.MouseEvent, kind: "album" | "track", id: string) => {
+      event.preventDefault();
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        items: [
+          {
+            label: "Открыть в проводнике",
+            icon: <FolderOpen size={16} />,
+            onSelect: async () => {
+              try {
+                await api("/explorer", { kind, id });
+              } catch (error) {
+                notify(error instanceof Error ? error.message : String(error));
+              }
+            },
+          },
+        ],
+      });
+    },
+    [notify],
+  );
   const player = usePlayer(notify);
   const [widths, setWidths] = useState<number[]>(() => {
     try {
@@ -642,6 +668,7 @@ export function App() {
                 void albums.fetchNextPage();
             }}
             loading={albums.isFetching}
+            onContextMenu={showExplorerMenu}
           />
         </section>
         <div
@@ -773,6 +800,7 @@ export function App() {
                 if (tracks.hasNextPage && !tracks.isFetchingNextPage)
                   void tracks.fetchNextPage();
               }}
+              onContextMenu={showExplorerMenu}
             />
           )}
           <div className="catalog-footer">
@@ -799,6 +827,7 @@ export function App() {
         </section>
       </main>
       <Player player={player} />
+      <ContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
       {toast && (
         <div className="toast" role="status">
           <span>{toast}</span>
@@ -924,6 +953,7 @@ function AlbumGrid({
   onSelect,
   onMore,
   loading,
+  onContextMenu,
 }: {
   albums: Album[];
   total: number;
@@ -931,6 +961,11 @@ function AlbumGrid({
   onSelect: (id: string, additive: boolean) => void;
   onMore: () => void;
   loading: boolean;
+  onContextMenu: (
+    event: React.MouseEvent,
+    kind: "album" | "track",
+    id: string,
+  ) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(330);
@@ -985,6 +1020,9 @@ function AlbumGrid({
                     key={album.id}
                     className={`album-card ${selected.includes(album.id) ? "selected" : ""}`}
                     title={`${album.title || "Без альбома"} · ${album.artists.join(", ")}`}
+                    onContextMenu={(event) =>
+                      onContextMenu(event, "album", album.id)
+                    }
                   >
                     <button
                       className="album-main"
@@ -1050,6 +1088,7 @@ function TrackList({
   onPlay,
   onSelect,
   onMore,
+  onContextMenu,
 }: {
   tracks: Track[];
   total: number;
@@ -1061,6 +1100,11 @@ function TrackList({
   onPlay: (track: Track) => void;
   onSelect: (id: string) => void;
   onMore: () => void;
+  onContextMenu: (
+    event: React.MouseEvent,
+    kind: "album" | "track",
+    id: string,
+  ) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const rows = useMemo(() => {
@@ -1161,6 +1205,9 @@ function TrackList({
                   transform: `translateY(${row.start}px)`,
                 }}
                 onDoubleClick={() => onPlay(track)}
+                onContextMenu={(event) =>
+                  onContextMenu(event, "track", track.id)
+                }
               >
                 <input
                   type="checkbox"

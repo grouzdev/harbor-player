@@ -1043,6 +1043,32 @@ a {
   font-size: var(--type-caption);
   line-height: 1.6;
 }
+.context-menu {
+  position: fixed;
+  z-index: 30;
+  min-width: 210px;
+  padding: 5px;
+  background: #222a30;
+  border: 1px solid #ffffff18;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px #0008;
+}
+.context-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border-radius: 5px;
+  color: #dce3df;
+  font-size: var(--type-caption);
+  text-align: left;
+}
+.context-menu-item:hover,
+.context-menu-item:focus-visible {
+  background: #ffffff0d;
+  color: #f3f7f3;
+}
 .modal {
   background: transparent;
   border: 0;

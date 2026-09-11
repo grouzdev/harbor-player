@@ -1,7 +1,12 @@
 import { beforeEach, afterEach, describe, it, expect } from "vitest";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createApp, rangeFor } from "../dist/server/app.js";
+import {
+  explorerArgs,
+  explorerCommand,
+  type ExplorerTarget,
+} from "../dist/server/explorer.js";
 
 let root: string;
 let context: Awaited<ReturnType<typeof createApp>>;
@@ -84,5 +89,130 @@ describe("HTTP boundary", () => {
       "bad",
     ])
       expect(() => rangeFor(range, 100)).toThrow();
+  });
+});
+
+describe("Explorer endpoint", () => {
+  async function sessionHeaders() {
+    const session = await context.app.inject({
+      url: "/api/session",
+      headers: { host: "127.0.0.1:4317" },
+    });
+    return {
+      host: "127.0.0.1:4317",
+      cookie: String(session.headers["set-cookie"]).split(";")[0],
+      "x-csrf-token": session.json().csrf,
+    };
+  }
+  async function addTrack(
+    relativePath: string,
+    id: string,
+    albumKey = "album",
+  ) {
+    const folder = path.join(root, "Music");
+    const file = path.join(folder, relativePath);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, "audio");
+    const library =
+      context.service.catalog.libraries()[0] ||
+      context.service.catalog.addLibrary("Music", folder);
+    context.service.catalog.upsert({
+      id,
+      libraryId: library.id,
+      relativePath,
+      title: id,
+      artists: [],
+      albumTitle: "Album",
+      albumArtists: [],
+      albumKey,
+      genres: [],
+      year: null,
+      trackNumber: null,
+      discNumber: null,
+      duration: 0,
+      format: "flac",
+      size: 5,
+      mtimeMs: 0,
+      coverId: null,
+      available: true,
+    });
+    return { file, folder };
+  }
+  it("requires CSRF and rejects invalid or unavailable explorer targets", async () => {
+    const headers = await sessionHeaders();
+    expect(
+      (
+        await context.app.inject({
+          method: "POST",
+          url: "/api/explorer",
+          headers: { host: headers.host, cookie: headers.cookie },
+          payload: { kind: "track", id: "missing" },
+        })
+      ).statusCode,
+    ).toBe(403);
+    for (const payload of [
+      { kind: "wrong", id: "x" },
+      { kind: "track", id: "missing" },
+    ])
+      expect(
+        (
+          await context.app.inject({
+            method: "POST",
+            url: "/api/explorer",
+            headers,
+            payload,
+          })
+        ).statusCode,
+      ).toBe(400);
+  });
+  it("selects a track file and opens the first album folder", async () => {
+    const calls: ExplorerTarget[] = [];
+    await context.app.close();
+    context = await createApp({
+      dataDir: root,
+      openExplorer: async (target) => {
+        calls.push(target);
+      },
+    });
+    const second = await addTrack("Z/second.flac", "second");
+    const first = await addTrack("A/first.flac", "first");
+    const headers = await sessionHeaders();
+    for (const payload of [
+      { kind: "track", id: "second" },
+      { kind: "album", id: "album" },
+    ]) {
+      const response = await context.app.inject({
+        method: "POST",
+        url: "/api/explorer",
+        headers,
+        payload,
+      });
+      expect(response.statusCode).toBe(200);
+    }
+    expect(calls).toEqual([
+      { directory: path.dirname(second.file), selectFile: second.file },
+      { directory: path.dirname(first.file) },
+    ]);
+  });
+  it("builds Windows Explorer arguments for folders and selected files", () => {
+    expect(explorerArgs({ directory: "C:\\Music\\Album" })).toEqual([
+      "C:\\Music\\Album",
+    ]);
+    expect(
+      explorerArgs({
+        directory: "C:\\Music\\Album",
+        selectFile: "C:\\Music\\Album\\track.flac",
+      }),
+    ).toEqual(["/select,", "C:\\Music\\Album\\track.flac"]);
+    expect(
+      explorerCommand({
+        directory: "C:\\Music\\Album",
+        selectFile: "C:\\Music\\Album\\track.flac",
+      }),
+    ).toEqual({
+      command: "explorer.exe",
+      args: ["/select,", "C:\\Music\\Album\\track.flac"],
+      options: { stdio: "ignore" },
+    });
   });
 });
