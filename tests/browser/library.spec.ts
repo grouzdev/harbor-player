@@ -13,6 +13,15 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(page.getByLabel("Поиск музыки")).toBeVisible();
   await expect(page.locator(".brand, .page-heading")).toHaveCount(0);
   await expect(page.locator(".topbar")).toHaveCSS("height", "65px");
+  await page
+    .getByRole("button", { name: "Добавить библиотеку", exact: true })
+    .click();
+  const addLibraryDialog = page.getByRole("dialog");
+  await expect(addLibraryDialog).toBeVisible();
+  await page.mouse.click(10, 10);
+  await expect(addLibraryDialog).toBeVisible();
+  await addLibraryDialog.getByRole("button", { name: "Закрыть" }).click();
+  await expect(addLibraryDialog).not.toBeVisible();
   const fonts = await page.evaluate(() => [
     ...new Set(
       [...document.querySelectorAll("body *")]
@@ -241,10 +250,15 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     "Первый трек",
   );
   await page.getByLabel("Название", { exact: true }).fill("Обновлённый трек");
+  await page.getByLabel("Изменить: Жанры").check();
+  await page.getByLabel("Жанры", { exact: true }).fill("E2E Fresh");
   await page.getByRole("button", { name: "Посмотреть изменения" }).click();
   await expect(page.getByText("Первый трек → Обновлённый трек")).toBeVisible();
   await page.getByRole("button", { name: /^Применить к/ }).click();
   await expect(flac()).toContainText("Обновлённый трек");
+  await expect(
+    page.locator(".genres-panel .facet-row").filter({ hasText: "E2E Fresh" }),
+  ).toBeVisible();
   await expect
     .poll(() =>
       page.locator("audio").evaluate((a: HTMLAudioElement) => !a.paused),

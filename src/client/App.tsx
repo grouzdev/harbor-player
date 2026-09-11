@@ -169,6 +169,21 @@ export function App() {
         ].includes(String(q.queryKey[0])),
     });
   }, [queryClient]);
+  const scheduleRefresh = useCallback(
+    (immediate = false) => {
+      if (pendingRefresh.current) {
+        clearTimeout(pendingRefresh.current);
+        pendingRefresh.current = undefined;
+      }
+      if (immediate) refresh();
+      else
+        pendingRefresh.current = setTimeout(() => {
+          pendingRefresh.current = undefined;
+          refresh();
+        }, 500);
+    },
+    [refresh],
+  );
   useEffect(() => {
     if (!ready) return;
     const source = new EventSource("/api/events");
@@ -187,16 +202,14 @@ export function App() {
             `${event.job.label}: ${event.job.errors[0] || "часть файлов не обработана"}`,
           );
       }
-      if (
+      if (event.type === "operation-finished") scheduleRefresh(true);
+      else if (
         event.type === "catalog" ||
-        (event.type === "job" && event.job.completed % 100 === 0)
-      ) {
-        if (!pendingRefresh.current)
-          pendingRefresh.current = setTimeout(() => {
-            pendingRefresh.current = undefined;
-            refresh();
-          }, 500);
-      }
+        (event.type === "job" &&
+          event.job.completed > 0 &&
+          event.job.completed % 100 === 0)
+      )
+        scheduleRefresh();
     };
     source.onerror = () => {
       void reconnectSession()
@@ -208,7 +221,7 @@ export function App() {
       clearTimeout(pendingRefresh.current);
       pendingRefresh.current = undefined;
     };
-  }, [ready, queryClient, notify, refresh]);
+  }, [ready, queryClient, notify, refresh, scheduleRefresh]);
   const libraries = useQuery({
     queryKey: ["libraries"],
     queryFn: () => api<Library[]>("/libraries"),
@@ -865,7 +878,6 @@ export function App() {
             setPreview(null);
             setSelected(new Set());
             setAllSelected(false);
-            refresh();
             notify("Операция запущена. Результат появится в журнале.");
           }}
         />
