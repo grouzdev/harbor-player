@@ -10,7 +10,9 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Медиатека" })).toBeVisible();
+  await expect(page.getByLabel("Поиск музыки")).toBeVisible();
+  await expect(page.locator(".brand, .page-heading")).toHaveCount(0);
+  await expect(page.locator(".topbar")).toHaveCSS("height", "65px");
   const fonts = await page.evaluate(() => [
     ...new Set(
       [...document.querySelectorAll("body *")]
@@ -54,6 +56,94 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .first()
     .click();
   await expect(page.getByTestId("track-row")).toHaveCount(7);
+
+  const genreRow = page
+    .locator(".genres-panel .facet-row")
+    .filter({ hasText: "Ambient" });
+  const genreButton = genreRow.getByRole("button");
+  const genreCheckbox = genreRow.getByRole("checkbox");
+  await expect(genreCheckbox).not.toBeChecked();
+  await expect(genreCheckbox).toHaveCSS("opacity", "0");
+  await genreRow.hover();
+  await expect(genreCheckbox).toHaveCSS("opacity", "1");
+  await genreCheckbox.check();
+  await expect(genreCheckbox).toBeChecked();
+  await page.mouse.move(0, 0);
+  await expect(genreCheckbox).toHaveCSS("opacity", "1");
+  await genreButton.dispatchEvent("click", { ctrlKey: true });
+  await expect(genreCheckbox).not.toBeChecked();
+  await genreCheckbox.focus();
+  await expect(genreCheckbox).toHaveCSS("opacity", "1");
+  await genreButton.click();
+  await expect(genreCheckbox).toBeChecked();
+
+  const artistRow = page
+    .locator(".artists-panel .facet-row")
+    .filter({ hasText: "Исполнитель" });
+  const artistButton = artistRow.getByRole("button");
+  const artistCheckbox = artistRow.getByRole("checkbox");
+  await artistCheckbox.check();
+  await expect(artistCheckbox).toBeChecked();
+
+  const firstAlbum = page
+    .locator(".album-card")
+    .filter({ hasText: "Исполнитель альбома" });
+  const firstAlbumButton = firstAlbum.getByRole("button");
+  const firstAlbumCheckbox = firstAlbum.getByRole("checkbox");
+  await firstAlbum.hover();
+  await firstAlbumCheckbox.check();
+  await expect(firstAlbumCheckbox).toBeChecked();
+  await genreButton.click();
+  await expect(genreCheckbox).toBeChecked();
+  await expect(artistCheckbox).not.toBeChecked();
+  await expect(firstAlbumCheckbox).not.toBeChecked();
+  await page
+    .locator(".genres-panel")
+    .getByRole("button", { name: "Все жанры" })
+    .click();
+
+  await artistButton.click();
+  await expect(artistCheckbox).toBeChecked();
+  await artistButton.dispatchEvent("click", { ctrlKey: true });
+  await expect(artistCheckbox).not.toBeChecked();
+  await artistCheckbox.check();
+  await page
+    .locator(".artists-panel")
+    .getByRole("button", { name: "Все исполнители" })
+    .click();
+  await expect(artistCheckbox).not.toBeChecked();
+
+  const secondAlbum = page
+    .locator(".album-card")
+    .filter({ hasText: "Неизвестный исполнитель" });
+  const secondAlbumButton = secondAlbum.getByRole("button");
+  const secondAlbumCheckbox = secondAlbum.getByRole("checkbox");
+  await firstAlbum.hover();
+  await firstAlbumCheckbox.check();
+  await secondAlbum.hover();
+  await secondAlbumCheckbox.check();
+  await expect(firstAlbumCheckbox).toBeChecked();
+  await expect(secondAlbumCheckbox).toBeChecked();
+  await firstAlbumButton.click();
+  await expect(firstAlbumCheckbox).toBeChecked();
+  await expect(secondAlbumCheckbox).not.toBeChecked();
+  await firstAlbumButton.dispatchEvent("click", { ctrlKey: true });
+  await expect(firstAlbumCheckbox).not.toBeChecked();
+  await firstAlbum.hover();
+  await firstAlbumCheckbox.check();
+  await secondAlbumButton.dispatchEvent("click", { ctrlKey: true });
+  await expect(firstAlbumCheckbox).toBeChecked();
+  await expect(secondAlbumCheckbox).toBeChecked();
+  await firstAlbumButton.click();
+  await expect(firstAlbumCheckbox).toBeChecked();
+  await expect(secondAlbumCheckbox).not.toBeChecked();
+  await page
+    .locator(".albums-panel")
+    .getByRole("button", { name: "Все альбомы" })
+    .click();
+  await expect(firstAlbumCheckbox).not.toBeChecked();
+  await expect(secondAlbumCheckbox).not.toBeChecked();
+
   await page.screenshot({ path: `.test-data/library-${browser}.png` });
   const rows = page.getByTestId("track-row");
   // Exercise every browser decoder, seeking, and range responses with actual audio bytes.
@@ -83,12 +173,11 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     page.locator('[data-testid="track-row"][data-format="flac"]');
   await expect(page.locator(".track-copy small")).toHaveCount(0);
   await expect(page.locator(".track-format")).toHaveCount(0);
-  await expect(page.locator(".track-album-header").first()).toContainText(
-    "Исполнитель альбома",
-  );
-  await expect(page.locator(".track-album-header").first()).toContainText(
-    "FLAC",
-  );
+  const taggedAlbumHeader = page
+    .locator(".track-album-header")
+    .filter({ hasText: "Исполнитель альбома" });
+  await expect(taggedAlbumHeader).toContainText("Исполнитель альбома");
+  await expect(taggedAlbumHeader).toContainText("FLAC");
   await page
     .locator(".artists-panel")
     .getByRole("button", { name: "Исполнитель", exact: false })

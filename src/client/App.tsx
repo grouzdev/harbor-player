@@ -58,6 +58,7 @@ import {
   HistoryDialog,
   PreviewDialog,
 } from "./Dialogs";
+import { selectFacetValue } from "./facet-selection";
 import { Player, usePlayer } from "./Player";
 
 function toggle(values: string[], value: string) {
@@ -340,10 +341,10 @@ export function App() {
       artists: [],
       albumIds: [],
     }));
-  const chooseGenre = (genre: string) =>
+  const chooseGenre = (genre: string, additive: boolean) =>
     setFilter((f) => ({
       ...f,
-      genres: toggle(f.genres, genre),
+      genres: selectFacetValue(f.genres, genre, additive),
       artists: [],
       albumIds: [],
     }));
@@ -367,19 +368,6 @@ export function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="brand" href="/" aria-label="MyMusicLib">
-          <span className="brand-icon">
-            <AudioLines size={24} />
-          </span>
-          <span>
-            my<span className="brand-light">music</span>lib
-            <span className="brand-dot">.</span>
-          </span>
-        </a>
-        <div className="page-heading">
-          <div className="eyebrow">ВАША ЛИЧНАЯ КОЛЛЕКЦИЯ</div>
-          <h1>Медиатека</h1>
-        </div>
         <label className="search">
           <Search size={18} />
           <input
@@ -551,17 +539,34 @@ export function App() {
             <span>Все жанры</span>
           </button>
           <div className="genre-list">
-            {genres.data?.map((g) => (
-              <button
-                key={g.name}
-                className={`genre-row ${filter.genres.includes(g.name) ? "selected" : ""}`}
-                aria-pressed={filter.genres.includes(g.name)}
-                onClick={() => chooseGenre(g.name)}
-              >
-                <span>{g.name || "Без жанра"}</span>
-                <small>{count(g.count)}</small>
-              </button>
-            ))}
+            {genres.data?.map((g) => {
+              const label = g.name || "Без жанра";
+              const checked = filter.genres.includes(g.name);
+              return (
+                <div
+                  key={g.name}
+                  className={`genre-row facet-row ${checked ? "selected" : ""}`}
+                >
+                  <label className="facet-checkbox-zone">
+                    <input
+                      className="facet-checkbox"
+                      type="checkbox"
+                      aria-label={`Выбрать жанр: ${label}`}
+                      checked={checked}
+                      onChange={() => chooseGenre(g.name, true)}
+                    />
+                  </label>
+                  <button
+                    className="facet-main"
+                    aria-pressed={checked}
+                    onClick={(event) => chooseGenre(g.name, event.ctrlKey)}
+                  >
+                    <span>{label}</span>
+                    <small>{count(g.count)}</small>
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </section>
         <div
@@ -590,10 +595,10 @@ export function App() {
             total={artists.data?.pages[0]?.total || 0}
             selected={filter.artists}
             loading={artists.isFetching}
-            onSelect={(name) =>
+            onSelect={(name, additive) =>
               setFilter((f) => ({
                 ...f,
-                artists: toggle(f.artists, name),
+                artists: selectFacetValue(f.artists, name, additive),
                 albumIds: [],
               }))
             }
@@ -626,8 +631,11 @@ export function App() {
             albums={albumItems}
             total={albumTotal}
             selected={filter.albumIds}
-            onSelect={(id) =>
-              setFilter((f) => ({ ...f, albumIds: toggle(f.albumIds, id) }))
+            onSelect={(id, additive) =>
+              setFilter((f) => ({
+                ...f,
+                albumIds: selectFacetValue(f.albumIds, id, additive),
+              }))
             }
             onMore={() => {
               if (albums.hasNextPage && !albums.isFetchingNextPage)
@@ -849,7 +857,7 @@ function ArtistList({
   total: number;
   selected: string[];
   loading: boolean;
-  onSelect: (name: string) => void;
+  onSelect: (name: string, additive: boolean) => void;
   onMore: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -869,24 +877,40 @@ function ArtistList({
       <div style={{ height: virtual.getTotalSize(), position: "relative" }}>
         {visible.map((row) => {
           const item = items[row.index];
-          return item ? (
-            <button
+          if (!item) return null;
+          const label = item.name || "Без исполнителя";
+          const checked = selected.includes(item.name);
+          return (
+            <div
               key={item.name}
-              className={`genre-row artist-row ${selected.includes(item.name) ? "selected" : ""}`}
-              aria-pressed={selected.includes(item.name)}
-              title={item.name || "Без исполнителя"}
+              className={`genre-row facet-row artist-row ${checked ? "selected" : ""}`}
+              title={label}
               style={{
                 position: "absolute",
                 top: 0,
                 transform: `translateY(${row.start}px)`,
                 height: 44,
               }}
-              onClick={() => onSelect(item.name)}
             >
-              <span>{item.name || "Без исполнителя"}</span>
-              <small>{count(item.count)}</small>
-            </button>
-          ) : null;
+              <label className="facet-checkbox-zone">
+                <input
+                  className="facet-checkbox"
+                  type="checkbox"
+                  aria-label={`Выбрать исполнителя: ${label}`}
+                  checked={checked}
+                  onChange={() => onSelect(item.name, true)}
+                />
+              </label>
+              <button
+                className="facet-main"
+                aria-pressed={checked}
+                onClick={(event) => onSelect(item.name, event.ctrlKey)}
+              >
+                <span>{label}</span>
+                <small>{count(item.count)}</small>
+              </button>
+            </div>
+          );
         })}
       </div>
     </div>
@@ -904,7 +928,7 @@ function AlbumGrid({
   albums: Album[];
   total: number;
   selected: string[];
-  onSelect: (id: string) => void;
+  onSelect: (id: string, additive: boolean) => void;
   onMore: () => void;
   loading: boolean;
 }) {
@@ -957,50 +981,55 @@ function AlbumGrid({
               {albums
                 .slice(row.index * columns, (row.index + 1) * columns)
                 .map((album) => (
-                  <button
+                  <div
                     key={album.id}
                     className={`album-card ${selected.includes(album.id) ? "selected" : ""}`}
-                    aria-pressed={selected.includes(album.id)}
                     title={`${album.title || "Без альбома"} · ${album.artists.join(", ")}`}
-                    onClick={() => onSelect(album.id)}
                   >
-                    <div
-                      className="album-cover"
-                      style={
-                        {
-                          "--cover-hue":
-                            parseInt(album.id.slice(0, 4), 16) % 360,
-                        } as CSSProperties
-                      }
+                    <button
+                      className="album-main"
+                      aria-pressed={selected.includes(album.id)}
+                      onClick={(event) => onSelect(album.id, event.ctrlKey)}
                     >
-                      {album.coverId ? (
-                        <img
-                          loading="lazy"
-                          src={`/api/covers/${album.coverId}`}
-                          alt=""
-                        />
-                      ) : (
-                        <div className="cover-placeholder">
-                          <Disc3 strokeWidth={0.6} />
-                          <span>{album.title?.slice(0, 1) || "♪"}</span>
-                        </div>
-                      )}
-                      <span className="album-selection">
-                        {selected.includes(album.id) ? (
-                          <Check size={13} />
+                      <div
+                        className="album-cover"
+                        style={
+                          {
+                            "--cover-hue":
+                              parseInt(album.id.slice(0, 4), 16) % 360,
+                          } as CSSProperties
+                        }
+                      >
+                        {album.coverId ? (
+                          <img
+                            loading="lazy"
+                            src={`/api/covers/${album.coverId}`}
+                            alt=""
+                          />
                         ) : (
-                          <Plus size={13} />
+                          <div className="cover-placeholder">
+                            <Disc3 strokeWidth={0.6} />
+                            <span>{album.title?.slice(0, 1) || "♪"}</span>
+                          </div>
                         )}
-                      </span>
-                      <span className="album-track-count">
-                        {album.trackCount} тр.
-                      </span>
-                    </div>
-                    <strong>{album.title || "Без альбома"}</strong>
-                    <small>
-                      {album.artists.join(", ") || "Неизвестный исполнитель"}
-                    </small>
-                  </button>
+                        <span className="album-track-count">
+                          {album.trackCount} тр.
+                        </span>
+                      </div>
+                      <strong>{album.title || "Без альбома"}</strong>
+                      <small>
+                        {album.artists.join(", ") || "Неизвестный исполнитель"}
+                      </small>
+                    </button>
+                    <label className="album-selection">
+                      <input
+                        type="checkbox"
+                        aria-label={`Выбрать альбом: ${album.title || "Без альбома"}`}
+                        checked={selected.includes(album.id)}
+                        onChange={() => onSelect(album.id, true)}
+                      />
+                    </label>
+                  </div>
                 ))}
             </div>
           ))}
