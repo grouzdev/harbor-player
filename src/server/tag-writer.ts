@@ -14,6 +14,7 @@ import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import type { TagPatch } from "../shared/contracts.js";
 import { audioDigest } from "./audio-digest.js";
+import { writeMp3Cover } from "./mp3-cover.js";
 
 const fields: Record<string, string[]> = {
   title: ["title"],
@@ -66,61 +67,72 @@ export async function writeTags(file: string, patch: TagPatch): Promise<void> {
   }
   const before = await parseFile(file, { duration: true });
   const digest = await audioDigest(file);
-  const tagged = File.createFromPath(file);
-  try {
-    if (
-      before.common.track.of &&
-      tagged.tag.trackCount !== before.common.track.of
-    )
-      tagged.tag.trackCount = before.common.track.of;
-    if (before.common.disk.of && tagged.tag.discCount !== before.common.disk.of)
-      tagged.tag.discCount = before.common.disk.of;
-    if (patch.title !== undefined) tagged.tag.title = patch.title;
-    if (patch.artists !== undefined) tagged.tag.performers = patch.artists;
-    if (patch.albumTitle !== undefined) tagged.tag.album = patch.albumTitle;
-    if (patch.albumArtists !== undefined)
-      tagged.tag.albumArtists = patch.albumArtists;
-    if (patch.genres !== undefined) tagged.tag.genres = patch.genres;
-    if (patch.year !== undefined) tagged.tag.year = patch.year || 0;
-    if (patch.trackNumber !== undefined)
-      tagged.tag.track = patch.trackNumber || 0;
-    if (patch.discNumber !== undefined) tagged.tag.disc = patch.discNumber || 0;
-    if (path.extname(file).toLowerCase() === ".m4a") {
-      const apple = tagged.getTag(TagTypes.Apple, true) as Mpeg4AppleTag;
-      for (const [values, box] of [
-        [patch.artists, Mpeg4BoxType.ART],
-        [patch.albumArtists, Mpeg4BoxType.AART],
-        [patch.genres, Mpeg4BoxType.GEN],
-      ] as const)
-        if (values !== undefined)
-          apple.setQuickTimeData(
-            box,
-            values.map((s) => ByteVector.fromString(s, StringType.UTF8)),
-            Mpeg4AppleDataBoxFlagType.ContainsText,
-          );
-    }
-    if (patch.cover !== undefined) {
-      const other = tagged.tag.pictures.filter(
-        (p) => p.type !== PictureType.FrontCover,
-      );
-      tagged.tag.pictures =
-        patch.cover === null
-          ? []
-          : [
-              ...other,
-              Picture.fromFullData(
-                ByteVector.fromByteArray(
-                  Buffer.from(patch.cover.data, "base64"),
+  const coverOnlyMp3 =
+    path.extname(file).toLowerCase() === ".mp3" &&
+    patch.cover !== undefined &&
+    Object.keys(patch).every((key) => key === "cover");
+  if (coverOnlyMp3) await writeMp3Cover(file, patch.cover!);
+  if (!coverOnlyMp3) {
+    const tagged = File.createFromPath(file);
+    try {
+      if (
+        before.common.track.of &&
+        tagged.tag.trackCount !== before.common.track.of
+      )
+        tagged.tag.trackCount = before.common.track.of;
+      if (
+        before.common.disk.of &&
+        tagged.tag.discCount !== before.common.disk.of
+      )
+        tagged.tag.discCount = before.common.disk.of;
+      if (patch.title !== undefined) tagged.tag.title = patch.title;
+      if (patch.artists !== undefined) tagged.tag.performers = patch.artists;
+      if (patch.albumTitle !== undefined) tagged.tag.album = patch.albumTitle;
+      if (patch.albumArtists !== undefined)
+        tagged.tag.albumArtists = patch.albumArtists;
+      if (patch.genres !== undefined) tagged.tag.genres = patch.genres;
+      if (patch.year !== undefined) tagged.tag.year = patch.year || 0;
+      if (patch.trackNumber !== undefined)
+        tagged.tag.track = patch.trackNumber || 0;
+      if (patch.discNumber !== undefined)
+        tagged.tag.disc = patch.discNumber || 0;
+      if (path.extname(file).toLowerCase() === ".m4a") {
+        const apple = tagged.getTag(TagTypes.Apple, true) as Mpeg4AppleTag;
+        for (const [values, box] of [
+          [patch.artists, Mpeg4BoxType.ART],
+          [patch.albumArtists, Mpeg4BoxType.AART],
+          [patch.genres, Mpeg4BoxType.GEN],
+        ] as const)
+          if (values !== undefined)
+            apple.setQuickTimeData(
+              box,
+              values.map((s) => ByteVector.fromString(s, StringType.UTF8)),
+              Mpeg4AppleDataBoxFlagType.ContainsText,
+            );
+      }
+      if (patch.cover !== undefined) {
+        const other = tagged.tag.pictures.filter(
+          (p) => p.type !== PictureType.FrontCover,
+        );
+        tagged.tag.pictures =
+          patch.cover === null
+            ? []
+            : [
+                ...other,
+                Picture.fromFullData(
+                  ByteVector.fromByteArray(
+                    Buffer.from(patch.cover.data, "base64"),
+                  ),
+                  PictureType.FrontCover,
+                  patch.cover.mime,
+                  "",
                 ),
-                PictureType.FrontCover,
-                patch.cover.mime,
-                "",
-              ),
-            ];
+              ];
+      }
+      tagged.save();
+    } finally {
+      tagged.dispose();
     }
-    tagged.save();
-  } finally {
-    tagged.dispose();
   }
   const after = await parseFile(file, { duration: true });
   if (digest !== (await audioDigest(file)))
@@ -145,7 +157,10 @@ export async function writeTags(file: string, patch: TagPatch): Promise<void> {
   };
   for (const [key, value] of Object.entries(patch)) {
     if (key === "cover") {
-      if (value === null && c.picture?.length)
+      if (
+        value === null &&
+        c.picture?.some((picture) => picture.type === "Cover (front)")
+      )
         throw new Error("Не удалось удалить обложку");
       if (
         patch.cover &&

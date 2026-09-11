@@ -114,6 +114,54 @@ describe("MusicBrainz client", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
+  it("provides a lazy thumbnail URL even when search results omit cover art", async () => {
+    const track = addTrack({ id: "thumbnail-search" });
+    const fetcher = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/recording?"))
+        return json({
+          recordings: [
+            {
+              id: recordingOne,
+              score: 100,
+              releases: [{ id: releaseId, title: "Album" }],
+            },
+          ],
+        });
+      return json({}, 404);
+    }) as unknown as typeof fetch;
+    const service = new MusicBrainzService(catalog, root, {
+      fetch: fetcher,
+      minIntervalMs: 0,
+    });
+
+    await expect(
+      service.search(
+        { trackIds: [track.id] },
+        { title: "Track", artist: "Artist" },
+      ),
+    ).resolves.toMatchObject({
+      candidates: [
+        {
+          releaseId,
+          thumbnailUrl: `/api/metadata/musicbrainz/thumbnail/${releaseId}`,
+        },
+      ],
+    });
+  });
+
+  it("caches a missing thumbnail from Cover Art Archive", async () => {
+    const fetcher = vi.fn(async () => json({}, 404)) as unknown as typeof fetch;
+    const service = new MusicBrainzService(catalog, root, {
+      fetch: fetcher,
+      minIntervalMs: 0,
+    });
+
+    await expect(service.thumbnail(releaseId)).resolves.toBeNull();
+    await expect(service.thumbnail(releaseId)).resolves.toBeNull();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it("builds per-track album proposals and downloads an exact front cover", async () => {
     const first = addTrack({
       id: "one",

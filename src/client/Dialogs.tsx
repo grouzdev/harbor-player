@@ -29,6 +29,18 @@ import type {
 import { api, count, fieldLabels, operationLabels } from "./api";
 import { Modal } from "./Modal";
 
+function MusicBrainzThumbnail({ url }: { url: string }) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => setFailed(false), [url]);
+
+  return failed ? (
+    <span className="musicbrainz-no-cover">Нет обложки</span>
+  ) : (
+    <img src={url} alt="" loading="lazy" onError={() => setFailed(true)} />
+  );
+}
+
 export function AddLibraryDialog({
   onClose,
   onAdded,
@@ -387,17 +399,7 @@ export function ActionDialog({
                           }
                         }}
                       >
-                        {candidate.thumbnailUrl ? (
-                          <img
-                            src={candidate.thumbnailUrl}
-                            alt=""
-                            loading="lazy"
-                          />
-                        ) : (
-                          <span className="musicbrainz-no-cover">
-                            Нет обложки
-                          </span>
-                        )}
+                        <MusicBrainzThumbnail url={candidate.thumbnailUrl} />
                         <span className="musicbrainz-candidate-copy">
                           <strong>{candidate.title}</strong>
                           <span>
@@ -842,9 +844,11 @@ function effectivePreviewPatch(
 export function HistoryDialog({
   onClose,
   onPreview,
+  onOperationStarted,
 }: {
   onClose: () => void;
   onPreview: (preview: OperationPreview) => void;
+  onOperationStarted: (id: string) => void;
 }) {
   const history = useQuery({
     queryKey: ["history"],
@@ -942,9 +946,13 @@ export function HistoryDialog({
                         );
                         if (retry.action === "preview")
                           onPreview(retry.preview);
-                        else await history.refetch();
+                        else {
+                          onOperationStarted(retry.job.operationId || op.id);
+                          await history.refetch();
+                        }
                       } else {
                         await api(`/operations/${op.id}/execute`, {});
+                        onOperationStarted(op.id);
                         await history.refetch();
                       }
                     } catch (e) {

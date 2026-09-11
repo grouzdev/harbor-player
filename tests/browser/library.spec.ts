@@ -46,20 +46,26 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
       .locator(".artists-panel")
       .evaluate((e) => e.getBoundingClientRect().width),
   );
-  const initialPanelWidths = await page.locator(".panel").evaluateAll((panels) =>
-    panels.map((panel) => panel.getBoundingClientRect().width),
-  );
+  const initialPanelWidths = await page
+    .locator(".panel")
+    .evaluateAll((panels) =>
+      panels.map((panel) => panel.getBoundingClientRect().width),
+    );
   await page.setViewportSize({ width: 1200, height: 1000 });
-  const resizedPanelWidths = await page.locator(".panel").evaluateAll((panels) =>
-    panels.map((panel) => panel.getBoundingClientRect().width),
-  );
+  const resizedPanelWidths = await page
+    .locator(".panel")
+    .evaluateAll((panels) =>
+      panels.map((panel) => panel.getBoundingClientRect().width),
+    );
   expect(
-    resizedPanelWidths.every((width, index) => width < initialPanelWidths[index]),
+    resizedPanelWidths.every(
+      (width, index) => width < initialPanelWidths[index],
+    ),
   ).toBe(true);
   expect(
-    await page.locator(".workspace").evaluate((workspace) =>
-      workspace.scrollWidth <= workspace.clientWidth,
-    ),
+    await page
+      .locator(".workspace")
+      .evaluate((workspace) => workspace.scrollWidth <= workspace.clientWidth),
   ).toBe(true);
   await page.screenshot({ path: `.test-data/empty-${browser}.png` });
   async function add(name: string, folder: string) {
@@ -222,6 +228,14 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .getByRole("listitem")
     .filter({ hasText: "Тестовый альбом MusicBrainz" });
   await expect(candidate).toBeVisible();
+  await expect(candidate.locator("img")).toBeVisible();
+  const missingCoverCandidate = page
+    .getByRole("dialog")
+    .getByRole("listitem")
+    .filter({ hasText: "Тестовый альбом без обложки" });
+  await missingCoverCandidate.scrollIntoViewIfNeeded();
+  await expect(missingCoverCandidate.getByText("Нет обложки")).toBeVisible();
+  const originalCover = await firstAlbum.locator("img").getAttribute("src");
   await candidate.click();
   await expect(page.getByRole("dialog")).toContainText(
     `Сопоставлено: ${albumTrackCount} из ${albumTrackCount}`,
@@ -229,11 +243,17 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(
     page.getByRole("dialog").getByLabel("заменить заполненные").first(),
   ).toBeVisible();
-  await page
+  const coverField = page
     .getByRole("dialog")
-    .getByRole("button", { name: "Закрыть" })
-    .click();
-  await expect(page.getByRole("dialog")).not.toBeVisible();
+    .locator(".musicbrainz-field")
+    .filter({ hasText: "Обложка" });
+  await coverField.getByRole("checkbox").first().check();
+  await coverField.getByRole("checkbox").nth(1).check();
+  await page.getByRole("button", { name: "Посмотреть изменения" }).click();
+  await page.getByRole("button", { name: /^Применить к/ }).click();
+  await expect
+    .poll(() => firstAlbum.locator("img").getAttribute("src"))
+    .not.toBe(originalCover);
   await firstAlbum.dispatchEvent("contextmenu", { clientX: 300, clientY: 300 });
   await page.getByRole("menuitem", { name: "Открыть в проводнике" }).click();
   await expect(page.getByRole("menu")).not.toBeVisible();

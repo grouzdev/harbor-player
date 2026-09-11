@@ -163,8 +163,7 @@ export interface MusicBrainzCandidate {
   discCount: number;
   trackCount: number;
   score: number;
-  hasCover: boolean;
-  thumbnailUrl?: string;
+  thumbnailUrl: string;
 }
 export interface MetadataProposalItem {
   trackId: string;

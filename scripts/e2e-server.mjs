@@ -1,7 +1,8 @@
-import { mkdir, rm, copyFile } from "node:fs/promises";
+import { mkdir, rm, copyFile, readFile } from "node:fs/promises";
 import path from "node:path";
 import { createApp } from "../dist/server/app.js";
 const releaseId = "11111111-1111-4111-8111-111111111111";
+const missingCoverReleaseId = "99999999-9999-4999-8999-999999999999";
 const groupId = "22222222-2222-4222-8222-222222222222";
 const recordingIds = Array.from(
   { length: 6 },
@@ -33,10 +34,25 @@ const release = {
   "track-count": 6,
   "cover-art-archive": { front: true, artwork: true },
 };
+const coverBytes = Buffer.concat([
+  await readFile(path.resolve(".fixtures/cover.png")),
+  Buffer.from([0]),
+]);
+const missingCoverRelease = {
+  id: missingCoverReleaseId,
+  title: "Тестовый альбом без обложки",
+  "artist-credit": [{ name: "Исполнитель" }],
+  "track-count": 6,
+};
 const musicBrainzFetch = async (input) => {
   const url = String(input);
   if (url.includes("musicbrainz.test/ws/2/release?"))
-    return Response.json({ releases: [{ ...release, score: 100 }] });
+    return Response.json({
+      releases: [
+        { ...release, score: 100, "cover-art-archive": undefined },
+        { ...missingCoverRelease, score: 90 },
+      ],
+    });
   if (url.includes(`musicbrainz.test/ws/2/release/${releaseId}?`))
     return Response.json(release);
   if (url.includes(`musicbrainz.test/ws/2/release-group/${groupId}?`))
@@ -49,7 +65,9 @@ const musicBrainzFetch = async (input) => {
     url.endsWith(`coverart.test/release/${releaseId}/123-1200`) ||
     url.endsWith(`coverart.test/release/${releaseId}/front-250`)
   )
-    return new Response(Uint8Array.from([255, 216, 255, 0]));
+    return new Response(coverBytes, {
+      headers: { "Content-Type": "image/png" },
+    });
   return Response.json({}, { status: 404 });
 };
 const root = path.resolve(".test-data/browser");

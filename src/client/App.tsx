@@ -129,14 +129,12 @@ export function App() {
   const [panelWeights, setPanelWeights] = useState<number[]>(() => {
     try {
       const weights = JSON.parse(
-        localStorage.getItem("mml-panel-weights-v1") ||
-          "[1.05,0.9,1,1.45,1.6]",
+        localStorage.getItem("mml-panel-weights-v1") || "[1.05,0.9,1,1.45,1.6]",
       );
       return Array.isArray(weights) &&
         weights.length === 5 &&
         weights.every(
-          (n: unknown) =>
-            typeof n === "number" && Number.isFinite(n) && n > 0,
+          (n: unknown) => typeof n === "number" && Number.isFinite(n) && n > 0,
         )
         ? weights
         : [1.05, 0.9, 1, 1.45, 1.6];
@@ -147,6 +145,7 @@ export function App() {
   const pendingRefresh = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
+  const watchedOperations = useRef(new Set<string>());
   useEffect(() => {
     api<{ csrf: string; capabilities: Capabilities }>("/session")
       .then((s) => {
@@ -199,6 +198,32 @@ export function App() {
         }, 500);
     },
     [refresh],
+  );
+  const watchOperation = useCallback(
+    (id: string) => {
+      if (watchedOperations.current.has(id)) return;
+      watchedOperations.current.add(id);
+      void (async () => {
+        try {
+          while (true) {
+            const operation = await api<OperationPreview>(`/operations/${id}`);
+            if (
+              operation.status === "done" ||
+              operation.status === "interrupted"
+            ) {
+              refresh();
+              return;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
+        } catch {
+          scheduleRefresh();
+        } finally {
+          watchedOperations.current.delete(id);
+        }
+      })();
+    },
+    [refresh, scheduleRefresh],
   );
   useEffect(() => {
     if (!ready) return;
@@ -374,7 +399,10 @@ export function App() {
       const pairPixels = (pairWeight / total) * available;
       const leftPixels = Math.max(
         110,
-        Math.min(pairPixels - 110, (initial[index] / total) * available + event.clientX - start),
+        Math.min(
+          pairPixels - 110,
+          (initial[index] / total) * available + event.clientX - start,
+        ),
       );
       setPanelWeights(
         initial.map((weight, currentIndex) => {
@@ -885,7 +913,11 @@ export function App() {
         />
       )}
       {modal === "history" && (
-        <HistoryDialog onClose={() => setModal(null)} onPreview={showPreview} />
+        <HistoryDialog
+          onClose={() => setModal(null)}
+          onPreview={showPreview}
+          onOperationStarted={watchOperation}
+        />
       )}
       {preview && (
         <PreviewDialog
@@ -893,6 +925,7 @@ export function App() {
           onClose={() => setPreview(null)}
           onExecute={async (id) => {
             await api(`/operations/${id}/execute`, {});
+            watchOperation(id);
             setPreview(null);
             setSelected(new Set());
             setAllSelected(false);
@@ -1107,7 +1140,9 @@ function AlbumGrid({
                       <small>
                         {album.artists.join(", ") || "Неизвестный исполнитель"}
                       </small>
-                      {album.year && <small className="album-year">{album.year}</small>}
+                      {album.year && (
+                        <small className="album-year">{album.year}</small>
+                      )}
                     </button>
                     <label className="album-selection">
                       <input

@@ -95,13 +95,7 @@ function releaseCandidate(
     discCount: media.length,
     trackCount,
     score: Number(score) || 0,
-    hasCover: Boolean(
-      release["cover-art-archive"]?.front ||
-      release["cover-art-archive"]?.artwork,
-    ),
-    thumbnailUrl: release["cover-art-archive"]?.front
-      ? `/api/metadata/musicbrainz/thumbnail/${release.id}`
-      : undefined,
+    thumbnailUrl: `/api/metadata/musicbrainz/thumbnail/${release.id}`,
   };
 }
 
@@ -498,13 +492,17 @@ export class MusicBrainzService {
   private async cachedCover(url: string): Promise<{ id: string } | null> {
     const key = `cover-file:${url}`;
     const cached = this.cache(key);
+    if (cached?.status === 404) return null;
     if (
       cached?.status === 200 &&
       existsSync(path.join(this.dataDir, "covers", cached.payload.id))
     )
       return cached.payload;
     const image = await this.bytes(url, false);
-    if (!image) return null;
+    if (!image) {
+      this.saveCache(key, 404, {}, DAY);
+      return null;
+    }
     const extension = image.mime === "image/png" ? ".png" : ".jpg";
     const id =
       createHash("sha256").update(image.data).digest("hex") + extension;
