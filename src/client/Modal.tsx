@@ -28,9 +28,6 @@ export function Modal({
         e.preventDefault();
         onClose();
       }}
-      onClick={(e) => {
-        if (e.target === ref.current) onClose();
-      }}
     >
       <div className="modal-content">
         <header className="modal-header">
