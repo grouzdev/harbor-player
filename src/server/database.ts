@@ -53,6 +53,8 @@ export class Catalog {
       CREATE INDEX IF NOT EXISTS genres_value ON track_genres(genre, trackId);
       CREATE TABLE IF NOT EXISTS track_artists (trackId TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE, artist TEXT NOT NULL, PRIMARY KEY(trackId,artist));
       CREATE INDEX IF NOT EXISTS artists_value ON track_artists(artist,trackId);
+      CREATE TABLE IF NOT EXISTS track_album_artists (trackId TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE, artist TEXT NOT NULL, PRIMARY KEY(trackId,artist));
+      CREATE INDEX IF NOT EXISTS album_artists_value ON track_album_artists(artist,trackId);
       CREATE TABLE IF NOT EXISTS operations (id TEXT PRIMARY KEY, createdAt TEXT NOT NULL, payload TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS queues (id TEXT PRIMARY KEY, createdAt TEXT NOT NULL, trackIds TEXT NOT NULL);
@@ -94,6 +96,13 @@ export class Catalog {
           )
         `);
         this.db.pragma("user_version = 3");
+      })();
+    if (version < 4)
+      this.db.transaction(() => {
+        this.db.exec(
+          "INSERT OR IGNORE INTO track_album_artists(trackId,artist) SELECT t.id,j.value FROM tracks t,json_each(t.albumArtists) j",
+        );
+        this.db.pragma("user_version = 4");
       })();
   }
   libraries(): Library[] {
@@ -146,11 +155,11 @@ export class Catalog {
       const parts: string[] = [];
       if (values.length) {
         parts.push(
-          `EXISTS (SELECT 1 FROM track_artists a WHERE a.trackId=t.id AND a.artist IN (${values.map(() => "?").join(",")}))`,
+          `EXISTS (SELECT 1 FROM track_album_artists a WHERE a.trackId=t.id AND a.artist IN (${values.map(() => "?").join(",")}))`,
         );
         args.push(...values);
       }
-      if (filter.artists.includes("")) parts.push("t.artists='[]'");
+      if (filter.artists.includes("")) parts.push("t.albumArtists='[]'");
       clauses.push(`(${parts.join(" OR ")})`);
     }
     if (filter.genres.length) {
@@ -291,7 +300,7 @@ export class Catalog {
       albumIds: [],
       search: "",
     });
-    const group = `FROM tracks t JOIN libraries l ON l.id=t.libraryId LEFT JOIN track_artists a ON a.trackId=t.id WHERE ${sql} GROUP BY coalesce(a.artist,'')`;
+    const group = `FROM tracks t JOIN libraries l ON l.id=t.libraryId LEFT JOIN track_album_artists a ON a.trackId=t.id WHERE ${sql} GROUP BY coalesce(a.artist,'')`;
     const total = (
       this.db
         .prepare(`SELECT count(*) n FROM (SELECT 1 ${group})`)
@@ -336,6 +345,14 @@ export class Catalog {
         "INSERT OR IGNORE INTO track_artists VALUES (?,?)",
       );
       for (const artist of track.artists) artistInsert.run(track.id, artist);
+      this.db
+        .prepare("DELETE FROM track_album_artists WHERE trackId=?")
+        .run(track.id);
+      const albumArtistInsert = this.db.prepare(
+        "INSERT OR IGNORE INTO track_album_artists VALUES (?,?)",
+      );
+      for (const artist of track.albumArtists)
+        albumArtistInsert.run(track.id, artist);
     })();
   }
   saveOperation(operation: OperationPreview): void {

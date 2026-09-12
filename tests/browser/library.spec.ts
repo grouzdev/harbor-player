@@ -107,7 +107,12 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
 
   const artistRow = page
     .locator(".artists-panel .facet-row")
-    .filter({ hasText: "Исполнитель" });
+    .filter({ hasText: "Исполнитель альбома" });
+  await expect(
+    page
+      .locator(".artists-panel .facet-row")
+      .getByRole("button", { name: "Исполнитель", exact: true }),
+  ).toHaveCount(0);
   const artistButton = artistRow.getByRole("button");
   const artistCheckbox = artistRow.getByRole("checkbox");
   await artistCheckbox.check();
@@ -137,7 +142,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await artistCheckbox.check();
   await page
     .locator(".artists-panel")
-    .getByRole("button", { name: "Все артисты" })
+    .getByRole("button", { name: "Все исполнители альбома" })
     .click();
   await expect(artistCheckbox).not.toBeChecked();
 
@@ -305,10 +310,10 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(taggedAlbumHeader).not.toContainText("FLAC");
   await page
     .locator(".artists-panel")
-    .getByRole("button", { name: "Исполнитель", exact: false })
+    .getByRole("button", { name: "Исполнитель альбома", exact: false })
     .last()
     .click();
-  await expect(rows).toHaveCount(7);
+  await expect(rows).toHaveCount(6);
   await flac().getByRole("button").click();
   await expect
     .poll(() =>
@@ -353,7 +358,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .selectOption({ label: `Collection ${browser}` });
   await page.getByRole("button", { name: "Посмотреть изменения" }).click();
   await page.getByRole("button", { name: /^Применить к/ }).click();
-  await expect(rows).toHaveCount(6);
+  await expect(rows).toHaveCount(5);
   await page.getByRole("button", { name: "Вся музыка" }).click();
   await page
     .getByRole("button", { name: new RegExp(`Collection ${browser}`) })

@@ -656,7 +656,7 @@ export function App() {
         />
         <section className="panel artists-panel">
           <div className="panel-heading">
-            <h2>Артисты</h2>
+            <h2>Исполнители альбома</h2>
             <span className="panel-count">
               {count(artists.data?.pages[0]?.total || 0)}
             </span>
@@ -667,7 +667,7 @@ export function App() {
               setFilter((f) => ({ ...f, artists: [], albumIds: [] }))
             }
           >
-            Все артисты
+            Все исполнители альбома
           </button>
           <ArtistList
             items={artistItems}
@@ -690,7 +690,7 @@ export function App() {
         <div
           className="resizer"
           role="separator"
-          aria-label="Ширина исполнителей"
+          aria-label="Ширина исполнителей альбома"
           onPointerDown={(e) => resize(2, e)}
         />
         <section className="panel albums-panel">
@@ -997,7 +997,7 @@ function ArtistList({
                 <input
                   className="facet-checkbox"
                   type="checkbox"
-                  aria-label={`Выбрать исполнителя: ${label}`}
+                  aria-label={`Выбрать исполнителя альбома: ${label}`}
                   checked={checked}
                   onClick={(event) => event.stopPropagation()}
                   onChange={() => onSelect(item.name, true)}
