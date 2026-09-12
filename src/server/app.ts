@@ -14,6 +14,7 @@ import {
   selectionSchema,
   tagPatchSchema,
 } from "../shared/contracts.js";
+import type { BookmarkKind } from "../shared/contracts.js";
 import { MusicService } from "./service.js";
 import { errorMessage } from "./config.js";
 import { openInExplorer, type ExplorerLauncher } from "./explorer.js";
@@ -130,6 +131,23 @@ export async function createApp(options: {
   app.get("/api/libraries", async () => {
     await service.refreshAvailability();
     return service.catalog.libraries();
+  });
+  app.get("/api/bookmarks", async () => service.catalog.bookmarks());
+  app.post("/api/bookmarks", async (request) => {
+    const body = z
+      .object({
+        kind: z.enum(["artist", "album", "track"]),
+        id: z.string().max(1000),
+        bookmarked: z.boolean(),
+      })
+      .strict()
+      .parse(request.body);
+    service.catalog.setBookmark(
+      body.kind as BookmarkKind,
+      body.id,
+      body.bookmarked,
+    );
+    return service.catalog.bookmarks();
   });
   app.post("/api/libraries", async (request) => {
     const body = z

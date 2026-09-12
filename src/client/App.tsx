@@ -14,6 +14,7 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   AudioLines,
+  Bookmark as BookmarkIcon,
   Check,
   ChevronRight,
   Clock3,
@@ -35,7 +36,9 @@ import {
 import {
   emptyFilter,
   type Album,
+  type BookmarkKind,
   type Capabilities,
+  type CatalogBookmark,
   type CatalogFilter,
   type Job,
   type Library,
@@ -87,43 +90,6 @@ export function App() {
   const [toast, setToast] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const notify = useCallback((message: string) => setToast(message), []);
-  const showExplorerMenu = useCallback(
-    (event: React.MouseEvent, kind: "album" | "track", id: string) => {
-      event.preventDefault();
-      setContextMenu({
-        x: event.clientX,
-        y: event.clientY,
-        items: [
-          ...(kind === "album"
-            ? [
-                {
-                  label: "–†–µ–¥–∞–∫—Ç–∏—Ä–æ–≤–∞—Ç—å —Ç–µ–≥–∏",
-                  icon: <Tag size={16} />,
-                  onSelect: () => {
-                    setModalSelection({
-                      filter: { ...emptyFilter, albumIds: [id] },
-                    });
-                    setModal("tags");
-                  },
-                },
-              ]
-            : []),
-          {
-            label: "–û—Ç–∫—Ä—ã—Ç—å –≤ –ø—Ä–æ–≤–æ–¥–Ω–∏–∫–µ",
-            icon: <FolderOpen size={16} />,
-            onSelect: async () => {
-              try {
-                await api("/explorer", { kind, id });
-              } catch (error) {
-                notify(error instanceof Error ? error.message : String(error));
-              }
-            },
-          },
-        ],
-      });
-    },
-    [notify],
-  );
   const player = usePlayer(notify);
   const workspaceRef = useRef<HTMLElement>(null);
   const [panelWeights, setPanelWeights] = useState<number[]>(() => {
@@ -181,9 +147,90 @@ export function App() {
           "history",
           "filter-validity",
           "selection-summary",
+          "bookmarks",
         ].includes(String(q.queryKey[0])),
     });
   }, [queryClient]);
+  const bookmarks = useQuery({
+    queryKey: ["bookmarks"],
+    queryFn: () => api<CatalogBookmark[]>("/bookmarks"),
+    enabled: ready,
+  });
+  const bookmarkKeys = useMemo(
+    () =>
+      new Set((bookmarks.data || []).map((item) => `${item.kind}:${item.id}`)),
+    [bookmarks.data],
+  );
+  const changeBookmark = useCallback(
+    async (kind: BookmarkKind, id: string, bookmarked: boolean) => {
+      try {
+        const next = await api<CatalogBookmark[]>("/bookmarks", {
+          kind,
+          id,
+          bookmarked,
+        });
+        queryClient.setQueryData(["bookmarks"], next);
+        refresh();
+      } catch (error) {
+        notify(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [notify, queryClient, refresh],
+  );
+  const showCatalogMenu = useCallback(
+    (event: React.MouseEvent, kind: BookmarkKind, id: string) => {
+      event.preventDefault();
+      const bookmarked = bookmarkKeys.has(`${kind}:${id}`);
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        items: [
+          {
+            label: bookmarked ? "ì§†´®‚Ï ®ß ß†™´†§Æ™" : "ÑÆ°†¢®‚Ï ¢ ß†™´†§™®",
+            icon: (
+              <BookmarkIcon
+                size={16}
+                fill={bookmarked ? "currentColor" : "none"}
+              />
+            ),
+            onSelect: () => changeBookmark(kind, id, !bookmarked),
+          },
+          ...(kind === "album"
+            ? [
+                {
+                  label: "ê•§†™‚®‡Æ¢†‚Ï ‚•£®",
+                  icon: <Tag size={16} />,
+                  onSelect: () => {
+                    setModalSelection({
+                      filter: { ...emptyFilter, albumIds: [id] },
+                    });
+                    setModal("tags");
+                  },
+                },
+              ]
+            : []),
+          ...(kind !== "artist"
+            ? [
+                {
+                  label: "é‚™‡Î‚Ï ¢ Ø‡Æ¢Æ§≠®™•",
+                  icon: <FolderOpen size={16} />,
+                  onSelect: async () => {
+                    try {
+                      await api("/explorer", { kind, id });
+                    } catch (error) {
+                      notify(
+                        error instanceof Error ? error.message : String(error),
+                      );
+                    }
+                  },
+                },
+              ]
+            : []),
+        ],
+      });
+    },
+    [bookmarkKeys, changeBookmark, notify],
+  );
   const scheduleRefresh = useCallback(
     (immediate = false) => {
       if (pendingRefresh.current) {
@@ -274,8 +321,12 @@ export function App() {
     enabled: ready,
   });
   const genreFilter = useMemo(
-    () => ({ ...emptyFilter, libraryIds: filter.libraryIds }),
-    [filter.libraryIds],
+    () => ({
+      ...emptyFilter,
+      libraryIds: filter.libraryIds,
+      bookmarksOnly: filter.bookmarksOnly,
+    }),
+    [filter.libraryIds, filter.bookmarksOnly],
   );
   const genres = useQuery({
     queryKey: ["genres", genreFilter],
@@ -288,8 +339,9 @@ export function App() {
       ...emptyFilter,
       libraryIds: filter.libraryIds,
       genres: filter.genres,
+      bookmarksOnly: filter.bookmarksOnly,
     }),
-    [filter.libraryIds, filter.genres],
+    [filter.libraryIds, filter.genres, filter.bookmarksOnly],
   );
   const artists = useInfiniteQuery({
     queryKey: ["artists", artistFilter],
@@ -340,7 +392,13 @@ export function App() {
   }, [valid.data]);
   const albumFilter = useMemo(
     () => ({ ...filter, albumIds: [] }),
-    [filter.libraryIds, filter.genres, filter.artists, filter.search],
+    [
+      filter.libraryIds,
+      filter.genres,
+      filter.artists,
+      filter.search,
+      filter.bookmarksOnly,
+    ],
   );
   const albums = useInfiniteQuery({
     queryKey: ["albums", albumFilter],
@@ -477,6 +535,25 @@ export function App() {
             </button>
           )}
         </label>
+        <button
+          className={`icon-button bookmarks-button ${filter.bookmarksOnly ? "active" : ""}`}
+          aria-label="–¢–æ–ª—å–∫–æ –∑–∞–∫–ª–∞–¥–∫–∏"
+          aria-pressed={filter.bookmarksOnly}
+          title="–¢–æ–ª—å–∫–æ –∑–∞–∫–ª–∞–¥–∫–∏"
+          onClick={() =>
+            setFilter((current) => ({
+              ...current,
+              bookmarksOnly: !current.bookmarksOnly,
+              artists: [],
+              albumIds: [],
+            }))
+          }
+        >
+          <BookmarkIcon
+            size={20}
+            fill={filter.bookmarksOnly ? "currentColor" : "none"}
+          />
+        </button>
         <button
           className="icon-button history-button"
           aria-label="–ñ—É—Ä–Ω–∞–ª –æ–ø–µ—Ä–∞—Ü–∏–π"
@@ -685,6 +762,7 @@ export function App() {
               if (artists.hasNextPage && !artists.isFetchingNextPage)
                 void artists.fetchNextPage();
             }}
+            onContextMenu={showCatalogMenu}
           />
         </section>
         <div
@@ -719,7 +797,7 @@ export function App() {
                 void albums.fetchNextPage();
             }}
             loading={albums.isFetching}
-            onContextMenu={showExplorerMenu}
+            onContextMenu={showCatalogMenu}
             onPlay={(id) => void player.startAlbum(id)}
           />
         </section>
@@ -856,7 +934,7 @@ export function App() {
                 if (tracks.hasNextPage && !tracks.isFetchingNextPage)
                   void tracks.fetchNextPage();
               }}
-              onContextMenu={showExplorerMenu}
+              onContextMenu={showCatalogMenu}
             />
           )}
           <div className="catalog-footer">
@@ -868,6 +946,7 @@ export function App() {
               filter.genres.length > 0 ||
               filter.artists.length > 0 ||
               filter.albumIds.length > 0 ||
+              filter.bookmarksOnly ||
               search) && (
               <button
                 className="text-button"
@@ -944,6 +1023,7 @@ function ArtistList({
   loading,
   onSelect,
   onMore,
+  onContextMenu,
 }: {
   items: { name: string; count: number }[];
   total: number;
@@ -951,6 +1031,11 @@ function ArtistList({
   loading: boolean;
   onSelect: (name: string, additive: boolean) => void;
   onMore: () => void;
+  onContextMenu: (
+    event: React.MouseEvent,
+    kind: BookmarkKind,
+    id: string,
+  ) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const virtual = useVirtualizer({
@@ -980,6 +1065,9 @@ function ArtistList({
               role="button"
               tabIndex={0}
               onClick={(event) => onSelect(item.name, event.ctrlKey)}
+              onContextMenu={(event) =>
+                onContextMenu(event, "artist", item.name)
+              }
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
@@ -1040,7 +1128,7 @@ function AlbumGrid({
   loading: boolean;
   onContextMenu: (
     event: React.MouseEvent,
-    kind: "album" | "track",
+    kind: BookmarkKind,
     id: string,
   ) => void;
   onPlay: (id: string) => void;
@@ -1187,7 +1275,7 @@ function TrackList({
   onMore: () => void;
   onContextMenu: (
     event: React.MouseEvent,
-    kind: "album" | "track",
+    kind: BookmarkKind,
     id: string,
   ) => void;
 }) {

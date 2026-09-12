@@ -1814,6 +1814,12 @@ body {
 .history-button {
   margin-left: auto;
 }
+.bookmarks-button {
+  margin-left: auto;
+}
+.bookmarks-button + .history-button {
+  margin-left: 0;
+}
 .workspace {
   grid-template-columns:
     minmax(110px, var(--library-weight)) 4px minmax(110px, var(--genre-weight))

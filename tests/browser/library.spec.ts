@@ -186,6 +186,29 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(firstAlbumCheckbox).not.toBeChecked();
   await expect(secondAlbumCheckbox).not.toBeChecked();
 
+  const inheritedTrackCount = Number(
+    (await firstAlbum.locator(".album-track-count").textContent())?.match(
+      /\d+/,
+    )?.[0],
+  );
+  await firstAlbum.dispatchEvent("contextmenu", { clientX: 300, clientY: 300 });
+  await page
+    .getByRole("menuitem", { name: "Добавить в закладки" })
+    .click();
+  const bookmarkToggle = page.getByRole("button", { name: "Только закладки" });
+  await bookmarkToggle.click();
+  await expect(bookmarkToggle).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("track-row")).toHaveCount(inheritedTrackCount);
+  await expect(page.locator(".album-card")).toHaveCount(1);
+  await bookmarkToggle.click();
+  await firstAlbum.dispatchEvent("contextmenu", { clientX: 300, clientY: 300 });
+  await page
+    .getByRole("menuitem", { name: "Удалить из закладок" })
+    .click();
+  await bookmarkToggle.click();
+  await expect(page.getByTestId("track-row")).toHaveCount(0);
+  await bookmarkToggle.click();
+
   const explorerRequests: { kind: string; id: string }[] = [];
   await page.route("**/api/explorer", async (route) => {
     explorerRequests.push(route.request().postDataJSON());

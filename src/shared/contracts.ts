@@ -41,6 +41,11 @@ export interface Album {
   coverId: string | null;
   trackCount: number;
 }
+export type BookmarkKind = "artist" | "album" | "track";
+export interface CatalogBookmark {
+  kind: BookmarkKind;
+  id: string;
+}
 export interface Page<T> {
   items: T[];
   total: number;
@@ -52,6 +57,7 @@ export const filterSchema = z.object({
   artists: z.array(z.string()).max(500).default([]),
   albumIds: z.array(z.string()).max(10000).default([]),
   search: z.string().max(300).default(""),
+  bookmarksOnly: z.boolean().default(false),
 });
 export type CatalogFilter = z.infer<typeof filterSchema>;
 export const tagPatchSchema = z
@@ -200,4 +206,5 @@ export const emptyFilter: CatalogFilter = {
   artists: [],
   albumIds: [],
   search: "",
+  bookmarksOnly: false,
 };

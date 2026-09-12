@@ -4,6 +4,8 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type {
   Album,
+  BookmarkKind,
+  CatalogBookmark,
   CatalogFilter,
   Job,
   Library,
@@ -58,6 +60,11 @@ export class Catalog {
       CREATE TABLE IF NOT EXISTS operations (id TEXT PRIMARY KEY, createdAt TEXT NOT NULL, payload TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS queues (id TEXT PRIMARY KEY, createdAt TEXT NOT NULL, trackIds TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS bookmarks (
+        kind TEXT NOT NULL CHECK(kind IN ('artist','album','track')),
+        id TEXT NOT NULL,
+        PRIMARY KEY(kind,id)
+      );
     `);
     if (version < 2)
       this.db.transaction(() => {
@@ -104,6 +111,7 @@ export class Catalog {
         );
         this.db.pragma("user_version = 4");
       })();
+    if (version < 5) this.db.pragma("user_version = 5");
   }
   libraries(): Library[] {
     return (
@@ -138,6 +146,55 @@ export class Catalog {
       )
       .get(id) as Row | undefined;
     return row ? fromRow(row) : undefined;
+  }
+  bookmarks(): CatalogBookmark[] {
+    return this.db
+      .prepare(
+        `SELECT kind,id FROM bookmarks
+         ORDER BY CASE kind WHEN 'artist' THEN 1 WHEN 'album' THEN 2 ELSE 3 END, id COLLATE NOCASE`,
+      )
+      .all() as CatalogBookmark[];
+  }
+  setBookmark(kind: BookmarkKind, id: string, bookmarked: boolean): void {
+    if (!bookmarked) {
+      this.db
+        .prepare("DELETE FROM bookmarks WHERE kind=? AND id=?")
+        .run(kind, id);
+      return;
+    }
+    const exists =
+      kind === "track"
+        ? this.db
+            .prepare("SELECT 1 FROM tracks WHERE id=? AND available=1")
+            .get(id)
+        : kind === "album"
+          ? this.db
+              .prepare("SELECT 1 FROM tracks WHERE albumKey=? AND available=1")
+              .get(id)
+          : id
+            ? this.db
+                .prepare(
+                  `SELECT 1 FROM track_album_artists a
+                   JOIN tracks t ON t.id=a.trackId
+                   WHERE a.artist=? AND t.available=1`,
+                )
+                .get(id)
+            : this.db
+                .prepare(
+                  "SELECT 1 FROM tracks WHERE albumArtists='[]' AND available=1",
+                )
+                .get();
+    if (!exists)
+      throw new Error(
+        kind === "track"
+          ? "Трек не найден"
+          : kind === "album"
+            ? "Альбом не найден"
+            : "Исполнитель не найден",
+      );
+    this.db
+      .prepare("INSERT OR IGNORE INTO bookmarks(kind,id) VALUES (?,?)")
+      .run(kind, id);
   }
   where(filter: CatalogFilter): { sql: string; args: any[] } {
     const clauses = ["t.available=1", "l.available=1"];
@@ -180,6 +237,20 @@ export class Catalog {
       );
       const search = `%${filter.search.trim().replace(/[\\%_]/g, "\\$&")}%`;
       args.push(search, search, search);
+    }
+    if (filter.bookmarksOnly) {
+      clauses.push(`(
+        EXISTS (SELECT 1 FROM bookmarks b WHERE b.kind='track' AND b.id=t.id)
+        OR EXISTS (SELECT 1 FROM bookmarks b WHERE b.kind='album' AND b.id=t.albumKey)
+        OR EXISTS (
+          SELECT 1 FROM track_album_artists a
+          JOIN bookmarks b ON b.kind='artist' AND b.id=a.artist
+          WHERE a.trackId=t.id
+        )
+        OR (t.albumArtists='[]' AND EXISTS (
+          SELECT 1 FROM bookmarks b WHERE b.kind='artist' AND b.id=''
+        ))
+      )`);
     }
     return { sql: clauses.join(" AND "), args };
   }

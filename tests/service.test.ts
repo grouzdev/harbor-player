@@ -62,6 +62,78 @@ async function library(name: string, extension = "flac") {
 const tracks = () => service.catalog.tracks(emptyFilter).items;
 
 describe("catalog and safe filesystem operations", () => {
+  it("filters bookmarks with artist and album inheritance", () => {
+    const catalog = service.catalog;
+    const lib = catalog.addLibrary("Bookmarks", path.join(root, "Bookmarks"));
+    const addTrack = (
+      id: string,
+      albumKey: string,
+      albumTitle: string,
+      albumArtist: string,
+    ) =>
+      catalog.upsert({
+        id,
+        libraryId: lib.id,
+        relativePath: `${id}.flac`,
+        title: id,
+        artists: [albumArtist],
+        albumTitle,
+        albumArtists: [albumArtist],
+        albumKey,
+        genres: ["Test"],
+        year: null,
+        trackNumber: 1,
+        discNumber: 1,
+        duration: 1,
+        format: "flac",
+        size: 1,
+        mtimeMs: 1,
+        coverId: null,
+        available: true,
+      });
+    addTrack("artist-first", "artist-album", "Artist album", "Artist");
+    addTrack("artist-second", "artist-album", "Artist album", "Artist");
+    addTrack("album-track", "saved-album", "Saved album", "Other");
+    addTrack("saved-track", "plain-album", "Plain album", "Third");
+    addTrack("hidden-track", "hidden-album", "Hidden album", "Hidden");
+
+    catalog.setBookmark("artist", "Artist", true);
+    catalog.setBookmark("album", "saved-album", true);
+    catalog.setBookmark("track", "saved-track", true);
+
+    expect(catalog.bookmarks()).toEqual([
+      { kind: "artist", id: "Artist" },
+      { kind: "album", id: "saved-album" },
+      { kind: "track", id: "saved-track" },
+    ]);
+    const bookmarked = { ...emptyFilter, bookmarksOnly: true };
+    expect(
+      catalog
+        .tracks(bookmarked)
+        .items.map((track) => track.id)
+        .sort(),
+    ).toEqual(["album-track", "artist-first", "artist-second", "saved-track"]);
+    expect(
+      catalog
+        .albums(bookmarked)
+        .items.map((album) => album.id)
+        .sort(),
+    ).toEqual(["artist-album", "plain-album", "saved-album"]);
+    expect(
+      catalog
+        .artists(bookmarked)
+        .items.map((artist) => artist.name)
+        .sort(),
+    ).toEqual(["Artist", "Other", "Third"]);
+
+    catalog.setBookmark("artist", "Artist", false);
+    expect(
+      catalog
+        .tracks(bookmarked)
+        .items.map((track) => track.id)
+        .sort(),
+    ).toEqual(["album-track", "saved-track"]);
+  });
   it("filters albums by album artists with genre and library intersection", async () => {
     const a = await library("A");
     await library("B");
