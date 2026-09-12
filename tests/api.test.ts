@@ -92,6 +92,54 @@ describe("HTTP boundary", () => {
   });
 });
 
+describe("Album catalog sorting", () => {
+  it("puts albums without a year first, then sorts by newest year and title", () => {
+    const library = context.service.catalog.addLibrary("Library", root);
+    const albums = [
+      { id: "unknown-z", title: "Zeta", year: null },
+      { id: "new-z", title: "Zebra", year: 2025 },
+      { id: "old", title: "Older", year: 2020 },
+      { id: "unknown-a", title: "Alpha", year: null },
+      { id: "new-a", title: "Alpha", year: 2025 },
+    ];
+    for (const album of albums)
+      context.service.catalog.upsert({
+        id: album.id,
+        libraryId: library.id,
+        relativePath: `${album.id}.flac`,
+        title: "Track",
+        artists: [],
+        albumTitle: album.title,
+        albumArtists: [],
+        albumKey: album.id,
+        genres: [],
+        year: album.year,
+        trackNumber: 1,
+        discNumber: 1,
+        duration: 1,
+        format: "flac",
+        size: 1,
+        mtimeMs: 1,
+        coverId: null,
+        available: true,
+      });
+
+    const filter = {
+      libraryIds: [],
+      genres: [],
+      artists: [],
+      albumIds: [],
+      search: "",
+    };
+    const firstPage = context.service.catalog.albums(filter, 0, 3);
+    const secondPage = context.service.catalog.albums(filter, 3, 3);
+
+    expect(
+      [...firstPage.items, ...secondPage.items].map((album) => album.id),
+    ).toEqual(["unknown-a", "unknown-z", "new-a", "new-z", "old"]);
+  });
+});
+
 describe("Explorer endpoint", () => {
   async function sessionHeaders() {
     const session = await context.app.inject({

@@ -278,7 +278,7 @@ export class Catalog {
     ).n;
     const rows = this.db
       .prepare(
-        `SELECT t.albumKey id, t.albumTitle title, t.albumArtists artists, t.year, max(t.coverId) coverId, count(*) trackCount FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql} GROUP BY t.albumKey ORDER BY t.albumTitle COLLATE NOCASE, t.albumKey LIMIT ? OFFSET ?`,
+        `SELECT t.albumKey id, t.albumTitle title, t.albumArtists artists, t.year, max(t.coverId) coverId, count(*) trackCount FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql} GROUP BY t.albumKey ORDER BY t.year IS NOT NULL, t.year DESC, t.albumTitle COLLATE NOCASE, t.albumKey LIMIT ? OFFSET ?`,
       )
       .all(...args, limit, offset) as Row[];
     return {
