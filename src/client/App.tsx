@@ -58,6 +58,7 @@ import {
 import {
   ActionDialog,
   AddLibraryDialog,
+  CoverDropConfirmDialog,
   HistoryDialog,
   PreviewDialog,
   RemoveLibraryDialog,
@@ -65,6 +66,12 @@ import {
 import { selectFacetValue } from "./facet-selection";
 import { Player, usePlayer } from "./Player";
 import { ContextMenu, type ContextMenuState } from "./ContextMenu";
+
+type DroppedCover = {
+  album: Album;
+  name: string;
+  cover: { data: string; mime: "image/jpeg" | "image/png" };
+};
 
 function toggle(values: string[], value: string) {
   return values.includes(value)
@@ -89,6 +96,7 @@ export function App() {
   const [libraryToRemove, setLibraryToRemove] = useState<Library | null>(null);
   const [modalSelection, setModalSelection] = useState<Selection | null>(null);
   const [preview, setPreview] = useState<OperationPreview | null>(null);
+  const [droppedCover, setDroppedCover] = useState<DroppedCover | null>(null);
   const [toast, setToast] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const notify = useCallback((message: string) => setToast(message), []);
@@ -306,6 +314,65 @@ export function App() {
     },
     [refresh, scheduleRefresh],
   );
+  const prepareDroppedCover = useCallback(
+    (album: Album, files: File[]) => {
+      if (files.length !== 1) {
+        notify("Перетащите один файл JPEG или PNG до 10 МБ");
+        return;
+      }
+      const [file] = files;
+      if (
+        file.size > 10 * 1024 * 1024 ||
+        !["image/jpeg", "image/png"].includes(file.type)
+      ) {
+        notify("Выберите JPEG или PNG до 10 МБ");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onerror = () => notify("Не удалось прочитать файл обложки");
+      reader.onload = () => {
+        const result = typeof reader.result === "string" ? reader.result : "";
+        const data = result.split(",")[1];
+        if (!data) {
+          notify("Не удалось прочитать файл обложки");
+          return;
+        }
+        setDroppedCover({
+          album,
+          name: file.name,
+          cover: {
+            data,
+            mime: file.type as "image/jpeg" | "image/png",
+          },
+        });
+      };
+      reader.readAsDataURL(file);
+    },
+    [notify],
+  );
+  const applyDroppedCover = useCallback(async () => {
+    if (!droppedCover) return;
+    const operation = await api<OperationPreview>("/operations/preview", {
+      kind: "tags",
+      selection: {
+        filter: { ...emptyFilter, albumIds: [droppedCover.album.id] },
+      },
+      patch: { cover: droppedCover.cover },
+    });
+    const writable = operation.items.filter(
+      (item) => !item.error && item.trackId,
+    );
+    if (!writable.length)
+      throw new Error("В альбоме нет треков, доступных для записи обложки");
+    await api(`/operations/${operation.id}/execute`, {});
+    watchOperation(operation.id);
+    setDroppedCover(null);
+    notify(
+      writable.length === operation.items.length
+        ? "Запись обложки запущена. Результат появится в журнале."
+        : `Запись обложки запущена для ${count(writable.length)} из ${count(operation.items.length)} треков. Подробности появятся в журнале.`,
+    );
+  }, [droppedCover, notify, watchOperation]);
   useEffect(() => {
     if (!ready) return;
     const source = new EventSource("/api/events");
@@ -822,6 +889,7 @@ export function App() {
             loading={albums.isFetching}
             onContextMenu={showCatalogMenu}
             onPlay={(id) => void player.startAlbum(id)}
+            onCoverDrop={prepareDroppedCover}
           />
         </section>
         <div
@@ -1058,6 +1126,15 @@ export function App() {
           }}
         />
       )}
+      {droppedCover && (
+        <CoverDropConfirmDialog
+          albumTitle={droppedCover.album.title}
+          coverName={droppedCover.name}
+          trackCount={droppedCover.album.trackCount}
+          onClose={() => setDroppedCover(null)}
+          onConfirm={applyDroppedCover}
+        />
+      )}
     </div>
   );
 }
@@ -1165,6 +1242,7 @@ function AlbumGrid({
   loading,
   onContextMenu,
   onPlay,
+  onCoverDrop,
 }: {
   albums: Album[];
   total: number;
@@ -1178,9 +1256,11 @@ function AlbumGrid({
     id: string,
   ) => void;
   onPlay: (id: string) => void;
+  onCoverDrop: (album: Album, files: File[]) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(330);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   useEffect(() => {
     const observer = new ResizeObserver((entries) =>
       setWidth(entries[0].contentRect.width),
@@ -1242,7 +1322,28 @@ function AlbumGrid({
                       onClick={(event) => onSelect(album.id, event.ctrlKey)}
                     >
                       <div
-                        className="album-cover"
+                        className={`album-cover ${dropTarget === album.id ? "drop-target" : ""}`}
+                        onDragEnter={(event) => {
+                          event.preventDefault();
+                          setDropTarget(album.id);
+                        }}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDragLeave={(event) => {
+                          if (
+                            !event.currentTarget.contains(
+                              event.relatedTarget as Node,
+                            )
+                          )
+                            setDropTarget(null);
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          setDropTarget(null);
+                          onCoverDrop(
+                            album,
+                            Array.from(event.dataTransfer.files),
+                          );
+                        }}
                         onDoubleClick={(event) => {
                           event.stopPropagation();
                           onPlay(album.id);
@@ -1269,6 +1370,11 @@ function AlbumGrid({
                         <span className="album-track-count">
                           {album.trackCount} тр.
                         </span>
+                        {dropTarget === album.id && (
+                          <span className="album-cover-drop-hint">
+                            Отпустите обложку
+                          </span>
+                        )}
                       </div>
                       <strong>{album.title || "Без альбома"}</strong>
                       <small>

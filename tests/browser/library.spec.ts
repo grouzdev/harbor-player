@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 test("local library: readable UI, playback, tags, move, delete and restore", async ({
@@ -302,6 +303,81 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect
     .poll(() => firstAlbum.locator("img").getAttribute("src"))
     .not.toBe(originalCover);
+  const coverAfterMusicBrainz = await firstAlbum
+    .locator("img")
+    .getAttribute("src");
+  const coverTarget = firstAlbum.locator(".album-cover");
+  await coverTarget.evaluate((element) => {
+    element.dispatchEvent(
+      new DragEvent("dragenter", {
+        bubbles: true,
+        dataTransfer: new DataTransfer(),
+      }),
+    );
+  });
+  await expect(coverTarget).toContainText("Отпустите обложку");
+  await coverTarget.evaluate((element) => {
+    element.dispatchEvent(new DragEvent("dragleave", { bubbles: true }));
+  });
+  const dropFile = async (name: string, type: string, base64: string) => {
+    await coverTarget.evaluate(
+      (element, file) => {
+        const bytes = Uint8Array.from(atob(file.base64), (char) =>
+          char.charCodeAt(0),
+        );
+        const transfer = new DataTransfer();
+        transfer.items.add(new File([bytes], file.name, { type: file.type }));
+        element.dispatchEvent(
+          new DragEvent("drop", {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer: transfer,
+          }),
+        );
+      },
+      { name, type, base64 },
+    );
+  };
+  await dropFile("not-cover.gif", "image/gif", "R0lGODlh");
+  await expect(page.locator(".toast")).toContainText("JPEG или PNG");
+  await coverTarget.evaluate((element) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(
+      new File([new Uint8Array(10 * 1024 * 1024 + 1)], "large.png", {
+        type: "image/png",
+      }),
+    );
+    element.dispatchEvent(
+      new DragEvent("drop", {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: transfer,
+      }),
+    );
+  });
+  await expect(page.locator(".toast")).toContainText("JPEG или PNG");
+  const droppedCover = (
+    await readFile(path.resolve(".fixtures/cover.png"))
+  ).toString("base64");
+  await dropFile("dropped-cover.png", "image/png", droppedCover);
+  const coverDialog = page.getByRole("dialog");
+  await expect(coverDialog).toContainText(
+    "Применить обложку «dropped-cover.png»",
+  );
+  await coverDialog.getByRole("button", { name: "Отмена" }).click();
+  await expect(coverDialog).not.toBeVisible();
+  await expect(firstAlbum.locator("img")).toHaveAttribute(
+    "src",
+    coverAfterMusicBrainz!,
+  );
+  await dropFile("dropped-cover.png", "image/png", droppedCover);
+  await coverDialog
+    .getByRole("button", { name: "Применить", exact: true })
+    .click();
+  await expect(coverDialog).not.toBeVisible();
+  await expect
+    .poll(() => firstAlbum.locator("img").getAttribute("src"))
+    .not.toBe(coverAfterMusicBrainz);
   await firstAlbum.dispatchEvent("contextmenu", { clientX: 300, clientY: 300 });
   await page.getByRole("menuitem", { name: "Открыть в проводнике" }).click();
   await expect(page.getByRole("menu")).not.toBeVisible();

@@ -29,6 +29,63 @@ import type {
 import { api, count, fieldLabels, operationLabels } from "./api";
 import { Modal } from "./Modal";
 
+export function CoverDropConfirmDialog({
+  albumTitle,
+  coverName,
+  trackCount,
+  onClose,
+  onConfirm,
+}: {
+  albumTitle: string;
+  coverName: string;
+  trackCount: number;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <Modal
+      title="Применить обложку?"
+      subtitle={albumTitle || "Без альбома"}
+      onClose={busy ? () => {} : onClose}
+    >
+      <p className="hint">
+        Применить обложку «{coverName}» ко всем {count(trackCount)} трекам
+        альбома?
+      </p>
+      {error && <p className="error-text">{error}</p>}
+      <footer className="modal-footer">
+        <button
+          type="button"
+          className="button secondary"
+          disabled={busy}
+          onClick={onClose}
+        >
+          Отмена
+        </button>
+        <button
+          type="button"
+          className="button primary"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setError("");
+            try {
+              await onConfirm();
+            } catch (cause) {
+              setError(cause instanceof Error ? cause.message : String(cause));
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? "Применяем…" : "Применить"}
+        </button>
+      </footer>
+    </Modal>
+  );
+}
+
 function MusicBrainzThumbnail({ url }: { url: string }) {
   const [failed, setFailed] = useState(false);
 
