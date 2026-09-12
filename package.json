@@ -11,7 +11,7 @@
     "build": "npm run typecheck && npm run build:server && vite build",
     "start": "npm run build && node dist/server/index.js",
     "serve": "node dist/server/index.js",
-    "dev": "npm run build:server && concurrently -k \"tsc -p tsconfig.server.json --watch --preserveWatchOutput\" \"cross-env MYMUSICLIB_DEV=1 node --watch dist/server/index.js --no-open\" \"vite --host 127.0.0.1 --open\"",
+    "dev": "npm run build:server && concurrently -k \"tsc -p tsconfig.server.json --watch --preserveWatchOutput\" \"cross-env MYMUSICLIB_DEV=1 node --watch dist/server/index.js --no-open\" \"vite --host 127.0.0.1\"",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json",
     "test": "npm run build:server && vitest run",
     "test:e2e": "npm run build && playwright test",

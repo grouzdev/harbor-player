@@ -10,7 +10,7 @@ try {
     !Array.isArray(data.capabilities?.writableFormats)
   )
     process.exit(1);
-  await open("http://127.0.0.1:5173");
+  if (!process.env.MYMUSICLIB_NO_OPEN) await open("http://127.0.0.1:5173");
 } catch {
   process.exitCode = 1;
 }
