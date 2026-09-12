@@ -123,7 +123,7 @@ export interface OperationPreview {
 }
 export interface Job {
   id: string;
-  kind: "scan" | "operation";
+  kind: "scan" | "operation" | "library";
   label: string;
   status: "queued" | "running" | "done" | "error";
   completed: number;

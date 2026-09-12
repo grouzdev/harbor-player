@@ -77,6 +77,26 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   }
   await add(`Downloads ${browser}`, source);
   await add(`Collection ${browser}`, target);
+  const collection = page
+    .getByRole("button", { name: new RegExp(`Collection ${browser}`) })
+    .first();
+  await collection.click({ button: "right" });
+  const libraryMenu = page.getByRole("menu");
+  await expect(libraryMenu.getByRole("menuitem", { name: "Обновить" })).toBeVisible();
+  await expect(libraryMenu.getByRole("menuitem", { name: "Удалить" })).toBeVisible();
+  const scanResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().includes("/api/libraries/") &&
+      response.url().endsWith("/scan"),
+  );
+  await libraryMenu.getByRole("menuitem", { name: "Обновить" }).click();
+  expect((await scanResponse).ok()).toBe(true);
+  await collection.click({ button: "right" });
+  await libraryMenu.getByRole("menuitem", { name: "Удалить" }).click();
+  const removeLibraryDialog = page.getByRole("dialog");
+  await expect(removeLibraryDialog).toContainText("Файлы музыки на диске останутся");
+  await removeLibraryDialog.getByRole("button", { name: "Отмена" }).click();
   await page
     .getByRole("button", { name: new RegExp(`Downloads ${browser}`) })
     .first()
@@ -404,5 +424,11 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .click();
   await page.getByRole("button", { name: /^Применить к/ }).click();
   await expect(rows).toHaveCount(1);
+  await collection.click({ button: "right" });
+  await libraryMenu.getByRole("menuitem", { name: "Удалить" }).click();
+  await page.getByRole("button", { name: "Отключить", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: new RegExp(`Collection ${browser}`) }),
+  ).toHaveCount(0);
   expect(errors).toEqual([]);
 });

@@ -290,20 +290,6 @@ a {
   position: relative;
   margin-bottom: 5px;
 }
-.library-container .library-row {
-  padding-right: 25px;
-}
-.rescan {
-  position: absolute;
-  right: 2px;
-  top: 15px;
-  padding: 4px;
-  opacity: 0;
-}
-.library-container:hover .rescan,
-.rescan:focus-visible {
-  opacity: 1;
-}
 .library-row.offline {
   opacity: 0.5;
 }
@@ -620,6 +606,13 @@ a {
 }
 .button.secondary:hover:not(:disabled) {
   background: #ffffff0b;
+}
+.button.danger {
+  background: #8d463d;
+  color: #fff4f1;
+}
+.button.danger:hover:not(:disabled) {
+  background: #a25348;
 }
 .button.small {
   padding: 7px 11px;

@@ -115,6 +115,60 @@ export function AddLibraryDialog({
   );
 }
 
+export function RemoveLibraryDialog({
+  library,
+  onClose,
+  onRemove,
+}: {
+  library: Library;
+  onClose: () => void;
+  onRemove: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <Modal
+      title="Отключить библиотеку?"
+      subtitle={library.name}
+      onClose={busy ? () => {} : onClose}
+    >
+      <p className="hint">
+        Папка будет удалена из каталога MyMusicLib вместе с индексированными
+        треками. Файлы музыки на диске останутся без изменений.
+      </p>
+      {error && (
+        <p className="error-text" role="alert">
+          {error}
+        </p>
+      )}
+      <footer className="modal-footer">
+        <button type="button" className="button secondary" onClick={onClose} disabled={busy}>
+          Отмена
+        </button>
+        <button
+          type="button"
+          className="button danger"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setError("");
+            try {
+              await onRemove();
+              onClose();
+            } catch (cause) {
+              setError(cause instanceof Error ? cause.message : String(cause));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? "Отключение…" : "Отключить"}
+        </button>
+      </footer>
+    </Modal>
+  );
+}
+
 export function ActionDialog({
   kind,
   selection,

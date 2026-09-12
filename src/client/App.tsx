@@ -60,6 +60,7 @@ import {
   AddLibraryDialog,
   HistoryDialog,
   PreviewDialog,
+  RemoveLibraryDialog,
 } from "./Dialogs";
 import { selectFacetValue } from "./facet-selection";
 import { Player, usePlayer } from "./Player";
@@ -83,8 +84,9 @@ export function App() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [allSelected, setAllSelected] = useState(false);
   const [modal, setModal] = useState<
-    "add" | "move" | "trash" | "tags" | "history" | null
+    "add" | "move" | "trash" | "tags" | "history" | "remove-library" | null
   >(null);
+  const [libraryToRemove, setLibraryToRemove] = useState<Library | null>(null);
   const [modalSelection, setModalSelection] = useState<Selection | null>(null);
   const [preview, setPreview] = useState<OperationPreview | null>(null);
   const [toast, setToast] = useState("");
@@ -186,7 +188,7 @@ export function App() {
         y: event.clientY,
         items: [
           {
-            label: bookmarked ? "������� �� ��������" : "�������� � ��������",
+            label: bookmarked ? "Удалить из закладок" : "Добавить в закладки",
             icon: (
               <BookmarkIcon
                 size={16}
@@ -198,7 +200,7 @@ export function App() {
           ...(kind === "album"
             ? [
                 {
-                  label: "������஢��� ⥣�",
+                  label: "Редактировать теги",
                   icon: <Tag size={16} />,
                   onSelect: () => {
                     setModalSelection({
@@ -212,7 +214,7 @@ export function App() {
           ...(kind !== "artist"
             ? [
                 {
-                  label: "������ � �஢������",
+                  label: "Открыть в проводнике",
                   icon: <FolderOpen size={16} />,
                   onSelect: async () => {
                     try {
@@ -230,6 +232,38 @@ export function App() {
       });
     },
     [bookmarkKeys, changeBookmark, notify],
+  );
+  const showLibraryMenu = useCallback(
+    (event: React.MouseEvent, library: Library) => {
+      event.preventDefault();
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        items: [
+          {
+            label: "Обновить",
+            icon: <RefreshCw size={16} />,
+            onSelect: async () => {
+              try {
+                await api(`/libraries/${library.id}/scan`, { force: true });
+                refresh();
+              } catch (error) {
+                notify(error instanceof Error ? error.message : String(error));
+              }
+            },
+          },
+          {
+            label: "Удалить",
+            icon: <Trash2 size={16} />,
+            onSelect: () => {
+              setLibraryToRemove(library);
+              setModal("remove-library");
+            },
+          },
+        ],
+      });
+    },
+    [notify, refresh],
   );
   const scheduleRefresh = useCallback(
     (immediate = false) => {
@@ -606,6 +640,7 @@ export function App() {
                   aria-pressed={filter.libraryIds.includes(library.id)}
                   title={library.path}
                   onClick={() => chooseLibrary(library.id)}
+                  onContextMenu={(event) => showLibraryMenu(event, library)}
                 >
                   <Folder size={18} />
                   <span>
@@ -619,18 +654,6 @@ export function App() {
                   {filter.libraryIds.includes(library.id) && (
                     <Check size={14} />
                   )}
-                </button>
-                <button
-                  className="rescan icon-button"
-                  aria-label={`Обновить ${library.name}`}
-                  title="Перечитать файлы и обложки"
-                  onClick={() =>
-                    api(`/libraries/${library.id}/scan`, { force: true })
-                      .then(refresh)
-                      .catch((e) => notify(e.message))
-                  }
-                >
-                  <RefreshCw size={13} />
                 </button>
               </div>
             ))}
@@ -977,6 +1000,29 @@ export function App() {
       )}
       {modal === "add" && (
         <AddLibraryDialog onClose={() => setModal(null)} onAdded={refresh} />
+      )}
+      {modal === "remove-library" && libraryToRemove && (
+        <RemoveLibraryDialog
+          library={libraryToRemove}
+          onClose={() => {
+            setModal(null);
+            setLibraryToRemove(null);
+          }}
+          onRemove={async () => {
+            await api(`/libraries/${libraryToRemove.id}/remove`, {});
+            setFilter((current) => ({
+              ...current,
+              libraryIds: current.libraryIds.filter(
+                (id) => id !== libraryToRemove.id,
+              ),
+              genres: [],
+              artists: [],
+              albumIds: [],
+            }));
+            refresh();
+            notify(`Библиотека «${libraryToRemove.name}» отключается`);
+          }}
+        />
       )}
       {modal && ["move", "trash", "tags"].includes(modal) && (
         <ActionDialog

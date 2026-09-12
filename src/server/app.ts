@@ -158,6 +158,9 @@ export async function createApp(options: {
       .parse(request.body);
     return service.addLibrary(body.name, body.path);
   });
+  app.post("/api/libraries/:id/remove", async (request) =>
+    service.removeLibrary(idParam.parse(request.params).id),
+  );
   app.post("/api/libraries/:id/scan", async (request) =>
     service.scan(
       idParam.parse(request.params).id,

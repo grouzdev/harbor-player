@@ -134,6 +134,28 @@ export class Catalog {
       .run(id, name, folder);
     return this.library(id);
   }
+  removeLibrary(id: string): Library {
+    const library = this.library(id);
+    this.db.transaction(() => {
+      this.db.prepare("DELETE FROM tracks WHERE libraryId=?").run(id);
+      this.db.prepare("DELETE FROM libraries WHERE id=?").run(id);
+      // Bookmarks do not use foreign keys. Retain entries still represented by
+      // another library and remove only those made orphaned by this deletion.
+      this.db.exec(`
+        DELETE FROM bookmarks
+        WHERE (kind='track' AND NOT EXISTS (SELECT 1 FROM tracks t WHERE t.id=bookmarks.id AND t.available=1))
+           OR (kind='album' AND NOT EXISTS (SELECT 1 FROM tracks t WHERE t.albumKey=bookmarks.id AND t.available=1))
+           OR (kind='artist' AND bookmarks.id<>'' AND NOT EXISTS (
+             SELECT 1 FROM track_album_artists a JOIN tracks t ON t.id=a.trackId
+             WHERE a.artist=bookmarks.id AND t.available=1
+           ))
+           OR (kind='artist' AND bookmarks.id='' AND NOT EXISTS (
+             SELECT 1 FROM tracks t WHERE t.albumArtists='[]' AND t.available=1
+           ))
+      `);
+    })();
+    return library;
+  }
   track(id: string): Track | undefined {
     const row = this.db.prepare("SELECT * FROM tracks WHERE id=?").get(id) as
       Row | undefined;

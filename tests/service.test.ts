@@ -62,6 +62,21 @@ async function library(name: string, extension = "flac") {
 const tracks = () => service.catalog.tracks(emptyFilter).items;
 
 describe("catalog and safe filesystem operations", () => {
+  it("disconnects a library after scans without removing its source files", async () => {
+    const lib = await library("Disconnect");
+    const source = path.join(lib.path, "Album", "track.flac");
+
+    const job = service.removeLibrary(lib.id);
+    await service.idle();
+
+    expect(job.status).toBe("done");
+    expect(service.catalog.libraries()).not.toContainEqual(
+      expect.objectContaining({ id: lib.id }),
+    );
+    expect(tracks()).toEqual([]);
+    await expect(stat(source)).resolves.toMatchObject({ isFile: expect.any(Function) });
+  });
+
   it("filters bookmarks with artist and album inheritance", () => {
     const catalog = service.catalog;
     const lib = catalog.addLibrary("Bookmarks", path.join(root, "Bookmarks"));

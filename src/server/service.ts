@@ -161,6 +161,16 @@ export class MusicService extends EventEmitter {
     );
     return { library, job: this.scan(library.id) };
   }
+  removeLibrary(libraryId: string): Job {
+    const library = this.catalog.library(libraryId);
+    return this.enqueue(
+      "library",
+      `Отключение библиотеки: ${library.name}`,
+      async () => {
+        this.catalog.removeLibrary(libraryId);
+      },
+    );
+  }
   private publish(job: Job) {
     this.catalog.saveJob(job);
     this.emit("change", { type: "job", job });

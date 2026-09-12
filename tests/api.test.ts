@@ -77,6 +77,42 @@ describe("HTTP boundary", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json().error).toContain("абсолютный");
   });
+  it("removes a library only with CSRF and reports an unknown library", async () => {
+    const library = context.service.catalog.addLibrary("Library", root);
+    const session = await context.app.inject({
+      url: "/api/session",
+      headers: { host: "127.0.0.1:4317" },
+    });
+    const cookie = String(session.headers["set-cookie"]).split(";")[0];
+    const headers = { host: "127.0.0.1:4317", cookie };
+
+    expect(
+      (
+        await context.app.inject({
+          method: "POST",
+          url: `/api/libraries/${library.id}/remove`,
+          headers,
+        })
+      ).statusCode,
+    ).toBe(403);
+
+    const missing = await context.app.inject({
+      method: "POST",
+      url: "/api/libraries/missing/remove",
+      headers: { ...headers, "x-csrf-token": session.json().csrf },
+    });
+    expect(missing.statusCode).toBe(400);
+    expect(missing.json().error).toContain("не найдена");
+
+    const removed = await context.app.inject({
+      method: "POST",
+      url: `/api/libraries/${library.id}/remove`,
+      headers: { ...headers, "x-csrf-token": session.json().csrf },
+    });
+    expect(removed.statusCode).toBe(200);
+    await context.service.idle();
+    expect(context.service.catalog.libraries()).toEqual([]);
+  });
   it("parses bounded, open-ended and suffix ranges and rejects malformed ones", () => {
     expect(rangeFor("bytes=10-19", 100)).toEqual({ start: 10, end: 19 });
     expect(rangeFor("bytes=90-", 100)).toEqual({ start: 90, end: 99 });
