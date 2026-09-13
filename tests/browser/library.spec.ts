@@ -446,6 +446,25 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await persistedTrackBookmark.click();
   await expect(page.getByText("В закладках пока пусто")).toBeVisible();
   await page.getByRole("button", { name: "Показать всю музыку" }).click();
+  await expect(page.getByTestId("track-row")).toHaveCount(7);
+  await expect(page.locator(".catalog-footer")).toContainText("7 треков");
+
+  const trackActions = [
+    "Редактировать теги",
+    "Перенести треки",
+    "Удалить треки",
+  ];
+  for (const action of trackActions) {
+    const button = page.getByRole("button", { name: action, exact: true });
+    await expect(button).toBeEnabled();
+    await button.click();
+    await expect(page.getByRole("dialog")).toContainText(
+      "Выбрано треков: 7",
+    );
+    await page.getByRole("button", { name: "Отмена" }).click();
+  }
+  await page.reload();
+  await expect(page.getByLabel("Поиск музыки")).toBeVisible();
 
   await page.route("**/api/bookmarks", async (route) => {
     if (route.request().method() !== "POST") {

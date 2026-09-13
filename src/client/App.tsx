@@ -725,6 +725,9 @@ export function App() {
   const selection: Selection = allSelected
     ? { filter, excludeTrackIds: [...selected] }
     : { trackIds: [...selected] };
+  const operationSelection: Selection = selected.size
+    ? selection
+    : { filter };
   const selectionCount = allSelected ? total - selected.size : selected.size;
   const activeJobs =
     jobs.data?.filter((j) => ["queued", "running"].includes(j.status)) || [];
@@ -1115,7 +1118,7 @@ export function App() {
                 className="icon-button"
                 aria-label="Редактировать теги"
                 title="Редактировать теги"
-                disabled={!selectionCount}
+                disabled={!total}
                 onClick={() => {
                   setModalSelection(null);
                   setModal("tags");
@@ -1127,7 +1130,7 @@ export function App() {
                 className="icon-button"
                 aria-label="Перенести треки"
                 title="Перенести в библиотеку"
-                disabled={!selectionCount}
+                disabled={!total}
                 onClick={() => {
                   setModalSelection(null);
                   setModal("move");
@@ -1139,7 +1142,7 @@ export function App() {
                 className="icon-button danger"
                 aria-label="Удалить треки"
                 title="Удалить с возможностью восстановления"
-                disabled={!selectionCount}
+                disabled={!total}
                 onClick={() => {
                   setModalSelection(null);
                   setModal("trash");
@@ -1305,7 +1308,7 @@ export function App() {
       {modal && ["move", "trash", "tags"].includes(modal) && (
         <ActionDialog
           kind={modal as "move" | "trash" | "tags"}
-          selection={modalSelection || selection}
+          selection={modalSelection || operationSelection}
           libraries={libraries.data || []}
           capabilities={capabilities}
           onClose={() => {
