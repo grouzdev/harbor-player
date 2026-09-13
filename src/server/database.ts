@@ -278,11 +278,22 @@ export class Catalog {
       }
     };
     list(filter.libraryIds, "t.libraryId");
-    if (filter.folder) {
-      const folder = checkedFolderPath(filter.folder.relativePath);
-      const prefix = `${folder}${path.sep}`;
-      clauses.push("t.libraryId=? AND substr(t.relativePath,1,?)=?");
-      args.push(filter.folder.libraryId, prefix.length, prefix);
+    const selectedFolders = filter.folders || [];
+    if (selectedFolders.length) {
+      const folders = selectedFolders.map((selection) => {
+        const folder = checkedFolderPath(selection.relativePath);
+        return {
+          libraryId: selection.libraryId,
+          prefix: `${folder}${path.sep}`,
+        };
+      });
+      clauses.push(
+        `(${folders
+          .map(() => "t.libraryId=? AND substr(t.relativePath,1,?)=?")
+          .join(" OR ")})`,
+      );
+      for (const folder of folders)
+        args.push(folder.libraryId, folder.prefix.length, folder.prefix);
     }
     list(filter.albumIds, "t.albumKey");
     if (filter.artists.length) {

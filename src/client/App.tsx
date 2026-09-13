@@ -172,10 +172,12 @@ export function App() {
     verificationDate: null,
   });
   const [filter, setFilter] = useState<CatalogFilter>(emptyFilter);
-  const [expandedLibraryId, setExpandedLibraryId] = useState<string | null>(
-    null,
+  const [expandedLibraryIds, setExpandedLibraryIds] = useState<Set<string>>(
+    new Set(),
   );
-  const [folderBranch, setFolderBranch] = useState<LibraryFolder[]>([]);
+  const [expandedFolderKeys, setExpandedFolderKeys] = useState<Set<string>>(
+    new Set(),
+  );
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [allSelected, setAllSelected] = useState(false);
@@ -593,54 +595,85 @@ export function App() {
     queryFn: () => api<Library[]>("/libraries"),
     enabled: ready,
   });
-  const folderParents = useMemo(
-    () =>
-      expandedLibraryId
-        ? [null, ...folderBranch.map((folder) => folder.relativePath)]
-        : [],
-    [expandedLibraryId, folderBranch],
-  );
+  const folderKey = (libraryId: string, relativePath: string | null) =>
+    `${libraryId}\u0000${relativePath || ""}`;
+  const folderParent = (relativePath: string) => {
+    const separator = Math.max(
+      relativePath.lastIndexOf("\\"),
+      relativePath.lastIndexOf("/"),
+    );
+    return separator < 0 ? null : relativePath.slice(0, separator);
+  };
+  const folderQueryTargets = useMemo(() => {
+    const targets = new Map<
+      string,
+      { libraryId: string; parent: string | null }
+    >();
+    for (const libraryId of expandedLibraryIds)
+      targets.set(folderKey(libraryId, null), { libraryId, parent: null });
+    for (const key of expandedFolderKeys) {
+      const [libraryId, parent] = key.split("\u0000");
+      if (libraryId && parent) targets.set(key, { libraryId, parent });
+    }
+    for (const folder of filter.folders) {
+      const parent = folderParent(folder.relativePath);
+      targets.set(folderKey(folder.libraryId, parent), {
+        libraryId: folder.libraryId,
+        parent,
+      });
+    }
+    return [...targets.values()];
+  }, [expandedFolderKeys, expandedLibraryIds, filter.folders]);
   const folderLevels = useQueries({
-    queries: folderParents.map((parent) => ({
-      queryKey: ["library-folders", expandedLibraryId, parent],
+    queries: folderQueryTargets.map(({ libraryId, parent }) => ({
+      queryKey: ["library-folders", libraryId, parent],
       queryFn: () => {
         const query = parent
           ? `?${new URLSearchParams({ parent }).toString()}`
           : "";
-        return api<LibraryFolder[]>(
-          `/libraries/${expandedLibraryId}/folders${query}`,
-        );
+        return api<LibraryFolder[]>(`/libraries/${libraryId}/folders${query}`);
       },
-      enabled: ready && Boolean(expandedLibraryId),
+      enabled: ready,
     })),
   });
-  const selectedFolderParentQuery =
-    filter.folder &&
-    filter.folder.libraryId === expandedLibraryId &&
-    folderBranch.at(-1)?.relativePath === filter.folder.relativePath
-      ? folderLevels[folderBranch.length - 1]
-      : undefined;
-  const selectedFolderMissing = Boolean(
-    filter.folder &&
-    selectedFolderParentQuery?.isSuccess &&
-    !selectedFolderParentQuery.data?.some(
-      (folder) => folder.relativePath === filter.folder?.relativePath,
-    ),
+  const folderQueryByParent = useMemo(
+    () =>
+      new Map(
+        folderQueryTargets.map((target, index) => [
+          folderKey(target.libraryId, target.parent),
+          folderLevels[index],
+        ]),
+      ),
+    [folderLevels, folderQueryTargets],
   );
+  const missingSelectedFolders = filter.folders.filter((folder) => {
+    const query = folderQueryByParent.get(
+      folderKey(folder.libraryId, folderParent(folder.relativePath)),
+    );
+    return (
+      query?.isSuccess &&
+      !query.data?.some((item) => item.relativePath === folder.relativePath)
+    );
+  });
   useEffect(() => {
-    if (!filter.folder || !selectedFolderMissing) return;
-    const libraryId = filter.folder.libraryId;
-    setFolderBranch([]);
+    if (!missingSelectedFolders.length) return;
+    const missing = new Set(
+      missingSelectedFolders.map((folder) =>
+        folderKey(folder.libraryId, folder.relativePath),
+      ),
+    );
     setFilter((current) => ({
       ...current,
-      folder: null,
-      libraryIds: [libraryId],
+      folders: current.folders.filter(
+        (folder) =>
+          !missing.has(folderKey(folder.libraryId, folder.relativePath)),
+      ),
       genres: [],
       artists: [],
       albumIds: [],
     }));
-    notify("Выбранная папка больше не найдена; показана вся библиотека");
-  }, [filter.folder, notify, selectedFolderMissing]);
+    notify("Выбранная папка больше не найдена; фильтр обновлён");
+  }, [missingSelectedFolders, notify]);
   const jobs = useQuery({
     queryKey: ["jobs"],
     queryFn: () => api<Job[]>("/jobs"),
@@ -650,10 +683,10 @@ export function App() {
     () => ({
       ...emptyFilter,
       libraryIds: filter.libraryIds,
-      folder: filter.folder,
+      folders: filter.folders,
       bookmarksOnly: filter.bookmarksOnly,
     }),
-    [filter.libraryIds, filter.folder, filter.bookmarksOnly],
+    [filter.libraryIds, filter.folders, filter.bookmarksOnly],
   );
   const genres = useQuery({
     queryKey: ["genres", genreFilter],
@@ -665,11 +698,11 @@ export function App() {
     () => ({
       ...emptyFilter,
       libraryIds: filter.libraryIds,
-      folder: filter.folder,
+      folders: filter.folders,
       genres: filter.genres,
       bookmarksOnly: filter.bookmarksOnly,
     }),
-    [filter.libraryIds, filter.folder, filter.genres, filter.bookmarksOnly],
+    [filter.libraryIds, filter.folders, filter.genres, filter.bookmarksOnly],
   );
   const artists = useInfiniteQuery({
     queryKey: ["artists", artistFilter],
@@ -741,7 +774,7 @@ export function App() {
     () => ({ ...filter, albumIds: [] }),
     [
       filter.libraryIds,
-      filter.folder,
+      filter.folders,
       filter.genres,
       filter.artists,
       filter.search,
@@ -832,12 +865,14 @@ export function App() {
     window.addEventListener("pointerup", stop);
   };
   const chooseLibrary = (id: string, additive: boolean) => {
-    setExpandedLibraryId(id);
-    setFolderBranch([]);
     setFilter((f) => ({
       ...f,
-      libraryIds: selectFacetValue(f.folder ? [] : f.libraryIds, id, additive),
-      folder: null,
+      libraryIds: selectFacetValue(
+        f.folders.length ? [] : f.libraryIds,
+        id,
+        additive,
+      ),
+      folders: [],
       genres: [],
       artists: [],
       albumIds: [],
@@ -846,14 +881,33 @@ export function App() {
   const chooseFolder = (
     libraryId: string,
     folder: LibraryFolder,
-    depth: number,
+    additive: boolean,
   ) => {
-    setExpandedLibraryId(libraryId);
-    setFolderBranch((current) => [...current.slice(0, depth), folder]);
     setFilter((current) => ({
       ...current,
       libraryIds: [],
-      folder: { libraryId, relativePath: folder.relativePath },
+      folders: (() => {
+        const selected = { libraryId, relativePath: folder.relativePath };
+        if (!additive) return [selected];
+        const key = folderKey(libraryId, folder.relativePath);
+        const selectedAlready = current.folders.some(
+          (item) => folderKey(item.libraryId, item.relativePath) === key,
+        );
+        if (selectedAlready)
+          return current.folders.filter(
+            (item) => folderKey(item.libraryId, item.relativePath) !== key,
+          );
+        return [
+          ...current.folders.filter(
+            (item) =>
+              !(
+                item.libraryId === libraryId &&
+                item.relativePath.startsWith(`${folder.relativePath}\\`)
+              ),
+          ),
+          selected,
+        ];
+      })(),
       genres: [],
       artists: [],
       albumIds: [],
@@ -872,14 +926,27 @@ export function App() {
     artists.error ||
     albums.error ||
     tracks.error;
-  const renderFolderLevel = (libraryId: string, depth = 0): ReactNode => {
-    const query = folderLevels[depth];
+  const toggleExpandedFolder = (libraryId: string, relativePath: string) => {
+    const key = folderKey(libraryId, relativePath);
+    setExpandedFolderKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+  const renderFolderLevel = (
+    libraryId: string,
+    parent: string | null = null,
+    depth = 0,
+  ): ReactNode => {
+    const query = folderQueryByParent.get(folderKey(libraryId, parent));
     if (!query) return null;
     if (query.isPending)
       return (
         <div
           className="folder-level-status"
-          style={{ "--folder-depth": Math.min(depth + 1, 3) } as CSSProperties}
+          style={{ "--folder-depth": depth + 1 } as CSSProperties}
         >
           <RefreshCw size={13} className="spinning" />
           <span>Загружаем папки…</span>
@@ -890,7 +957,7 @@ export function App() {
         <button
           type="button"
           className="folder-level-status error"
-          style={{ "--folder-depth": Math.min(depth + 1, 3) } as CSSProperties}
+          style={{ "--folder-depth": depth + 1 } as CSSProperties}
           onClick={() => void query.refetch()}
         >
           <RefreshCw size={13} />
@@ -898,37 +965,49 @@ export function App() {
         </button>
       );
     return query.data?.map((folder) => {
-      const inBranch =
-        folderBranch[depth]?.relativePath === folder.relativePath;
-      const selected =
-        filter.folder?.libraryId === libraryId &&
-        filter.folder.relativePath === folder.relativePath;
+      const expanded = expandedFolderKeys.has(
+        folderKey(libraryId, folder.relativePath),
+      );
+      const selected = filter.folders.some(
+        (item) =>
+          item.libraryId === libraryId &&
+          item.relativePath === folder.relativePath,
+      );
       return (
         <div key={folder.relativePath} className="library-folder-node">
           <ListTile
             className="library-folder-tile"
             selected={selected}
-            current={inBranch && !selected}
-            expanded={folder.hasChildren ? inBranch : undefined}
+            current={expanded && !selected}
+            expanded={folder.hasChildren ? expanded : undefined}
             title={folder.relativePath}
             value={folder.name}
-            prefix={
+            startAction={
               folder.hasChildren ? (
-                <ChevronRight
-                  size={14}
-                  className={`folder-chevron ${inBranch ? "expanded" : ""}`}
-                />
+                <button
+                  type="button"
+                  className="tree-toggle"
+                  aria-label={`${expanded ? "Свернуть" : "Развернуть"} папку «${folder.name}»`}
+                  aria-expanded={expanded}
+                  onClick={() =>
+                    toggleExpandedFolder(libraryId, folder.relativePath)
+                  }
+                >
+                  <ChevronRight
+                    size={14}
+                    className={`folder-chevron ${expanded ? "expanded" : ""}`}
+                  />
+                </button>
               ) : (
-                <span className="folder-chevron-spacer" />
+                <span className="tree-toggle-spacer" aria-hidden="true" />
               )
             }
             suffix={count(folder.trackCount)}
-            style={
-              { "--folder-depth": Math.min(depth + 1, 3) } as CSSProperties
-            }
-            onSelect={() => chooseFolder(libraryId, folder, depth)}
+            style={{ "--folder-depth": depth + 1 } as CSSProperties}
+            onSelect={(event) => chooseFolder(libraryId, folder, event.ctrlKey)}
           />
-          {inBranch && renderFolderLevel(libraryId, depth + 1)}
+          {expanded &&
+            renderFolderLevel(libraryId, folder.relativePath, depth + 1)}
         </div>
       );
     });
@@ -1035,14 +1114,14 @@ export function App() {
             <h2>Библиотеки</h2>
           </div>
           <button
-            className={`list-all-action ${filter.libraryIds.length === 0 && !filter.folder ? "selected" : ""}`}
+            className={`list-all-action ${filter.libraryIds.length === 0 && !filter.folders.length ? "selected" : ""}`}
             onClick={() => {
-              setExpandedLibraryId(null);
-              setFolderBranch([]);
+              setExpandedLibraryIds(new Set());
+              setExpandedFolderKeys(new Set());
               setFilter((f) => ({
                 ...f,
                 libraryIds: [],
-                folder: null,
+                folders: [],
                 genres: [],
                 artists: [],
                 albumIds: [],
@@ -1066,23 +1145,41 @@ export function App() {
                     .filter(Boolean)
                     .join(" ")}
                   selected={
-                    !filter.folder && filter.libraryIds.includes(library.id)
+                    !filter.folders.length &&
+                    filter.libraryIds.includes(library.id)
                   }
-                  current={filter.folder?.libraryId === library.id}
-                  expanded={expandedLibraryId === library.id}
+                  current={filter.folders.some(
+                    (folder) => folder.libraryId === library.id,
+                  )}
+                  expanded={expandedLibraryIds.has(library.id)}
                   title={library.path}
                   value={library.name}
-                  prefix={
-                    <ChevronRight
-                      size={14}
-                      className={`folder-chevron ${expandedLibraryId === library.id ? "expanded" : ""}`}
-                    />
+                  startAction={
+                    <button
+                      type="button"
+                      className="tree-toggle"
+                      aria-label={`${expandedLibraryIds.has(library.id) ? "Свернуть" : "Развернуть"} библиотеку «${library.name}»`}
+                      aria-expanded={expandedLibraryIds.has(library.id)}
+                      onClick={() =>
+                        setExpandedLibraryIds((current) => {
+                          const next = new Set(current);
+                          if (next.has(library.id)) next.delete(library.id);
+                          else next.add(library.id);
+                          return next;
+                        })
+                      }
+                    >
+                      <ChevronRight
+                        size={14}
+                        className={`folder-chevron ${expandedLibraryIds.has(library.id) ? "expanded" : ""}`}
+                      />
+                    </button>
                   }
                   suffix={count(library.trackCount)}
                   onSelect={(event) => chooseLibrary(library.id, event.ctrlKey)}
                   onContextMenu={(event) => showLibraryMenu(event, library)}
                 />
-                {expandedLibraryId === library.id &&
+                {expandedLibraryIds.has(library.id) &&
                   renderFolderLevel(library.id)}
               </div>
             ))}
@@ -1400,7 +1497,7 @@ export function App() {
               bookmarkCount={bookmarks.data?.length || 0}
               hasOtherFilters={
                 filter.libraryIds.length > 0 ||
-                Boolean(filter.folder) ||
+                filter.folders.length > 0 ||
                 filter.genres.length > 0 ||
                 filter.artists.length > 0 ||
                 filter.albumIds.length > 0 ||
@@ -1414,8 +1511,8 @@ export function App() {
               }
               onResetBookmarkFilters={() => {
                 setSearch("");
-                setExpandedLibraryId(null);
-                setFolderBranch([]);
+                setExpandedLibraryIds(new Set());
+                setExpandedFolderKeys(new Set());
                 setFilter({ ...emptyFilter, bookmarksOnly: true });
               }}
             />
@@ -1426,7 +1523,7 @@ export function App() {
             <span className="footer-dot">·</span>
             <span>{count(albumTotal)} альбомов</span>
             {(filter.libraryIds.length > 0 ||
-              filter.folder ||
+              filter.folders.length > 0 ||
               filter.genres.length > 0 ||
               filter.artists.length > 0 ||
               filter.albumIds.length > 0 ||
@@ -1437,8 +1534,8 @@ export function App() {
                 onClick={() => {
                   setFilter(emptyFilter);
                   setSearch("");
-                  setExpandedLibraryId(null);
-                  setFolderBranch([]);
+                  setExpandedLibraryIds(new Set());
+                  setExpandedFolderKeys(new Set());
                 }}
               >
                 Сбросить фильтры
@@ -1478,18 +1575,26 @@ export function App() {
               libraryIds: current.libraryIds.filter(
                 (id) => id !== libraryToRemove.id,
               ),
-              folder:
-                current.folder?.libraryId === libraryToRemove.id
-                  ? null
-                  : current.folder,
+              folders: current.folders.filter(
+                (folder) => folder.libraryId !== libraryToRemove.id,
+              ),
               genres: [],
               artists: [],
               albumIds: [],
             }));
-            if (expandedLibraryId === libraryToRemove.id) {
-              setExpandedLibraryId(null);
-              setFolderBranch([]);
-            }
+            setExpandedLibraryIds((current) => {
+              const next = new Set(current);
+              next.delete(libraryToRemove.id);
+              return next;
+            });
+            setExpandedFolderKeys(
+              (current) =>
+                new Set(
+                  [...current].filter(
+                    (key) => !key.startsWith(`${libraryToRemove.id}\u0000`),
+                  ),
+                ),
+            );
             refresh();
             notify(`Библиотека «${libraryToRemove.name}» отключается`);
           }}

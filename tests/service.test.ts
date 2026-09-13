@@ -537,7 +537,7 @@ describe("catalog and safe filesystem operations", () => {
     };
     expect(
       catalog
-        .tracks({ ...emptyFilter, folder: rockFolder })
+        .tracks({ ...emptyFilter, folders: [rockFolder] })
         .items.map((track) => track.id)
         .sort(),
     ).toEqual(["rock-album", "rock-live"]);
@@ -545,7 +545,7 @@ describe("catalog and safe filesystem operations", () => {
       catalog
         .tracks({
           ...emptyFilter,
-          folder: rockFolder,
+          folders: [rockFolder],
           genres: ["Rock"],
         })
         .items.map((track) => track.id),
@@ -554,10 +554,27 @@ describe("catalog and safe filesystem operations", () => {
     expect(
       catalog
         .selected({
-          filter: { ...emptyFilter, folder: rockFolder, bookmarksOnly: true },
+          filter: {
+            ...emptyFilter,
+            folders: [rockFolder],
+            bookmarksOnly: true,
+          },
         })
         .map((track) => track.id),
     ).toEqual(["rock-live"]);
+    expect(
+      catalog
+        .tracks({
+          ...emptyFilter,
+          folders: [
+            rockFolder,
+            { libraryId: lib.id, relativePath: path.join("Rock", "Album") },
+            { libraryId: lib.id, relativePath: "Archive" },
+          ],
+        })
+        .items.map((track) => track.id)
+        .sort(),
+    ).toEqual(["rock-album", "rock-live", "same-name"]);
   });
   it("moves across volumes with original structure, ID and byte identity", async () => {
     const lib = await library("Downloads");

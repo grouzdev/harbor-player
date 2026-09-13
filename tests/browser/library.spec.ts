@@ -8,6 +8,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   const browser = info.project.name;
   const source = path.resolve(".test-data/browser", browser, "Downloads");
   const target = path.resolve(".test-data/browser", browser, "Collection");
+  const tree = path.resolve(".test-data/browser", browser, "Tree");
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
@@ -126,11 +127,16 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     "Файлы музыки на диске останутся",
   );
   await removeLibraryDialog.getByRole("button", { name: "Отмена" }).click();
-  await page
-    .getByRole("button", { name: new RegExp(`Downloads ${browser}`) })
-    .first()
-    .click();
+  const downloadsTile = page
+    .locator(".libraries-panel .list-tile")
+    .filter({ hasText: `Downloads ${browser}` });
+  await downloadsTile.locator(".list-tile-main").click();
   await expect(page.getByTestId("track-row")).toHaveCount(7);
+  await page
+    .getByRole("button", {
+      name: `Развернуть библиотеку «Downloads ${browser}»`,
+    })
+    .click();
   const albumFolderButton = page
     .locator(".libraries-panel")
     .getByTitle("Album", { exact: true });
@@ -139,10 +145,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await albumFolderButton.click();
   await expect(albumFolder).toHaveClass(/selected/);
   await expect(page.getByTestId("track-row")).toHaveCount(7);
-  await page
-    .getByRole("button", { name: new RegExp(`Downloads ${browser}`) })
-    .first()
-    .click();
+  await downloadsTile.locator(".list-tile-main").click();
   await expect(
     page.locator(".track-row .track-number, .track-row .row-play"),
   ).toHaveCount(0);
@@ -225,9 +228,6 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await artistButton.click();
   await expect(artistRow).toHaveClass(/selected/);
 
-  const downloadsTile = page
-    .locator(".libraries-panel .list-tile")
-    .filter({ hasText: `Downloads ${browser}` });
   await expect(downloadsTile).not.toHaveClass(/unrelated/);
   await expect(collectionTile).toHaveClass(/unrelated/);
   await expect(collectionTile.locator(".list-tile-value")).toHaveCSS(
@@ -523,10 +523,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     "Тестовая ошибка закладок",
   );
   await page.unroute("**/api/bookmarks");
-  await page
-    .getByRole("button", { name: new RegExp(`Downloads ${browser}`) })
-    .first()
-    .click();
+  await downloadsTile.locator(".list-tile-main").click();
 
   const explorerRequests: { kind: string; id: string }[] = [];
   await page.route("**/api/explorer", async (route) => {
@@ -807,4 +804,58 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     page.getByRole("button", { name: new RegExp(`Collection ${browser}`) }),
   ).toHaveCount(0);
   expect(errors).toEqual([]);
+});
+
+test("library folders expand independently and support Ctrl selection", async ({
+  page,
+}, info) => {
+  const browser = info.project.name;
+  const tree = path.resolve(".test-data/browser", browser, "Tree");
+  const name = `Tree controls ${browser}`;
+  await page.goto("/");
+  await page.locator(".add-library").click();
+  await page.getByLabel("Путь к папке", { exact: true }).fill(tree);
+  await page.getByLabel("Название библиотеки").fill(name);
+  await page.getByRole("button", { name: "Подключить", exact: true }).click();
+  const treeTile = page
+    .locator(".libraries-panel .list-tile")
+    .filter({ hasText: name });
+  await treeTile.locator(".list-tile-main").click();
+  await expect(treeTile).toHaveClass(/selected/);
+  await expect(page.getByTitle("Rock", { exact: true })).toHaveCount(0);
+  await treeTile
+    .getByRole("button", { name: `Развернуть библиотеку «${name}»` })
+    .click();
+  const rockTile = page
+    .locator(".libraries-panel .list-tile")
+    .filter({ hasText: "Rock" });
+  const jazzTile = page
+    .locator(".libraries-panel .list-tile")
+    .filter({ hasText: "Jazz" });
+  await rockTile
+    .getByRole("button", { name: "Развернуть папку «Rock»" })
+    .click();
+  await jazzTile
+    .getByRole("button", { name: "Развернуть папку «Jazz»" })
+    .click();
+  await expect(page.getByTitle(/Rock\\Live$/)).toBeVisible();
+  await expect(
+    jazzTile.getByRole("button", { name: "Свернуть папку «Jazz»" }),
+  ).toBeVisible();
+  await rockTile.getByRole("button", { name: "Свернуть папку «Rock»" }).click();
+  await expect(page.getByTitle(/Rock\\Live$/)).toHaveCount(0);
+  await rockTile
+    .getByRole("button", { name: "Развернуть папку «Rock»" })
+    .click();
+  await rockTile.locator(".list-tile-main").click();
+  await jazzTile.locator(".list-tile-main").click({ modifiers: ["Control"] });
+  await expect(page.getByTestId("track-row")).toHaveCount(3);
+  const rockAlbumTile = page.getByTitle(/Rock\\Album$/).locator("..");
+  await rockAlbumTile
+    .locator(".list-tile-main")
+    .click({ modifiers: ["Control"] });
+  await rockTile.locator(".list-tile-main").click({ modifiers: ["Control"] });
+  await rockTile.locator(".list-tile-main").click({ modifiers: ["Control"] });
+  await expect(rockAlbumTile).not.toHaveClass(/selected/);
+  await expect(page.getByTestId("track-row")).toHaveCount(3);
 });

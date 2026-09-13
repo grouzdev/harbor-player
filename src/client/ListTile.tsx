@@ -13,6 +13,7 @@ type ListTileProps = {
   style?: CSSProperties;
   testId?: string;
   dataFormat?: string;
+  startAction?: ReactNode;
   endAction?: ReactNode;
   onSelect: (event: MouseEvent<HTMLButtonElement>) => void;
   onDoubleClick?: () => void;
@@ -32,6 +33,7 @@ export function ListTile({
   style,
   testId,
   dataFormat,
+  startAction,
   endAction,
   onSelect,
   onDoubleClick,
@@ -39,12 +41,13 @@ export function ListTile({
 }: ListTileProps) {
   return (
     <div
-      className={`list-tile ${selected ? "selected" : ""} ${current ? "current" : ""} ${endAction ? "has-end-action" : ""} ${className}`}
+      className={`list-tile ${selected ? "selected" : ""} ${current ? "current" : ""} ${startAction ? "has-start-action" : ""} ${endAction ? "has-end-action" : ""} ${className}`}
       style={style}
       data-testid={testId}
       data-format={dataFormat}
       onContextMenu={onContextMenu}
     >
+      {startAction}
       <button
         type="button"
         className="list-tile-main"

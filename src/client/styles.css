@@ -330,7 +330,29 @@ a {
   min-width: 0;
 }
 .libraries-panel .library-folder-tile .list-tile-main {
-  padding-left: calc(8px + var(--folder-depth) * 8px);
+  padding-left: 4px;
+}
+.tree-toggle,
+.tree-toggle-spacer {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 100%;
+  color: #63727c;
+}
+.tree-toggle {
+  border-radius: 0;
+  font-size: var(--type-caption);
+}
+.tree-toggle:hover,
+.tree-toggle:focus-visible {
+  color: #b7d5af;
+  background: #ffffff04;
+}
+.libraries-panel .library-folder-tile .tree-toggle,
+.libraries-panel .library-folder-tile .tree-toggle-spacer {
+  margin-left: calc(4px + var(--folder-depth) * 8px);
 }
 .folder-chevron {
   display: block;
