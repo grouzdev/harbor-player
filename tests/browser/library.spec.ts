@@ -207,10 +207,14 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .filter({ hasText: "Исполнитель альбома" });
   const firstAlbumButton = firstAlbum.locator(".album-main");
   await expect(firstAlbum.getByRole("checkbox")).toHaveCount(0);
+  await expect(firstAlbum.locator(".album-cover")).toHaveCSS(
+    "border-color",
+    /transparent|rgba\(0, 0, 0, 0\)/,
+  );
   await firstAlbumButton.click();
   await expect(firstAlbum).toHaveClass(/selected/);
   await expect(firstAlbum.locator(".album-cover")).toHaveCSS(
-    "box-shadow",
+    "border-color",
     /rgb\(185, 212, 183\)/,
   );
   await genreButton.click();
@@ -560,6 +564,10 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     );
   });
   await expect(coverTarget).toContainText("Отпустите обложку");
+  await expect(coverTarget).toHaveCSS(
+    "box-shadow",
+    /rgb\(185, 212, 183\)/,
+  );
   await coverTarget.evaluate((element) => {
     element.dispatchEvent(new DragEvent("dragleave", { bubbles: true }));
   });
