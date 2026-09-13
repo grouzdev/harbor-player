@@ -13,12 +13,14 @@ import {
   rename,
   readFile,
   open,
+  writeFile,
 } from "node:fs/promises";
 import path from "node:path";
 import { Catalog } from "./database.js";
 import { Workers } from "./workers.js";
 import { acquireInstanceLock } from "./instance-lock.js";
 import { writeTagsIsolated } from "./isolated-tag-writer.js";
+import { writeId3InPlace } from "./in-place-id3.js";
 import { audioExtensions, errorMessage, inside } from "./config.js";
 import { readTrack } from "./metadata.js";
 import { MusicBrainzService, type MusicBrainzOptions } from "./musicbrainz.js";
@@ -464,12 +466,15 @@ export class MusicService extends EventEmitter {
           const item = op.items[start + offset];
           try {
             await this.safePath(item.source);
-            const fingerprint = await this.fingerprint(item.source, "source");
-            if (fingerprint.size !== track.size)
+            const current = await stat(item.source);
+            if (current.size !== track.size)
               throw new Error(
                 "Файл изменился извне. Сначала обновите библиотеку.",
               );
-            Object.assign(item, fingerprint);
+            if (kind === "tags") {
+              item.size = current.size;
+              item.mtimeMs = current.mtimeMs;
+            } else Object.assign(item, await this.fingerprint(item.source, "source"));
             if (
               kind === "tags" &&
               !this.capabilities.writableFormats.includes(track.format)
@@ -678,6 +683,7 @@ export class MusicService extends EventEmitter {
           job.total = op.items.length;
           const ids = op.items.filter((i) => i.trackId).map((i) => i.trackId!);
           await this.closeStreams(ids);
+          await this.applyExternalCovers(op);
           for (const item of op.items as JournalItem[]) {
             if (item.phase === "done") {
               job.completed++;
@@ -690,6 +696,17 @@ export class MusicService extends EventEmitter {
               continue;
             }
             try {
+              if (
+                op.kind === "tags" &&
+                !Object.keys(this.effectiveTagPatch(op, item)).length
+              ) {
+                await this.reindexItem(op, item, true);
+                item.phase = "done";
+                job.completed++;
+                this.catalog.saveOperation(op);
+                this.publish(job);
+                continue;
+              }
               await this.applyItem(op, item);
               item.phase = "done";
               item.error = undefined;
@@ -729,6 +746,19 @@ export class MusicService extends EventEmitter {
     const editing = op.kind === "tags" || restoringTags;
     await this.safePath(item.source, true, op.kind === "restore");
     await this.safePath(item.destination, true, op.kind === "trash");
+    if (op.kind === "tags" && item.phase === "preview" && !item.hash) {
+      const fast = await writeId3InPlace(
+        item.destination,
+        this.effectiveTagPatch(op, item),
+      );
+      if (fast.fast) {
+        item.result = "Теги записаны без копирования аудиофайла";
+        await this.reindexItem(op, item, true);
+        return;
+      }
+      item.result = `Требуется полная запись: ${fast.reason}`;
+      Object.assign(item, await this.fingerprint(item.source, "source"));
+    }
     if (item.phase === "prepared" && (await exists(item.destination))) {
       const destinationHash = (await this.fingerprint(item.destination)).hash;
       if (
@@ -862,9 +892,42 @@ export class MusicService extends EventEmitter {
       (!item.trackId || !op.coverTrackIds.includes(item.trackId))
     )
       delete patch.cover;
+    // New artwork lives beside the album instead of being duplicated in audio files.
+    if (patch.cover !== undefined && patch.cover !== null) delete patch.cover;
     return patch;
   }
-  private async reindexItem(op: OperationPreview, item: OperationItem) {
+  private async applyExternalCovers(op: OperationPreview) {
+    if (op.kind !== "tags" || op.patch?.cover === undefined) return;
+    const allowed = op.coverTrackIds ? new Set(op.coverTrackIds) : undefined;
+    const folders = new Set(
+      op.items
+        .filter((item) => item.trackId && (!allowed || allowed.has(item.trackId)))
+        .map((item) => path.dirname(item.source)),
+    );
+    for (const folder of folders) {
+      if (op.patch.cover === null) {
+        for (const name of ["cover.jpg", "cover.png", "folder.jpg", "folder.png"])
+          await unlink(path.join(folder, name)).catch((error: NodeJS.ErrnoException) => {
+            if (error.code !== "ENOENT") throw error;
+          });
+        continue;
+      }
+      const ext = op.patch.cover.mime === "image/png" ? "png" : "jpg";
+      const target = path.join(folder, `cover.${ext}`);
+      const stage = path.join(folder, `.mymusiclib-cover-${op.id}.${ext}`);
+      await writeFile(stage, Buffer.from(op.patch.cover.data, "base64"), { flag: "wx" });
+      await rename(stage, target);
+      const other = path.join(folder, `cover.${ext === "png" ? "jpg" : "png"}`);
+      await unlink(other).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+    }
+  }
+  private async reindexItem(
+    op: OperationPreview,
+    item: OperationItem,
+    tagsOnly = false,
+  ) {
     if (!item.trackId) return;
     const old = this.catalog.track(item.trackId);
     if (!old) throw new Error("Запись трека не найдена");
@@ -885,6 +948,8 @@ export class MusicService extends EventEmitter {
           lib.path,
           old.id,
           this.dataDir,
+          undefined,
+          tagsOnly ? old.duration : undefined,
         );
         if (!track) throw new Error("Обработчик не вернул данные трека");
         this.catalog.upsert(track);

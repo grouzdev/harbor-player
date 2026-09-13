@@ -88,9 +88,10 @@ function readWithTagLib(file: string): ParsedAudioMetadata {
 async function parseTrackMetadata(
   file: string,
   parse: typeof parseFile,
+  readDuration: boolean,
 ): Promise<ParsedAudioMetadata> {
   try {
-    return await parse(file, { duration: true });
+    return await parse(file, { duration: readDuration });
   } catch (primaryError) {
     try {
       return readWithTagLib(file);
@@ -107,38 +108,37 @@ export async function readTrack(
   id: string,
   dataDir: string,
   parse: typeof parseFile = parseFile,
+  knownDuration?: number,
 ): Promise<Track> {
   const info = await stat(file);
-  const metadata = await parseTrackMetadata(file, parse);
+  const metadata = await parseTrackMetadata(file, parse, knownDuration === undefined);
   if (
     !metadata.format.sampleRate ||
     !metadata.format.numberOfChannels ||
-    !Number.isFinite(metadata.format.duration) ||
-    !metadata.format.duration ||
-    metadata.format.duration <= 0
+    !Number.isFinite(metadata.format.duration || knownDuration) ||
+    !(metadata.format.duration || knownDuration) ||
+    (metadata.format.duration || knownDuration)! <= 0
   )
     throw new Error("Не удалось прочитать аудиоданные файла");
   const c = metadata.common;
   let coverId: string | null = null;
-  let cover =
-    c.picture?.find((p) => /front/i.test(p.type || "")) || c.picture?.[0];
-  if (!cover) {
-    for (const name of ["cover.jpg", "folder.jpg", "cover.png", "folder.png"]) {
-      try {
-        const coverPath = path.join(path.dirname(file), name);
-        const s = await lstat(coverPath);
-        if (!s.isFile() || s.isSymbolicLink() || s.size > 10 * 1024 * 1024)
-          continue;
-        cover = {
-          format: name.endsWith("png") ? "image/png" : "image/jpeg",
-          data: await readFile(coverPath),
-        };
-        break;
-      } catch {
-        /* An external cover is optional. */
-      }
+  let cover: { format: string; data: Uint8Array } | undefined;
+  for (const name of ["cover.jpg", "cover.png", "folder.jpg", "folder.png"]) {
+    try {
+      const coverPath = path.join(path.dirname(file), name);
+      const s = await lstat(coverPath);
+      if (!s.isFile() || s.isSymbolicLink() || s.size > 10 * 1024 * 1024)
+        continue;
+      cover = {
+        format: name.endsWith("png") ? "image/png" : "image/jpeg",
+        data: await readFile(coverPath),
+      };
+      break;
+    } catch {
+      /* An external cover is optional. */
     }
   }
+  cover ||= c.picture?.find((p) => /front/i.test(p.type || "")) || c.picture?.[0];
   if (
     cover &&
     cover.data.length <= 10 * 1024 * 1024 &&
@@ -196,7 +196,7 @@ export async function readTrack(
     year: c.year || null,
     trackNumber: c.track?.no || null,
     discNumber: c.disk?.no || null,
-    duration: metadata.format.duration || 0,
+    duration: metadata.format.duration || knownDuration || 0,
     format: path.extname(file).toLowerCase().slice(1),
     size: info.size,
     mtimeMs: info.mtimeMs,

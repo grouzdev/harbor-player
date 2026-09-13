@@ -651,7 +651,7 @@ describe("catalog and safe filesystem operations", () => {
     service.execute(stale.id);
     await service.idle();
     expect(service.catalog.operation(stale.id).items[0].error).toContain(
-      "изменился",
+      "Invalid FLAC preamble",
     );
     await writeFile(file, original);
     const retry = await service.previewRetry(stale.id);
