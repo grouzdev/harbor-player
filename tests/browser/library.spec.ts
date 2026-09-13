@@ -206,14 +206,17 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .locator(".album-card")
     .filter({ hasText: "Исполнитель альбома" });
   const firstAlbumButton = firstAlbum.locator(".album-main");
-  const firstAlbumCheckbox = firstAlbum.getByRole("checkbox");
-  await firstAlbum.hover();
-  await firstAlbumCheckbox.check();
-  await expect(firstAlbumCheckbox).toBeChecked();
+  await expect(firstAlbum.getByRole("checkbox")).toHaveCount(0);
+  await firstAlbumButton.click();
+  await expect(firstAlbum).toHaveClass(/selected/);
+  await expect(firstAlbum.locator(".album-cover")).toHaveCSS(
+    "box-shadow",
+    /rgb\(185, 212, 183\)/,
+  );
   await genreButton.click();
   await expect(genreRow).toHaveClass(/selected/);
   await expect(artistRow).not.toHaveClass(/selected/);
-  await expect(firstAlbumCheckbox).not.toBeChecked();
+  await expect(firstAlbum).not.toHaveClass(/selected/);
   await page
     .locator(".genres-panel")
     .getByRole("button", { name: "Все жанры" })
@@ -234,41 +237,40 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .locator(".album-card")
     .filter({ hasText: "Неизвестный исполнитель" });
   const secondAlbumButton = secondAlbum.locator(".album-main");
-  const secondAlbumCheckbox = secondAlbum.getByRole("checkbox");
-  await firstAlbum.hover();
-  await firstAlbumCheckbox.check();
-  await secondAlbum.hover();
-  await secondAlbumCheckbox.check();
-  await expect(firstAlbumCheckbox).toBeChecked();
-  await expect(secondAlbumCheckbox).toBeChecked();
   await firstAlbumButton.click();
-  await expect(firstAlbumCheckbox).toBeChecked();
-  await expect(secondAlbumCheckbox).not.toBeChecked();
+  await secondAlbumButton.dispatchEvent("click", { ctrlKey: true });
+  await expect(firstAlbum).toHaveClass(/selected/);
+  await expect(secondAlbum).toHaveClass(/selected/);
   await firstAlbumButton.dispatchEvent("click", { ctrlKey: true });
-  await expect(firstAlbumCheckbox).not.toBeChecked();
+  await expect(firstAlbum).not.toHaveClass(/selected/);
+  await expect(secondAlbum).toHaveClass(/selected/);
 
-  await expect(firstAlbum.locator(".album-main > small")).toHaveCount(2);
+  await expect(firstAlbum.locator(".album-details")).toHaveCount(1);
+  await expect(firstAlbum.locator(".album-details > small")).toHaveCount(2);
   await expect(firstAlbum.locator(".album-year")).toHaveCount(1);
-  await firstAlbum.locator(".album-cover").dblclick();
+  await expect(firstAlbum.locator(".album-track-count")).toHaveText(
+    /^\d+ трек(?:а|ов)?$/,
+  );
+  await firstAlbumButton.click();
+  await expect(firstAlbum).toHaveClass(/selected/);
+  await firstAlbumButton.click();
   await expect
     .poll(() =>
       page.locator("audio").evaluate((a: HTMLAudioElement) => a.readyState),
     )
     .toBeGreaterThanOrEqual(2);
-  await firstAlbum.hover();
-  await firstAlbumCheckbox.check();
   await secondAlbumButton.dispatchEvent("click", { ctrlKey: true });
-  await expect(firstAlbumCheckbox).toBeChecked();
-  await expect(secondAlbumCheckbox).toBeChecked();
+  await expect(firstAlbum).toHaveClass(/selected/);
+  await expect(secondAlbum).toHaveClass(/selected/);
   await firstAlbumButton.click();
-  await expect(firstAlbumCheckbox).toBeChecked();
-  await expect(secondAlbumCheckbox).not.toBeChecked();
+  await expect(firstAlbum).toHaveClass(/selected/);
+  await expect(secondAlbum).toHaveClass(/selected/);
   await page
     .locator(".albums-panel")
     .getByRole("button", { name: "Все альбомы" })
     .click();
-  await expect(firstAlbumCheckbox).not.toBeChecked();
-  await expect(secondAlbumCheckbox).not.toBeChecked();
+  await expect(firstAlbum).not.toHaveClass(/selected/);
+  await expect(secondAlbum).not.toHaveClass(/selected/);
 
   const inheritedTrackCount = Number(
     (await firstAlbum.locator(".album-track-count").textContent())?.match(
@@ -282,8 +284,20 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(addAlbumBookmark).toHaveCSS("opacity", "0");
   await firstAlbum.hover();
   await expect(addAlbumBookmark).toHaveCSS("opacity", "1");
+  const albumBookmarkAlignment = await firstAlbum.evaluate((card) => {
+    const cover = card.querySelector<HTMLElement>(".album-cover")!;
+    const button = card.querySelector<HTMLElement>(".bookmark-toggle")!;
+    const coverRect = cover.getBoundingClientRect();
+    const buttonRect = button.getBoundingClientRect();
+    return {
+      topInset: buttonRect.top - coverRect.top,
+      rightInset: coverRect.right - buttonRect.right,
+    };
+  });
+  expect(albumBookmarkAlignment.topInset).toBeCloseTo(7, 1);
+  expect(albumBookmarkAlignment.rightInset).toBeCloseTo(7, 1);
   await addAlbumBookmark.click();
-  await expect(firstAlbumCheckbox).not.toBeChecked();
+  await expect(firstAlbum).not.toHaveClass(/selected/);
   const removeAlbumBookmark = firstAlbum.getByRole("button", {
     name: "Удалить альбом «Тестовый альбом» из закладок",
   });

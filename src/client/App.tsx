@@ -84,6 +84,20 @@ const bookmarkEntityLabels: Record<BookmarkKind, string> = {
   track: "трек",
 };
 
+function trackCountLabel(trackCount: number) {
+  const remainder = Math.abs(trackCount) % 100;
+  const lastDigit = remainder % 10;
+  const word =
+    remainder >= 11 && remainder <= 14
+      ? "треков"
+      : lastDigit === 1
+        ? "трек"
+        : lastDigit >= 2 && lastDigit <= 4
+          ? "трека"
+          : "треков";
+  return `${count(trackCount)} ${word}`;
+}
+
 function updateBookmarkList(
   current: CatalogBookmark[] | undefined,
   kind: BookmarkKind,
@@ -1499,7 +1513,17 @@ function AlbumGrid({
                     <button
                       className="album-main"
                       aria-pressed={selected.includes(album.id)}
-                      onClick={(event) => onSelect(album.id, event.ctrlKey)}
+                      onClick={(event) => {
+                        if (event.ctrlKey) {
+                          onSelect(album.id, true);
+                          return;
+                        }
+                        if (selected.includes(album.id)) {
+                          onPlay(album.id);
+                          return;
+                        }
+                        onSelect(album.id, false);
+                      }}
                     >
                       <div
                         className={`album-cover ${dropTarget === album.id ? "drop-target" : ""}`}
@@ -1524,10 +1548,6 @@ function AlbumGrid({
                             Array.from(event.dataTransfer.files),
                           );
                         }}
-                        onDoubleClick={(event) => {
-                          event.stopPropagation();
-                          onPlay(album.id);
-                        }}
                         style={
                           {
                             "--cover-hue":
@@ -1542,13 +1562,10 @@ function AlbumGrid({
                             alt=""
                           />
                         ) : (
-                          <div className="cover-placeholder">
-                            <Disc3 strokeWidth={0.6} />
-                            <span>{album.title?.slice(0, 1) || "♪"}</span>
-                          </div>
+                          <div className="cover-placeholder" />
                         )}
                         <span className="album-track-count">
-                          {album.trackCount} тр.
+                          {trackCountLabel(album.trackCount)}
                         </span>
                         {dropTarget === album.id && (
                           <span className="album-cover-drop-hint">
@@ -1557,21 +1574,15 @@ function AlbumGrid({
                         )}
                       </div>
                       <strong>{album.title || "Без альбома"}</strong>
-                      <small>
-                        {album.artists.join(", ") || "Неизвестный исполнитель"}
-                      </small>
-                      {album.year && (
-                        <small className="album-year">{album.year}</small>
-                      )}
+                      <span className="album-details">
+                        <small>
+                          {album.artists.join(", ") || "Неизвестный исполнитель"}
+                        </small>
+                        {album.year && (
+                          <small className="album-year">{album.year}</small>
+                        )}
+                      </span>
                     </button>
-                    <label className="album-selection">
-                      <input
-                        type="checkbox"
-                        aria-label={`Выбрать альбом: ${album.title || "Без альбома"}`}
-                        checked={selected.includes(album.id)}
-                        onChange={() => onSelect(album.id, true)}
-                      />
-                    </label>
                   </div>
                 ))}
             </div>

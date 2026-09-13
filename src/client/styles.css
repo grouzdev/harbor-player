@@ -450,19 +450,18 @@ a {
   position: relative;
   border-radius: 6px;
   overflow: hidden;
-  border: 2px solid transparent;
   transition:
     filter 0.15s,
-    border-color 0.15s;
+    box-shadow 0.15s;
 }
 .album-card:hover .album-cover {
   filter: brightness(1.12);
 }
 .album-card.selected .album-cover {
-  border-color: #b9d4b7;
+  box-shadow: inset 0 0 0 2px #b9d4b7;
 }
 .album-cover.drop-target {
-  border-color: #b9d4b7;
+  box-shadow: inset 0 0 0 2px #b9d4b7;
   filter: brightness(1.18);
 }
 .album-cover-drop-hint {
@@ -487,14 +486,25 @@ a {
   font-weight: 500;
   margin: 10px 2px 5px;
 }
-.album-main > small {
-  display: block;
+.album-details {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   color: #75858e;
   font-size: var(--type-caption);
+  margin: 0 2px;
+}
+.album-details > small {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin: 0 2px;
+}
+.album-details > small:first-child {
+  flex: 1;
+}
+.album-year {
+  flex: 0 0 auto;
 }
 .cover-placeholder {
   position: absolute;
@@ -504,39 +514,6 @@ a {
     hsl(var(--cover-hue) 17% 37%),
     hsl(var(--cover-hue) 20% 15%)
   );
-  display: grid;
-  place-items: center;
-}
-.cover-placeholder > svg {
-  width: 85%;
-  height: 85%;
-  position: absolute;
-  opacity: 0.2;
-}
-.cover-placeholder > span {
-  font-size: var(--type-title);
-  font-weight: 300;
-  color: #e2e2dca0;
-  position: relative;
-}
-.album-selection {
-  position: absolute;
-  top: 7px;
-  right: 7px;
-  width: 27px;
-  height: 27px;
-  display: grid;
-  place-items: center;
-  border-radius: 5px;
-  background: #1119;
-  opacity: 0;
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
-.album-card:hover .album-selection,
-.album-card.selected .album-selection,
-.album-card:focus-within .album-selection {
-  opacity: 1;
 }
 .album-track-count {
   position: absolute;
@@ -1533,9 +1510,6 @@ body {
   padding: 0;
   margin: 0;
 }
-.album-main > small {
-  margin-top: 6px;
-}
 .catalog-footer {
   height: 43px;
   min-height: 43px;
@@ -1754,7 +1728,7 @@ body {
   position: absolute;
   z-index: 2;
   top: 7px;
-  left: 7px;
+  right: 7px;
 }
 .track-bookmark-toggle,
 .track-album-bookmark-toggle {
