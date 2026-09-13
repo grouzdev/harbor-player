@@ -8,6 +8,12 @@ export interface Library {
   lastScan: string | null;
   trackCount: number;
 }
+export interface LibraryFolder {
+  relativePath: string;
+  name: string;
+  trackCount: number;
+  hasChildren: boolean;
+}
 export interface Track {
   id: string;
   libraryId: string;
@@ -57,6 +63,14 @@ export interface FacetRelevance {
 }
 export const filterSchema = z.object({
   libraryIds: z.array(z.string()).max(100).default([]),
+  folder: z
+    .object({
+      libraryId: z.string().min(1).max(100),
+      relativePath: z.string().min(1).max(32000),
+    })
+    .strict()
+    .nullable()
+    .default(null),
   genres: z.array(z.string()).max(500).default([]),
   artists: z.array(z.string()).max(500).default([]),
   albumIds: z.array(z.string()).max(10000).default([]),
@@ -206,6 +220,7 @@ export interface OperationSummary {
 }
 export const emptyFilter: CatalogFilter = {
   libraryIds: [],
+  folder: null,
   genres: [],
   artists: [],
   albumIds: [],

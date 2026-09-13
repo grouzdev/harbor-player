@@ -30,11 +30,14 @@ try {
       const album = Math.floor(i / 10)
         .toString()
         .padStart(5, "0");
+      const artistFolder = `Artist ${Math.floor(Number(album) / 100)
+        .toString()
+        .padStart(3, "0")}`;
       const id = `track-${i}`;
       insert.run(
         id,
         lib.id,
-        `Album ${album}/${i}.flac`,
+        path.join(artistFolder, `Album ${album}`, `${i}.flac`),
         `Трек ${i}`,
         '["Исполнитель"]',
         `Альбом ${album}`,
@@ -67,6 +70,16 @@ try {
   const albums = timed(() => service.catalog.albums(emptyFilter));
   const genres = timed(() => service.catalog.genres(emptyFilter));
   const queue = timed(() => service.catalog.trackIds(emptyFilter));
+  const rootFolders = timed(() => service.catalog.folders(lib.id, null));
+  const nestedFolders = timed(() =>
+    service.catalog.folders(lib.id, "Artist 000"),
+  );
+  const folderTracks = timed(() =>
+    service.catalog.tracks({
+      ...emptyFilter,
+      folder: { libraryId: lib.id, relativePath: "Artist 000" },
+    }),
+  );
   await app.listen({ port: 4328, host: "127.0.0.1" });
   browser = await chromium.launch({ channel: "chrome" });
   const page = await browser.newPage({
@@ -99,6 +112,14 @@ try {
       albums: albums.ms,
       genres: genres.ms,
       queueSnapshot: queue.ms,
+      rootFolders: rootFolders.ms,
+      nestedFolders: nestedFolders.ms,
+      folderTracks: folderTracks.ms,
+    },
+    folderCounts: {
+      root: rootFolders.result.length,
+      nested: nestedFolders.result.length,
+      selectedTracks: folderTracks.result.total,
     },
     renderedTracks,
     renderedAlbums,

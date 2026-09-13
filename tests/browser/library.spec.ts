@@ -131,15 +131,36 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .first()
     .click();
   await expect(page.getByTestId("track-row")).toHaveCount(7);
-  await expect(page.locator(".libraries-panel .list-tile svg")).toHaveCount(0);
-  await expect(page.locator(".track-row .track-number, .track-row .row-play")).toHaveCount(0);
+  const albumFolderButton = page
+    .locator(".libraries-panel")
+    .getByTitle("Album", { exact: true });
+  const albumFolder = albumFolderButton.locator("..");
+  await expect(albumFolder).toBeVisible();
+  await albumFolderButton.click();
+  await expect(albumFolder).toHaveClass(/selected/);
+  await expect(page.getByTestId("track-row")).toHaveCount(7);
+  await page
+    .getByRole("button", { name: new RegExp(`Downloads ${browser}`) })
+    .first()
+    .click();
+  await expect(
+    page.locator(".track-row .track-number, .track-row .row-play"),
+  ).toHaveCount(0);
   const collectionTile = page
     .locator(".libraries-panel .list-tile")
     .filter({ hasText: `Collection ${browser}` });
-  await collectionTile.locator(".list-tile-main").click({ modifiers: ["Control"] });
-  await expect(page.locator(".libraries-panel .list-tile.selected")).toHaveCount(2);
-  await collectionTile.locator(".list-tile-main").click({ modifiers: ["Control"] });
-  await expect(page.locator(".libraries-panel .list-tile.selected")).toHaveCount(1);
+  await collectionTile
+    .locator(".list-tile-main")
+    .click({ modifiers: ["Control"] });
+  await expect(
+    page.locator(".libraries-panel .list-tile.selected"),
+  ).toHaveCount(2);
+  await collectionTile
+    .locator(".list-tile-main")
+    .click({ modifiers: ["Control"] });
+  await expect(
+    page.locator(".libraries-panel .list-tile.selected"),
+  ).toHaveCount(1);
 
   const genreRow = page
     .locator(".genres-panel .list-tile")
@@ -150,7 +171,9 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   const artistRow = page
     .locator(".artists-panel .list-tile")
     .filter({ hasText: "Исполнитель альбома" });
-  await expect(page.getByRole("heading", { name: "Исполнители" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Исполнители" }),
+  ).toBeVisible();
   const artistButton = artistRow.locator(".list-tile-main");
   await expect(artistRow.getByRole("checkbox")).toHaveCount(0);
   const firstTrackRow = page.getByTestId("track-row").first();
@@ -468,9 +491,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     const button = page.getByRole("button", { name: action, exact: true });
     await expect(button).toBeEnabled();
     await button.click();
-    await expect(page.getByRole("dialog")).toContainText(
-      "Выбрано треков: 7",
-    );
+    await expect(page.getByRole("dialog")).toContainText("Выбрано треков: 7");
     await page.getByRole("button", { name: "Отмена" }).click();
   }
   await page.reload();
@@ -593,10 +614,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     );
   });
   await expect(coverTarget).toContainText("Отпустите обложку");
-  await expect(coverTarget).toHaveCSS(
-    "box-shadow",
-    /rgb\(185, 212, 183\)/,
-  );
+  await expect(coverTarget).toHaveCSS("box-shadow", /rgb\(185, 212, 183\)/);
   await coverTarget.evaluate((element) => {
     element.dispatchEvent(new DragEvent("dragleave", { bubbles: true }));
   });

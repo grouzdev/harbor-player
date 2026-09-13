@@ -5,9 +5,11 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from "react";
 import {
   useInfiniteQuery,
+  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -41,6 +43,7 @@ import {
   type FacetRelevance,
   type Job,
   type Library,
+  type LibraryFolder,
   type OperationPreview,
   type Page,
   type Selection,
@@ -169,6 +172,10 @@ export function App() {
     verificationDate: null,
   });
   const [filter, setFilter] = useState<CatalogFilter>(emptyFilter);
+  const [expandedLibraryId, setExpandedLibraryId] = useState<string | null>(
+    null,
+  );
+  const [folderBranch, setFolderBranch] = useState<LibraryFolder[]>([]);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [allSelected, setAllSelected] = useState(false);
@@ -237,6 +244,7 @@ export function App() {
       predicate: (q) =>
         [
           "libraries",
+          "library-folders",
           "genres",
           "artists",
           "albums",
@@ -460,10 +468,12 @@ export function App() {
       if (watchedOperations.current.has(id)) return;
       watchedOperations.current.add(id);
       if (initialJob)
-        queryClient.setQueryData<Job[]>(["jobs"], (old) => [
-          initialJob,
-          ...(old || []).filter((job) => job.id !== initialJob.id),
-        ].slice(0, 30));
+        queryClient.setQueryData<Job[]>(["jobs"], (old) =>
+          [
+            initialJob,
+            ...(old || []).filter((job) => job.id !== initialJob.id),
+          ].slice(0, 30),
+        );
       void (async () => {
         try {
           while (true) {
@@ -583,6 +593,54 @@ export function App() {
     queryFn: () => api<Library[]>("/libraries"),
     enabled: ready,
   });
+  const folderParents = useMemo(
+    () =>
+      expandedLibraryId
+        ? [null, ...folderBranch.map((folder) => folder.relativePath)]
+        : [],
+    [expandedLibraryId, folderBranch],
+  );
+  const folderLevels = useQueries({
+    queries: folderParents.map((parent) => ({
+      queryKey: ["library-folders", expandedLibraryId, parent],
+      queryFn: () => {
+        const query = parent
+          ? `?${new URLSearchParams({ parent }).toString()}`
+          : "";
+        return api<LibraryFolder[]>(
+          `/libraries/${expandedLibraryId}/folders${query}`,
+        );
+      },
+      enabled: ready && Boolean(expandedLibraryId),
+    })),
+  });
+  const selectedFolderParentQuery =
+    filter.folder &&
+    filter.folder.libraryId === expandedLibraryId &&
+    folderBranch.at(-1)?.relativePath === filter.folder.relativePath
+      ? folderLevels[folderBranch.length - 1]
+      : undefined;
+  const selectedFolderMissing = Boolean(
+    filter.folder &&
+    selectedFolderParentQuery?.isSuccess &&
+    !selectedFolderParentQuery.data?.some(
+      (folder) => folder.relativePath === filter.folder?.relativePath,
+    ),
+  );
+  useEffect(() => {
+    if (!filter.folder || !selectedFolderMissing) return;
+    const libraryId = filter.folder.libraryId;
+    setFolderBranch([]);
+    setFilter((current) => ({
+      ...current,
+      folder: null,
+      libraryIds: [libraryId],
+      genres: [],
+      artists: [],
+      albumIds: [],
+    }));
+    notify("Выбранная папка больше не найдена; показана вся библиотека");
+  }, [filter.folder, notify, selectedFolderMissing]);
   const jobs = useQuery({
     queryKey: ["jobs"],
     queryFn: () => api<Job[]>("/jobs"),
@@ -592,9 +650,10 @@ export function App() {
     () => ({
       ...emptyFilter,
       libraryIds: filter.libraryIds,
+      folder: filter.folder,
       bookmarksOnly: filter.bookmarksOnly,
     }),
-    [filter.libraryIds, filter.bookmarksOnly],
+    [filter.libraryIds, filter.folder, filter.bookmarksOnly],
   );
   const genres = useQuery({
     queryKey: ["genres", genreFilter],
@@ -606,10 +665,11 @@ export function App() {
     () => ({
       ...emptyFilter,
       libraryIds: filter.libraryIds,
+      folder: filter.folder,
       genres: filter.genres,
       bookmarksOnly: filter.bookmarksOnly,
     }),
-    [filter.libraryIds, filter.genres, filter.bookmarksOnly],
+    [filter.libraryIds, filter.folder, filter.genres, filter.bookmarksOnly],
   );
   const artists = useInfiniteQuery({
     queryKey: ["artists", artistFilter],
@@ -681,6 +741,7 @@ export function App() {
     () => ({ ...filter, albumIds: [] }),
     [
       filter.libraryIds,
+      filter.folder,
       filter.genres,
       filter.artists,
       filter.search,
@@ -722,9 +783,7 @@ export function App() {
   const selection: Selection = allSelected
     ? { filter, excludeTrackIds: [...selected] }
     : { trackIds: [...selected] };
-  const operationSelection: Selection = selected.size
-    ? selection
-    : { filter };
+  const operationSelection: Selection = selected.size ? selection : { filter };
   const selectionCount = allSelected ? total - selected.size : selected.size;
   const activeJobs =
     jobs.data?.filter((j) => ["queued", "running"].includes(j.status)) || [];
@@ -772,14 +831,34 @@ export function App() {
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
   };
-  const chooseLibrary = (id: string, additive: boolean) =>
+  const chooseLibrary = (id: string, additive: boolean) => {
+    setExpandedLibraryId(id);
+    setFolderBranch([]);
     setFilter((f) => ({
       ...f,
-      libraryIds: selectFacetValue(f.libraryIds, id, additive),
+      libraryIds: selectFacetValue(f.folder ? [] : f.libraryIds, id, additive),
+      folder: null,
       genres: [],
       artists: [],
       albumIds: [],
     }));
+  };
+  const chooseFolder = (
+    libraryId: string,
+    folder: LibraryFolder,
+    depth: number,
+  ) => {
+    setExpandedLibraryId(libraryId);
+    setFolderBranch((current) => [...current.slice(0, depth), folder]);
+    setFilter((current) => ({
+      ...current,
+      libraryIds: [],
+      folder: { libraryId, relativePath: folder.relativePath },
+      genres: [],
+      artists: [],
+      albumIds: [],
+    }));
+  };
   const chooseGenre = (genre: string, additive: boolean) =>
     setFilter((f) => ({
       ...f,
@@ -793,6 +872,67 @@ export function App() {
     artists.error ||
     albums.error ||
     tracks.error;
+  const renderFolderLevel = (libraryId: string, depth = 0): ReactNode => {
+    const query = folderLevels[depth];
+    if (!query) return null;
+    if (query.isPending)
+      return (
+        <div
+          className="folder-level-status"
+          style={{ "--folder-depth": Math.min(depth + 1, 3) } as CSSProperties}
+        >
+          <RefreshCw size={13} className="spinning" />
+          <span>Загружаем папки…</span>
+        </div>
+      );
+    if (query.isError)
+      return (
+        <button
+          type="button"
+          className="folder-level-status error"
+          style={{ "--folder-depth": Math.min(depth + 1, 3) } as CSSProperties}
+          onClick={() => void query.refetch()}
+        >
+          <RefreshCw size={13} />
+          <span>Повторить загрузку</span>
+        </button>
+      );
+    return query.data?.map((folder) => {
+      const inBranch =
+        folderBranch[depth]?.relativePath === folder.relativePath;
+      const selected =
+        filter.folder?.libraryId === libraryId &&
+        filter.folder.relativePath === folder.relativePath;
+      return (
+        <div key={folder.relativePath} className="library-folder-node">
+          <ListTile
+            className="library-folder-tile"
+            selected={selected}
+            current={inBranch && !selected}
+            expanded={folder.hasChildren ? inBranch : undefined}
+            title={folder.relativePath}
+            value={folder.name}
+            prefix={
+              folder.hasChildren ? (
+                <ChevronRight
+                  size={14}
+                  className={`folder-chevron ${inBranch ? "expanded" : ""}`}
+                />
+              ) : (
+                <span className="folder-chevron-spacer" />
+              )
+            }
+            suffix={count(folder.trackCount)}
+            style={
+              { "--folder-depth": Math.min(depth + 1, 3) } as CSSProperties
+            }
+            onSelect={() => chooseFolder(libraryId, folder, depth)}
+          />
+          {inBranch && renderFolderLevel(libraryId, depth + 1)}
+        </div>
+      );
+    });
+  };
   if (startupError)
     return (
       <main className="startup-error">
@@ -895,16 +1035,19 @@ export function App() {
             <h2>Библиотеки</h2>
           </div>
           <button
-            className={`list-all-action ${filter.libraryIds.length === 0 ? "selected" : ""}`}
-            onClick={() =>
+            className={`list-all-action ${filter.libraryIds.length === 0 && !filter.folder ? "selected" : ""}`}
+            onClick={() => {
+              setExpandedLibraryId(null);
+              setFolderBranch([]);
               setFilter((f) => ({
                 ...f,
                 libraryIds: [],
+                folder: null,
                 genres: [],
                 artists: [],
                 albumIds: [],
-              }))
-            }
+              }));
+            }}
           >
             <span>Вся музыка</span>
           </button>
@@ -922,13 +1065,25 @@ export function App() {
                   ]
                     .filter(Boolean)
                     .join(" ")}
-                  selected={filter.libraryIds.includes(library.id)}
+                  selected={
+                    !filter.folder && filter.libraryIds.includes(library.id)
+                  }
+                  current={filter.folder?.libraryId === library.id}
+                  expanded={expandedLibraryId === library.id}
                   title={library.path}
                   value={library.name}
+                  prefix={
+                    <ChevronRight
+                      size={14}
+                      className={`folder-chevron ${expandedLibraryId === library.id ? "expanded" : ""}`}
+                    />
+                  }
                   suffix={count(library.trackCount)}
                   onSelect={(event) => chooseLibrary(library.id, event.ctrlKey)}
                   onContextMenu={(event) => showLibraryMenu(event, library)}
                 />
+                {expandedLibraryId === library.id &&
+                  renderFolderLevel(library.id)}
               </div>
             ))}
           </div>
@@ -1245,6 +1400,7 @@ export function App() {
               bookmarkCount={bookmarks.data?.length || 0}
               hasOtherFilters={
                 filter.libraryIds.length > 0 ||
+                Boolean(filter.folder) ||
                 filter.genres.length > 0 ||
                 filter.artists.length > 0 ||
                 filter.albumIds.length > 0 ||
@@ -1258,6 +1414,8 @@ export function App() {
               }
               onResetBookmarkFilters={() => {
                 setSearch("");
+                setExpandedLibraryId(null);
+                setFolderBranch([]);
                 setFilter({ ...emptyFilter, bookmarksOnly: true });
               }}
             />
@@ -1268,6 +1426,7 @@ export function App() {
             <span className="footer-dot">·</span>
             <span>{count(albumTotal)} альбомов</span>
             {(filter.libraryIds.length > 0 ||
+              filter.folder ||
               filter.genres.length > 0 ||
               filter.artists.length > 0 ||
               filter.albumIds.length > 0 ||
@@ -1278,6 +1437,8 @@ export function App() {
                 onClick={() => {
                   setFilter(emptyFilter);
                   setSearch("");
+                  setExpandedLibraryId(null);
+                  setFolderBranch([]);
                 }}
               >
                 Сбросить фильтры
@@ -1317,10 +1478,18 @@ export function App() {
               libraryIds: current.libraryIds.filter(
                 (id) => id !== libraryToRemove.id,
               ),
+              folder:
+                current.folder?.libraryId === libraryToRemove.id
+                  ? null
+                  : current.folder,
               genres: [],
               artists: [],
               albumIds: [],
             }));
+            if (expandedLibraryId === libraryToRemove.id) {
+              setExpandedLibraryId(null);
+              setFolderBranch([]);
+            }
             refresh();
             notify(`Библиотека «${libraryToRemove.name}» отключается`);
           }}
@@ -1439,16 +1608,18 @@ function ArtistList({
                 transform: `translateY(${row.start}px)`,
                 height: 42,
               }}
-              endAction={<BookmarkToggle
-                kind="artist"
-                id={item.name}
-                label={label}
-                bookmarked={bookmarkKeys.has(`artist:${item.name}`)}
-                unavailable={bookmarksUnavailable}
-                pending={pendingBookmarkKeys.has(`artist:${item.name}`)}
-                onChange={onBookmarkChange}
-                className="artist-bookmark-toggle"
-              />}
+              endAction={
+                <BookmarkToggle
+                  kind="artist"
+                  id={item.name}
+                  label={label}
+                  bookmarked={bookmarkKeys.has(`artist:${item.name}`)}
+                  unavailable={bookmarksUnavailable}
+                  pending={pendingBookmarkKeys.has(`artist:${item.name}`)}
+                  onChange={onBookmarkChange}
+                  className="artist-bookmark-toggle"
+                />
+              }
             />
           );
         })}
@@ -1624,7 +1795,8 @@ function AlbumGrid({
                       <strong>{album.title || "Без альбома"}</strong>
                       <span className="album-details">
                         <small>
-                          {album.artists.join(", ") || "Неизвестный исполнитель"}
+                          {album.artists.join(", ") ||
+                            "Неизвестный исполнитель"}
                         </small>
                         {album.year && (
                           <small className="album-year">{album.year}</small>
@@ -1818,7 +1990,9 @@ function TrackList({
                 testId="track-row"
                 dataFormat={track.format}
                 className="track-row"
-                selected={allSelected ? !selected.has(track.id) : selected.has(track.id)}
+                selected={
+                  allSelected ? !selected.has(track.id) : selected.has(track.id)
+                }
                 current={currentId === track.id}
                 prefix={track.trackNumber ?? undefined}
                 value={track.title}
@@ -1834,16 +2008,18 @@ function TrackList({
                 onContextMenu={(event) =>
                   onContextMenu(event, "track", track.id)
                 }
-                endAction={<BookmarkToggle
-                  kind="track"
-                  id={track.id}
-                  label={track.title}
-                  bookmarked={bookmarkKeys.has(`track:${track.id}`)}
-                  unavailable={bookmarksUnavailable}
-                  pending={pendingBookmarkKeys.has(`track:${track.id}`)}
-                  onChange={onBookmarkChange}
-                  className="track-bookmark-toggle"
-                />}
+                endAction={
+                  <BookmarkToggle
+                    kind="track"
+                    id={track.id}
+                    label={track.title}
+                    bookmarked={bookmarkKeys.has(`track:${track.id}`)}
+                    unavailable={bookmarksUnavailable}
+                    pending={pendingBookmarkKeys.has(`track:${track.id}`)}
+                    onChange={onBookmarkChange}
+                    className="track-bookmark-toggle"
+                  />
+                }
               />
             );
           })}

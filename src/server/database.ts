@@ -10,6 +10,7 @@ import type {
   FacetRelevance,
   Job,
   Library,
+  LibraryFolder,
   OperationPreview,
   Page,
   Selection,
@@ -17,6 +18,16 @@ import type {
 } from "../shared/contracts.js";
 
 type Row = Record<string, any>;
+const checkedFolderPath = (relativePath: string) => {
+  if (
+    path.isAbsolute(relativePath) ||
+    relativePath === "." ||
+    path.normalize(relativePath) !== relativePath ||
+    relativePath.split(path.sep).includes("..")
+  )
+    throw new Error("Некорректный путь папки");
+  return relativePath;
+};
 const fromRow = (r: Row): Track =>
   ({
     ...r,
@@ -128,6 +139,44 @@ export class Catalog {
     if (!l) throw new Error("Библиотека не найдена");
     return l;
   }
+  folders(libraryId: string, parent: string | null): LibraryFolder[] {
+    this.library(libraryId);
+    const parentPath = parent === null ? null : checkedFolderPath(parent);
+    const prefix = parentPath ? `${parentPath}${path.sep}` : "";
+    const rows = this.db
+      .prepare(
+        "SELECT relativePath FROM tracks WHERE libraryId=? AND available=1 ORDER BY relativePath",
+      )
+      .all(libraryId) as { relativePath: string }[];
+    const folders = new Map<string, LibraryFolder>();
+    for (const row of rows) {
+      if (prefix && !row.relativePath.startsWith(prefix)) continue;
+      const remainder = row.relativePath.slice(prefix.length);
+      const parts = remainder.split(path.sep);
+      if (parts.length < 2) continue;
+      const name = parts[0];
+      const relativePath = parentPath ? path.join(parentPath, name) : name;
+      const existing = folders.get(relativePath);
+      if (existing) {
+        existing.trackCount++;
+        existing.hasChildren ||= parts.length > 2;
+      } else {
+        folders.set(relativePath, {
+          relativePath,
+          name,
+          trackCount: 1,
+          hasChildren: parts.length > 2,
+        });
+      }
+    }
+    return [...folders.values()].sort(
+      (a, b) =>
+        a.name.localeCompare(b.name, "ru", {
+          numeric: true,
+          sensitivity: "base",
+        }) || a.relativePath.localeCompare(b.relativePath),
+    );
+  }
   addLibrary(name: string, folder: string): Library {
     const id = randomUUID();
     this.db
@@ -229,6 +278,12 @@ export class Catalog {
       }
     };
     list(filter.libraryIds, "t.libraryId");
+    if (filter.folder) {
+      const folder = checkedFolderPath(filter.folder.relativePath);
+      const prefix = `${folder}${path.sep}`;
+      clauses.push("t.libraryId=? AND substr(t.relativePath,1,?)=?");
+      args.push(filter.folder.libraryId, prefix.length, prefix);
+    }
     list(filter.albumIds, "t.albumKey");
     if (filter.artists.length) {
       const values = filter.artists.filter((a) => a !== "");
@@ -360,7 +415,9 @@ export class Catalog {
     }
     if (filter.artists.includes("")) relations.push("t.albumArtists='[]'");
     if (filter.albumIds.length) {
-      relations.push(`t.albumKey IN (${filter.albumIds.map(() => "?").join(",")})`);
+      relations.push(
+        `t.albumKey IN (${filter.albumIds.map(() => "?").join(",")})`,
+      );
       args.push(...filter.albumIds);
     }
     if (!relations.length) return { libraryIds: [], genres: [] };

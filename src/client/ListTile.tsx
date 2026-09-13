@@ -6,6 +6,7 @@ type ListTileProps = {
   suffix?: ReactNode;
   selected?: boolean;
   current?: boolean;
+  expanded?: boolean;
   disabled?: boolean;
   title?: string;
   className?: string;
@@ -24,6 +25,7 @@ export function ListTile({
   suffix,
   selected = false,
   current = false,
+  expanded,
   disabled = false,
   title,
   className = "",
@@ -47,14 +49,19 @@ export function ListTile({
         type="button"
         className="list-tile-main"
         aria-pressed={selected}
+        aria-expanded={expanded}
         title={title || value}
         disabled={disabled}
         onClick={onSelect}
         onDoubleClick={onDoubleClick}
       >
-        {prefix !== undefined && <span className="list-tile-prefix">{prefix}</span>}
+        {prefix !== undefined && (
+          <span className="list-tile-prefix">{prefix}</span>
+        )}
         <span className="list-tile-value">{value}</span>
-        {suffix !== undefined && <span className="list-tile-suffix">{suffix}</span>}
+        {suffix !== undefined && (
+          <span className="list-tile-suffix">{suffix}</span>
+        )}
       </button>
       {endAction}
     </div>

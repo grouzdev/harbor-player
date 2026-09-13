@@ -75,7 +75,9 @@ describe("catalog and safe filesystem operations", () => {
       expect.objectContaining({ id: lib.id }),
     );
     expect(tracks()).toEqual([]);
-    await expect(stat(source)).resolves.toMatchObject({ isFile: expect.any(Function) });
+    await expect(stat(source)).resolves.toMatchObject({
+      isFile: expect.any(Function),
+    });
   });
 
   it("filters bookmarks with artist and album inheritance", () => {
@@ -152,7 +154,10 @@ describe("catalog and safe filesystem operations", () => {
   });
   it("counts album artists per genre and distinct albums per artist", () => {
     const catalog = service.catalog;
-    const lib = catalog.addLibrary("Facet counts", path.join(root, "Facet counts"));
+    const lib = catalog.addLibrary(
+      "Facet counts",
+      path.join(root, "Facet counts"),
+    );
     const addTrack = (
       id: string,
       albumKey: string,
@@ -193,9 +198,7 @@ describe("catalog and safe filesystem operations", () => {
       { name: "Artist B", count: 1 },
       { name: "Artist C", count: 1 },
     ]);
-    expect(
-      catalog.genres({ ...emptyFilter, libraryIds: [lib.id] }),
-    ).toEqual([
+    expect(catalog.genres({ ...emptyFilter, libraryIds: [lib.id] })).toEqual([
       { name: "Jazz", count: 1 },
       { name: "Rock", count: 2 },
     ]);
@@ -285,10 +288,12 @@ describe("catalog and safe filesystem operations", () => {
       }).total,
     ).toBe(0);
     expect(
-      service.catalog.albums({
-        ...emptyFilter,
-        artists: ["Другой исполнитель альбома"],
-      }).items.map((album) => album.artists),
+      service.catalog
+        .albums({
+          ...emptyFilter,
+          artists: ["Другой исполнитель альбома"],
+        })
+        .items.map((album) => album.artists),
     ).toEqual([["Другой исполнитель альбома", "Исполнитель альбома"]]);
   });
   it("migrates album artist relations without rescanning", async () => {
@@ -353,8 +358,9 @@ describe("catalog and safe filesystem operations", () => {
       artists: ["Исполнитель"],
     });
     expect(
-      service.catalog.jobs().find((job) => job.label === "Сканирование: Worker retry")
-        ?.errors,
+      service.catalog
+        .jobs()
+        .find((job) => job.label === "Сканирование: Worker retry")?.errors,
     ).toEqual([]);
   });
   it("falls back to TagLib when music-metadata cannot parse a valid audio file", async () => {
@@ -366,7 +372,9 @@ describe("catalog and safe filesystem operations", () => {
       "fallback-track",
       path.join(root, "data"),
       async () => {
-        throw new Error("Cannot read properties of undefined (reading 'artists')");
+        throw new Error(
+          "Cannot read properties of undefined (reading 'artists')",
+        );
       },
     );
 
@@ -414,8 +422,7 @@ describe("catalog and safe filesystem operations", () => {
       fixtures,
       "fallback-track",
       path.join(root, "data"),
-      async () =>
-        ({ format: {} } as Awaited<ReturnType<typeof parseFile>>),
+      async () => ({ format: {} }) as Awaited<ReturnType<typeof parseFile>>,
     );
 
     expect(track).toMatchObject({
@@ -466,6 +473,91 @@ describe("catalog and safe filesystem operations", () => {
         excludeTrackIds: [t.id],
       }),
     ).toHaveLength(1);
+  });
+  it("lists folder levels and filters an exact recursive subtree", () => {
+    const catalog = service.catalog;
+    const lib = catalog.addLibrary("Folders", path.join(root, "Folders"));
+    const addTrack = (
+      id: string,
+      relativePath: string,
+      genres: string[] = [],
+    ) =>
+      catalog.upsert({
+        id,
+        libraryId: lib.id,
+        relativePath,
+        title: id,
+        artists: ["Artist"],
+        albumTitle: id,
+        albumArtists: ["Artist"],
+        albumKey: id,
+        genres,
+        year: null,
+        trackNumber: 1,
+        discNumber: 1,
+        duration: 1,
+        format: "flac",
+        size: 1,
+        mtimeMs: 1,
+        coverId: null,
+        available: true,
+      });
+    addTrack("root", "root.flac");
+    addTrack("rock-album", path.join("Rock", "Album", "one.flac"), ["Rock"]);
+    addTrack("rock-live", path.join("Rock", "Live", "two.flac"), ["Live"]);
+    addTrack("rockabilly", path.join("Rockabilly", "Album", "three.flac"), [
+      "Rock",
+    ]);
+    addTrack("unicode", path.join("Коллекция", "Диск", "track.flac"));
+    addTrack("same-name", path.join("Archive", "Album", "track.flac"));
+
+    const rootFolders = catalog.folders(lib.id, null);
+    expect(rootFolders.map((folder) => folder.name).sort()).toEqual(
+      ["Archive", "Rock", "Rockabilly", "Коллекция"].sort(),
+    );
+    expect(rootFolders.find((folder) => folder.name === "Rock")).toEqual(
+      expect.objectContaining({ trackCount: 2, hasChildren: true }),
+    );
+    expect(catalog.folders(lib.id, "Rock")).toEqual([
+      expect.objectContaining({
+        name: "Album",
+        trackCount: 1,
+        hasChildren: false,
+      }),
+      expect.objectContaining({
+        name: "Live",
+        trackCount: 1,
+        hasChildren: false,
+      }),
+    ]);
+
+    const rockFolder = {
+      libraryId: lib.id,
+      relativePath: "Rock",
+    };
+    expect(
+      catalog
+        .tracks({ ...emptyFilter, folder: rockFolder })
+        .items.map((track) => track.id)
+        .sort(),
+    ).toEqual(["rock-album", "rock-live"]);
+    expect(
+      catalog
+        .tracks({
+          ...emptyFilter,
+          folder: rockFolder,
+          genres: ["Rock"],
+        })
+        .items.map((track) => track.id),
+    ).toEqual(["rock-album"]);
+    catalog.setBookmark("track", "rock-live", true);
+    expect(
+      catalog
+        .selected({
+          filter: { ...emptyFilter, folder: rockFolder, bookmarksOnly: true },
+        })
+        .map((track) => track.id),
+    ).toEqual(["rock-live"]);
   });
   it("moves across volumes with original structure, ID and byte identity", async () => {
     const lib = await library("Downloads");
@@ -660,8 +752,7 @@ describe("catalog and safe filesystem operations", () => {
     const originalFingerprint = service.fingerprint.bind(service);
     service.fingerprint = async (target, purpose) => {
       const fingerprint = await originalFingerprint(target, purpose);
-      if (purpose === "stage")
-        await writeFile(file, "change before backup");
+      if (purpose === "stage") await writeFile(file, "change before backup");
       return fingerprint;
     };
     const op = await service.preview(

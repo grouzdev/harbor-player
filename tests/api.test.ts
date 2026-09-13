@@ -115,7 +115,10 @@ describe("HTTP boundary", () => {
   });
   it("returns facet relevance independently of the active library filter", async () => {
     const first = context.service.catalog.addLibrary("First", root);
-    const second = context.service.catalog.addLibrary("Second", `${root}-second`);
+    const second = context.service.catalog.addLibrary(
+      "Second",
+      `${root}-second`,
+    );
     const addTrack = (
       id: string,
       libraryId: string,
@@ -174,6 +177,69 @@ describe("HTTP boundary", () => {
       libraryIds: [first.id, second.id].sort(),
       genres: ["", "Rock"],
     });
+  });
+  it("returns one folder level with recursive track counts", async () => {
+    const library = context.service.catalog.addLibrary("Folders", root);
+    for (const [id, relativePath] of [
+      ["one", path.join("Artist", "Album", "one.flac")],
+      ["two", path.join("Artist", "Live", "two.flac")],
+      ["other", path.join("Other", "other.flac")],
+    ])
+      context.service.catalog.upsert({
+        id,
+        libraryId: library.id,
+        relativePath,
+        title: id,
+        artists: [],
+        albumTitle: id,
+        albumArtists: [],
+        albumKey: id,
+        genres: [],
+        year: null,
+        trackNumber: 1,
+        discNumber: 1,
+        duration: 1,
+        format: "flac",
+        size: 1,
+        mtimeMs: 1,
+        coverId: null,
+        available: true,
+      });
+    const session = await context.app.inject({
+      url: "/api/session",
+      headers: { host: "127.0.0.1:4317" },
+    });
+    const headers = {
+      host: "127.0.0.1:4317",
+      cookie: String(session.headers["set-cookie"]).split(";")[0],
+    };
+
+    const rootFolders = await context.app.inject({
+      url: `/api/libraries/${library.id}/folders`,
+      headers,
+    });
+    expect(rootFolders.statusCode).toBe(200);
+    expect(rootFolders.json()).toEqual([
+      expect.objectContaining({
+        name: "Artist",
+        trackCount: 2,
+        hasChildren: true,
+      }),
+      expect.objectContaining({
+        name: "Other",
+        trackCount: 1,
+        hasChildren: false,
+      }),
+    ]);
+
+    const children = await context.app.inject({
+      url: `/api/libraries/${library.id}/folders?${new URLSearchParams({ parent: "Artist" })}`,
+      headers,
+    });
+    expect(children.json()).toEqual([
+      expect.objectContaining({ name: "Album", trackCount: 1 }),
+      expect.objectContaining({ name: "Live", trackCount: 1 }),
+    ]);
   });
   it("parses bounded, open-ended and suffix ranges and rejects malformed ones", () => {
     expect(rangeFor("bytes=10-19", 100)).toEqual({ start: 10, end: 19 });

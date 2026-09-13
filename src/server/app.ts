@@ -132,6 +132,13 @@ export async function createApp(options: {
     await service.refreshAvailability();
     return service.catalog.libraries();
   });
+  app.get("/api/libraries/:id/folders", async (request) => {
+    const { id } = idParam.parse(request.params);
+    const query = z
+      .object({ parent: z.string().max(32000).default("") })
+      .parse(request.query);
+    return service.catalog.folders(id, query.parent || null);
+  });
   app.get("/api/bookmarks", async () => service.catalog.bookmarks());
   app.post("/api/bookmarks", async (request) => {
     const body = z
@@ -510,9 +517,10 @@ export async function createApp(options: {
         z.object({ albumId: z.string() }),
       ])
       .parse(request.body);
-    const ids = "albumId" in body
-      ? service.catalog.trackIds({ ...emptyFilter, albumIds: [body.albumId] })
-      : service.catalog.trackIds(body.filter);
+    const ids =
+      "albumId" in body
+        ? service.catalog.trackIds({ ...emptyFilter, albumIds: [body.albumId] })
+        : service.catalog.trackIds(body.filter);
     const position = "albumId" in body ? 0 : ids.indexOf(body.startId);
     if (position < 0 || !ids.length)
       throw new Error(
