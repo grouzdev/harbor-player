@@ -178,7 +178,7 @@ export async function writeTags(file: string, patch: TagPatch): Promise<void> {
       artists: ["TPE1", "ARTIST", "©ART", "IART"],
       albumTitle: ["TALB", "ALBUM", "©alb", "IPRD"],
       albumArtists: ["TPE2", "ALBUMARTIST", "ALBUM ARTIST", "aART"],
-      genres: ["TCON", "GENRE", "©gen", "gnre", "IGNR"],
+      genres: ["TCON", "GENRE", "genre", "©gen", "gnre", "IGNR"],
       year: ["TYER", "TDRC", "DATE", "YEAR", "©day", "ICRD"],
       trackNumber: ["TRCK", "TRACKNUMBER", "TRACK", "trkn", "ITRK", "IPRT"],
       discNumber: ["TPOS", "DISCNUMBER", "DISC", "disk"],

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { parseFile } from "music-metadata";
 import { writeTags } from "../dist/server/tag-writer.js";
 import { writeMp3Cover } from "../dist/server/mp3-cover.js";
 import { audioDigest } from "../src/server/audio-digest.js";
@@ -31,6 +32,28 @@ function frame(id: string, body: Buffer) {
   const length = Buffer.alloc(4);
   length.writeUInt32BE(body.length);
   return Buffer.concat([Buffer.from(id), length, Buffer.from([0, 0]), body]);
+}
+
+function version4Frame(id: string, text: string) {
+  const body = Buffer.concat([Buffer.from([3]), Buffer.from(text, "utf8")]);
+  return Buffer.concat([
+    Buffer.from(id),
+    syncsafe(body.length),
+    Buffer.from([0, 0]),
+    body,
+  ]);
+}
+
+function id3v2(version: 3 | 4, tag: Buffer) {
+  const header = Buffer.from([0x49, 0x44, 0x33, version, 0, 0]);
+  return Buffer.concat([header, syncsafe(tag.length), tag]);
+}
+
+function id3v1Genre(genre: number) {
+  const tag = Buffer.alloc(128);
+  tag.write("TAG", 0, "ascii");
+  tag[127] = genre;
+  return tag;
 }
 
 function apic(type: number, data: Buffer) {
@@ -94,6 +117,57 @@ async function mp3WithSeparateGenres() {
 }
 
 describe("MP3 cover writer", () => {
+  it("synchronizes genre across existing ID3v2.3, ID3v2.4 and ID3v1 tags", async () => {
+    root = await mkdtemp(path.join(os.tmpdir(), "mymusiclib-mp3-genre-"));
+    const sample = await readFile(path.join(fixtures, "sample.mp3"));
+    const sampleTagSize = size(sample.subarray(6, 10));
+    const audio = sample.subarray(10 + sampleTagSize);
+    const file = path.join(root, "conflicting-genres.mp3");
+    await writeFile(
+      file,
+      Buffer.concat([
+        id3v2(
+          3,
+          Buffer.concat([
+            frame(
+              "TIT2",
+              Buffer.concat([Buffer.from([0]), Buffer.from("Track", "latin1")]),
+            ),
+            frame(
+              "TCON",
+              Buffer.concat([Buffer.from([0]), Buffer.from("Rave", "latin1")]),
+            ),
+          ]),
+        ),
+        id3v2(4, version4Frame("TCON", "Electronic")),
+        audio,
+        id3v1Genre(111), // Rave in the standard ID3v1 genre table.
+      ]),
+    );
+    const beforeAudio = await audioDigest(file);
+
+    await writeTags(file, { genres: ["Rave"] });
+
+    const metadata = await parseFile(file, { duration: false });
+    expect(metadata.common.genre).toEqual(["Rave"]);
+    expect(
+      metadata.native["ID3v2.3"]
+        ?.filter((tag) => tag.id === "TCON")
+        .map((tag) => tag.value),
+    ).toEqual(["Rave"]);
+    expect(
+      metadata.native["ID3v2.4"]
+        ?.filter((tag) => tag.id === "TCON")
+        .map((tag) => tag.value),
+    ).toEqual(["Rave"]);
+    expect(
+      metadata.native.ID3v1?.filter((tag) => tag.id === "genre").map(
+        (tag) => tag.value,
+      ),
+    ).toEqual(["Rave"]);
+    expect(await audioDigest(file)).toBe(beforeAudio);
+  });
+
   it("adds, replaces and removes a front cover without changing other ID3 frames", async () => {
     const { file, preserved } = await mp3WithSeparateGenres();
     const cover = await readFile(path.join(fixtures, "cover.png"));

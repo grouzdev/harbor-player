@@ -9,7 +9,7 @@ import {
   renameSync,
 } from "node:fs";
 import path from "node:path";
-import { writeTags } from "../dist/server/metadata.js";
+import { writeTags } from "../dist/server/tag-writer.js";
 
 const root = path.resolve(".fixtures");
 const output = path.join(root, "verification");
