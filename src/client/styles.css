@@ -1260,7 +1260,7 @@ a {
   place-items: center;
   padding: 5px;
   color: #71838b;
-  font-size: 10px;
+  font-size: var(--type-caption);
   text-align: center;
 }
 .musicbrainz-candidate-copy,
@@ -1310,7 +1310,7 @@ a {
 }
 .replace-existing {
   color: #7f9299;
-  font-size: 12px;
+  font-size: var(--type-caption);
 }
 .musicbrainz-warnings {
   margin-top: 12px;
@@ -1936,4 +1936,288 @@ body {
 .album-year {
   color: #647681 !important;
   margin-top: 4px !important;
+}
+
+/* Soft-metal lounge visual layer. Structure and control geometry stay intact. */
+:root {
+  --room-inset: clamp(14px, 2.1vw, 34px);
+  --metal-0: #101514;
+  --metal-1: #151b1a;
+  --metal-2: #1b2220;
+  --metal-edge: #d8e0cc1c;
+  --metal-line: #e6ecdf0d;
+  --metal-shadow: #030706b8;
+  --soft-highlight: #dce7cf12;
+  --accent: #bdcca0;
+  --teal: #a9c9bc;
+  --line: var(--metal-line);
+  --muted: #8b9790;
+  --panel: var(--metal-1);
+  --bg: var(--metal-0);
+}
+
+body {
+  min-height: 100dvh;
+  padding: var(--room-inset);
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, #080b0a9e 0%, #10151366 38%, #17120b4d 100%),
+    url("../../assets/bg_lounge.jpg") center / cover fixed,
+    #0d1110;
+}
+
+body::before {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background:
+    radial-gradient(circle at 79% 52%, #d09b5540, transparent 29%),
+    linear-gradient(180deg, #04070642, #070b0a78);
+}
+
+#root,
+.app-shell {
+  position: relative;
+  z-index: 1;
+}
+
+.app-shell {
+  height: calc(100dvh - var(--room-inset) - var(--room-inset));
+  min-height: 520px;
+  border: 1px solid var(--metal-edge);
+  border-radius: 14px;
+  background: var(--metal-0);
+  box-shadow:
+    0 24px 70px #0204038c,
+    0 2px 0 #eff5dd12 inset,
+    0 -1px 0 #0000008c inset;
+}
+
+.topbar,
+.player {
+  background:
+    linear-gradient(180deg, #252d29d9, #111715eb),
+    repeating-linear-gradient(0deg, #ffffff10 0 1px, transparent 1px 4px);
+}
+
+.topbar {
+  border-bottom-color: #e2ebd811;
+  box-shadow: 0 1px #eff5dd0d inset;
+}
+
+.search,
+input:not([type="checkbox"]):not([type="range"]),
+select {
+  border-color: #dfe9d31c;
+  background:
+    linear-gradient(145deg, #0b100e, #161d1a) !important;
+  box-shadow:
+    0 1px #dce7cc12 inset,
+    0 -1px #00000082 inset,
+    0 1px 2px #0000004d;
+}
+
+.search {
+  color: #9aa79e;
+}
+
+.search input:not([type="checkbox"]):not([type="range"]) {
+  background: transparent !important;
+  box-shadow: none;
+}
+
+.workspace {
+  background: #0f1513e8;
+}
+
+.libraries-panel,
+.genres-panel,
+.artists-panel,
+.albums-panel,
+.tracks-panel {
+  background:
+    linear-gradient(108deg, #202824e6, #141a18f0 46%, #111715f2),
+    repeating-linear-gradient(0deg, #ffffff08 0 1px, transparent 1px 5px);
+}
+
+.genres-panel,
+.artists-panel {
+  background:
+    linear-gradient(108deg, #1c2421e8, #121916f2),
+    repeating-linear-gradient(0deg, #ffffff08 0 1px, transparent 1px 5px);
+}
+
+.albums-panel {
+  background:
+    radial-gradient(ellipse at 84% 5%, #bbc9a608, transparent 34%),
+    linear-gradient(108deg, #1c2421e8, #111714f4);
+}
+
+.tracks-panel {
+  background:
+    radial-gradient(ellipse at 91% 14%, #c5b58d07, transparent 30%),
+    linear-gradient(108deg, #1b2320ec, #101614f5);
+}
+
+.panel-heading,
+.track-toolbar,
+.catalog-footer {
+  border-color: var(--metal-line);
+  box-shadow: 0 1px #eff5dd08 inset;
+}
+
+.resizer,
+.row-resizer {
+  background: linear-gradient(90deg, #0000005e, #dce7cc09, #0000005e);
+}
+
+.resizer:hover,
+.resizer:active,
+.row-resizer:hover,
+.row-resizer:active {
+  background: #aebd9a72;
+}
+
+.panel-count,
+.format-badge {
+  border: 1px solid #dbe5cd13;
+  background: #e3efd007;
+  color: #84928b;
+}
+
+.list-tile:hover .list-tile-main,
+.list-tile-main:focus-visible,
+.list-all-action:hover:not(:disabled),
+.track-album-header:hover {
+  background: linear-gradient(90deg, #dce9cf0d, #dce9cf04 62%, transparent);
+}
+
+.list-tile.selected .list-tile-main,
+.list-all-action.selected {
+  background:
+    linear-gradient(90deg, #c9d8ad20, #c9d8ad0d 68%, transparent),
+    #bdcca007;
+  box-shadow:
+    1px 0 #d9eab561 inset,
+    0 1px #e9f5d70b inset;
+  color: #d5e0c3;
+}
+
+.list-tile.selected .list-tile-prefix,
+.list-tile.selected .list-tile-suffix {
+  color: #a8b997;
+}
+
+.list-all-action,
+.all-albums {
+  border-color: #dfe9d314;
+  background: #dfe9d305;
+  border-radius: 7px;
+  box-shadow: 0 1px #e9f5d708 inset;
+}
+
+.album-cover,
+.now-cover,
+.tiny-cover {
+  border-radius: 7px;
+  box-shadow:
+    0 8px 20px #02050478,
+    0 1px #ecf5da18 inset;
+}
+
+.now-cover,
+.tiny-cover {
+  border-color: #dce7cc1c;
+}
+
+.album-card.selected .album-cover {
+  border-color: #b9d4b7;
+  box-shadow:
+    0 0 0 1px #c3d6a633,
+    0 8px 20px #02050478,
+    0 1px #ecf5da18 inset;
+}
+
+.track-row {
+  box-shadow: inset 0 -1px #e4eddc0c;
+}
+
+.track-row .list-tile-main {
+  color: #cbd2cc;
+}
+
+.album-details > small {
+  font-size: inherit;
+}
+
+.button.secondary,
+.icon-button:hover:not(:disabled),
+.bookmark-toggle {
+  border: 1px solid #dce7cc14;
+  background: linear-gradient(145deg, #242c28, #131917);
+  box-shadow:
+    0 1px #e7f0d315 inset,
+    0 -1px #0000007a inset,
+    0 4px 11px #0205043d;
+}
+
+.button.primary,
+.play-button {
+  background: linear-gradient(145deg, #d2ddb6, #aab88e);
+  color: #243028;
+  box-shadow:
+    0 1px #ffffffe0 inset,
+    0 7px 16px #00000052,
+    0 -1px #62705985 inset;
+}
+
+.button.primary:hover:not(:disabled),
+.play-button:hover:not(:disabled) {
+  background: linear-gradient(145deg, #dde9c0, #b8c99b);
+}
+
+.player {
+  border-top-color: #e2ebd815;
+  box-shadow:
+    0 1px #eff5dd0d inset,
+    0 -10px 30px #0508063b;
+}
+
+input[type="range"] {
+  accent-color: var(--accent);
+  filter: saturate(0.8) brightness(1.08);
+}
+
+.context-menu,
+.modal-content,
+.toast {
+  border-color: #dce7cc1b;
+  background:
+    linear-gradient(145deg, #27302bdc, #151c19f2),
+    #161d1a;
+  box-shadow:
+    0 22px 60px #020403b0,
+    0 1px #f0f6e21a inset;
+}
+
+@media (max-width: 900px), (max-height: 650px) {
+  body {
+    padding: 0;
+    overflow: auto;
+    background: var(--metal-0);
+  }
+
+  body::before {
+    display: none;
+  }
+
+  .app-shell {
+    height: 100dvh;
+    min-height: 520px;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
 }
