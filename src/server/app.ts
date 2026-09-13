@@ -188,6 +188,12 @@ export async function createApp(options: {
     const q = pageSchema.parse(request.query);
     return service.catalog.genres(filterSchema.parse(JSON.parse(q.filter)));
   });
+  app.get("/api/facet-relevance", async (request) => {
+    const q = pageSchema.parse(request.query);
+    return service.catalog.facetRelevance(
+      filterSchema.parse(JSON.parse(q.filter)),
+    );
+  });
   app.get("/api/artists", async (request) => {
     const q = pageSchema.parse(request.query);
     return service.catalog.artists(

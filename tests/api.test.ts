@@ -113,6 +113,68 @@ describe("HTTP boundary", () => {
     await context.service.idle();
     expect(context.service.catalog.libraries()).toEqual([]);
   });
+  it("returns facet relevance independently of the active library filter", async () => {
+    const first = context.service.catalog.addLibrary("First", root);
+    const second = context.service.catalog.addLibrary("Second", `${root}-second`);
+    const addTrack = (
+      id: string,
+      libraryId: string,
+      albumKey: string,
+      albumArtists: string[],
+      genres: string[],
+    ) =>
+      context.service.catalog.upsert({
+        id,
+        libraryId,
+        relativePath: `${id}.flac`,
+        title: id,
+        artists: albumArtists,
+        albumTitle: albumKey,
+        albumArtists,
+        albumKey,
+        genres,
+        year: null,
+        trackNumber: 1,
+        discNumber: 1,
+        duration: 1,
+        format: "flac",
+        size: 1,
+        mtimeMs: 1,
+        coverId: null,
+        available: true,
+      });
+    addTrack("artist-track", first.id, "artist-album", ["Artist A"], ["Rock"]);
+    addTrack("album-track", second.id, "selected-album", ["Artist B"], []);
+    const session = await context.app.inject({
+      url: "/api/session",
+      headers: { host: "127.0.0.1:4317" },
+    });
+    const filter = {
+      libraryIds: [first.id],
+      genres: ["Rock"],
+      artists: ["Artist A"],
+      albumIds: ["selected-album"],
+      search: "ignored",
+      bookmarksOnly: true,
+    };
+    const response = await context.app.inject({
+      url: `/api/facet-relevance?${new URLSearchParams({
+        filter: JSON.stringify(filter),
+        offset: "0",
+        limit: "200",
+      })}`,
+      headers: {
+        host: "127.0.0.1:4317",
+        cookie: String(session.headers["set-cookie"]).split(";")[0],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      libraryIds: [first.id, second.id].sort(),
+      genres: ["", "Rock"],
+    });
+  });
   it("parses bounded, open-ended and suffix ranges and rejects malformed ones", () => {
     expect(rangeFor("bytes=10-19", 100)).toEqual({ start: 10, end: 19 });
     expect(rangeFor("bytes=90-", 100)).toEqual({ start: 90, end: 99 });

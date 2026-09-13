@@ -202,6 +202,16 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await artistButton.click();
   await expect(artistRow).toHaveClass(/selected/);
 
+  const downloadsTile = page
+    .locator(".libraries-panel .list-tile")
+    .filter({ hasText: `Downloads ${browser}` });
+  await expect(downloadsTile).not.toHaveClass(/unrelated/);
+  await expect(collectionTile).toHaveClass(/unrelated/);
+  await expect(collectionTile.locator(".list-tile-value")).toHaveCSS(
+    "opacity",
+    "0.45",
+  );
+
   const firstAlbum = page
     .locator(".album-card")
     .filter({ hasText: "Исполнитель альбома" });

@@ -200,6 +200,56 @@ describe("catalog and safe filesystem operations", () => {
       { name: "Rock", count: 2 },
     ]);
   });
+  it("finds libraries and genres related to selected artists or albums", () => {
+    const catalog = service.catalog;
+    const first = catalog.addLibrary("First", path.join(root, "First"));
+    const second = catalog.addLibrary("Second", path.join(root, "Second"));
+    const addTrack = (
+      id: string,
+      libraryId: string,
+      albumKey: string,
+      albumArtists: string[],
+      genres: string[],
+    ) =>
+      catalog.upsert({
+        id,
+        libraryId,
+        relativePath: `${id}.flac`,
+        title: id,
+        artists: albumArtists,
+        albumTitle: albumKey,
+        albumArtists,
+        albumKey,
+        genres,
+        year: null,
+        trackNumber: 1,
+        discNumber: 1,
+        duration: 1,
+        format: "flac",
+        size: 1,
+        mtimeMs: 1,
+        coverId: null,
+        available: true,
+      });
+    addTrack("artist-track", first.id, "artist-album", ["Artist A"], ["Rock"]);
+    addTrack("album-track", second.id, "selected-album", ["Artist B"], []);
+    addTrack("other-track", second.id, "other-album", ["Artist C"], ["Jazz"]);
+
+    expect(
+      catalog.facetRelevance({
+        ...emptyFilter,
+        libraryIds: ["ignored-library"],
+        genres: ["Jazz"],
+        search: "ignored",
+        bookmarksOnly: true,
+        artists: ["Artist A"],
+        albumIds: ["selected-album"],
+      }),
+    ).toEqual({
+      libraryIds: [first.id, second.id].sort(),
+      genres: ["", "Rock"],
+    });
+  });
   it("filters albums by album artists with genre and library intersection", async () => {
     const a = await library("A");
     await library("B");

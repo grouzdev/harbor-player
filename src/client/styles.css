@@ -329,6 +329,9 @@ a {
 .list-tile.offline {
   opacity: 0.5;
 }
+.list-tile.unrelated .list-tile-value {
+  opacity: 0.45;
+}
 .add-library {
   font-size: var(--type-caption);
   color: #96a19b;

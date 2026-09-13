@@ -7,6 +7,7 @@ import type {
   BookmarkKind,
   CatalogBookmark,
   CatalogFilter,
+  FacetRelevance,
   Job,
   Library,
   OperationPreview,
@@ -345,6 +346,42 @@ export class Catalog {
         )
         .all(...args) as { id: string }[]
     ).map((r) => r.id);
+  }
+  facetRelevance(filter: CatalogFilter): FacetRelevance {
+    const clauses = ["t.available=1", "l.available=1"];
+    const args: string[] = [];
+    const relations: string[] = [];
+    const artists = filter.artists.filter((artist) => artist !== "");
+    if (artists.length) {
+      relations.push(
+        `EXISTS (SELECT 1 FROM track_album_artists a WHERE a.trackId=t.id AND a.artist IN (${artists.map(() => "?").join(",")}))`,
+      );
+      args.push(...artists);
+    }
+    if (filter.artists.includes("")) relations.push("t.albumArtists='[]'");
+    if (filter.albumIds.length) {
+      relations.push(`t.albumKey IN (${filter.albumIds.map(() => "?").join(",")})`);
+      args.push(...filter.albumIds);
+    }
+    if (!relations.length) return { libraryIds: [], genres: [] };
+    clauses.push(`(${relations.join(" OR ")})`);
+    const sql = clauses.join(" AND ");
+    return {
+      libraryIds: (
+        this.db
+          .prepare(
+            `SELECT DISTINCT t.libraryId id FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql} ORDER BY id`,
+          )
+          .all(...args) as { id: string }[]
+      ).map((row) => row.id),
+      genres: (
+        this.db
+          .prepare(
+            `SELECT DISTINCT coalesce(g.genre,'') name FROM tracks t JOIN libraries l ON l.id=t.libraryId LEFT JOIN track_genres g ON g.trackId=t.id WHERE ${sql} ORDER BY name COLLATE NOCASE`,
+          )
+          .all(...args) as { name: string }[]
+      ).map((row) => row.name),
+    };
   }
   genres(filter: CatalogFilter): { name: string; count: number }[] {
     const { sql, args } = this.where({

@@ -51,6 +51,10 @@ export interface Page<T> {
   total: number;
   offset: number;
 }
+export interface FacetRelevance {
+  libraryIds: string[];
+  genres: string[];
+}
 export const filterSchema = z.object({
   libraryIds: z.array(z.string()).max(100).default([]),
   genres: z.array(z.string()).max(500).default([]),

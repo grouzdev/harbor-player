@@ -38,6 +38,7 @@ import {
   type Capabilities,
   type CatalogBookmark,
   type CatalogFilter,
+  type FacetRelevance,
   type Job,
   type Library,
   type OperationPreview,
@@ -635,6 +636,25 @@ export function App() {
       ),
     enabled: ready && (filter.albumIds.length > 0 || filter.artists.length > 0),
   });
+  const relevanceFilter = useMemo(
+    () => ({
+      ...emptyFilter,
+      artists: filter.artists,
+      albumIds: filter.albumIds,
+    }),
+    [filter.artists, filter.albumIds],
+  );
+  const facetRelevance = useQuery({
+    queryKey: ["facet-relevance", relevanceFilter],
+    queryFn: () =>
+      api<FacetRelevance>(catalogUrl("facet-relevance", relevanceFilter)),
+    enabled:
+      ready &&
+      (relevanceFilter.artists.length > 0 ||
+        relevanceFilter.albumIds.length > 0),
+  });
+  const hasFacetRelevance =
+    relevanceFilter.artists.length > 0 || relevanceFilter.albumIds.length > 0;
   useEffect(() => {
     if (!genres.data) return;
     const available = new Set(genres.data.map((g) => g.name));
@@ -892,7 +912,16 @@ export function App() {
             {libraries.data?.map((library) => (
               <div key={library.id} className="library-container">
                 <ListTile
-                  className={!library.available ? "offline" : ""}
+                  className={[
+                    !library.available ? "offline" : "",
+                    hasFacetRelevance &&
+                    facetRelevance.data &&
+                    !facetRelevance.data.libraryIds.includes(library.id)
+                      ? "unrelated"
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   selected={filter.libraryIds.includes(library.id)}
                   title={library.path}
                   value={library.name}
@@ -968,7 +997,13 @@ export function App() {
               return (
                 <ListTile
                   key={g.name}
-                  className="genre-row"
+                  className={`genre-row ${
+                    hasFacetRelevance &&
+                    facetRelevance.data &&
+                    !facetRelevance.data.genres.includes(g.name)
+                      ? "unrelated"
+                      : ""
+                  }`}
                   selected={checked}
                   value={label}
                   suffix={count(g.count)}
