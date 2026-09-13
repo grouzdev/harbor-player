@@ -1781,3 +1781,29 @@ body {
   color: #647681 !important;
   margin-top: 4px !important;
 }
+.operation-progress-stack {
+  position: fixed;
+  z-index: 80;
+  right: 20px;
+  bottom: 20px;
+  display: grid;
+  gap: 10px;
+  width: min(340px, calc(100vw - 32px));
+}
+.operation-progress-card {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  padding: 14px 36px 14px 15px;
+  border: 1px solid #ffffff16;
+  border-radius: 9px;
+  background: #182126f5;
+  box-shadow: 0 12px 36px #0008;
+}
+.operation-progress-card strong { color: #d5e0e0; font-size: var(--type-body); }
+.operation-progress-card small { color: #91a2aa; font-size: var(--type-caption); }
+.operation-progress-close { position: absolute; top: 9px; right: 9px; padding: 4px; color: #9bacb2; background: transparent; }
+.operation-progress-close:disabled { opacity: .35; cursor: default; }
+.operation-progress-bar { height: 4px; overflow: hidden; border-radius: 3px; background: #ffffff12; }
+.operation-progress-bar i { display: block; height: 100%; background: var(--accent); transition: width .2s ease; }
+.operation-progress-errors { color: #df9b91 !important; }
