@@ -14,6 +14,28 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(page.getByLabel("Поиск музыки")).toBeVisible();
   await expect(page.locator(".brand, .page-heading")).toHaveCount(0);
   await expect(page.locator(".topbar")).toHaveCSS("height", "65px");
+  await expect(page.locator(".player")).toHaveCSS("height", "72px");
+  await expect(page.getByLabel("Позиция воспроизведения")).toHaveCSS(
+    "width",
+    "240px",
+  );
+  const playerLayout = await page.locator(".player").evaluate((player) => {
+    const panel = player.getBoundingClientRect();
+    const transport = player.querySelector<HTMLElement>(".transport")!;
+    const buttons = player.querySelector<HTMLElement>(".transport-buttons")!;
+    const seek = player.querySelector<HTMLElement>(".seek")!;
+    const transportRect = transport.getBoundingClientRect();
+    const buttonsRect = buttons.getBoundingClientRect();
+    const seekRect = seek.getBoundingClientRect();
+    return {
+      panelCenter: panel.left + panel.width / 2,
+      transportCenter: transportRect.left + transportRect.width / 2,
+      buttonsCenterY: buttonsRect.top + buttonsRect.height / 2,
+      seekCenterY: seekRect.top + seekRect.height / 2,
+    };
+  });
+  expect(playerLayout.transportCenter).toBeCloseTo(playerLayout.panelCenter, 1);
+  expect(playerLayout.buttonsCenterY).toBeCloseTo(playerLayout.seekCenterY, 1);
   await page.locator(".add-library").click();
   const addLibraryDialog = page.getByRole("dialog");
   await expect(addLibraryDialog).toBeVisible();
