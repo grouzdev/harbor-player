@@ -1814,6 +1814,12 @@ body {
 .track-empty .button {
   margin-top: 4px;
 }
+.workspace-row {
+  display: contents;
+}
+.row-resizer {
+  display: none;
+}
 .workspace {
   grid-template-columns:
     minmax(110px, var(--library-weight)) 4px minmax(110px, var(--genre-weight))
@@ -1822,6 +1828,49 @@ body {
       var(--album-weight)
     )
     4px minmax(180px, var(--track-weight));
+}
+@media (orientation: portrait) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows:
+      minmax(160px, var(--facet-row-weight)) 4px
+      minmax(160px, var(--catalog-row-weight));
+    overflow: hidden;
+  }
+  .workspace-row {
+    display: grid;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .workspace-row > .panel,
+  .workspace-row > .resizer {
+    height: 100%;
+  }
+  .artist-album-resizer {
+    display: none;
+  }
+  .row-resizer {
+    display: block;
+    background: #ffffff06;
+    cursor: row-resize;
+    touch-action: none;
+    transition: background 0.15s;
+  }
+  .row-resizer:hover,
+  .row-resizer:active {
+    background: #8bae9980;
+  }
+  .workspace-facets {
+    grid-template-columns:
+      minmax(110px, var(--library-weight)) 4px
+      minmax(110px, var(--genre-weight)) 4px
+      minmax(110px, var(--artist-weight));
+  }
+  .workspace-catalog {
+    grid-template-columns:
+      minmax(150px, var(--album-weight)) 4px
+      minmax(180px, var(--track-weight));
+  }
 }
 .list-all-action {
   display: flex;

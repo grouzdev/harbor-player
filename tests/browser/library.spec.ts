@@ -2,6 +2,132 @@ import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+test("portrait workspace uses two independently resizable rows", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.setViewportSize({ width: 1000, height: 1200 });
+
+  const portraitLayout = await page
+    .locator(".workspace")
+    .evaluate((workspace) => {
+      const rect = (selector: string) => {
+        const element = workspace.querySelector<HTMLElement>(selector)!;
+        const box = element.getBoundingClientRect();
+        return {
+          left: box.left,
+          top: box.top,
+          width: box.width,
+          height: box.height,
+        };
+      };
+      return {
+        library: rect(".libraries-panel"),
+        genres: rect(".genres-panel"),
+        artists: rect(".artists-panel"),
+        albums: rect(".albums-panel"),
+        tracks: rect(".tracks-panel"),
+        scrollsHorizontally: workspace.scrollWidth > workspace.clientWidth,
+      };
+    });
+  expect(portraitLayout.library.top).toBeCloseTo(portraitLayout.genres.top, 1);
+  expect(portraitLayout.library.top).toBeCloseTo(portraitLayout.artists.top, 1);
+  expect(portraitLayout.albums.top).toBeCloseTo(portraitLayout.tracks.top, 1);
+  expect(portraitLayout.library.top).toBeLessThan(portraitLayout.albums.top);
+  expect(portraitLayout.library.height).toBeCloseTo(
+    portraitLayout.albums.height,
+    1,
+  );
+  expect(portraitLayout.scrollsHorizontally).toBe(false);
+  await expect(page.getByRole("separator")).toHaveCount(4);
+
+  async function resizeSeparator(label: string, deltaX: number) {
+    const separator = page.getByRole("separator", { name: label });
+    const box = await separator.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(
+      box!.x + box!.width / 2 + deltaX,
+      box!.y + box!.height / 2,
+    );
+    await page.mouse.up();
+  }
+
+  async function resizeRows(deltaY: number) {
+    const separator = page.getByRole("separator", { name: "Высота строк" });
+    const box = await separator.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(
+      box!.x + box!.width / 2,
+      box!.y + box!.height / 2 + deltaY,
+    );
+    await page.mouse.up();
+  }
+
+  const beforeFacetResize = await page
+    .locator(".panel")
+    .evaluateAll((panels) =>
+      panels.map((panel) => panel.getBoundingClientRect().width),
+    );
+  await resizeSeparator("Ширина библиотек", 24);
+  const afterFacetResize = await page
+    .locator(".panel")
+    .evaluateAll((panels) =>
+      panels.map((panel) => panel.getBoundingClientRect().width),
+    );
+  expect(afterFacetResize[0]).not.toBeCloseTo(beforeFacetResize[0], 1);
+  expect(afterFacetResize[3]).toBeCloseTo(beforeFacetResize[3], 1);
+  expect(afterFacetResize[4]).toBeCloseTo(beforeFacetResize[4], 1);
+
+  const beforeArtistResize = afterFacetResize;
+  await resizeSeparator("Ширина жанров", -24);
+  const afterArtistResize = await page
+    .locator(".panel")
+    .evaluateAll((panels) =>
+      panels.map((panel) => panel.getBoundingClientRect().width),
+    );
+  expect(afterArtistResize[2]).not.toBeCloseTo(beforeArtistResize[2], 1);
+  expect(afterArtistResize[3]).toBeCloseTo(beforeArtistResize[3], 1);
+  expect(afterArtistResize[4]).toBeCloseTo(beforeArtistResize[4], 1);
+
+  const beforeCatalogResize = afterArtistResize;
+  await resizeSeparator("Ширина альбомов", 24);
+  const afterCatalogResize = await page
+    .locator(".panel")
+    .evaluateAll((panels) =>
+      panels.map((panel) => panel.getBoundingClientRect().width),
+    );
+  expect(afterCatalogResize[0]).toBeCloseTo(beforeCatalogResize[0], 1);
+  expect(afterCatalogResize[1]).toBeCloseTo(beforeCatalogResize[1], 1);
+  expect(afterCatalogResize[2]).toBeCloseTo(beforeCatalogResize[2], 1);
+  expect(afterCatalogResize[3]).not.toBeCloseTo(beforeCatalogResize[3], 1);
+
+  const beforeRowResize = await page
+    .locator(".workspace-row")
+    .evaluateAll((rows) =>
+      rows.map((row) => row.getBoundingClientRect().height),
+    );
+  await resizeRows(120);
+  const afterRowResize = await page
+    .locator(".workspace-row")
+    .evaluateAll((rows) =>
+      rows.map((row) => row.getBoundingClientRect().height),
+    );
+  expect(afterRowResize[0]).toBeGreaterThan(beforeRowResize[0]);
+  expect(afterRowResize[1]).toBeLessThan(beforeRowResize[1]);
+
+  await page.setViewportSize({ width: 1200, height: 1000 });
+  const landscapeTops = await page
+    .locator(".panel")
+    .evaluateAll((panels) =>
+      panels.map((panel) => panel.getBoundingClientRect().top),
+    );
+  expect(landscapeTops.every((top) => top === landscapeTops[0])).toBe(true);
+});
+
 test("local library: readable UI, playback, tags, move, delete and restore", async ({
   page,
 }, info) => {
