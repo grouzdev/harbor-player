@@ -15,6 +15,7 @@ import path from "node:path";
 import os from "node:os";
 import { execFileSync } from "node:child_process";
 import { MusicService } from "../dist/server/service.js";
+import { readTrack } from "../dist/server/metadata.js";
 import { emptyFilter } from "../src/shared/contracts.js";
 import { audioDigest } from "../src/server/audio-digest.js";
 import { parseFile } from "music-metadata";
@@ -237,6 +238,32 @@ describe("catalog and safe filesystem operations", () => {
     await rename(lib.path + "-offline", lib.path);
     await service.refreshAvailability();
     expect(tracks()).toHaveLength(1);
+  });
+  it("falls back to TagLib when music-metadata cannot parse a valid audio file", async () => {
+    const file = path.join(fixtures, "sample.mp3");
+    const track = await readTrack(
+      file,
+      "fallback-library",
+      fixtures,
+      "fallback-track",
+      path.join(root, "data"),
+      async () => {
+        throw new Error("Cannot read properties of undefined (reading 'artists')");
+      },
+    );
+
+    expect(track).toMatchObject({
+      id: "fallback-track",
+      title: "Первый трек",
+      artists: ["Исполнитель"],
+      albumTitle: "Тестовый альбом",
+      albumArtists: ["Исполнитель альбома"],
+      genres: ["Ambient"],
+      year: 2024,
+      trackNumber: 1,
+      discNumber: 1,
+    });
+    expect(track.duration).toBeGreaterThan(0);
   });
   it("rejects overlaps and symlink escapes", async () => {
     const lib = await library("Music");

@@ -1,4 +1,5 @@
 import { parseFile, type IAudioMetadata } from "music-metadata";
+import { File, PictureType } from "@digimezzo/node-taglib-sharp";
 import { createHash } from "node:crypto";
 import { stat, readFile, mkdir, writeFile, lstat } from "node:fs/promises";
 import path from "node:path";
@@ -7,15 +8,108 @@ import type { Track } from "../shared/contracts.js";
 const clean = (values: string[] | undefined) => [
   ...new Set((values || []).map((v) => v.trim()).filter(Boolean)),
 ];
+
+type ParsedAudioMetadata = {
+  common: Pick<
+    IAudioMetadata["common"],
+    | "title"
+    | "artists"
+    | "artist"
+    | "album"
+    | "albumartists"
+    | "albumartist"
+    | "genre"
+    | "year"
+    | "musicbrainz_recordingid"
+    | "musicbrainz_albumid"
+    | "musicbrainz_releasegroupid"
+  > & {
+    picture?: { type?: string; format: string; data: Uint8Array }[];
+    track?: { no: number | null; of?: number | null };
+    disk?: { no: number | null; of?: number | null };
+  };
+  format: Pick<
+    IAudioMetadata["format"],
+    "sampleRate" | "numberOfChannels" | "duration"
+  >;
+};
+
+function readWithTagLib(file: string): ParsedAudioMetadata {
+  const tagged = File.createFromPath(file);
+  try {
+    const { tag, properties } = tagged;
+    const artists = clean(tag.performers);
+    const albumArtists = clean(tag.albumArtists);
+    const picture = tag.pictures
+      .filter(
+        (item) =>
+          item.data.length <= 10 * 1024 * 1024 &&
+          ["image/jpeg", "image/png"].includes(item.mimeType),
+      )
+      .sort(
+        (a, b) =>
+          Number(b.type === PictureType.FrontCover) -
+          Number(a.type === PictureType.FrontCover),
+      )[0];
+    return {
+      common: {
+        title: tag.title || undefined,
+        artists,
+        artist: artists.join("; ") || undefined,
+        album: tag.album || undefined,
+        albumartists: albumArtists,
+        albumartist: albumArtists.join("; ") || undefined,
+        genre: clean(tag.genres),
+        year: tag.year || undefined,
+        track: { no: tag.track || null, of: tag.trackCount || null },
+        disk: { no: tag.disc || null, of: tag.discCount || null },
+        picture: picture
+          ? [
+              {
+                type:
+                  picture.type === PictureType.FrontCover ? "Cover (front)" : "",
+                format: picture.mimeType,
+                data: Buffer.from(picture.data.toByteArray()),
+              },
+            ]
+          : undefined,
+      },
+      format: {
+        sampleRate: properties.audioSampleRate,
+        numberOfChannels: properties.audioChannels,
+        duration: properties.durationMilliseconds / 1000,
+      },
+    };
+  } finally {
+    tagged.dispose();
+  }
+}
+
+async function parseTrackMetadata(
+  file: string,
+  parse: typeof parseFile,
+): Promise<ParsedAudioMetadata> {
+  try {
+    return await parse(file, { duration: true });
+  } catch (primaryError) {
+    try {
+      return readWithTagLib(file);
+    } catch {
+      throw primaryError;
+    }
+  }
+}
+
 export async function readTrack(
   file: string,
   libraryId: string,
   root: string,
   id: string,
   dataDir: string,
+  parse: typeof parseFile = parseFile,
 ): Promise<Track> {
   const info = await stat(file);
-  const metadata = await parseFile(file, { duration: true });
+  const metadata = await parseTrackMetadata(file, parse);
   if (
     !metadata.format.sampleRate ||
     !metadata.format.numberOfChannels ||
@@ -68,8 +162,8 @@ export async function readTrack(
     missingTagFields.push("albumArtists");
   if (!c.genre?.length) missingTagFields.push("genres");
   if (!c.year) missingTagFields.push("year");
-  if (!c.track.no) missingTagFields.push("trackNumber");
-  if (!c.disk.no) missingTagFields.push("discNumber");
+  if (!c.track?.no) missingTagFields.push("trackNumber");
+  if (!c.disk?.no) missingTagFields.push("discNumber");
   if (!coverId) missingTagFields.push("cover");
   let albumFolder = path.dirname(path.relative(root, file));
   if (/^(cd|disc|disk|диск)[\s_-]*\d+$/i.test(path.basename(albumFolder)))
@@ -100,8 +194,8 @@ export async function readTrack(
     albumKey,
     genres: clean(c.genre),
     year: c.year || null,
-    trackNumber: c.track.no || null,
-    discNumber: c.disk.no || null,
+    trackNumber: c.track?.no || null,
+    discNumber: c.disk?.no || null,
     duration: metadata.format.duration || 0,
     format: path.extname(file).toLowerCase().slice(1),
     size: info.size,
