@@ -356,7 +356,7 @@ export class Catalog {
     });
     return this.db
       .prepare(
-        `SELECT coalesce(g.genre,'') name, count(*) count FROM tracks t JOIN libraries l ON l.id=t.libraryId LEFT JOIN track_genres g ON g.trackId=t.id WHERE ${sql} GROUP BY coalesce(g.genre,'') ORDER BY name COLLATE NOCASE`,
+        `SELECT coalesce(g.genre,'') name, count(DISTINCT a.artist) count FROM tracks t JOIN libraries l ON l.id=t.libraryId LEFT JOIN track_genres g ON g.trackId=t.id LEFT JOIN track_album_artists a ON a.trackId=t.id WHERE ${sql} GROUP BY coalesce(g.genre,'') ORDER BY name COLLATE NOCASE`,
       )
       .all(...args) as { name: string; count: number }[];
   }
@@ -401,7 +401,7 @@ export class Catalog {
     ).n;
     const items = this.db
       .prepare(
-        `SELECT coalesce(a.artist,'') name,count(*) count ${group} ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?`,
+        `SELECT coalesce(a.artist,'') name,count(DISTINCT t.albumKey) count ${group} ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?`,
       )
       .all(...args, limit, offset) as { name: string; count: number }[];
     return { items, total, offset };

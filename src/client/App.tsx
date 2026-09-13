@@ -15,11 +15,9 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   AudioLines,
   Bookmark as BookmarkIcon,
-  Check,
   ChevronRight,
   Clock3,
   Disc3,
-  Folder,
   FolderOpen,
   FolderInput,
   History,
@@ -64,6 +62,7 @@ import {
   RemoveLibraryDialog,
 } from "./Dialogs";
 import { selectFacetValue } from "./facet-selection";
+import { ListTile } from "./ListTile";
 import { Player, usePlayer } from "./Player";
 import { ContextMenu, type ContextMenuState } from "./ContextMenu";
 
@@ -72,12 +71,6 @@ type DroppedCover = {
   name: string;
   cover: { data: string; mime: "image/jpeg" | "image/png" };
 };
-
-function toggle(values: string[], value: string) {
-  return values.includes(value)
-    ? values.filter((v) => v !== value)
-    : [...values, value];
-}
 
 type BookmarkChange = (
   kind: BookmarkKind,
@@ -743,10 +736,10 @@ export function App() {
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
   };
-  const chooseLibrary = (id: string) =>
+  const chooseLibrary = (id: string, additive: boolean) =>
     setFilter((f) => ({
       ...f,
-      libraryIds: toggle(f.libraryIds, id),
+      libraryIds: selectFacetValue(f.libraryIds, id, additive),
       genres: [],
       artists: [],
       albumIds: [],
@@ -882,26 +875,15 @@ export function App() {
           <div className="library-list">
             {libraries.data?.map((library) => (
               <div key={library.id} className="library-container">
-                <button
-                  className={`library-row ${filter.libraryIds.includes(library.id) ? "selected" : ""} ${!library.available ? "offline" : ""}`}
-                  aria-pressed={filter.libraryIds.includes(library.id)}
+                <ListTile
+                  className={!library.available ? "offline" : ""}
+                  selected={filter.libraryIds.includes(library.id)}
                   title={library.path}
-                  onClick={() => chooseLibrary(library.id)}
+                  value={library.name}
+                  suffix={count(library.trackCount)}
+                  onSelect={(event) => chooseLibrary(library.id, event.ctrlKey)}
                   onContextMenu={(event) => showLibraryMenu(event, library)}
-                >
-                  <Folder size={18} />
-                  <span>
-                    {library.name}
-                    <small>
-                      {library.available
-                        ? `${count(library.trackCount)} треков`
-                        : "Папка недоступна"}
-                    </small>
-                  </span>
-                  {filter.libraryIds.includes(library.id) && (
-                    <Check size={14} />
-                  )}
-                </button>
+                />
               </div>
             ))}
           </div>
@@ -956,41 +938,14 @@ export function App() {
               const label = g.name || "Без жанра";
               const checked = filter.genres.includes(g.name);
               return (
-                <div
+                <ListTile
                   key={g.name}
-                  className={`genre-row facet-row ${checked ? "selected" : ""}`}
-                  role="button"
-                  tabIndex={0}
-                  onClick={(event) => chooseGenre(g.name, event.ctrlKey)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      chooseGenre(g.name, event.ctrlKey);
-                    }
-                  }}
-                >
-                  <div className="facet-checkbox-zone">
-                    <input
-                      className="facet-checkbox"
-                      type="checkbox"
-                      aria-label={`Выбрать жанр: ${label}`}
-                      checked={checked}
-                      onClick={(event) => event.stopPropagation()}
-                      onChange={() => chooseGenre(g.name, true)}
-                    />
-                  </div>
-                  <button
-                    className="facet-main"
-                    aria-pressed={checked}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      chooseGenre(g.name, event.ctrlKey);
-                    }}
-                  >
-                    <span>{label}</span>
-                    <small>{count(g.count)}</small>
-                  </button>
-                </div>
+                  className="genre-row"
+                  selected={checked}
+                  value={label}
+                  suffix={count(g.count)}
+                  onSelect={(event) => chooseGenre(g.name, event.ctrlKey)}
+                />
               );
             })}
           </div>
@@ -1003,7 +958,7 @@ export function App() {
         />
         <section className="panel artists-panel">
           <div className="panel-heading">
-            <h2>Исполнители альбома</h2>
+            <h2>Исполнители</h2>
             <span className="panel-count">
               {count(artists.data?.pages[0]?.total || 0)}
             </span>
@@ -1014,7 +969,7 @@ export function App() {
               setFilter((f) => ({ ...f, artists: [], albumIds: [] }))
             }
           >
-            Все исполнители альбома
+            Все исполнители
           </button>
           <ArtistList
             items={artistItems}
@@ -1042,7 +997,7 @@ export function App() {
         <div
           className="resizer"
           role="separator"
-          aria-label="Ширина исполнителей альбома"
+          aria-label="Ширина исполнителей"
           onPointerDown={(e) => resize(2, e)}
         />
         <section className="panel albums-panel">
@@ -1199,16 +1154,21 @@ export function App() {
               selected={selected}
               allSelected={allSelected}
               currentId={player.queue?.track?.id}
-              playing={player.playing}
               loading={tracks.isFetching}
               onPlay={(track) => void player.start(track, filter)}
-              onSelect={(id) =>
-                setSelected((s) => {
-                  const next = new Set(s);
-                  next.has(id) ? next.delete(id) : next.add(id);
+              onSelect={(id, additive) => {
+                if (!additive) {
+                  setAllSelected(false);
+                  setSelected(new Set([id]));
+                  return;
+                }
+                setSelected((current) => {
+                  const next = new Set(current);
+                  if (next.has(id)) next.delete(id);
+                  else next.add(id);
                   return next;
-                })
-              }
+                });
+              }}
               onMore={() => {
                 if (tracks.hasNextPage && !tracks.isFetchingNextPage)
                   void tracks.fetchNextPage();
@@ -1400,51 +1360,24 @@ function ArtistList({
           const label = item.name || "Без исполнителя";
           const checked = selected.includes(item.name);
           return (
-            <div
+            <ListTile
               key={item.name}
-              className={`genre-row facet-row artist-row ${checked ? "selected" : ""}`}
+              className="genre-row artist-row"
               title={label}
-              role="button"
-              tabIndex={0}
-              onClick={(event) => onSelect(item.name, event.ctrlKey)}
+              selected={checked}
+              value={label}
+              suffix={count(item.count)}
+              onSelect={(event) => onSelect(item.name, event.ctrlKey)}
               onContextMenu={(event) =>
                 onContextMenu(event, "artist", item.name)
               }
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  onSelect(item.name, event.ctrlKey);
-                }
-              }}
               style={{
                 position: "absolute",
                 top: 0,
                 transform: `translateY(${row.start}px)`,
                 height: 44,
               }}
-            >
-              <div className="facet-checkbox-zone">
-                <input
-                  className="facet-checkbox"
-                  type="checkbox"
-                  aria-label={`Выбрать исполнителя альбома: ${label}`}
-                  checked={checked}
-                  onClick={(event) => event.stopPropagation()}
-                  onChange={() => onSelect(item.name, true)}
-                />
-              </div>
-              <button
-                className="facet-main"
-                aria-pressed={checked}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onSelect(item.name, event.ctrlKey);
-                }}
-              >
-                <span>{label}</span>
-                <small>{count(item.count)}</small>
-              </button>
-              <BookmarkToggle
+              endAction={<BookmarkToggle
                 kind="artist"
                 id={item.name}
                 label={label}
@@ -1453,8 +1386,8 @@ function ArtistList({
                 pending={pendingBookmarkKeys.has(`artist:${item.name}`)}
                 onChange={onBookmarkChange}
                 className="artist-bookmark-toggle"
-              />
-            </div>
+              />}
+            />
           );
         })}
       </div>
@@ -1655,7 +1588,6 @@ function TrackList({
   selected,
   allSelected,
   currentId,
-  playing,
   loading,
   onPlay,
   onSelect,
@@ -1676,10 +1608,9 @@ function TrackList({
   selected: Set<string>;
   allSelected: boolean;
   currentId?: string;
-  playing: boolean;
   loading: boolean;
   onPlay: (track: Track) => void;
-  onSelect: (id: string) => void;
+  onSelect: (id: string, additive: boolean) => void;
   onMore: () => void;
   onContextMenu: (
     event: React.MouseEvent,
@@ -1823,55 +1754,28 @@ function TrackList({
                 <ChevronRight size={15} />
               </div>
             ) : (
-              <div
+              <ListTile
                 key={track.id}
-                data-testid="track-row"
-                data-format={track.format}
-                className={`track-row ${(allSelected ? !selected.has(track.id) : selected.has(track.id)) ? "selected" : ""} ${currentId === track.id ? "current" : ""}`}
+                testId="track-row"
+                dataFormat={track.format}
+                className="track-row"
+                selected={allSelected ? !selected.has(track.id) : selected.has(track.id)}
+                current={currentId === track.id}
+                prefix={track.trackNumber ?? undefined}
+                value={track.title}
+                suffix={duration(track.duration)}
                 style={{
                   position: "absolute",
                   width: "100%",
                   height: row.size,
                   transform: `translateY(${row.start}px)`,
                 }}
+                onSelect={(event) => onSelect(track.id, event.ctrlKey)}
                 onDoubleClick={() => onPlay(track)}
                 onContextMenu={(event) =>
                   onContextMenu(event, "track", track.id)
                 }
-              >
-                <input
-                  type="checkbox"
-                  aria-label={`Выбрать ${track.title}`}
-                  checked={
-                    allSelected
-                      ? !selected.has(track.id)
-                      : selected.has(track.id)
-                  }
-                  onChange={() => onSelect(track.id)}
-                  onDoubleClick={(e) => e.stopPropagation()}
-                />
-                <button
-                  className="track-number"
-                  aria-label={`Слушать ${track.title}`}
-                  onClick={() => onPlay(track)}
-                >
-                  {currentId === track.id && playing ? (
-                    <AudioLines size={15} />
-                  ) : (
-                    <>
-                      <span>{track.trackNumber || "—"}</span>
-                      <Play
-                        size={13}
-                        className="row-play"
-                        fill="currentColor"
-                      />
-                    </>
-                  )}
-                </button>
-                <div className="track-copy">
-                  <strong title={track.title}>{track.title}</strong>
-                </div>
-                <BookmarkToggle
+                endAction={<BookmarkToggle
                   kind="track"
                   id={track.id}
                   label={track.title}
@@ -1880,11 +1784,8 @@ function TrackList({
                   pending={pendingBookmarkKeys.has(`track:${track.id}`)}
                   onChange={onBookmarkChange}
                   className="track-bookmark-toggle"
-                />
-                <span className="track-duration">
-                  {duration(track.duration)}
-                </span>
-              </div>
+                />}
+              />
             );
           })}
         </div>

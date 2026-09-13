@@ -131,41 +131,34 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .first()
     .click();
   await expect(page.getByTestId("track-row")).toHaveCount(7);
+  await expect(page.locator(".libraries-panel .list-tile svg")).toHaveCount(0);
+  await expect(page.locator(".track-row .track-number, .track-row .row-play")).toHaveCount(0);
+  const collectionTile = page
+    .locator(".libraries-panel .list-tile")
+    .filter({ hasText: `Collection ${browser}` });
+  await collectionTile.locator(".list-tile-main").click({ modifiers: ["Control"] });
+  await expect(page.locator(".libraries-panel .list-tile.selected")).toHaveCount(2);
+  await collectionTile.locator(".list-tile-main").click({ modifiers: ["Control"] });
+  await expect(page.locator(".libraries-panel .list-tile.selected")).toHaveCount(1);
 
   const genreRow = page
-    .locator(".genres-panel .facet-row")
+    .locator(".genres-panel .list-tile")
     .filter({ hasText: "Ambient" });
   const genreButton = genreRow.getByRole("button");
-  const genreCheckbox = genreRow.getByRole("checkbox");
-  await expect(genreCheckbox).not.toBeChecked();
-  await expect(genreCheckbox).toHaveCSS("opacity", "0");
-  await genreRow.hover();
-  await expect(genreCheckbox).toHaveCSS("opacity", "1");
-  await genreCheckbox.check();
-  await expect(genreCheckbox).toBeChecked();
-  await page.mouse.move(0, 0);
-  await expect(genreCheckbox).toHaveCSS("opacity", "1");
-  await genreButton.dispatchEvent("click", { ctrlKey: true });
-  await expect(genreCheckbox).not.toBeChecked();
-  await genreCheckbox.focus();
-  await expect(genreCheckbox).toHaveCSS("opacity", "1");
-  await genreButton.click();
-  await expect(genreCheckbox).toBeChecked();
-  await genreRow.click({ position: { x: 4, y: 22 } });
-  await expect(genreCheckbox).toBeChecked();
+  await expect(genreRow.getByRole("checkbox")).toHaveCount(0);
 
   const artistRow = page
-    .locator(".artists-panel .facet-row")
+    .locator(".artists-panel .list-tile")
     .filter({ hasText: "Исполнитель альбома" });
-  await expect(
-    page
-      .locator(".artists-panel .facet-row")
-      .getByRole("button", { name: "Исполнитель", exact: true }),
-  ).toHaveCount(0);
-  const artistButton = artistRow.locator(".facet-main");
-  const artistCheckbox = artistRow.getByRole("checkbox");
-  await artistCheckbox.check();
-  await expect(artistCheckbox).toBeChecked();
+  await expect(page.getByRole("heading", { name: "Исполнители" })).toBeVisible();
+  const artistButton = artistRow.locator(".list-tile-main");
+  await expect(artistRow.getByRole("checkbox")).toHaveCount(0);
+  await artistButton.click();
+  await expect(artistRow).toHaveClass(/selected/);
+  await artistButton.dispatchEvent("click", { ctrlKey: true });
+  await expect(artistRow).not.toHaveClass(/selected/);
+  await artistButton.click();
+  await expect(artistRow).toHaveClass(/selected/);
 
   const firstAlbum = page
     .locator(".album-card")
@@ -176,8 +169,8 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await firstAlbumCheckbox.check();
   await expect(firstAlbumCheckbox).toBeChecked();
   await genreButton.click();
-  await expect(genreCheckbox).toBeChecked();
-  await expect(artistCheckbox).not.toBeChecked();
+  await expect(genreRow).toHaveClass(/selected/);
+  await expect(artistRow).not.toHaveClass(/selected/);
   await expect(firstAlbumCheckbox).not.toBeChecked();
   await page
     .locator(".genres-panel")
@@ -185,15 +178,15 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .click();
 
   await artistButton.click();
-  await expect(artistCheckbox).toBeChecked();
+  await expect(artistRow).toHaveClass(/selected/);
   await artistButton.dispatchEvent("click", { ctrlKey: true });
-  await expect(artistCheckbox).not.toBeChecked();
-  await artistCheckbox.check();
+  await expect(artistRow).not.toHaveClass(/selected/);
+  await artistButton.click();
   await page
     .locator(".artists-panel")
-    .getByRole("button", { name: "Все исполнители альбома" })
+    .getByRole("button", { name: "Все исполнители" })
     .click();
-  await expect(artistCheckbox).not.toBeChecked();
+  await expect(artistRow).not.toHaveClass(/selected/);
 
   const secondAlbum = page
     .locator(".album-card")
@@ -289,10 +282,19 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   const artistBookmark = artistRow.getByRole("button", {
     name: /Добавить исполнителя .* в закладки/,
   });
+  await page.mouse.move(0, 0);
+  await expect(artistRow.locator(".list-tile-suffix")).toHaveCSS(
+    "visibility",
+    "visible",
+  );
   await artistBookmark.focus();
   await expect(artistBookmark).toHaveCSS("opacity", "1");
+  await expect(artistRow.locator(".list-tile-suffix")).toHaveCSS(
+    "visibility",
+    "hidden",
+  );
   await artistBookmark.press("Enter");
-  await expect(artistCheckbox).not.toBeChecked();
+  await expect(artistRow).not.toHaveClass(/selected/);
   const removeArtistBookmark = artistRow.getByRole("button", {
     name: /Удалить исполнителя .* из закладок/,
   });
@@ -315,11 +317,13 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await removeArtistBookmark.press("Space");
 
   const firstTrack = page.getByTestId("track-row").first();
-  const firstTrackCheckbox = firstTrack.getByRole("checkbox");
+  await expect(firstTrack.getByRole("checkbox")).toHaveCount(0);
+  await firstTrack.locator(".list-tile-main").click();
+  await expect(firstTrack).toHaveClass(/selected/);
   await firstTrack
     .getByRole("button", { name: /Добавить трек .* в закладки/ })
     .click();
-  await expect(firstTrackCheckbox).not.toBeChecked();
+  await expect(firstTrack).toHaveClass(/selected/);
   await page.reload();
   await expect(page.getByLabel("Поиск музыки")).toBeVisible();
   const persistedTrackBookmark = page
@@ -543,7 +547,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     const row = page.locator(
       `[data-testid="track-row"][data-format="${format}"]`,
     );
-    await row.locator(".track-number").click();
+    await row.dblclick();
     await expect
       .poll(
         () =>
@@ -563,7 +567,8 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   }
   const flac = () =>
     page.locator('[data-testid="track-row"][data-format="flac"]');
-  await expect(page.locator(".track-copy small")).toHaveCount(0);
+  await expect(page.locator(".track-number")).toHaveCount(0);
+  await expect(page.locator(".track-copy")).toHaveCount(0);
   await expect(page.locator(".track-format")).toHaveCount(0);
   await expect(page.locator(".album-formats")).toHaveCount(0);
   const taggedAlbumHeader = page
@@ -573,11 +578,11 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(taggedAlbumHeader).not.toContainText("FLAC");
   await page
     .locator(".artists-panel")
-    .locator(".facet-main")
+    .locator(".list-tile-main")
     .filter({ hasText: "Исполнитель альбома" })
     .click();
   await expect(rows).toHaveCount(6);
-  await flac().locator(".track-number").click();
+  await flac().dblclick();
   await expect
     .poll(() =>
       page.locator("audio").evaluate((a: HTMLAudioElement) => a.readyState),
@@ -588,7 +593,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     a.currentTime = 0.8;
     return a.play();
   });
-  await flac().getByRole("checkbox").check();
+  await flac().locator(".list-tile-main").click();
   await page
     .getByRole("button", { name: "Редактировать теги", exact: true })
     .click();
@@ -603,7 +608,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await page.getByRole("button", { name: /^Применить к/ }).click();
   await expect(flac()).toContainText("Обновлённый трек");
   await expect(
-    page.locator(".genres-panel .facet-row").filter({ hasText: "E2E Fresh" }),
+    page.locator(".genres-panel .list-tile").filter({ hasText: "E2E Fresh" }),
   ).toBeVisible();
   await expect
     .poll(() =>
@@ -614,7 +619,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     a.pause();
     a.loop = false;
   });
-  await flac().getByRole("checkbox").check();
+  await flac().locator(".list-tile-main").click();
   await page.getByRole("button", { name: "Перенести треки" }).click();
   await page
     .getByLabel("Куда перенести")
@@ -628,7 +633,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .first()
     .click();
   await expect(rows).toHaveCount(1);
-  await flac().getByRole("checkbox").check();
+  await flac().locator(".list-tile-main").click();
   await page.getByRole("button", { name: "Удалить треки" }).click();
   await page.getByRole("button", { name: "Посмотреть изменения" }).click();
   await page.getByRole("button", { name: /^Применить к/ }).click();

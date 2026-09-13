@@ -150,6 +150,56 @@ describe("catalog and safe filesystem operations", () => {
         .sort(),
     ).toEqual(["album-track", "saved-track"]);
   });
+  it("counts album artists per genre and distinct albums per artist", () => {
+    const catalog = service.catalog;
+    const lib = catalog.addLibrary("Facet counts", path.join(root, "Facet counts"));
+    const addTrack = (
+      id: string,
+      albumKey: string,
+      albumArtists: string[],
+      genres: string[],
+    ) =>
+      catalog.upsert({
+        id,
+        libraryId: lib.id,
+        relativePath: `${id}.flac`,
+        title: id,
+        artists: albumArtists,
+        albumTitle: albumKey,
+        albumArtists,
+        albumKey,
+        genres,
+        year: null,
+        trackNumber: 1,
+        discNumber: 1,
+        duration: 1,
+        format: "flac",
+        size: 1,
+        mtimeMs: 1,
+        coverId: null,
+        available: true,
+      });
+    addTrack("one", "album-one", ["Artist A", "Artist B"], ["Rock"]);
+    addTrack("two", "album-one", ["Artist A", "Artist B"], ["Rock"]);
+    addTrack("three", "album-two", ["Artist A"], ["Rock"]);
+    addTrack("four", "album-three", ["Artist C"], ["Jazz"]);
+
+    expect(catalog.genres(emptyFilter)).toEqual([
+      { name: "Jazz", count: 1 },
+      { name: "Rock", count: 2 },
+    ]);
+    expect(catalog.artists(emptyFilter).items).toEqual([
+      { name: "Artist A", count: 2 },
+      { name: "Artist B", count: 1 },
+      { name: "Artist C", count: 1 },
+    ]);
+    expect(
+      catalog.genres({ ...emptyFilter, libraryIds: [lib.id] }),
+    ).toEqual([
+      { name: "Jazz", count: 1 },
+      { name: "Rock", count: 2 },
+    ]);
+  });
   it("filters albums by album artists with genre and library intersection", async () => {
     const a = await library("A");
     await library("B");
