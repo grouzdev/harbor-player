@@ -153,6 +153,48 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(page.getByRole("heading", { name: "Исполнители" })).toBeVisible();
   const artistButton = artistRow.locator(".list-tile-main");
   await expect(artistRow.getByRole("checkbox")).toHaveCount(0);
+  const firstTrackRow = page.getByTestId("track-row").first();
+  const listTileGeometry = await page.evaluate(() => {
+    const selectors = [
+      ".libraries-panel .list-tile",
+      ".genres-panel .list-tile",
+      ".artists-panel .list-tile",
+      '[data-testid="track-row"]',
+    ];
+    return selectors.map((selector) => {
+      const rows = [...document.querySelectorAll<HTMLElement>(selector)];
+      const first = rows[0]!;
+      const second = rows[1];
+      const list = first.closest<HTMLElement>(
+        ".library-list, .genre-list, .artist-scroll, .track-scroll",
+      )!;
+      const rowRect = first.getBoundingClientRect();
+      const listRect = list.getBoundingClientRect();
+      return {
+        height: rowRect.height,
+        left: rowRect.left - listRect.left,
+        right: listRect.left + list.clientWidth - rowRect.right,
+        radius: getComputedStyle(
+          first.querySelector<HTMLElement>(".list-tile-main")!,
+        ).borderRadius,
+        gap:
+          selector === '[data-testid="track-row"]' || !second
+            ? null
+            : second.getBoundingClientRect().top - rowRect.bottom,
+      };
+    });
+  });
+  for (const geometry of listTileGeometry) {
+    expect(geometry.height).toBe(42);
+    expect(Math.abs(geometry.left)).toBeLessThan(0.5);
+    expect(Math.abs(geometry.right)).toBeLessThan(0.5);
+    expect(geometry.radius).toBe("0px");
+    if (geometry.gap !== null) expect(geometry.gap).toBeCloseTo(0, 1);
+  }
+  await expect(firstTrackRow.locator(".list-tile-main")).toHaveCSS(
+    "height",
+    "42px",
+  );
   await artistButton.click();
   await expect(artistRow).toHaveClass(/selected/);
   await artistButton.dispatchEvent("click", { ctrlKey: true });
@@ -293,6 +335,31 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     "visibility",
     "hidden",
   );
+  const artistBookmarkAlignment = await artistRow.evaluate((row) => {
+    const rowRect = row.getBoundingClientRect();
+    const buttonRect = row
+      .querySelector<HTMLElement>(".bookmark-toggle")!
+      .getBoundingClientRect();
+    return {
+      centerOffset:
+        buttonRect.top +
+        buttonRect.height / 2 -
+        (rowRect.top + rowRect.height / 2),
+      rightInset: rowRect.right - buttonRect.right,
+      suffixCenterOffset:
+        row
+          .querySelector<HTMLElement>(".list-tile-suffix")!
+          .getBoundingClientRect().left +
+        row
+          .querySelector<HTMLElement>(".list-tile-suffix")!
+          .getBoundingClientRect().width /
+          2 -
+        (buttonRect.left + buttonRect.width / 2),
+    };
+  });
+  expect(artistBookmarkAlignment.centerOffset).toBeCloseTo(0, 1);
+  expect(artistBookmarkAlignment.rightInset).toBeCloseTo(7, 1);
+  expect(artistBookmarkAlignment.suffixCenterOffset).toBeCloseTo(0, 1);
   await artistBookmark.press("Enter");
   await expect(artistRow).not.toHaveClass(/selected/);
   const removeArtistBookmark = artistRow.getByRole("button", {
@@ -320,6 +387,21 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(firstTrack.getByRole("checkbox")).toHaveCount(0);
   await firstTrack.locator(".list-tile-main").click();
   await expect(firstTrack).toHaveClass(/selected/);
+  const trackBookmarkAlignment = await firstTrack.evaluate((row) => {
+    const rowRect = row.getBoundingClientRect();
+    const buttonRect = row
+      .querySelector<HTMLElement>(".bookmark-toggle")!
+      .getBoundingClientRect();
+    return {
+      centerOffset:
+        buttonRect.top +
+        buttonRect.height / 2 -
+        (rowRect.top + rowRect.height / 2),
+      rightInset: rowRect.right - buttonRect.right,
+    };
+  });
+  expect(trackBookmarkAlignment.centerOffset).toBeCloseTo(0, 1);
+  expect(trackBookmarkAlignment.rightInset).toBeCloseTo(7, 1);
   await firstTrack
     .getByRole("button", { name: /Добавить трек .* в закладки/ })
     .click();
