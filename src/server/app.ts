@@ -212,15 +212,7 @@ export async function createApp(options: {
   app.get("/api/filter-validity", async (request) => {
     const q = pageSchema.parse(request.query);
     const filter = filterSchema.parse(JSON.parse(q.filter));
-    return {
-      albumIds: service.catalog.validAlbumIds(filter),
-      artists: filter.artists.length
-        ? service.catalog
-            .artists(filter, 0, 100000)
-            .items.map((a) => a.name)
-            .filter((a) => filter.artists.includes(a))
-        : [],
-    };
+    return service.catalog.filterValidity(filter);
   });
   app.get(
     "/api/tracks/:id",

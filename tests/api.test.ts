@@ -178,6 +178,79 @@ describe("HTTP boundary", () => {
       genres: ["", "Rock"],
     });
   });
+  it("normalizes facet selections from library through album", async () => {
+    const first = context.service.catalog.addLibrary("First", root);
+    const second = context.service.catalog.addLibrary(
+      "Second",
+      `${root}-second`,
+    );
+    const addTrack = (
+      id: string,
+      libraryId: string,
+      albumKey: string,
+      artist: string,
+      genre: string,
+    ) =>
+      context.service.catalog.upsert({
+        id,
+        libraryId,
+        relativePath: `${id}.flac`,
+        title: id,
+        artists: [artist],
+        albumTitle: albumKey,
+        albumArtists: [artist],
+        albumKey,
+        genres: [genre],
+        year: null,
+        trackNumber: 1,
+        discNumber: 1,
+        duration: 1,
+        format: "flac",
+        size: 1,
+        mtimeMs: 1,
+        coverId: null,
+        available: true,
+      });
+    addTrack("first-rock", first.id, "first-rock", "Shared", "Rock");
+    addTrack("first-jazz", first.id, "first-jazz", "First only", "Jazz");
+    addTrack(
+      "second-electronic",
+      second.id,
+      "second-electronic",
+      "Second only",
+      "Electronic",
+    );
+    const session = await context.app.inject({
+      url: "/api/session",
+      headers: { host: "127.0.0.1:4317" },
+    });
+    const filter = {
+      libraryIds: [first.id],
+      folders: [],
+      genres: ["Rock", "Electronic"],
+      artists: ["Shared", "Second only"],
+      albumIds: ["first-rock", "first-jazz", "second-electronic"],
+      search: "",
+      bookmarksOnly: false,
+    };
+
+    const response = await context.app.inject({
+      url: `/api/filter-validity?${new URLSearchParams({
+        filter: JSON.stringify(filter),
+      })}`,
+      headers: {
+        host: "127.0.0.1:4317",
+        cookie: String(session.headers["set-cookie"]).split(";")[0],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      genres: ["Rock"],
+      artists: ["Shared"],
+      albumIds: ["first-rock"],
+    });
+  });
   it("returns one folder level with recursive track counts", async () => {
     const library = context.service.catalog.addLibrary("Folders", root);
     for (const [id, relativePath] of [

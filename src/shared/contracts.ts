@@ -61,6 +61,11 @@ export interface FacetRelevance {
   libraryIds: string[];
   genres: string[];
 }
+export interface FilterValidity {
+  genres: string[];
+  artists: string[];
+  albumIds: string[];
+}
 export const filterSchema = z.object({
   libraryIds: z.array(z.string()).max(100).default([]),
   folders: z

@@ -41,6 +41,7 @@ import {
   type CatalogBookmark,
   type CatalogFilter,
   type FacetRelevance,
+  type FilterValidity,
   type Job,
   type Library,
   type LibraryFolder,
@@ -99,6 +100,13 @@ function trackCountLabel(trackCount: number) {
           ? "трека"
           : "треков";
   return `${count(trackCount)} ${word}`;
+}
+
+function sameStringArray(left: string[], right: string[]) {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 }
 
 function updateBookmarkList(
@@ -668,9 +676,6 @@ export function App() {
         (folder) =>
           !missing.has(folderKey(folder.libraryId, folder.relativePath)),
       ),
-      genres: [],
-      artists: [],
-      albumIds: [],
     }));
     notify("Выбранная папка больше не найдена; фильтр обновлён");
   }, [missingSelectedFolders, notify]);
@@ -723,11 +728,12 @@ export function App() {
   );
   const valid = useQuery({
     queryKey: ["filter-validity", filter],
-    queryFn: () =>
-      api<{ albumIds: string[]; artists: string[] }>(
-        catalogUrl("filter-validity", filter),
-      ),
-    enabled: ready && (filter.albumIds.length > 0 || filter.artists.length > 0),
+    queryFn: () => api<FilterValidity>(catalogUrl("filter-validity", filter)),
+    enabled:
+      ready &&
+      (filter.genres.length > 0 ||
+        filter.artists.length > 0 ||
+        filter.albumIds.length > 0),
   });
   const relevanceFilter = useMemo(
     () => ({
@@ -749,25 +755,18 @@ export function App() {
   const hasFacetRelevance =
     relevanceFilter.artists.length > 0 || relevanceFilter.albumIds.length > 0;
   useEffect(() => {
-    if (!genres.data) return;
-    const available = new Set(genres.data.map((g) => g.name));
-    setFilter((f) => {
-      const next = f.genres.filter((g) => available.has(g));
-      return next.length === f.genres.length
-        ? f
-        : { ...f, genres: next, artists: [], albumIds: [] };
-    });
-  }, [genres.data]);
-  useEffect(() => {
     if (!valid.data) return;
-    const available = new Set(valid.data.albumIds);
-    setFilter((f) => {
-      const next = f.albumIds.filter((id) => available.has(id));
-      const artists = f.artists.filter((a) => valid.data.artists.includes(a));
-      return next.length === f.albumIds.length &&
-        artists.length === f.artists.length
-        ? f
-        : { ...f, albumIds: next, artists };
+    setFilter((current) => {
+      return sameStringArray(current.genres, valid.data.genres) &&
+        sameStringArray(current.artists, valid.data.artists) &&
+        sameStringArray(current.albumIds, valid.data.albumIds)
+        ? current
+        : {
+            ...current,
+            genres: valid.data.genres,
+            artists: valid.data.artists,
+            albumIds: valid.data.albumIds,
+          };
     });
   }, [valid.data]);
   const albumFilter = useMemo(
@@ -873,9 +872,6 @@ export function App() {
         additive,
       ),
       folders: [],
-      genres: [],
-      artists: [],
-      albumIds: [],
     }));
   };
   const chooseFolder = (
@@ -908,17 +904,12 @@ export function App() {
           selected,
         ];
       })(),
-      genres: [],
-      artists: [],
-      albumIds: [],
     }));
   };
   const chooseGenre = (genre: string, additive: boolean) =>
     setFilter((f) => ({
       ...f,
       genres: selectFacetValue(f.genres, genre, additive),
-      artists: [],
-      albumIds: [],
     }));
   const queryError =
     libraries.error ||
@@ -1122,9 +1113,6 @@ export function App() {
                 ...f,
                 libraryIds: [],
                 folders: [],
-                genres: [],
-                artists: [],
-                albumIds: [],
               }));
             }}
           >
@@ -1235,8 +1223,6 @@ export function App() {
               setFilter((f) => ({
                 ...f,
                 genres: [],
-                artists: [],
-                albumIds: [],
               }))
             }
           >
@@ -1280,9 +1266,7 @@ export function App() {
           </div>
           <button
             className={`list-all-action ${!filter.artists.length ? "selected" : ""}`}
-            onClick={() =>
-              setFilter((f) => ({ ...f, artists: [], albumIds: [] }))
-            }
+            onClick={() => setFilter((f) => ({ ...f, artists: [] }))}
           >
             Все исполнители
           </button>
@@ -1295,7 +1279,6 @@ export function App() {
               setFilter((f) => ({
                 ...f,
                 artists: selectFacetValue(f.artists, name, additive),
-                albumIds: [],
               }))
             }
             onMore={() => {
@@ -1578,9 +1561,6 @@ export function App() {
               folders: current.folders.filter(
                 (folder) => folder.libraryId !== libraryToRemove.id,
               ),
-              genres: [],
-              artists: [],
-              albumIds: [],
             }));
             setExpandedLibraryIds((current) => {
               const next = new Set(current);

@@ -252,12 +252,14 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   );
   await genreButton.click();
   await expect(genreRow).toHaveClass(/selected/);
-  await expect(artistRow).not.toHaveClass(/selected/);
-  await expect(firstAlbum).not.toHaveClass(/selected/);
+  await expect(artistRow).toHaveClass(/selected/);
+  await expect(firstAlbum).toHaveClass(/selected/);
   await page
     .locator(".genres-panel")
     .getByRole("button", { name: "Все жанры" })
     .click();
+  await expect(artistRow).toHaveClass(/selected/);
+  await expect(firstAlbum).toHaveClass(/selected/);
 
   await artistButton.click();
   await expect(artistRow).toHaveClass(/selected/);
@@ -269,6 +271,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .getByRole("button", { name: "Все исполнители" })
     .click();
   await expect(artistRow).not.toHaveClass(/selected/);
+  await expect(firstAlbum).toHaveClass(/selected/);
 
   const secondAlbum = page
     .locator(".album-card")

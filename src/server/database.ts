@@ -8,6 +8,7 @@ import type {
   CatalogBookmark,
   CatalogFilter,
   FacetRelevance,
+  FilterValidity,
   Job,
   Library,
   LibraryFolder,
@@ -412,6 +413,23 @@ export class Catalog {
         )
         .all(...args) as { id: string }[]
     ).map((r) => r.id);
+  }
+  filterValidity(filter: CatalogFilter): FilterValidity {
+    const genreNames = new Set(this.genres(filter).map((genre) => genre.name));
+    const genres = filter.genres.filter((genre) => genreNames.has(genre));
+    const artistNames = new Set(
+      this.artists(
+        { ...filter, genres, artists: [], albumIds: [] },
+        0,
+        100000,
+      ).items.map((artist) => artist.name),
+    );
+    const artists = filter.artists.filter((artist) => artistNames.has(artist));
+    return {
+      genres,
+      artists,
+      albumIds: this.validAlbumIds({ ...filter, genres, artists }),
+    };
   }
   facetRelevance(filter: CatalogFilter): FacetRelevance {
     const clauses = ["t.available=1", "l.available=1"];
