@@ -457,6 +457,88 @@ describe("catalog and safe filesystem operations", () => {
         audio.get(track.id),
       );
   });
+  it("prepares tag previews in selection order and isolates a changed source", async () => {
+    const lib = await library("Preview", "mp3");
+    const folder = path.join(lib.path, "Album");
+    await copyFile(
+      path.join(fixtures, "sample.mp3"),
+      path.join(folder, "two.mp3"),
+    );
+    await copyFile(
+      path.join(fixtures, "sample.mp3"),
+      path.join(folder, "three.mp3"),
+    );
+    service.scan(lib.id);
+    await service.idle();
+    const selected = tracks().filter((track) => track.libraryId === lib.id);
+    const changed = selected[1];
+    await writeFile(path.join(lib.path, changed.relativePath), "external edit");
+
+    const op = await service.preview(
+      "tags",
+      { trackIds: selected.map((track) => track.id) },
+      undefined,
+      { genres: ["Preview"] },
+    );
+
+    expect(op.items.map((item) => item.trackId)).toEqual(
+      selected.map((track) => track.id),
+    );
+    expect(op.items.filter((item) => item.error)).toEqual([
+      expect.objectContaining({
+        trackId: changed.id,
+        error: expect.stringContaining("изменился"),
+      }),
+    ]);
+  });
+  it("rejects a source change made after verification but before backup", async () => {
+    const lib = await library("Late source change", "mp3");
+    const track = tracks()[0];
+    const file = path.join(lib.path, track.relativePath);
+    const originalFingerprint = service.fingerprint.bind(service);
+    service.fingerprint = async (target, purpose) => {
+      const fingerprint = await originalFingerprint(target, purpose);
+      if (purpose === "stage")
+        await writeFile(file, "change before backup");
+      return fingerprint;
+    };
+    const op = await service.preview(
+      "tags",
+      { trackIds: [track.id] },
+      undefined,
+      { title: "Не должно сохраниться" },
+    );
+    service.execute(op.id);
+    await service.idle();
+
+    const item = service.catalog.operation(op.id).items[0];
+    expect(item.error).toContain("изменился");
+    expect(await readFile(file, "utf8")).toBe("change before backup");
+  });
+  it("rejects a source change immediately before atomic tag replacement", async () => {
+    const lib = await library("Pre-rename source change", "mp3");
+    const track = tracks()[0];
+    const file = path.join(lib.path, track.relativePath);
+    const originalFingerprint = service.fingerprint.bind(service);
+    let sourceChecks = 0;
+    service.fingerprint = async (target, purpose) => {
+      if (target === file && purpose === "source" && ++sourceChecks === 3)
+        await writeFile(file, "change before rename");
+      return originalFingerprint(target, purpose);
+    };
+    const op = await service.preview(
+      "tags",
+      { trackIds: [track.id] },
+      undefined,
+      { title: "Не должно сохраниться" },
+    );
+    service.execute(op.id);
+    await service.idle();
+
+    const item = service.catalog.operation(op.id).items[0];
+    expect(item.error).toContain("изменился");
+    expect(await readFile(file, "utf8")).toBe("change before rename");
+  });
   it("resumes copied tag replacements by reindexing without writing the file again", async () => {
     const lib = await library("Music", "mp3");
     const track = tracks()[0];

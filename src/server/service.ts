@@ -455,29 +455,38 @@ export class MusicService extends EventEmitter {
         );
       else if (kind === "tags")
         item.error = "Для трека нет выбранных изменений";
-      try {
-        await this.safePath(source);
-        const fingerprint = await this.fingerprint(source, "source");
-        if (fingerprint.size !== track.size)
-          throw new Error("Файл изменился извне. Сначала обновите библиотеку.");
-        Object.assign(item, fingerprint);
-        if (
-          kind === "tags" &&
-          !this.capabilities.writableFormats.includes(track.format)
-        )
-          throw new Error(
-            `Запись ${track.format.toUpperCase()} не прошла проверку безопасности и отключена`,
-          );
-        if (kind === "move") {
-          await this.safePath(destination, true);
-          if (await exists(destination))
-            throw new Error("В целевой папке уже есть файл с таким именем");
-        }
-      } catch (e) {
-        item.error = errorMessage(e);
-      }
       op.items.push(item);
     }
+    // Keep preview item order stable while using both hash workers.
+    for (let start = 0; start < tracks.length; start += 2)
+      await Promise.all(
+        tracks.slice(start, start + 2).map(async (track, offset) => {
+          const item = op.items[start + offset];
+          try {
+            await this.safePath(item.source);
+            const fingerprint = await this.fingerprint(item.source, "source");
+            if (fingerprint.size !== track.size)
+              throw new Error(
+                "Файл изменился извне. Сначала обновите библиотеку.",
+              );
+            Object.assign(item, fingerprint);
+            if (
+              kind === "tags" &&
+              !this.capabilities.writableFormats.includes(track.format)
+            )
+              throw new Error(
+                `Запись ${track.format.toUpperCase()} не прошла проверку безопасности и отключена`,
+              );
+            if (kind === "move") {
+              await this.safePath(item.destination, true);
+              if (await exists(item.destination))
+                throw new Error("В целевой папке уже есть файл с таким именем");
+            }
+          } catch (e) {
+            item.error = errorMessage(e);
+          }
+        }),
+      );
     if (kind === "move" && companions) {
       const selectedIds = new Set(tracks.map((t) => t.id));
       const folders = new Set(op.items.map((i) => path.dirname(i.source)));
@@ -792,8 +801,8 @@ export class MusicService extends EventEmitter {
         if (op.kind === "tags")
           await writeTagsIsolated(stage, this.effectiveTagPatch(op, item));
         item.producedHash = (await this.fingerprint(stage, "stage")).hash;
-        if (op.kind === "tags") await this.assertOriginal(item);
-        else if (
+        if (
+          restoringTags &&
           (await this.fingerprint(item.destination)).hash !==
           item.restoreExpectedHash
         )
@@ -803,8 +812,14 @@ export class MusicService extends EventEmitter {
           : item.hash;
         if (!(await exists(backup)))
           await copyFile(item.destination, backup, constants.COPYFILE_EXCL);
-        if ((await this.fingerprint(backup)).hash !== expectedBackup)
+        // This verifies both the recovery copy and the source state immediately
+        // before replacement, so a separate successful-path source hash is redundant.
+        if ((await this.fingerprint(backup)).hash !== expectedBackup) {
+          // Distinguish a changed source from a failed backup verification without
+          // adding another full source hash on the successful path.
+          if (op.kind === "tags") await this.assertOriginal(item);
           throw new Error("Резервная копия не прошла проверку");
+        }
         await flushFile(backup);
         await flushFile(stage);
         this.catalog.saveOperation(op);
