@@ -865,6 +865,29 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
       page.locator("audio").evaluate((a: HTMLAudioElement) => a.readyState),
     )
     .toBeGreaterThanOrEqual(2);
+  const nowPlaying = page.locator(".now-playing");
+  await expect(
+    nowPlaying.getByRole("button", { name: /Открыть альбом/ }),
+  ).toBeVisible();
+  await nowPlaying.getByRole("button", { name: /Открыть альбом/ }).click();
+  await expect(page.locator(".albums-panel .album-card.selected")).toHaveCount(
+    1,
+  );
+  await expect(
+    page
+      .locator(".artists-panel .list-tile.selected")
+      .filter({ hasText: "Исполнитель альбома" }),
+  ).toHaveCount(1);
+  await expect(rows).toHaveCount(6);
+  await nowPlaying
+    .getByRole("button", { name: "Открыть исполнителя «Исполнитель альбома»" })
+    .click();
+  await expect(
+    page
+      .locator(".artists-panel .list-tile.selected")
+      .filter({ hasText: "Исполнитель альбома" }),
+  ).toHaveCount(1);
+  await expect(rows).toHaveCount(6);
   await page.locator("audio").evaluate((a: HTMLAudioElement) => {
     a.loop = true;
     a.currentTime = 0.8;

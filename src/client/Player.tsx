@@ -270,7 +270,15 @@ export function usePlayer(notify: (message: string) => void) {
   };
 }
 
-export function Player({ player }: { player: ReturnType<typeof usePlayer> }) {
+export function Player({
+  player,
+  onNavigateToAlbum,
+  onNavigateToArtist,
+}: {
+  player: ReturnType<typeof usePlayer>;
+  onNavigateToAlbum: (albumId: string, albumArtists: string[]) => void;
+  onNavigateToArtist: (artist: string) => void;
+}) {
   const track = player.queue?.track;
   return (
     <footer className="player">
@@ -284,12 +292,50 @@ export function Player({ player }: { player: ReturnType<typeof usePlayer> }) {
           )}
         </div>
         <div className="now-copy">
-          <strong>{track?.title || "Ваша музыка — здесь"}</strong>
-          <span>
-            {track
-              ? track.artists.join(", ") || "Неизвестный исполнитель"
-              : "Выберите трек для воспроизведения"}
-          </span>
+          {track ? (
+            <button
+              type="button"
+              className="now-track-link"
+              aria-label={`Открыть альбом «${track.albumTitle || "Без альбома"}»`}
+              onClick={() =>
+                onNavigateToAlbum(track.albumKey, track.albumArtists)
+              }
+            >
+              {track.title || "Без названия"}
+            </button>
+          ) : (
+            <strong>Ваша музыка — здесь</strong>
+          )}
+          {track ? (
+            <span className="now-artists">
+              {track.albumArtists.length ? (
+                track.albumArtists.map((artist, index) => (
+                  <span key={`${artist}-${index}`}>
+                    {index > 0 && ", "}
+                    <button
+                      type="button"
+                      className="now-artist-link"
+                      aria-label={`Открыть исполнителя «${artist}»`}
+                      onClick={() => onNavigateToArtist(artist)}
+                    >
+                      {artist}
+                    </button>
+                  </span>
+                ))
+              ) : (
+                <button
+                  type="button"
+                  className="now-artist-link"
+                  aria-label="Открыть неизвестного исполнителя"
+                  onClick={() => onNavigateToArtist("")}
+                >
+                  Неизвестный исполнитель
+                </button>
+              )}
+            </span>
+          ) : (
+            <span>Выберите трек для воспроизведения</span>
+          )}
         </div>
         {track && <span className="format-badge">{track.format}</span>}
       </div>

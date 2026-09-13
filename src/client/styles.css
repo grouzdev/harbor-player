@@ -892,7 +892,8 @@ a {
 .now-copy {
   min-width: 0;
 }
-.now-copy strong {
+.now-copy strong,
+.now-track-link {
   display: block;
   font-size: var(--type-caption);
   font-weight: 500;
@@ -901,7 +902,7 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.now-copy span {
+.now-copy > span {
   display: block;
   font-size: var(--type-caption);
   color: #778f99;
@@ -909,6 +910,35 @@ a {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.now-track-link,
+.now-artist-link {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+.now-track-link {
+  width: 100%;
+  text-align: left;
+}
+.now-artists {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.now-artist-link:hover,
+.now-track-link:hover {
+  color: #bfdcb8;
+}
+.now-artist-link:focus-visible,
+.now-track-link:focus-visible {
+  outline: 1px solid #bfdcb8;
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 .format-badge {
   align-self: flex-start;
@@ -1532,7 +1562,8 @@ body {
 .track-album-header strong,
 .track-copy strong,
 .album-main > strong,
-.now-copy strong {
+.now-copy strong,
+.now-track-link {
   font-size: var(--type-body);
   font-weight: 400;
 }

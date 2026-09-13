@@ -206,6 +206,40 @@ export function App() {
   const bookmarkCatalogDirty = useRef(false);
   const notify = useCallback((message: string) => setToast(message), []);
   const player = usePlayer(notify);
+  const [artistScrollTarget, setArtistScrollTarget] = useState<{
+    artist: string;
+    requestId: number;
+  } | null>(null);
+  const requestArtistScroll = useCallback((artist: string) => {
+    setArtistScrollTarget((current) => ({
+      artist,
+      requestId: (current?.requestId || 0) + 1,
+    }));
+  }, []);
+  const navigateFromPlayer = useCallback(
+    (
+      target: "album" | "artist",
+      value: string,
+      albumArtists: string[] = [],
+    ) => {
+      const artists =
+        target === "album"
+          ? albumArtists.length
+            ? albumArtists
+            : [""]
+          : [value];
+      setSearch("");
+      setExpandedLibraryIds(new Set());
+      setExpandedFolderKeys(new Set());
+      setFilter({
+        ...emptyFilter,
+        artists,
+        ...(target === "album" ? { albumIds: [value] } : {}),
+      });
+      requestArtistScroll(artists[0]);
+    },
+    [requestArtistScroll],
+  );
   const workspaceRef = useRef<HTMLElement>(null);
   const [panelWeights, setPanelWeights] = useState<number[]>(() => {
     try {
@@ -1345,6 +1379,7 @@ export function App() {
               bookmarksUnavailable={bookmarksUnavailable}
               pendingBookmarkKeys={pendingBookmarkKeys}
               onBookmarkChange={changeBookmark}
+              scrollTarget={artistScrollTarget}
             />
           </section>
           <div
@@ -1593,7 +1628,13 @@ export function App() {
           </section>
         </div>
       </main>
-      <Player player={player} />
+      <Player
+        player={player}
+        onNavigateToAlbum={(albumId, albumArtists) =>
+          navigateFromPlayer("album", albumId, albumArtists)
+        }
+        onNavigateToArtist={(artist) => navigateFromPlayer("artist", artist)}
+      />
       <ContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
       {toast && (
         <div className="toast" role="status">
@@ -1704,6 +1745,7 @@ function ArtistList({
   bookmarksUnavailable,
   pendingBookmarkKeys,
   onBookmarkChange,
+  scrollTarget,
 }: {
   items: { name: string; count: number }[];
   total: number;
@@ -1720,8 +1762,11 @@ function ArtistList({
   bookmarksUnavailable: boolean;
   pendingBookmarkKeys: Set<string>;
   onBookmarkChange: BookmarkChange;
+  scrollTarget: { artist: string; requestId: number } | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const centeredRequestId = useRef<number | null>(null);
+  const requestedPageKey = useRef<string | null>(null);
   const virtual = useVirtualizer({
     count: items.length + (items.length < total ? 1 : 0),
     getScrollElement: () => ref.current,
@@ -1733,6 +1778,28 @@ function ArtistList({
   useEffect(() => {
     if (last >= items.length - 5 && items.length < total && !loading) onMore();
   }, [last, items.length, total, loading, onMore]);
+  useEffect(() => {
+    if (!scrollTarget) return;
+    const targetIndex = items.findIndex(
+      (item) => item.name === scrollTarget.artist,
+    );
+    if (targetIndex >= 0) {
+      if (centeredRequestId.current !== scrollTarget.requestId) {
+        virtual.scrollToIndex(targetIndex, { align: "center" });
+        centeredRequestId.current = scrollTarget.requestId;
+      }
+      return;
+    }
+    const pageKey = `${scrollTarget.requestId}:${items.length}`;
+    if (
+      items.length < total &&
+      !loading &&
+      requestedPageKey.current !== pageKey
+    ) {
+      requestedPageKey.current = pageKey;
+      onMore();
+    }
+  }, [scrollTarget, items, total, loading, onMore, virtual]);
   return (
     <div className="artist-scroll" ref={ref}>
       <div style={{ height: virtual.getTotalSize(), position: "relative" }}>
