@@ -90,13 +90,23 @@ async function parseTrackMetadata(
   parse: typeof parseFile,
   readDuration: boolean,
 ): Promise<ParsedAudioMetadata> {
+  const parseOnce = async () => {
+    const metadata = await parse(file, { duration: readDuration });
+    if (!metadata?.common || !metadata.format)
+      throw new Error("Парсер вернул неполные метаданные");
+    return metadata;
+  };
   try {
-    return await parse(file, { duration: readDuration });
+    return await parseOnce();
   } catch (primaryError) {
     try {
-      return readWithTagLib(file);
+      return await parseOnce();
     } catch {
-      throw primaryError;
+      try {
+        return readWithTagLib(file);
+      } catch {
+        throw primaryError;
+      }
     }
   }
 }

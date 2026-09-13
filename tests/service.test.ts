@@ -339,6 +339,24 @@ describe("catalog and safe filesystem operations", () => {
     await service.refreshAvailability();
     expect(tracks()).toHaveLength(1);
   });
+  it("retries metadata reads outside a worker when its result is unavailable", async () => {
+    const lib = await library("Worker retry", "mp3");
+    service.workers.run = async () => {
+      throw new Error("worker metadata failure");
+    };
+
+    service.scan(lib.id, true);
+    await service.idle();
+
+    expect(tracks().find((track) => track.libraryId === lib.id)).toMatchObject({
+      title: "Первый трек",
+      artists: ["Исполнитель"],
+    });
+    expect(
+      service.catalog.jobs().find((job) => job.label === "Сканирование: Worker retry")
+        ?.errors,
+    ).toEqual([]);
+  });
   it("falls back to TagLib when music-metadata cannot parse a valid audio file", async () => {
     const file = path.join(fixtures, "sample.mp3");
     const track = await readTrack(
@@ -362,6 +380,50 @@ describe("catalog and safe filesystem operations", () => {
       year: 2024,
       trackNumber: 1,
       discNumber: 1,
+    });
+    expect(track.duration).toBeGreaterThan(0);
+  });
+  it("retries a transient music-metadata failure before using TagLib", async () => {
+    const file = path.join(fixtures, "sample.mp3");
+    let calls = 0;
+    const track = await readTrack(
+      file,
+      "retry-library",
+      fixtures,
+      "retry-track",
+      path.join(root, "data"),
+      async () => {
+        calls++;
+        if (calls === 1) throw new Error("transient parser failure");
+        return parseFile(file, { duration: true });
+      },
+    );
+
+    expect(calls).toBe(2);
+    expect(track).toMatchObject({
+      id: "retry-track",
+      title: "Первый трек",
+      artists: ["Исполнитель"],
+    });
+  });
+  it("falls back to TagLib when music-metadata returns incomplete metadata", async () => {
+    const file = path.join(fixtures, "sample.mp3");
+    const track = await readTrack(
+      file,
+      "fallback-library",
+      fixtures,
+      "fallback-track",
+      path.join(root, "data"),
+      async () =>
+        ({ format: {} } as Awaited<ReturnType<typeof parseFile>>),
+    );
+
+    expect(track).toMatchObject({
+      id: "fallback-track",
+      title: "Первый трек",
+      artists: ["Исполнитель"],
+      albumTitle: "Тестовый альбом",
+      albumArtists: ["Исполнитель альбома"],
     });
     expect(track.duration).toBeGreaterThan(0);
   });

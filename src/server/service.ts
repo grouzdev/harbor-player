@@ -258,13 +258,29 @@ export class MusicService extends EventEmitter {
                 .prepare("UPDATE tracks SET scanId=?,available=1 WHERE id=?")
                 .run(scanId, old.id);
             else {
-              const track = await this.workers.run<Track>("read", {
+              const args = {
                 file,
                 libraryId,
                 root: library.path,
                 id: old?.id || randomUUID(),
                 dataDir: this.dataDir,
-              });
+              };
+              let track: Track;
+              try {
+                track = await this.workers.run<Track>("read", args);
+                if (!track || !Array.isArray(track.artists))
+                  throw new Error("Рабочий процесс вернул неполные метаданные");
+              } catch {
+                // A parser/native-module failure in a worker is recoverable by
+                // retrying the same read in the serialized server process.
+                track = await readTrack(
+                  args.file,
+                  args.libraryId,
+                  args.root,
+                  args.id,
+                  args.dataDir,
+                );
+              }
               this.catalog.upsert(track, scanId);
             }
           } catch (e) {
