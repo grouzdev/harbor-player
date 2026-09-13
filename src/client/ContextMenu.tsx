@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 export interface ContextMenuItem {
   label: string;
   icon?: ReactNode;
+  disabled?: boolean;
   onSelect: () => void | Promise<void>;
 }
 
@@ -66,6 +67,7 @@ export function ContextMenu({
           type="button"
           role="menuitem"
           className="context-menu-item"
+          disabled={item.disabled}
           onClick={() => {
             onClose();
             void item.onSelect();

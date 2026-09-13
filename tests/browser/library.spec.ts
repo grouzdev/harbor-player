@@ -83,8 +83,12 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .first();
   await collection.click({ button: "right" });
   const libraryMenu = page.getByRole("menu");
-  await expect(libraryMenu.getByRole("menuitem", { name: "Обновить" })).toBeVisible();
-  await expect(libraryMenu.getByRole("menuitem", { name: "Удалить" })).toBeVisible();
+  await expect(
+    libraryMenu.getByRole("menuitem", { name: "Обновить" }),
+  ).toBeVisible();
+  await expect(
+    libraryMenu.getByRole("menuitem", { name: "Удалить" }),
+  ).toBeVisible();
   const scanResponse = page.waitForResponse(
     (response) =>
       response.request().method() === "POST" &&
@@ -96,7 +100,9 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await collection.click({ button: "right" });
   await libraryMenu.getByRole("menuitem", { name: "Удалить" }).click();
   const removeLibraryDialog = page.getByRole("dialog");
-  await expect(removeLibraryDialog).toContainText("Файлы музыки на диске останутся");
+  await expect(removeLibraryDialog).toContainText(
+    "Файлы музыки на диске останутся",
+  );
   await removeLibraryDialog.getByRole("button", { name: "Отмена" }).click();
   await page
     .getByRole("button", { name: new RegExp(`Downloads ${browser}`) })
@@ -134,7 +140,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
       .locator(".artists-panel .facet-row")
       .getByRole("button", { name: "Исполнитель", exact: true }),
   ).toHaveCount(0);
-  const artistButton = artistRow.getByRole("button");
+  const artistButton = artistRow.locator(".facet-main");
   const artistCheckbox = artistRow.getByRole("checkbox");
   await artistCheckbox.check();
   await expect(artistCheckbox).toBeChecked();
@@ -142,7 +148,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   const firstAlbum = page
     .locator(".album-card")
     .filter({ hasText: "Исполнитель альбома" });
-  const firstAlbumButton = firstAlbum.getByRole("button");
+  const firstAlbumButton = firstAlbum.locator(".album-main");
   const firstAlbumCheckbox = firstAlbum.getByRole("checkbox");
   await firstAlbum.hover();
   await firstAlbumCheckbox.check();
@@ -170,7 +176,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   const secondAlbum = page
     .locator(".album-card")
     .filter({ hasText: "Неизвестный исполнитель" });
-  const secondAlbumButton = secondAlbum.getByRole("button");
+  const secondAlbumButton = secondAlbum.locator(".album-main");
   const secondAlbumCheckbox = secondAlbum.getByRole("checkbox");
   await firstAlbum.hover();
   await firstAlbumCheckbox.check();
@@ -212,23 +218,139 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
       /\d+/,
     )?.[0],
   );
+  const addAlbumBookmark = firstAlbum.getByRole("button", {
+    name: "Добавить альбом «Тестовый альбом» в закладки",
+  });
+  await page.mouse.move(0, 0);
+  await expect(addAlbumBookmark).toHaveCSS("opacity", "0");
+  await firstAlbum.hover();
+  await expect(addAlbumBookmark).toHaveCSS("opacity", "1");
+  await addAlbumBookmark.click();
+  await expect(firstAlbumCheckbox).not.toBeChecked();
+  const removeAlbumBookmark = firstAlbum.getByRole("button", {
+    name: "Удалить альбом «Тестовый альбом» из закладок",
+  });
+  await expect(removeAlbumBookmark).toHaveAttribute("aria-pressed", "true");
+  await page.mouse.move(0, 0);
+  await expect(removeAlbumBookmark).toHaveCSS("opacity", "1");
   await firstAlbum.dispatchEvent("contextmenu", { clientX: 300, clientY: 300 });
-  await page
-    .getByRole("menuitem", { name: "Добавить в закладки" })
-    .click();
-  const bookmarkToggle = page.getByRole("button", { name: "Только закладки" });
+  await expect(
+    page.getByRole("menuitem", { name: "Удалить из закладок" }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  const bookmarkToggle = page.getByRole("button", {
+    name: "Показать музыку из закладок",
+  });
   await bookmarkToggle.click();
-  await expect(bookmarkToggle).toHaveAttribute("aria-pressed", "true");
+  const activeBookmarkToggle = page.getByRole("button", {
+    name: "Отключить фильтр закладок",
+  });
+  await expect(activeBookmarkToggle).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByTestId("track-row")).toHaveCount(inheritedTrackCount);
   await expect(page.locator(".album-card")).toHaveCount(1);
-  await bookmarkToggle.click();
+  await expect(
+    page
+      .getByTestId("track-row")
+      .getByRole("button", { name: /Добавить трек .* в закладки/ }),
+  ).toHaveCount(inheritedTrackCount);
+  await activeBookmarkToggle.click();
   await firstAlbum.dispatchEvent("contextmenu", { clientX: 300, clientY: 300 });
+  await page.getByRole("menuitem", { name: "Удалить из закладок" }).click();
   await page
-    .getByRole("menuitem", { name: "Удалить из закладок" })
+    .getByRole("button", { name: "Показать музыку из закладок" })
     .click();
-  await bookmarkToggle.click();
   await expect(page.getByTestId("track-row")).toHaveCount(0);
-  await bookmarkToggle.click();
+  await expect(page.getByText("В закладках пока пусто")).toBeVisible();
+  await page.getByRole("button", { name: "Показать всю музыку" }).click();
+
+  const artistBookmark = artistRow.getByRole("button", {
+    name: /Добавить исполнителя .* в закладки/,
+  });
+  await artistBookmark.focus();
+  await expect(artistBookmark).toHaveCSS("opacity", "1");
+  await artistBookmark.press("Enter");
+  await expect(artistCheckbox).not.toBeChecked();
+  const removeArtistBookmark = artistRow.getByRole("button", {
+    name: /Удалить исполнителя .* из закладок/,
+  });
+  await expect(removeArtistBookmark).toHaveAttribute("aria-pressed", "true");
+  await page
+    .getByRole("button", { name: "Показать музыку из закладок" })
+    .click();
+  await expect(page.locator(".album-card")).toHaveCount(1);
+  await expect(
+    page
+      .locator(".album-card")
+      .getByRole("button", { name: /Добавить альбом .* в закладки/ }),
+  ).toHaveCount(1);
+  await expect(
+    page
+      .getByTestId("track-row")
+      .getByRole("button", { name: /Добавить трек .* в закладки/ }),
+  ).toHaveCount(inheritedTrackCount);
+  await page.getByRole("button", { name: "Отключить фильтр закладок" }).click();
+  await removeArtistBookmark.press("Space");
+
+  const firstTrack = page.getByTestId("track-row").first();
+  const firstTrackCheckbox = firstTrack.getByRole("checkbox");
+  await firstTrack
+    .getByRole("button", { name: /Добавить трек .* в закладки/ })
+    .click();
+  await expect(firstTrackCheckbox).not.toBeChecked();
+  await page.reload();
+  await expect(page.getByLabel("Поиск музыки")).toBeVisible();
+  const persistedTrackBookmark = page
+    .getByTestId("track-row")
+    .first()
+    .getByRole("button", { name: /Удалить трек .* из закладок/ });
+  await expect(persistedTrackBookmark).toHaveAttribute("aria-pressed", "true");
+  await page.getByLabel("Поиск музыки").fill("Несуществующая композиция");
+  await expect(page.getByTestId("track-row")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Показать музыку из закладок" })
+    .click();
+  await expect(page.getByText("В закладках ничего не найдено")).toBeVisible();
+  await expect(page.getByText("Текущие фильтры скрывают")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Сбросить остальные фильтры" })
+    .click();
+  await expect(page.getByLabel("Поиск музыки")).toHaveValue("");
+  await expect(page.getByTestId("track-row")).toHaveCount(1);
+  await persistedTrackBookmark.click();
+  await expect(page.getByText("В закладках пока пусто")).toBeVisible();
+  await page.getByRole("button", { name: "Показать всю музыку" }).click();
+
+  await page.route("**/api/bookmarks", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    await route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "Тестовая ошибка закладок" }),
+    });
+  });
+  const failedArtistBookmark = artistRow.getByRole("button", {
+    name: /Добавить исполнителя .* в закладки/,
+  });
+  await failedArtistBookmark.click();
+  await expect(
+    artistRow.getByRole("button", {
+      name: /Удалить исполнителя .* из закладок/,
+    }),
+  ).toHaveAttribute("aria-busy", "true");
+  await expect(failedArtistBookmark).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("status")).toContainText(
+    "Тестовая ошибка закладок",
+  );
+  await page.unroute("**/api/bookmarks");
+  await page
+    .getByRole("button", { name: new RegExp(`Downloads ${browser}`) })
+    .first()
+    .click();
 
   const explorerRequests: { kind: string; id: string }[] = [];
   await page.route("**/api/explorer", async (route) => {
@@ -399,7 +521,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     const row = page.locator(
       `[data-testid="track-row"][data-format="${format}"]`,
     );
-    await row.getByRole("button").click();
+    await row.locator(".track-number").click();
     await expect
       .poll(
         () =>
@@ -429,11 +551,11 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(taggedAlbumHeader).not.toContainText("FLAC");
   await page
     .locator(".artists-panel")
-    .getByRole("button", { name: "Исполнитель альбома", exact: false })
-    .last()
+    .locator(".facet-main")
+    .filter({ hasText: "Исполнитель альбома" })
     .click();
   await expect(rows).toHaveCount(6);
-  await flac().getByRole("button").click();
+  await flac().locator(".track-number").click();
   await expect
     .poll(() =>
       page.locator("audio").evaluate((a: HTMLAudioElement) => a.readyState),

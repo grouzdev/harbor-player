@@ -1078,6 +1078,10 @@ a {
   background: #ffffff0d;
   color: #f3f7f3;
 }
+.context-menu-item:disabled {
+  background: transparent;
+  color: #738088;
+}
 .modal {
   background: transparent;
   border: 0;
@@ -1805,7 +1809,10 @@ body {
 .workspace {
   grid-template-columns:
     minmax(110px, var(--library-weight)) 4px minmax(110px, var(--genre-weight))
-    4px minmax(110px, var(--artist-weight)) 4px minmax(150px, var(--album-weight))
+    4px minmax(110px, var(--artist-weight)) 4px minmax(
+      150px,
+      var(--album-weight)
+    )
     4px minmax(180px, var(--track-weight));
 }
 
@@ -1825,14 +1832,83 @@ body {
 }
 .bookmarks-button {
   margin-left: auto;
+  gap: 7px;
+  padding-left: 9px;
+  padding-right: 10px;
+  font-size: var(--type-caption);
 }
 .bookmarks-button + .history-button {
   margin-left: 0;
 }
+.bookmarks-button.active {
+  background: #c0d6bb12;
+}
+.bookmarks-button.error {
+  color: #e19a8c;
+  background: #8d463d16;
+}
+.bookmark-toggle {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 28px;
+  padding: 0;
+  border-radius: 5px;
+  color: #84939b;
+  background: #111820cc;
+  opacity: 0;
+  transition:
+    opacity 0.15s,
+    color 0.15s,
+    background 0.15s;
+}
+.bookmark-toggle:hover:not(:disabled),
+.bookmark-toggle:focus-visible {
+  color: #e6eee9;
+  background: #10161ce8;
+}
+.bookmark-toggle.bookmarked {
+  color: var(--accent);
+  opacity: 1;
+}
+.bookmark-toggle[aria-busy="true"] {
+  opacity: 1;
+}
+.artist-row:hover > .bookmark-toggle,
+.artist-row:focus-within > .bookmark-toggle,
+.album-card:hover > .bookmark-toggle,
+.album-card:focus-within > .bookmark-toggle,
+.track-row:hover > .bookmark-toggle,
+.track-row:focus-within > .bookmark-toggle,
+.track-album-header:hover > .bookmark-toggle,
+.track-album-header:focus-within > .bookmark-toggle {
+  opacity: 1;
+}
+.artist-bookmark-toggle {
+  margin-right: 5px;
+  background: transparent;
+}
+.album-bookmark-toggle {
+  position: absolute;
+  z-index: 2;
+  top: 7px;
+  left: 7px;
+}
+.track-bookmark-toggle,
+.track-album-bookmark-toggle {
+  background: transparent;
+}
+.track-empty .button {
+  margin-top: 4px;
+}
 .workspace {
   grid-template-columns:
     minmax(110px, var(--library-weight)) 4px minmax(110px, var(--genre-weight))
-    4px minmax(110px, var(--artist-weight)) 4px minmax(150px, var(--album-weight))
+    4px minmax(110px, var(--artist-weight)) 4px minmax(
+      150px,
+      var(--album-weight)
+    )
     4px minmax(180px, var(--track-weight));
 }
 .list-all-action {
