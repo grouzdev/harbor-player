@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type {
   Capabilities,
+  Job,
   Library,
   OperationPreview,
   OperationRetryResult,
@@ -959,7 +960,7 @@ export function HistoryDialog({
 }: {
   onClose: () => void;
   onPreview: (preview: OperationPreview) => void;
-  onOperationStarted: (id: string) => void;
+  onOperationStarted: (id: string, job?: Job) => void;
 }) {
   const history = useQuery({
     queryKey: ["history"],
@@ -1058,12 +1059,12 @@ export function HistoryDialog({
                         if (retry.action === "preview")
                           onPreview(retry.preview);
                         else {
-                          onOperationStarted(retry.job.operationId || op.id);
+                          onOperationStarted(retry.job.operationId || op.id, retry.job);
                           await history.refetch();
                         }
                       } else {
-                        await api(`/operations/${op.id}/execute`, {});
-                        onOperationStarted(op.id);
+                        const job = await api<Job>(`/operations/${op.id}/execute`, {});
+                        onOperationStarted(op.id, job);
                         await history.refetch();
                       }
                     } catch (e) {

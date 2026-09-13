@@ -71,12 +71,6 @@ type DroppedCover = {
   name: string;
   cover: { data: string; mime: "image/jpeg" | "image/png" };
 };
-type OperationProgressCard = {
-  id: string;
-  operation?: OperationPreview;
-  finished: boolean;
-};
-
 type BookmarkChange = (
   kind: BookmarkKind,
   id: string,
@@ -183,7 +177,6 @@ export function App() {
   const [libraryToRemove, setLibraryToRemove] = useState<Library | null>(null);
   const [modalSelection, setModalSelection] = useState<Selection | null>(null);
   const [preview, setPreview] = useState<OperationPreview | null>(null);
-  const [operationCards, setOperationCards] = useState<OperationProgressCard[]>([]);
   const [droppedCover, setDroppedCover] = useState<DroppedCover | null>(null);
   const [toast, setToast] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -462,34 +455,23 @@ export function App() {
     [refresh],
   );
   const watchOperation = useCallback(
-    (id: string) => {
+    (id: string, initialJob?: Job) => {
       if (watchedOperations.current.has(id)) return;
       watchedOperations.current.add(id);
-      setOperationCards((cards) =>
-        cards.some((card) => card.id === id)
-          ? cards
-          : [{ id, finished: false }, ...cards],
-      );
+      if (initialJob)
+        queryClient.setQueryData<Job[]>(["jobs"], (old) => [
+          initialJob,
+          ...(old || []).filter((job) => job.id !== initialJob.id),
+        ].slice(0, 30));
       void (async () => {
         try {
           while (true) {
             const operation = await api<OperationPreview>(`/operations/${id}`);
-            setOperationCards((cards) =>
-              cards.map((card) =>
-                card.id === id
-                  ? { ...card, operation, finished: operation.status !== "running" }
-                  : card,
-              ),
-            );
             if (
               operation.status === "done" ||
               operation.status === "interrupted"
             ) {
               refresh();
-              setTimeout(
-                () => setOperationCards((cards) => cards.filter((card) => card.id !== id)),
-                10_000,
-              );
               return;
             }
             await new Promise((resolve) => setTimeout(resolve, 500));
@@ -501,7 +483,7 @@ export function App() {
         }
       })();
     },
-    [refresh, scheduleRefresh],
+    [queryClient, refresh, scheduleRefresh],
   );
   const prepareDroppedCover = useCallback(
     (album: Album, files: File[]) => {
@@ -553,14 +535,9 @@ export function App() {
     );
     if (!writable.length)
       throw new Error("В альбоме нет треков, доступных для записи обложки");
-    await api(`/operations/${operation.id}/execute`, {});
-    watchOperation(operation.id);
+    const job = await api<Job>(`/operations/${operation.id}/execute`, {});
+    watchOperation(operation.id, job);
     setDroppedCover(null);
-    notify(
-      writable.length === operation.items.length
-        ? "Запись обложки запущена. Результат появится в журнале."
-        : `Запись обложки запущена для ${count(writable.length)} из ${count(operation.items.length)} треков. Подробности появятся в журнале.`,
-    );
   }, [droppedCover, notify, watchOperation]);
   useEffect(() => {
     if (!ready) return;
@@ -731,9 +708,6 @@ export function App() {
   const selectionCount = allSelected ? total - selected.size : selected.size;
   const activeJobs =
     jobs.data?.filter((j) => ["queued", "running"].includes(j.status)) || [];
-  const operationJobById = new Map(
-    (jobs.data || []).filter((job) => job.operationId).map((job) => [job.operationId!, job]),
-  );
   const showPreview = (p: OperationPreview) => {
     setModal(null);
     setModalSelection(null);
@@ -943,8 +917,20 @@ export function App() {
                     <small>
                       {job.status === "queued"
                         ? "В очереди"
-                        : `${count(job.completed)} обработано`}
+                        : `${count(job.completed)} из ${count(job.total)} обработано`}
                     </small>
+                    {job.status === "running" && job.total > 0 && (
+                      <div
+                        className="scan-status-bar"
+                        aria-label={`Прогресс: ${job.completed} из ${job.total}`}
+                      >
+                        <i
+                          style={{
+                            width: `${Math.min(100, Math.round((job.completed / job.total) * 100))}%`,
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1330,31 +1316,14 @@ export function App() {
           preview={preview}
           onClose={() => setPreview(null)}
           onExecute={async (id) => {
-            await api(`/operations/${id}/execute`, {});
-            watchOperation(id);
+            const job = await api<Job>(`/operations/${id}/execute`, {});
+            watchOperation(id, job);
             setPreview(null);
             setSelected(new Set());
             setAllSelected(false);
-            notify("Операция запущена. Результат появится в журнале.");
           }}
         />
       )}
-      <div className="operation-progress-stack" aria-live="polite">
-        {operationCards.map((card) => {
-          const job = operationJobById.get(card.id);
-          const completed = job?.completed ?? 0;
-          const total = job?.total ?? card.operation?.items.length ?? 0;
-          const errors = card.operation?.items.filter((item) => item.error) || [];
-          const percent = total ? Math.round((completed / total) * 100) : 0;
-          return <section className="operation-progress-card" key={card.id}>
-            <button className="operation-progress-close" disabled={!card.finished} onClick={() => setOperationCards((cards) => cards.filter((item) => item.id !== card.id))}><X size={14} /></button>
-            <strong>{job?.label || "Сохранение тегов"}</strong>
-            <small>{card.finished ? `Готово: ${completed - errors.length} успешно${errors.length ? `, ошибок: ${errors.length}` : ""}` : `${count(completed)} из ${count(total)} обработано`}</small>
-            <div className="operation-progress-bar"><i style={{ width: `${percent}%` }} /></div>
-            {!!errors.length && <small className="operation-progress-errors">{errors.slice(0, 2).map((item) => item.error).join(" · ")}</small>}
-          </section>;
-        })}
-      </div>
       {droppedCover && (
         <CoverDropConfirmDialog
           albumTitle={droppedCover.album.title}
