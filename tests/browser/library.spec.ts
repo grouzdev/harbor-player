@@ -605,6 +605,20 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     name: /Удалить исполнителя .* из закладок/,
   });
   await expect(removeArtistBookmark).toHaveAttribute("aria-pressed", "true");
+  await expect(artistRow.locator(".list-tile-suffix")).toHaveCSS(
+    "visibility",
+    "visible",
+  );
+  const savedArtistBookmarkGeometry = await artistRow.evaluate((row) => {
+    const suffixRect = row
+      .querySelector<HTMLElement>(".list-tile-suffix")!
+      .getBoundingClientRect();
+    const buttonRect = row
+      .querySelector<HTMLElement>(".bookmark-toggle")!
+      .getBoundingClientRect();
+    return { gap: buttonRect.left - suffixRect.right };
+  });
+  expect(savedArtistBookmarkGeometry.gap).toBeCloseTo(0, 1);
   await page
     .getByRole("button", { name: "Показать музыку из закладок" })
     .click();

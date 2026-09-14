@@ -302,9 +302,12 @@ a {
   text-align: center;
 }
 .list-tile.has-end-action:hover .list-tile-suffix,
-.list-tile.has-end-action:focus-within .list-tile-suffix,
-.list-tile.has-end-action:has(.bookmark-toggle.bookmarked) .list-tile-suffix {
+.list-tile.has-end-action:focus-within .list-tile-suffix {
   visibility: hidden;
+}
+.list-tile.has-end-action:has(.bookmark-toggle.bookmarked) .list-tile-suffix {
+  visibility: visible;
+  margin-right: 28px;
 }
 .libraries-panel .list-tile-main {
   padding: 0 12px;
