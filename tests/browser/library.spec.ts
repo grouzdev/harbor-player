@@ -469,8 +469,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
 
   await expect(firstAlbum.locator(".album-details")).toHaveCount(1);
   await expect(firstAlbum.locator(".album-details > small")).toHaveCount(1);
-  await expect(firstAlbum.locator(".album-title-year")).toHaveCount(1);
-  await expect(firstAlbum.locator(".album-title-line")).toContainText(/^\d{4}/);
+  await expect(firstAlbum.locator(".album-details")).toContainText(/^\d{4} · /);
   await expect(firstAlbum.locator(".album-track-count")).toHaveText(
     /^\d+ трек(?:а|ов)?$/,
   );
@@ -481,15 +480,9 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     "width",
     "52px",
   );
-  await expect(firstTrackAlbumHeader.locator(".track-album-year")).toHaveCount(
-    1,
+  await expect(firstTrackAlbumHeader.locator("small")).toContainText(
+    /^\d{4} · /,
   );
-  await expect(
-    firstTrackAlbumHeader.locator(".track-album-title-line"),
-  ).toContainText(/^\d{4}/);
-  await expect(
-    firstTrackAlbumHeader.locator(".track-album-artists"),
-  ).not.toContainText(/ · \d{4}$/);
   await firstAlbumButton.click();
   await expect(firstAlbum).toHaveClass(/selected/);
   await firstAlbumButton.click();

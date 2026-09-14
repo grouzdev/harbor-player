@@ -557,28 +557,15 @@ a {
   font-weight: 500;
   text-align: center;
 }
-.album-title-line {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-  margin: 10px 2px 5px;
-}
-.album-title-line > strong {
-  min-width: 0;
-  flex: 1;
+.album-main > strong {
+  display: block;
   color: #c5cdd1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: var(--type-caption);
   font-weight: 500;
-}
-.album-title-year {
-  flex: 0 0 auto;
-  color: #75858e;
-  font-size: var(--type-caption);
-  font-weight: 400;
+  margin: 10px 2px 5px;
 }
 .album-details {
   display: flex;
@@ -713,19 +700,11 @@ a {
   overflow: hidden;
   flex-shrink: 0;
 }
-.track-album-copy {
+.track-album-header > div:nth-child(2) {
   min-width: 0;
   flex: 1;
 }
-.track-album-title-line {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-}
-.track-album-title-line strong {
-  min-width: 0;
-  flex: 1;
+.track-album-header strong {
   font-size: var(--type-caption);
   font-weight: 600;
   white-space: nowrap;
@@ -733,13 +712,7 @@ a {
   text-overflow: ellipsis;
   display: block;
 }
-.track-album-year {
-  flex: 0 0 auto;
-  color: #7c8b96;
-  font-size: var(--type-caption);
-  font-weight: 400;
-}
-.track-album-artists {
+.track-album-header small {
   font-size: var(--type-caption);
   color: #7c8b96;
   display: block;
@@ -1572,7 +1545,7 @@ body {
 .panel-heading h2,
 .track-album-header strong,
 .track-copy strong,
-.album-title-line > strong,
+.album-main > strong,
 .now-copy strong,
 .now-track-link {
   font-size: var(--type-body);
