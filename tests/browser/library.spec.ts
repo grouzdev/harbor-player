@@ -373,6 +373,16 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     "height",
     "42px",
   );
+  await expect(
+    page.getByRole("button", { name: "Сбросить выбор треков" }),
+  ).toHaveCount(0);
+  await firstTrackRow.locator(".list-tile-main").click();
+  await expect(page.getByRole("heading", { name: "Треки" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Сбросить выбор треков" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Сбросить выбор треков" }).click();
+  await expect(firstTrackRow).not.toHaveClass(/selected/);
   await artistButton.click();
   await expect(artistRow).toHaveClass(/selected/);
   await artistButton.dispatchEvent("click", { ctrlKey: true });
@@ -408,8 +418,11 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(firstAlbum).toHaveClass(/selected/);
   await page
     .locator(".genres-panel")
-    .getByRole("button", { name: "Все жанры" })
+    .getByRole("button", { name: "Сбросить жанры" })
     .click();
+  await expect(
+    page.getByRole("button", { name: "Сбросить жанры" }),
+  ).toHaveCount(0);
   await expect(artistRow).toHaveClass(/selected/);
   await expect(firstAlbum).toHaveClass(/selected/);
 
@@ -420,8 +433,11 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await artistButton.click();
   await page
     .locator(".artists-panel")
-    .getByRole("button", { name: "Все исполнители" })
+    .getByRole("button", { name: "Сбросить исполнителей" })
     .click();
+  await expect(
+    page.getByRole("button", { name: "Сбросить исполнителей" }),
+  ).toHaveCount(0);
   await expect(artistRow).not.toHaveClass(/selected/);
   await expect(firstAlbum).toHaveClass(/selected/);
 
@@ -459,8 +475,11 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(secondAlbum).toHaveClass(/selected/);
   await page
     .locator(".albums-panel")
-    .getByRole("button", { name: "Все альбомы" })
+    .getByRole("button", { name: "Сбросить альбомы" })
     .click();
+  await expect(
+    page.getByRole("button", { name: "Сбросить альбомы" }),
+  ).toHaveCount(0);
   await expect(firstAlbum).not.toHaveClass(/selected/);
   await expect(secondAlbum).not.toHaveClass(/selected/);
 
@@ -635,7 +654,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(page.getByText("В закладках пока пусто")).toBeVisible();
   await page.getByRole("button", { name: "Показать всю музыку" }).click();
   await expect(page.getByTestId("track-row")).toHaveCount(7);
-  await expect(page.locator(".catalog-footer")).toContainText("7 треков");
+  await expect(page.locator(".catalog-footer")).toHaveCount(0);
 
   const trackActions = [
     "Редактировать теги",
@@ -953,7 +972,10 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await page.getByRole("button", { name: "Посмотреть изменения" }).click();
   await page.getByRole("button", { name: /^Применить к/ }).click();
   await expect(rows).toHaveCount(5);
-  await page.getByRole("button", { name: "Вся музыка" }).click();
+  await page.getByRole("button", { name: "Сбросить библиотеки" }).click();
+  await expect(
+    page.getByRole("button", { name: "Сбросить библиотеки" }),
+  ).toHaveCount(0);
   await page
     .getByRole("button", { name: new RegExp(`Collection ${browser}`) })
     .first()

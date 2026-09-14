@@ -23,7 +23,6 @@ import {
   FolderOpen,
   FolderInput,
   History,
-  ListMusic,
   Maximize2,
   Minimize2,
   Music2,
@@ -191,7 +190,6 @@ export function App() {
   );
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [allSelected, setAllSelected] = useState(false);
   const [modal, setModal] = useState<
     "add" | "move" | "trash" | "tags" | "history" | "remove-library" | null
   >(null);
@@ -326,7 +324,6 @@ export function App() {
   }, [toast]);
   useEffect(() => {
     setSelected(new Set());
-    setAllSelected(false);
   }, [filter]);
   const refresh = useCallback(() => {
     void queryClient.invalidateQueries({
@@ -936,11 +933,9 @@ export function App() {
   );
   const total = tracks.data?.pages[0]?.total || 0;
   const albumTotal = albums.data?.pages[0]?.total || 0;
-  const selection: Selection = allSelected
-    ? { filter, excludeTrackIds: [...selected] }
-    : { trackIds: [...selected] };
-  const operationSelection: Selection = selected.size ? selection : { filter };
-  const selectionCount = allSelected ? total - selected.size : selected.size;
+  const operationSelection: Selection = selected.size
+    ? { trackIds: [...selected] }
+    : { filter };
   const activeJobs =
     jobs.data?.filter((j) => ["queued", "running"].includes(j.status)) || [];
   const showPreview = (p: OperationPreview) => {
@@ -1305,21 +1300,23 @@ export function App() {
           <aside className="panel libraries-panel">
             <div className="panel-heading">
               <h2>Библиотеки</h2>
+              {(filter.libraryIds.length > 0 || filter.folders.length > 0) && (
+                <button
+                  className="icon-button facet-reset"
+                  aria-label="Сбросить библиотеки"
+                  title="Сбросить библиотеки"
+                  onClick={() =>
+                    setFilter((f) => ({
+                      ...f,
+                      libraryIds: [],
+                      folders: [],
+                    }))
+                  }
+                >
+                  <X size={15} />
+                </button>
+              )}
             </div>
-            <button
-              className={`list-all-action ${filter.libraryIds.length === 0 && !filter.folders.length ? "selected" : ""}`}
-              onClick={() => {
-                setExpandedLibraryIds(new Set());
-                setExpandedFolderKeys(new Set());
-                setFilter((f) => ({
-                  ...f,
-                  libraryIds: [],
-                  folders: [],
-                }));
-              }}
-            >
-              <span>Вся музыка</span>
-            </button>
             <div className="library-list">
               {libraries.data?.map((library) => (
                 <div key={library.id} className="library-container">
@@ -1419,19 +1416,20 @@ export function App() {
           <section className="panel genres-panel">
             <div className="panel-heading">
               <h2>Жанры</h2>
-              <span className="panel-count">{genres.data?.length || 0}</span>
+              <div className="panel-heading-actions">
+                <span className="panel-count">{genres.data?.length || 0}</span>
+                {filter.genres.length > 0 && (
+                  <button
+                    className="icon-button facet-reset"
+                    aria-label="Сбросить жанры"
+                    title="Сбросить жанры"
+                    onClick={() => setFilter((f) => ({ ...f, genres: [] }))}
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
             </div>
-            <button
-              className={`list-all-action ${!filter.genres.length ? "selected" : ""}`}
-              onClick={() =>
-                setFilter((f) => ({
-                  ...f,
-                  genres: [],
-                }))
-              }
-            >
-              <span>Все жанры</span>
-            </button>
             <div className="genre-list">
               {genres.data?.map((g) => {
                 const label = g.name || "Без жанра";
@@ -1464,16 +1462,22 @@ export function App() {
           <section className="panel artists-panel">
             <div className="panel-heading">
               <h2>Исполнители</h2>
-              <span className="panel-count">
-                {count(artists.data?.pages[0]?.total || 0)}
-              </span>
+              <div className="panel-heading-actions">
+                <span className="panel-count">
+                  {count(artists.data?.pages[0]?.total || 0)}
+                </span>
+                {filter.artists.length > 0 && (
+                  <button
+                    className="icon-button facet-reset"
+                    aria-label="Сбросить исполнителей"
+                    title="Сбросить исполнителей"
+                    onClick={() => setFilter((f) => ({ ...f, artists: [] }))}
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
             </div>
-            <button
-              className={`list-all-action ${!filter.artists.length ? "selected" : ""}`}
-              onClick={() => setFilter((f) => ({ ...f, artists: [] }))}
-            >
-              Все исполнители
-            </button>
             <ArtistList
               items={artistItems}
               total={artists.data?.pages[0]?.total || 0}
@@ -1514,14 +1518,20 @@ export function App() {
           <section className="panel albums-panel">
             <div className="panel-heading">
               <h2>Альбомы</h2>
-              <span className="panel-count">{count(albumTotal)}</span>
+              <div className="panel-heading-actions">
+                <span className="panel-count">{count(albumTotal)}</span>
+                {filter.albumIds.length > 0 && (
+                  <button
+                    className="icon-button facet-reset"
+                    aria-label="Сбросить альбомы"
+                    title="Сбросить альбомы"
+                    onClick={() => setFilter((f) => ({ ...f, albumIds: [] }))}
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
             </div>
-            <button
-              className={`list-all-action ${!filter.albumIds.length ? "selected" : ""}`}
-              onClick={() => setFilter((f) => ({ ...f, albumIds: [] }))}
-            >
-              <span>Все альбомы</span>
-            </button>
             <AlbumGrid
               albums={albumItems}
               total={albumTotal}
@@ -1555,36 +1565,20 @@ export function App() {
           <section className="panel tracks-panel">
             <div className="panel-heading tracks-heading">
               <div>
-                <h2>
-                  {selectionCount
-                    ? `Выбрано: ${count(selectionCount)}`
-                    : "Треки"}
-                </h2>
+                <h2>Треки</h2>
                 <span className="panel-count">{count(total)}</span>
               </div>
-              <button
-                className="button primary small"
-                disabled={!trackItems.length}
-                onClick={() => void player.start(trackItems[0], filter)}
-              >
-                <Play size={13} fill="currentColor" />
-                Слушать
-              </button>
-            </div>
-            <div className="track-toolbar">
-              <button
-                className={`list-all-action ${allSelected && !selected.size ? "selected" : ""}`}
-                aria-label="Выбрать все треки"
-                aria-pressed={allSelected && !selected.size}
-                disabled={!total}
-                onClick={() => {
-                  setAllSelected((current) => !current);
-                  setSelected(new Set());
-                }}
-              >
-                Выбрать все
-              </button>
-              <div className="toolbar-actions">
+              <div className="tracks-heading-actions">
+                {selected.size > 0 && (
+                  <button
+                    className="icon-button facet-reset"
+                    aria-label="Сбросить выбор треков"
+                    title="Сбросить выбор треков"
+                    onClick={() => setSelected(new Set())}
+                  >
+                    <X size={15} />
+                  </button>
+                )}
                 <button
                   className="icon-button"
                   aria-label="Редактировать теги"
@@ -1620,6 +1614,14 @@ export function App() {
                   }}
                 >
                   <Trash2 size={16} />
+                </button>
+                <button
+                  className="button primary small"
+                  disabled={!trackItems.length}
+                  onClick={() => void player.start(trackItems[0], filter)}
+                >
+                  <Play size={13} fill="currentColor" />
+                  Слушать
                 </button>
               </div>
             </div>
@@ -1665,13 +1667,11 @@ export function App() {
                 tracks={trackItems}
                 total={total}
                 selected={selected}
-                allSelected={allSelected}
                 currentId={player.queue?.track?.id}
                 loading={tracks.isFetching}
                 onPlay={(track) => void player.start(track, filter)}
                 onSelect={(id, additive) => {
                   if (!additive) {
-                    setAllSelected(false);
                     setSelected(new Set([id]));
                     return;
                   }
@@ -1715,31 +1715,6 @@ export function App() {
                 }}
               />
             )}
-            <div className="catalog-footer">
-              <ListMusic size={13} />
-              <span>{count(total)} треков</span>
-              <span className="footer-dot">·</span>
-              <span>{count(albumTotal)} альбомов</span>
-              {(filter.libraryIds.length > 0 ||
-                filter.folders.length > 0 ||
-                filter.genres.length > 0 ||
-                filter.artists.length > 0 ||
-                filter.albumIds.length > 0 ||
-                filter.bookmarksOnly ||
-                search) && (
-                <button
-                  className="text-button"
-                  onClick={() => {
-                    setFilter(emptyFilter);
-                    setSearch("");
-                    setExpandedLibraryIds(new Set());
-                    setExpandedFolderKeys(new Set());
-                  }}
-                >
-                  Сбросить фильтры
-                </button>
-              )}
-            </div>
           </section>
         </div>
       </main>
@@ -1852,7 +1827,6 @@ export function App() {
             watchOperation(id, job);
             setPreview(null);
             setSelected(new Set());
-            setAllSelected(false);
           }}
         />
       )}
@@ -2171,7 +2145,6 @@ function TrackList({
   tracks,
   total,
   selected,
-  allSelected,
   currentId,
   loading,
   onPlay,
@@ -2191,7 +2164,6 @@ function TrackList({
   tracks: Track[];
   total: number;
   selected: Set<string>;
-  allSelected: boolean;
   currentId?: string;
   loading: boolean;
   onPlay: (track: Track) => void;
@@ -2356,9 +2328,7 @@ function TrackList({
                 testId="track-row"
                 dataFormat={track.format}
                 className="track-row"
-                selected={
-                  allSelected ? !selected.has(track.id) : selected.has(track.id)
-                }
+                selected={selected.has(track.id)}
                 current={currentId === track.id}
                 prefix={track.trackNumber ?? undefined}
                 value={track.title}
