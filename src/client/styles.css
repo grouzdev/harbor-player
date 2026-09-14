@@ -2311,12 +2311,9 @@ body {
 
 body {
   min-height: 100dvh;
-  padding: var(--room-inset);
+  padding: 0;
   overflow: hidden;
-  background:
-    linear-gradient(90deg, #080b0a9e 0%, #10151366 38%, #17120b4d 100%),
-    url("../../assets/bg_lounge.jpg") center / cover fixed,
-    #0d1110;
+  background: var(--metal-0);
 }
 
 body::before {
@@ -2324,6 +2321,18 @@ body::before {
   z-index: 0;
   inset: 0;
   pointer-events: none;
+  content: none;
+}
+
+html:fullscreen body {
+  padding: var(--room-inset);
+  background:
+    linear-gradient(90deg, #080b0a9e 0%, #10151366 38%, #17120b4d 100%),
+    url("../../assets/bg_lounge.jpg") center / cover fixed,
+    #0d1110;
+}
+
+html:fullscreen body::before {
   content: "";
   background:
     radial-gradient(circle at 79% 52%, #d09b5540, transparent 29%),
@@ -2337,11 +2346,18 @@ body::before {
 }
 
 .app-shell {
-  height: calc(100dvh - var(--room-inset) - var(--room-inset));
+  height: 100dvh;
   min-height: 520px;
+  border: 0;
+  border-radius: 0;
+  background: var(--metal-0);
+  box-shadow: none;
+}
+
+html:fullscreen .app-shell {
+  height: calc(100dvh - var(--room-inset) - var(--room-inset));
   border: 1px solid var(--metal-edge);
   border-radius: 14px;
-  background: var(--metal-0);
   box-shadow:
     0 24px 70px #0204038c,
     0 2px 0 #eff5dd12 inset,
@@ -2552,17 +2568,17 @@ input[type="range"] {
 }
 
 @media (max-width: 900px), (max-height: 650px) {
-  body {
+  html:not(:fullscreen) body {
     padding: 0;
     overflow: auto;
     background: var(--metal-0);
   }
 
-  body::before {
+  html:not(:fullscreen) body::before {
     display: none;
   }
 
-  .app-shell {
+  html:not(:fullscreen) .app-shell {
     height: 100dvh;
     min-height: 520px;
     border: 0;

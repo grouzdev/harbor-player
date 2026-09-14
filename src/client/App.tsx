@@ -24,6 +24,8 @@ import {
   FolderInput,
   History,
   ListMusic,
+  Maximize2,
+  Minimize2,
   Music2,
   Plus,
   RefreshCw,
@@ -207,6 +209,9 @@ export function App() {
   const bookmarkCatalogDirty = useRef(false);
   const notify = useCallback((message: string) => setToast(message), []);
   const player = usePlayer(notify);
+  const [isFullscreen, setIsFullscreen] = useState(
+    () => document.fullscreenElement === document.documentElement,
+  );
   const [coverMode, setCoverMode] = useState(false);
   const [quickSearchOpen, setQuickSearchOpen] = useState(false);
   const [artistScrollTarget, setArtistScrollTarget] = useState<{
@@ -218,6 +223,21 @@ export function App() {
       artist,
       requestId: (current?.requestId || 0) + 1,
     }));
+  }, []);
+  useEffect(() => {
+    const syncFullscreen = () => {
+      setIsFullscreen(document.fullscreenElement === document.documentElement);
+    };
+    document.addEventListener("fullscreenchange", syncFullscreen);
+    return () =>
+      document.removeEventListener("fullscreenchange", syncFullscreen);
+  }, []);
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement === document.documentElement) {
+      void document.exitFullscreen();
+      return;
+    }
+    void document.documentElement.requestFullscreen();
   }, []);
   const navigateFromPlayer = useCallback(
     (
@@ -1188,6 +1208,24 @@ export function App() {
           onClick={() => setModal("history")}
         >
           <History size={21} />
+        </button>
+        <button
+          type="button"
+          className="icon-button fullscreen-button"
+          aria-label={
+            isFullscreen
+              ? "Свернуть окно из полноэкранного режима"
+              : "Развернуть окно на весь экран"
+          }
+          aria-pressed={isFullscreen}
+          title={
+            isFullscreen
+              ? "Свернуть окно из полноэкранного режима"
+              : "Развернуть окно на весь экран"
+          }
+          onClick={toggleFullscreen}
+        >
+          {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
         </button>
         <div className="local-status">
           <span />

@@ -2,6 +2,32 @@ import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+test("fullscreen button changes the application shell", async ({ page }) => {
+  await page.goto("/");
+  const button = page.getByRole("button", {
+    name: "Развернуть окно на весь экран",
+  });
+  await expect(page.locator(".app-shell")).toHaveCSS("border-radius", "0px");
+
+  await button.click();
+  await expect
+    .poll(() => page.evaluate(() => Boolean(document.fullscreenElement)))
+    .toBe(true);
+  await expect(
+    page.getByRole("button", {
+      name: "Свернуть окно из полноэкранного режима",
+    }),
+  ).toBeVisible();
+  await expect(page.locator(".app-shell")).toHaveCSS("border-radius", "14px");
+
+  await page
+    .getByRole("button", { name: "Свернуть окно из полноэкранного режима" })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => document.fullscreenElement === null))
+    .toBe(true);
+});
+
 test("portrait workspace uses two independently resizable rows", async ({
   page,
 }) => {
