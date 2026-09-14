@@ -2293,7 +2293,8 @@ body {
 
 /* Soft-metal lounge visual layer. Structure and control geometry stay intact. */
 :root {
-  --room-inset: clamp(14px, 2.1vw, 34px);
+  --room-inset-x: clamp(32px, 5vw, 80px);
+  --room-inset-y: clamp(28px, 5vh, 60px);
   --metal-0: #101514;
   --metal-1: #151b1a;
   --metal-2: #1b2220;
@@ -2325,18 +2326,14 @@ body::before {
 }
 
 html:fullscreen body {
-  padding: var(--room-inset);
+  padding: var(--room-inset-y) var(--room-inset-x);
   background:
-    linear-gradient(90deg, #080b0a9e 0%, #10151366 38%, #17120b4d 100%),
     url("../../assets/bg_lounge.jpg") center / cover fixed,
     #0d1110;
 }
 
 html:fullscreen body::before {
-  content: "";
-  background:
-    radial-gradient(circle at 79% 52%, #d09b5540, transparent 29%),
-    linear-gradient(180deg, #04070642, #070b0a78);
+  content: none;
 }
 
 #root,
@@ -2355,7 +2352,7 @@ html:fullscreen body::before {
 }
 
 html:fullscreen .app-shell {
-  height: calc(100dvh - var(--room-inset) - var(--room-inset));
+  height: calc(100dvh - var(--room-inset-y) - var(--room-inset-y));
   border: 1px solid var(--metal-edge);
   border-radius: 14px;
   box-shadow:
