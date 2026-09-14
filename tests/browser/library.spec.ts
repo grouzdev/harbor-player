@@ -2,6 +2,20 @@ import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+test("icon buttons keep their geometry on hover", async ({ page }) => {
+  await page.goto("/");
+  const button = page.getByRole("button", { name: "Журнал операций" });
+  const before = await button.boundingBox();
+
+  await button.hover();
+  const after = await button.boundingBox();
+
+  expect(before).not.toBeNull();
+  expect(after).not.toBeNull();
+  expect(after!.width).toBeCloseTo(before!.width, 5);
+  expect(after!.height).toBeCloseTo(before!.height, 5);
+});
+
 test("fullscreen button changes the application shell", async ({ page }) => {
   await page.goto("/");
   const button = page.getByRole("button", {

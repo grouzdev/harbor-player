@@ -158,6 +158,7 @@ a {
   align-items: center;
   justify-content: center;
   padding: 7px;
+  border: 1px solid transparent;
   border-radius: 6px;
   color: #929da5;
   flex-shrink: 0;
