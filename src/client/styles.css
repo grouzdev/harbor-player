@@ -1,5 +1,7 @@
+@import "./fonts.css";
+
 :root {
-  font-family: Inter, "Segoe UI", system-ui, sans-serif;
+  font-family: "Fira Sans Condensed", "Arial Narrow", "Segoe UI", sans-serif;
   color: #dce0e2;
   background: #171c21;
   font-synthesis: none;
@@ -2499,6 +2501,19 @@ input[type="range"] {
   box-shadow:
     0 22px 60px #020202b0,
     0 1px #f1f1e31a inset;
+}
+
+.panel-count,
+.list-tile-prefix,
+.list-tile-suffix,
+.seek span,
+.queue-count,
+.format-badge,
+.album-formats,
+.cover-track-number,
+.quick-search-duration {
+  font-family: "Fira Mono", "Cascadia Mono", Consolas, monospace;
+  font-weight: 400;
 }
 
 @media (max-width: 900px), (max-height: 650px) {
