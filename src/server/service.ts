@@ -462,13 +462,20 @@ export class MusicService extends EventEmitter {
       };
       const effectivePatch =
         kind === "tags" ? this.effectiveTagPatch(op, item) : undefined;
+      // A non-null cover is written beside the audio file, so it remains a
+      // meaningful operation even though it is deliberately absent from the
+      // tag-writer patch below.
+      const appliesExternalCover =
+        kind === "tags" &&
+        op.patch?.cover !== undefined &&
+        (!op.coverTrackIds || op.coverTrackIds.includes(track.id));
       if (
         kind === "tags" &&
-        effectivePatch &&
-        Object.keys(effectivePatch).length
+        ((effectivePatch && Object.keys(effectivePatch).length) ||
+          appliesExternalCover)
       )
         item.before = Object.fromEntries(
-          Object.keys(effectivePatch)
+          Object.keys(effectivePatch || {})
             .filter((k) => k !== "cover")
             .map((k) => [k, track[k as keyof Track]]),
         );
@@ -494,6 +501,7 @@ export class MusicService extends EventEmitter {
             } else Object.assign(item, await this.fingerprint(item.source, "source"));
             if (
               kind === "tags" &&
+              Object.keys(this.effectiveTagPatch(op, item)).length > 0 &&
               !this.capabilities.writableFormats.includes(track.format)
             )
               throw new Error(

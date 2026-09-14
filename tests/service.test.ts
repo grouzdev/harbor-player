@@ -1049,6 +1049,35 @@ describe("catalog and safe filesystem operations", () => {
     // Either a strict writer rejects it or the independent parser rejects the resulting cover.
     expect(await readFile(path.join(lib.path, t.relativePath))).toEqual(bytes);
   });
+  it("applies an external cover without requiring a writable tag format", async () => {
+    const lib = await library("Music");
+    const track = tracks()[0];
+    const source = path.join(lib.path, track.relativePath);
+    const audioBefore = await readFile(source);
+    const cover = await readFile(path.join(fixtures, "cover.png"));
+    service.capabilities.writableFormats = [];
+
+    const op = await service.preview(
+      "tags",
+      { filter: { ...emptyFilter, albumIds: [track.albumKey] } },
+      undefined,
+      { cover: { data: cover.toString("base64"), mime: "image/png" } },
+    );
+
+    expect(op.items).toHaveLength(1);
+    expect(op.items[0].error).toBeUndefined();
+    service.execute(op.id);
+    await service.idle();
+
+    const result = service.catalog.operation(op.id).items[0];
+    expect(result.phase).toBe("done");
+    expect(result.error).toBeUndefined();
+    expect(await readFile(source)).toEqual(audioBefore);
+    expect(await readFile(path.join(lib.path, "Album", "cover.png"))).toEqual(
+      cover,
+    );
+    expect(service.catalog.track(track.id)?.coverId).not.toBeNull();
+  });
   it("reconciles a verified copied destination after interruption", async () => {
     const lib = await library("Downloads");
     const t = tracks()[0];
