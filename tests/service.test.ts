@@ -239,6 +239,39 @@ describe("catalog and safe filesystem operations", () => {
     expect(catalog.quickSearch("Исполнитель").artists).toEqual([
       { name: "Исполнитель трека", count: 1 },
     ]);
+    expect(catalog.quickSearch("Album").albums).toMatchObject([
+      { id: "fallback-album", artists: ["Исполнитель трека"] },
+    ]);
+    expect(catalog.albums(emptyFilter).items).toMatchObject([
+      { id: "fallback-album", artists: ["Исполнитель трека"] },
+    ]);
+
+    catalog.upsert({
+      id: "fallback-artist-two",
+      libraryId: lib.id,
+      relativePath: "track-two.flac",
+      title: "Track two",
+      artists: ["Другой исполнитель"],
+      albumTitle: "Album",
+      albumArtists: [],
+      albumKey: "fallback-album",
+      genres: [],
+      year: null,
+      trackNumber: 2,
+      discNumber: 1,
+      duration: 1,
+      format: "flac",
+      size: 1,
+      mtimeMs: 1,
+      coverId: null,
+      available: true,
+    });
+    expect(catalog.albums(emptyFilter).items).toMatchObject([
+      {
+        id: "fallback-album",
+        artists: ["Другой исполнитель", "Исполнитель трека"],
+      },
+    ]);
   });
   it("quick-searches and ranks tracks, albums, artists and genres", () => {
     const catalog = service.catalog;

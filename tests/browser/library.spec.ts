@@ -401,7 +401,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
 
   const secondAlbum = page
     .locator(".album-card")
-    .filter({ hasText: "Неизвестный исполнитель" });
+    .filter({ hasText: "Исполнитель", hasNotText: "альбома" });
   const secondAlbumButton = secondAlbum.locator(".album-main");
   await firstAlbumButton.click();
   await secondAlbumButton.dispatchEvent("click", { ctrlKey: true });

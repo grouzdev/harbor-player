@@ -2123,13 +2123,25 @@ function TrackList({
   const ref = useRef<HTMLDivElement>(null);
   const rows = useMemo(() => {
     const result: (
-      { type: "album"; track: Track } | { type: "track"; track: Track }
+      | { type: "album"; track: Track; artists: string[] }
+      | { type: "track"; track: Track }
     )[] = [];
-    let last = "";
-    for (const track of tracks) {
-      if (last !== track.albumKey) result.push({ type: "album", track });
-      result.push({ type: "track", track });
-      last = track.albumKey;
+    for (let index = 0; index < tracks.length;) {
+      const albumTracks: Track[] = [];
+      const albumKey = tracks[index].albumKey;
+      while (index < tracks.length && tracks[index].albumKey === albumKey)
+        albumTracks.push(tracks[index++]);
+      const [track] = albumTracks;
+      const artists = [
+        ...new Set(
+          albumTracks.flatMap((item) =>
+            item.albumArtists.length ? item.albumArtists : item.artists,
+          ),
+        ),
+      ].sort((a, b) => a.localeCompare(b, "ru", { sensitivity: "base" }));
+      result.push({ type: "album", track, artists });
+      for (const item of albumTracks)
+        result.push({ type: "track", track: item });
     }
     return result;
   }, [tracks]);
@@ -2230,7 +2242,7 @@ function TrackList({
                 <div>
                   <strong>{track.albumTitle || "Без альбома"}</strong>
                   <small>
-                    {track.albumArtists.join(", ") || "Неизвестный исполнитель"}
+                    {entry.artists.join(", ") || "Неизвестный исполнитель"}
                     {track.year ? ` · ${track.year}` : ""}
                   </small>
                 </div>

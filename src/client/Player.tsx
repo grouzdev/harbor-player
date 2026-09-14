@@ -285,6 +285,9 @@ export function Player({
   onToggleCoverMode: () => void;
 }) {
   const track = player.queue?.track;
+  const albumArtists = track?.albumArtists.length
+    ? track.albumArtists
+    : track?.artists || [];
   return (
     <footer className="player">
       {player.audioElement}
@@ -312,9 +315,7 @@ export function Player({
               type="button"
               className="now-track-link"
               aria-label={`Открыть альбом «${track.albumTitle || "Без альбома"}»`}
-              onClick={() =>
-                onNavigateToAlbum(track.albumKey, track.albumArtists)
-              }
+              onClick={() => onNavigateToAlbum(track.albumKey, albumArtists)}
             >
               {track.title || "Без названия"}
             </button>
@@ -323,8 +324,8 @@ export function Player({
           )}
           {track ? (
             <span className="now-artists">
-              {track.albumArtists.length ? (
-                track.albumArtists.map((artist, index) => (
+              {albumArtists.length ? (
+                albumArtists.map((artist, index) => (
                   <span key={`${artist}-${index}`}>
                     {index > 0 && ", "}
                     <button

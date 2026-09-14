@@ -500,6 +500,22 @@ export class Catalog {
       )
       .all(...args) as { name: string; count: number }[];
   }
+  private fallbackAlbumArtists(ids: string[]): Map<string, string[]> {
+    const artists = new Map<string, string[]>();
+    if (!ids.length) return artists;
+    const placeholders = ids.map(() => "?").join(",");
+    const values = this.db
+      .prepare(
+        `SELECT DISTINCT t.albumKey id, a.artist
+         FROM track_album_artists a JOIN tracks t ON t.id=a.trackId
+         WHERE t.available=1 AND t.albumKey IN (${placeholders})
+         ORDER BY t.albumKey, a.artist COLLATE NOCASE`,
+      )
+      .all(...ids) as { id: string; artist: string }[];
+    for (const { id, artist } of values)
+      artists.set(id, [...(artists.get(id) || []), artist]);
+    return artists;
+  }
   albums(filter: CatalogFilter, offset = 0, limit = 120): Page<Album> {
     const { sql, args } = this.where({ ...filter, albumIds: [] });
     const total = (
@@ -514,9 +530,23 @@ export class Catalog {
         `SELECT t.albumKey id, t.albumTitle title, t.albumArtists artists, t.year, max(t.coverId) coverId, count(*) trackCount FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql} GROUP BY t.albumKey ORDER BY t.year IS NOT NULL, t.year DESC, t.albumTitle COLLATE NOCASE, t.albumKey LIMIT ? OFFSET ?`,
       )
       .all(...args, limit, offset) as Row[];
+    const items: Array<Row & { artists: string[] }> = rows.map((row) => ({
+      ...row,
+      artists: JSON.parse(row.artists) as string[],
+    }));
+    const ids = items
+      .filter((album) => !album.artists.length)
+      .map((album) => album.id);
+    const fallbackArtists = this.fallbackAlbumArtists(ids);
     return {
-      items: rows.map(
-        (r) => ({ ...r, artists: JSON.parse(r.artists) }) as Album,
+      items: items.map(
+        (album) =>
+          ({
+            ...album,
+            artists: album.artists.length
+              ? album.artists
+              : fallbackArtists.get(album.id) || [],
+          }) as Album,
       ),
       total,
       offset,
@@ -603,13 +633,25 @@ export class Catalog {
          LIMIT ?`,
       )
       .all(contains, contains, contains, value, prefix, prefix, limit) as Row[];
+    const albums: Array<Row & { artists: string[] }> = albumRows.map((row) => ({
+      ...row,
+      artists: JSON.parse(row.artists) as string[],
+    }));
+    const fallbackArtists = this.fallbackAlbumArtists(
+      albums.filter((album) => !album.artists.length).map((album) => album.id),
+    );
     return {
       genres,
       artists,
-      albums: albumRows.map((row) => ({
-        ...row,
-        artists: JSON.parse(row.artists),
-      })) as Album[],
+      albums: albums.map(
+        (album) =>
+          ({
+            ...album,
+            artists: album.artists.length
+              ? album.artists
+              : fallbackArtists.get(album.id) || [],
+          }) as Album,
+      ),
       tracks: trackRows.map(fromRow),
     };
   }
