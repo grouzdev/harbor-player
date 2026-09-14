@@ -2031,18 +2031,55 @@ function AlbumGrid({
   }, []);
   const columns = Math.max(1, Math.floor((width - 20) / 144));
   const cellWidth = (width - 28 - (columns - 1) * 14) / columns;
-  const rows = Math.ceil(albums.length / columns);
+  const rows = useMemo(() => {
+    const result: Array<
+      | { type: "artist"; key: string; label: string }
+      | { type: "albums"; key: string; albums: Album[] }
+    > = [];
+    let group: Album[] = [];
+    let groupKey = "";
+    let groupLabel = "";
+    const appendGroup = () => {
+      if (!group.length) return;
+      result.push({ type: "artist", key: groupKey, label: groupLabel });
+      for (let index = 0; index < group.length; index += columns)
+        result.push({
+          type: "albums",
+          key: `${groupKey}:${index}`,
+          albums: group.slice(index, index + columns),
+        });
+    };
+    for (const album of albums) {
+      const label = album.artists.join(", ") || "Неизвестный исполнитель";
+      const key = album.artists.length
+        ? [...album.artists]
+            .map((artist) => artist.toLocaleLowerCase())
+            .sort()
+            .join("\u001f")
+        : "\u001f";
+      if (group.length && key !== groupKey) {
+        appendGroup();
+        group = [];
+      }
+      groupKey = key;
+      groupLabel = label;
+      group.push(album);
+    }
+    appendGroup();
+    return result;
+  }, [albums, columns]);
   const virtual = useVirtualizer({
-    count: rows + (albums.length < total ? 1 : 0),
+    count: rows.length + (albums.length < total ? 1 : 0),
     getScrollElement: () => ref.current,
-    estimateSize: () => cellWidth + 88,
+    estimateSize: (index) =>
+      rows[index]?.type === "artist" ? 23 : cellWidth + 72,
     overscan: 3,
   });
   const visible = virtual.getVirtualItems();
   const last = visible.at(-1)?.index ?? 0;
   useEffect(() => {
-    if (last >= rows - 3 && albums.length < total && !loading) onMore();
-  }, [last, rows, albums.length, total, loading, onMore]);
+    if (last >= rows.length - 3 && albums.length < total && !loading) onMore();
+  }, [last, rows.length, albums.length, total, loading, onMore]);
   useEffect(() => {
     virtual.measure();
   }, [cellWidth]);
@@ -2055,114 +2092,126 @@ function AlbumGrid({
         </div>
       ) : (
         <div style={{ height: virtual.getTotalSize(), position: "relative" }}>
-          {visible.map((row) => (
-            <div
-              key={row.key}
-              className="album-grid-row"
-              style={{
-                position: "absolute",
-                width: "100%",
-                transform: `translateY(${row.start}px)`,
-                gridTemplateColumns: `repeat(${columns},minmax(0,1fr))`,
-              }}
-            >
-              {albums
-                .slice(row.index * columns, (row.index + 1) * columns)
-                .map((album) => (
-                  <div
-                    key={album.id}
-                    className={`album-card ${selected.includes(album.id) ? "selected" : ""}`}
-                    title={`${album.title || "Без альбома"} · ${album.artists.join(", ")}`}
-                    onContextMenu={(event) =>
-                      onContextMenu(event, "album", album.id)
-                    }
-                  >
-                    <BookmarkToggle
-                      kind="album"
-                      id={album.id}
-                      label={album.title || "Без альбома"}
-                      bookmarked={bookmarkKeys.has(`album:${album.id}`)}
-                      unavailable={bookmarksUnavailable}
-                      pending={pendingBookmarkKeys.has(`album:${album.id}`)}
-                      onChange={onBookmarkChange}
-                      className="album-bookmark-toggle"
-                    />
-                    <button
-                      className="album-main"
-                      aria-pressed={selected.includes(album.id)}
-                      onClick={(event) => {
-                        if (event.ctrlKey) {
-                          onSelect(album.id, true);
-                          return;
-                        }
-                        if (selected.includes(album.id)) {
-                          onPlay(album.id);
-                          return;
-                        }
-                        onSelect(album.id, false);
-                      }}
+          {visible.map((row) => {
+            const entry = rows[row.index];
+            if (entry?.type === "artist")
+              return (
+                <div
+                  key={row.key}
+                  className="album-artist-header"
+                  style={{
+                    position: "absolute",
+                    width: "100%",
+                    transform: `translateY(${row.start}px)`,
+                  }}
+                >
+                  {entry.label}
+                </div>
+              );
+            return (
+              <div
+                key={row.key}
+                className="album-grid-row"
+                style={{
+                  position: "absolute",
+                  width: "100%",
+                  transform: `translateY(${row.start}px)`,
+                  gridTemplateColumns: `repeat(${columns},minmax(0,1fr))`,
+                }}
+              >
+                {entry?.type === "albums" &&
+                  entry.albums.map((album) => (
+                    <div
+                      key={album.id}
+                      className={`album-card ${selected.includes(album.id) ? "selected" : ""}`}
+                      title={`${album.title || "Без альбома"} · ${album.artists.join(", ")}`}
+                      onContextMenu={(event) =>
+                        onContextMenu(event, "album", album.id)
+                      }
                     >
-                      <div
-                        className={`album-cover ${dropTarget === album.id ? "drop-target" : ""}`}
-                        onDragEnter={(event) => {
-                          event.preventDefault();
-                          setDropTarget(album.id);
+                      <BookmarkToggle
+                        kind="album"
+                        id={album.id}
+                        label={album.title || "Без альбома"}
+                        bookmarked={bookmarkKeys.has(`album:${album.id}`)}
+                        unavailable={bookmarksUnavailable}
+                        pending={pendingBookmarkKeys.has(`album:${album.id}`)}
+                        onChange={onBookmarkChange}
+                        className="album-bookmark-toggle"
+                      />
+                      <button
+                        className="album-main"
+                        aria-pressed={selected.includes(album.id)}
+                        onClick={(event) => {
+                          if (event.ctrlKey) {
+                            onSelect(album.id, true);
+                            return;
+                          }
+                          if (selected.includes(album.id)) {
+                            onPlay(album.id);
+                            return;
+                          }
+                          onSelect(album.id, false);
                         }}
-                        onDragOver={(event) => event.preventDefault()}
-                        onDragLeave={(event) => {
-                          if (
-                            !event.currentTarget.contains(
-                              event.relatedTarget as Node,
-                            )
-                          )
-                            setDropTarget(null);
-                        }}
-                        onDrop={(event) => {
-                          event.preventDefault();
-                          setDropTarget(null);
-                          onCoverDrop(
-                            album,
-                            Array.from(event.dataTransfer.files),
-                          );
-                        }}
-                        style={
-                          {
-                            "--cover-hue":
-                              parseInt(album.id.slice(0, 4), 16) % 360,
-                          } as CSSProperties
-                        }
                       >
-                        {album.coverId ? (
-                          <img
-                            loading="lazy"
-                            src={`/api/covers/${album.coverId}`}
-                            alt=""
-                          />
-                        ) : (
-                          <div className="cover-placeholder" />
-                        )}
-                        <span className="album-track-count">
-                          {trackCountLabel(album.trackCount)}
-                        </span>
-                        {dropTarget === album.id && (
-                          <span className="album-cover-drop-hint">
-                            Отпустите обложку
+                        <div
+                          className={`album-cover ${dropTarget === album.id ? "drop-target" : ""}`}
+                          onDragEnter={(event) => {
+                            event.preventDefault();
+                            setDropTarget(album.id);
+                          }}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDragLeave={(event) => {
+                            if (
+                              !event.currentTarget.contains(
+                                event.relatedTarget as Node,
+                              )
+                            )
+                              setDropTarget(null);
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            setDropTarget(null);
+                            onCoverDrop(
+                              album,
+                              Array.from(event.dataTransfer.files),
+                            );
+                          }}
+                          style={
+                            {
+                              "--cover-hue":
+                                parseInt(album.id.slice(0, 4), 16) % 360,
+                            } as CSSProperties
+                          }
+                        >
+                          {album.coverId ? (
+                            <img
+                              loading="lazy"
+                              src={`/api/covers/${album.coverId}`}
+                              alt=""
+                            />
+                          ) : (
+                            <div className="cover-placeholder" />
+                          )}
+                          <span className="album-track-count">
+                            {trackCountLabel(album.trackCount)}
                           </span>
-                        )}
-                      </div>
-                      <strong>{album.title || "Без альбома"}</strong>
-                      <span className="album-details">
-                        <small>
-                          {album.year ? `${album.year} · ` : ""}
-                          {album.artists.join(", ") ||
-                            "Неизвестный исполнитель"}
-                        </small>
-                      </span>
-                    </button>
-                  </div>
-                ))}
-            </div>
-          ))}
+                          {dropTarget === album.id && (
+                            <span className="album-cover-drop-hint">
+                              Отпустите обложку
+                            </span>
+                          )}
+                        </div>
+                        <strong>{album.title || "Без альбома"}</strong>
+                        <span className="album-details">
+                          <small>{album.year || ""}</small>
+                        </span>
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

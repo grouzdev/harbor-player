@@ -411,10 +411,15 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     "0.45",
   );
 
-  const firstAlbum = page
-    .locator(".album-card")
-    .filter({ hasText: "Исполнитель альбома" });
+  const firstAlbum = page.getByTitle("Тестовый альбом · Исполнитель альбома", {
+    exact: true,
+  });
   const firstAlbumButton = firstAlbum.locator(".album-main");
+  await expect(
+    page
+      .locator(".album-artist-header")
+      .filter({ hasText: "Исполнитель альбома" }),
+  ).toHaveCount(1);
   await expect(firstAlbum.getByRole("checkbox")).toHaveCount(0);
   await expect(firstAlbum.locator(".album-cover")).toHaveCSS(
     "border-color",
@@ -440,12 +445,16 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   );
   await firstTrackAlbumHeader.click();
   await expect(firstTrackAlbumHeader).toHaveClass(/selected/);
-  await expect(page.locator('[data-testid="track-row"].selected')).toHaveCount(0);
+  await expect(page.locator('[data-testid="track-row"].selected')).toHaveCount(
+    0,
+  );
   await firstTrackRow.locator(".list-tile-main").click();
   await expect(firstTrackRow).toHaveClass(/selected/);
   await firstTrackAlbumHeader.click();
   await expect(firstTrackAlbumHeader).toHaveClass(/selected/);
-  await expect(page.locator('[data-testid="track-row"].selected')).toHaveCount(0);
+  await expect(page.locator('[data-testid="track-row"].selected')).toHaveCount(
+    0,
+  );
   await firstTrackAlbumHeader.click();
   await expect
     .poll(() =>
@@ -482,9 +491,9 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(artistRow).not.toHaveClass(/selected/);
   await expect(firstAlbum).toHaveClass(/selected/);
 
-  const secondAlbum = page
-    .locator(".album-card")
-    .filter({ hasText: "Исполнитель", hasNotText: "альбома" });
+  const secondAlbum = page.getByTitle("Тестовый альбом · Исполнитель", {
+    exact: true,
+  });
   const secondAlbumButton = secondAlbum.locator(".album-main");
   await firstAlbumButton.click();
   await secondAlbumButton.dispatchEvent("click", { ctrlKey: true });
@@ -496,7 +505,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
 
   await expect(firstAlbum.locator(".album-details")).toHaveCount(1);
   await expect(firstAlbum.locator(".album-details > small")).toHaveCount(1);
-  await expect(firstAlbum.locator(".album-details")).toContainText(/^\d{4} · /);
+  await expect(firstAlbum.locator(".album-details")).toHaveText(/^\d{4}$/);
   await expect(firstAlbum.locator(".album-track-count")).toHaveText(
     /^\d+ трек(?:а|ов)?$/,
   );

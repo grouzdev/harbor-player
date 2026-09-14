@@ -375,14 +375,30 @@ describe("HTTP boundary", () => {
 });
 
 describe("Album catalog sorting", () => {
-  it("puts albums without a year first, then sorts by newest year and title", () => {
+  it("groups albums by artist, then puts undated albums before newest years", () => {
     const library = context.service.catalog.addLibrary("Library", root);
     const albums = [
-      { id: "unknown-z", title: "Zeta", year: null },
-      { id: "new-z", title: "Zebra", year: 2025 },
-      { id: "old", title: "Older", year: 2020 },
-      { id: "unknown-a", title: "Alpha", year: null },
-      { id: "new-a", title: "Alpha", year: 2025 },
+      { id: "beta-new", title: "Zebra", year: 2025, artists: ["Beta"] },
+      { id: "alpha-old", title: "Older", year: 2020, artists: ["Alpha"] },
+      {
+        id: "beta-unknown",
+        title: "Zeta",
+        year: null,
+        artists: ["Beta"],
+      },
+      { id: "alpha-new", title: "Alpha", year: 2025, artists: ["Alpha"] },
+      {
+        id: "alpha-unknown",
+        title: "Unknown",
+        year: null,
+        artists: ["Alpha"],
+      },
+      {
+        id: "collaboration",
+        title: "Together",
+        year: 2024,
+        artists: ["Alpha", "Guest"],
+      },
     ];
     for (const album of albums)
       context.service.catalog.upsert({
@@ -390,9 +406,9 @@ describe("Album catalog sorting", () => {
         libraryId: library.id,
         relativePath: `${album.id}.flac`,
         title: "Track",
-        artists: [],
+        artists: album.artists,
         albumTitle: album.title,
-        albumArtists: [],
+        albumArtists: album.artists,
         albumKey: album.id,
         genres: [],
         year: album.year,
@@ -418,7 +434,14 @@ describe("Album catalog sorting", () => {
 
     expect(
       [...firstPage.items, ...secondPage.items].map((album) => album.id),
-    ).toEqual(["unknown-a", "unknown-z", "new-a", "new-z", "old"]);
+    ).toEqual([
+      "alpha-unknown",
+      "alpha-new",
+      "alpha-old",
+      "collaboration",
+      "beta-unknown",
+      "beta-new",
+    ]);
   });
 });
 

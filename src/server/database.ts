@@ -484,8 +484,7 @@ export class Catalog {
       if (filter.genres.includes("")) parts.push("t.genres='[]'");
       relations.push(`(${parts.join(" OR ")})`);
     }
-    if (!relations.length)
-      return { libraryIds: [], genres: [], folders: [] };
+    if (!relations.length) return { libraryIds: [], genres: [], folders: [] };
     clauses.push(`(${relations.join(" OR ")})`);
     const sql = clauses.join(" AND ");
     const folderKeys = new Set<string>();
@@ -561,6 +560,7 @@ export class Catalog {
   }
   albums(filter: CatalogFilter, offset = 0, limit = 120): Page<Album> {
     const { sql, args } = this.where({ ...filter, albumIds: [] });
+    const artistOrder = `coalesce((SELECT group_concat(artist, char(31)) FROM (SELECT DISTINCT a.artist FROM track_album_artists a JOIN tracks artistTrack ON artistTrack.id=a.trackId WHERE artistTrack.available=1 AND artistTrack.albumKey=t.albumKey ORDER BY a.artist COLLATE NOCASE)), '')`;
     const total = (
       this.db
         .prepare(
@@ -570,7 +570,7 @@ export class Catalog {
     ).n;
     const rows = this.db
       .prepare(
-        `SELECT t.albumKey id, t.albumTitle title, t.albumArtists artists, t.year, max(t.coverId) coverId, count(*) trackCount FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql} GROUP BY t.albumKey ORDER BY t.year IS NOT NULL, t.year DESC, t.albumTitle COLLATE NOCASE, t.albumKey LIMIT ? OFFSET ?`,
+        `SELECT t.albumKey id, t.albumTitle title, t.albumArtists artists, t.year, max(t.coverId) coverId, count(*) trackCount FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql} GROUP BY t.albumKey ORDER BY ${artistOrder} COLLATE NOCASE, t.year IS NOT NULL, t.year DESC, t.albumTitle COLLATE NOCASE, t.albumKey LIMIT ? OFFSET ?`,
       )
       .all(...args, limit, offset) as Row[];
     const items: Array<Row & { artists: string[] }> = rows.map((row) => ({
