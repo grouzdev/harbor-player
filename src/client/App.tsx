@@ -513,6 +513,20 @@ export function App() {
         y: event.clientY,
         items: [
           {
+            label: "Открыть в проводнике",
+            icon: <FolderOpen size={16} />,
+            onSelect: async () => {
+              try {
+                await api("/explorer", {
+                  kind: "library",
+                  libraryId: library.id,
+                });
+              } catch (error) {
+                notify(error instanceof Error ? error.message : String(error));
+              }
+            },
+          },
+          {
             label: "Обновить",
             icon: <RefreshCw size={16} />,
             onSelect: async () => {
@@ -536,6 +550,33 @@ export function App() {
       });
     },
     [notify, refresh],
+  );
+  const showFolderMenu = useCallback(
+    (event: React.MouseEvent, libraryId: string, folder: LibraryFolder) => {
+      event.preventDefault();
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        items: [
+          {
+            label: "Открыть в проводнике",
+            icon: <FolderOpen size={16} />,
+            onSelect: async () => {
+              try {
+                await api("/explorer", {
+                  kind: "folder",
+                  libraryId,
+                  relativePath: folder.relativePath,
+                });
+              } catch (error) {
+                notify(error instanceof Error ? error.message : String(error));
+              }
+            },
+          },
+        ],
+      });
+    },
+    [notify],
   );
   const scheduleRefresh = useCallback(
     (immediate = false) => {
@@ -817,10 +858,11 @@ export function App() {
   const relevanceFilter = useMemo(
     () => ({
       ...emptyFilter,
+      genres: filter.genres,
       artists: filter.artists,
       albumIds: filter.albumIds,
     }),
-    [filter.artists, filter.albumIds],
+    [filter.genres, filter.artists, filter.albumIds],
   );
   const facetRelevance = useQuery({
     queryKey: ["facet-relevance", relevanceFilter],
@@ -828,11 +870,14 @@ export function App() {
       api<FacetRelevance>(catalogUrl("facet-relevance", relevanceFilter)),
     enabled:
       ready &&
-      (relevanceFilter.artists.length > 0 ||
+      (relevanceFilter.genres.length > 0 ||
+        relevanceFilter.artists.length > 0 ||
         relevanceFilter.albumIds.length > 0),
   });
   const hasFacetRelevance =
-    relevanceFilter.artists.length > 0 || relevanceFilter.albumIds.length > 0;
+    relevanceFilter.genres.length > 0 ||
+    relevanceFilter.artists.length > 0 ||
+    relevanceFilter.albumIds.length > 0;
   useEffect(() => {
     if (!valid.data) return;
     setFilter((current) => {
@@ -1079,10 +1124,18 @@ export function App() {
           item.libraryId === libraryId &&
           item.relativePath === folder.relativePath,
       );
+      const unrelated =
+        hasFacetRelevance &&
+        facetRelevance.data &&
+        !facetRelevance.data.folders.some(
+          (item) =>
+            item.libraryId === libraryId &&
+            item.relativePath === folder.relativePath,
+        );
       return (
         <div key={folder.relativePath} className="library-folder-node">
           <ListTile
-            className="library-folder-tile"
+            className={`library-folder-tile ${unrelated ? "unrelated" : ""}`}
             selected={selected}
             current={expanded && !selected}
             expanded={folder.hasChildren ? expanded : undefined}
@@ -1111,6 +1164,7 @@ export function App() {
             suffix={count(folder.trackCount)}
             style={{ "--folder-depth": depth + 1 } as CSSProperties}
             onSelect={(event) => chooseFolder(libraryId, folder, event.ctrlKey)}
+            onContextMenu={(event) => showFolderMenu(event, libraryId, folder)}
           />
           {expanded &&
             renderFolderLevel(libraryId, folder.relativePath, depth + 1)}

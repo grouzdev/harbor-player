@@ -231,15 +231,46 @@ export async function createApp(options: {
   app.post("/api/explorer", async (request) => {
     const body = z
       .object({
-        kind: z.enum(["album", "track"]),
-        id: z.string().min(1).max(100),
+        kind: z.enum(["album", "track", "library", "folder"]),
+        id: z.string().min(1).max(100).optional(),
+        libraryId: z.string().min(1).max(100).optional(),
+        relativePath: z.string().min(1).max(32000).optional(),
       })
       .strict()
       .parse(request.body);
+    if (
+      (body.kind === "folder" && (!body.libraryId || !body.relativePath)) ||
+      (body.kind === "library" && !body.libraryId) ||
+      ((body.kind === "album" || body.kind === "track") && !body.id)
+    )
+      throw new Error("Некорректная цель Проводника");
+    if (
+      body.relativePath &&
+      (path.isAbsolute(body.relativePath) ||
+        path.normalize(body.relativePath) !== body.relativePath ||
+        body.relativePath.split(path.sep).includes(".."))
+    )
+      throw new Error("Некорректный путь папки");
+    if (body.kind === "library" || body.kind === "folder") {
+      const library = service.catalog.library(body.libraryId!);
+      if (!library.available) throw new Error("Библиотека недоступна");
+      if (
+        body.kind === "folder" &&
+        !service.catalog.hasFolder(library.id, body.relativePath!)
+      )
+        throw new Error("Папка не найдена");
+      const directory =
+        body.kind === "folder"
+          ? path.join(library.path, body.relativePath!)
+          : library.path;
+      await service.safePath(directory, false, false, body.kind === "library");
+      await openExplorer({ directory });
+      return { ok: true };
+    }
     const track =
       body.kind === "track"
-        ? service.catalog.track(body.id)
-        : service.catalog.firstAlbumTrack(body.id);
+        ? service.catalog.track(body.id!)
+        : service.catalog.firstAlbumTrack(body.id!);
     if (!track || !track.available)
       throw new Error(
         body.kind === "track" ? "Трек не найден" : "Альбом не найден",

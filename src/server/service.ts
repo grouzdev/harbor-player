@@ -336,11 +336,12 @@ export class MusicService extends EventEmitter {
     file: string,
     destination = false,
     recovery = false,
+    allowLibraryRoot = false,
   ): Promise<void> {
     const roots = this.catalog.libraries().map((l) => l.path);
     if (recovery) roots.push(path.join(this.dataDir, "recovery"));
     const root = roots.find((root) => inside(root, file));
-    if (!root || file === root)
+    if (!root || (file === root && !allowLibraryRoot))
       throw new Error("Путь вне музыкальных библиотек");
     // Check every existing ancestor: no symlink/junction traversal, including destination parents.
     const components = path.relative(root, file).split(path.sep);

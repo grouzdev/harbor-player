@@ -1095,6 +1095,11 @@ test("library folders expand independently and support Ctrl selection", async ({
   const browser = info.project.name;
   const tree = path.resolve(".test-data/browser", browser, "Tree");
   const name = `Tree controls ${browser}`;
+  const explorerRequests: { kind: string; relativePath?: string }[] = [];
+  await page.route("**/api/explorer", async (route) => {
+    explorerRequests.push(route.request().postDataJSON());
+    await route.fulfill({ json: { ok: true } });
+  });
   await page.goto("/");
   await page.locator(".add-library").click();
   await page.getByLabel("Путь к папке", { exact: true }).fill(tree);
@@ -1105,6 +1110,8 @@ test("library folders expand independently and support Ctrl selection", async ({
     .filter({ hasText: name });
   await treeTile.locator(".list-tile-main").click();
   await expect(treeTile).toHaveClass(/selected/);
+  await treeTile.dispatchEvent("contextmenu", { clientX: 200, clientY: 200 });
+  await page.getByRole("menuitem", { name: "Открыть в проводнике" }).click();
   await expect(page.getByTitle("Rock", { exact: true })).toHaveCount(0);
   await treeTile
     .getByRole("button", { name: `Развернуть библиотеку «${name}»` })
@@ -1115,6 +1122,12 @@ test("library folders expand independently and support Ctrl selection", async ({
   const jazzTile = page
     .locator(".libraries-panel .list-tile")
     .filter({ hasText: "Jazz" });
+  await rockTile.dispatchEvent("contextmenu", { clientX: 200, clientY: 250 });
+  await page.getByRole("menuitem", { name: "Открыть в проводнике" }).click();
+  expect(explorerRequests).toEqual([
+    { kind: "library", libraryId: expect.any(String) },
+    { kind: "folder", libraryId: expect.any(String), relativePath: "Rock" },
+  ]);
   await rockTile
     .getByRole("button", { name: "Развернуть папку «Rock»" })
     .click();

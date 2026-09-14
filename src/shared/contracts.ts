@@ -70,6 +70,7 @@ export interface Page<T> {
 export interface FacetRelevance {
   libraryIds: string[];
   genres: string[];
+  folders: { libraryId: string; relativePath: string }[];
 }
 export interface FilterValidity {
   genres: string[];

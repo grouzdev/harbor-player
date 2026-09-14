@@ -342,7 +342,7 @@ describe("catalog and safe filesystem operations", () => {
       tracks: [],
     });
   });
-  it("finds libraries and genres related to selected artists or albums", () => {
+  it("finds libraries, folders and genres related to selected facets", () => {
     const catalog = service.catalog;
     const first = catalog.addLibrary("First", path.join(root, "First"));
     const second = catalog.addLibrary("Second", path.join(root, "Second"));
@@ -356,7 +356,10 @@ describe("catalog and safe filesystem operations", () => {
       catalog.upsert({
         id,
         libraryId,
-        relativePath: `${id}.flac`,
+        relativePath:
+          id === "artist-track"
+            ? path.join("Artist", "Album", `${id}.flac`)
+            : `${id}.flac`,
         title: id,
         artists: albumArtists,
         albumTitle: albumKey,
@@ -389,7 +392,11 @@ describe("catalog and safe filesystem operations", () => {
       }),
     ).toEqual({
       libraryIds: [first.id, second.id].sort(),
-      genres: ["", "Rock"],
+      genres: ["", "Jazz", "Rock"],
+      folders: [
+        { libraryId: first.id, relativePath: "Artist" },
+        { libraryId: first.id, relativePath: path.join("Artist", "Album") },
+      ],
     });
   });
   it("filters albums by album artists with genre and library intersection", async () => {

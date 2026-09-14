@@ -176,6 +176,7 @@ describe("HTTP boundary", () => {
     expect(response.json()).toEqual({
       libraryIds: [first.id, second.id].sort(),
       genres: ["", "Rock"],
+      folders: [],
     });
   });
   it("normalizes facet selections from library through album", async () => {
@@ -438,6 +439,8 @@ describe("Explorer endpoint", () => {
     for (const payload of [
       { kind: "wrong", id: "x" },
       { kind: "track", id: "missing" },
+      { kind: "library" },
+      { kind: "folder", libraryId: "missing", relativePath: ".." },
     ])
       expect(
         (
@@ -450,7 +453,7 @@ describe("Explorer endpoint", () => {
         ).statusCode,
       ).toBe(400);
   });
-  it("selects a track file and opens the first album folder", async () => {
+  it("selects a track file and opens album, library and nested folders", async () => {
     const calls: ExplorerTarget[] = [];
     await context.app.close();
     context = await createApp({
@@ -459,12 +462,18 @@ describe("Explorer endpoint", () => {
         calls.push(target);
       },
     });
-    const second = await addTrack("Z/second.flac", "second");
-    const first = await addTrack("A/first.flac", "first");
+    const second = await addTrack(path.join("Z", "second.flac"), "second");
+    const first = await addTrack(path.join("A", "first.flac"), "first");
     const headers = await sessionHeaders();
     for (const payload of [
       { kind: "track", id: "second" },
       { kind: "album", id: "album" },
+      { kind: "library", libraryId: context.service.catalog.libraries()[0].id },
+      {
+        kind: "folder",
+        libraryId: context.service.catalog.libraries()[0].id,
+        relativePath: "A",
+      },
     ]) {
       const response = await context.app.inject({
         method: "POST",
@@ -477,6 +486,8 @@ describe("Explorer endpoint", () => {
     expect(calls).toEqual([
       { directory: path.dirname(second.file), selectFile: second.file },
       { directory: path.dirname(first.file) },
+      { directory: second.folder },
+      { directory: path.join(second.folder, "A") },
     ]);
   });
   it("starts an album queue with every album track in playback order", async () => {

@@ -192,6 +192,12 @@ export class Catalog {
         }) || a.relativePath.localeCompare(b.relativePath),
     );
   }
+  hasFolder(libraryId: string, relativePath: string): boolean {
+    const parent = path.dirname(checkedFolderPath(relativePath));
+    return this.folders(libraryId, parent === "." ? null : parent).some(
+      (folder) => folder.relativePath === relativePath,
+    );
+  }
   addLibrary(name: string, folder: string): Library {
     const id = randomUUID();
     this.db
@@ -466,9 +472,36 @@ export class Catalog {
       );
       args.push(...filter.albumIds);
     }
-    if (!relations.length) return { libraryIds: [], genres: [] };
+    if (filter.genres.length) {
+      const genres = filter.genres.filter((genre) => genre !== "");
+      const parts: string[] = [];
+      if (genres.length) {
+        parts.push(
+          `EXISTS (SELECT 1 FROM track_genres g WHERE g.trackId=t.id AND g.genre IN (${genres.map(() => "?").join(",")}))`,
+        );
+        args.push(...genres);
+      }
+      if (filter.genres.includes("")) parts.push("t.genres='[]'");
+      relations.push(`(${parts.join(" OR ")})`);
+    }
+    if (!relations.length)
+      return { libraryIds: [], genres: [], folders: [] };
     clauses.push(`(${relations.join(" OR ")})`);
     const sql = clauses.join(" AND ");
+    const folderKeys = new Set<string>();
+    for (const row of this.db
+      .prepare(
+        `SELECT t.libraryId, t.relativePath FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql}`,
+      )
+      .all(...args) as { libraryId: string; relativePath: string }[]) {
+      let relativePath = path.dirname(row.relativePath);
+      while (relativePath !== "." && relativePath !== path.sep) {
+        folderKeys.add(`${row.libraryId}\u0000${relativePath}`);
+        const parent = path.dirname(relativePath);
+        if (parent === relativePath) break;
+        relativePath = parent;
+      }
+    }
     return {
       libraryIds: (
         this.db
@@ -484,6 +517,16 @@ export class Catalog {
           )
           .all(...args) as { name: string }[]
       ).map((row) => row.name),
+      folders: [...folderKeys]
+        .map((key) => {
+          const [libraryId, relativePath] = key.split("\u0000");
+          return { libraryId, relativePath };
+        })
+        .sort(
+          (left, right) =>
+            left.libraryId.localeCompare(right.libraryId) ||
+            left.relativePath.localeCompare(right.relativePath),
+        ),
     };
   }
   genres(filter: CatalogFilter): { name: string; count: number }[] {
