@@ -187,6 +187,10 @@ export async function createApp(options: {
       q.limit,
     );
   });
+  app.post("/api/track-ids", async (request) => {
+    const filter = filterSchema.parse(request.body);
+    return { trackIds: service.catalog.trackIds(filter) };
+  });
   app.get("/api/albums", async (request) => {
     const q = pageSchema.parse(request.query);
     return service.catalog.albums(

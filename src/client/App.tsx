@@ -190,6 +190,7 @@ export function App() {
   );
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [modal, setModal] = useState<
     "add" | "move" | "trash" | "tags" | "history" | "remove-library" | null
   >(null);
@@ -324,6 +325,7 @@ export function App() {
   }, [toast]);
   useEffect(() => {
     setSelected(new Set());
+    setSelectedAlbumId(null);
   }, [filter]);
   const refresh = useCallback(() => {
     void queryClient.invalidateQueries({
@@ -1574,7 +1576,10 @@ export function App() {
                     className="icon-button facet-reset"
                     aria-label="Сбросить выбор треков"
                     title="Сбросить выбор треков"
-                    onClick={() => setSelected(new Set())}
+                    onClick={() => {
+                      setSelected(new Set());
+                      setSelectedAlbumId(null);
+                    }}
                   >
                     <X size={15} />
                   </button>
@@ -1670,7 +1675,31 @@ export function App() {
                 currentId={player.queue?.track?.id}
                 loading={tracks.isFetching}
                 onPlay={(track) => void player.start(track, filter)}
+                selectedAlbumId={selectedAlbumId}
+                onSelectAlbum={async (albumId) => {
+                  try {
+                    const albumFilter = { ...filter, albumIds: [albumId] };
+                    const { trackIds } = await api<{ trackIds: string[] }>(
+                      "/track-ids",
+                      albumFilter,
+                    );
+                    if (!trackIds.length) return;
+                    if (trackIds.every((id) => selected.has(id))) {
+                      void player.startAlbum(albumId);
+                      return;
+                    }
+                    setSelected(new Set(trackIds));
+                    setSelectedAlbumId(albumId);
+                  } catch (error) {
+                    notify(
+                      error instanceof Error
+                        ? error.message
+                        : "Не удалось выбрать треки альбома",
+                    );
+                  }
+                }}
                 onSelect={(id, additive) => {
+                  setSelectedAlbumId(null);
                   if (!additive) {
                     setSelected(new Set([id]));
                     return;
@@ -1827,6 +1856,7 @@ export function App() {
             watchOperation(id, job);
             setPreview(null);
             setSelected(new Set());
+            setSelectedAlbumId(null);
           }}
         />
       )}
@@ -2143,9 +2173,11 @@ function TrackList({
   tracks,
   total,
   selected,
+  selectedAlbumId,
   currentId,
   loading,
   onPlay,
+  onSelectAlbum,
   onSelect,
   onMore,
   onContextMenu,
@@ -2162,9 +2194,11 @@ function TrackList({
   tracks: Track[];
   total: number;
   selected: Set<string>;
+  selectedAlbumId: string | null;
   currentId?: string;
   loading: boolean;
   onPlay: (track: Track) => void;
+  onSelectAlbum: (albumId: string) => Promise<void>;
   onSelect: (id: string, additive: boolean) => void;
   onMore: () => void;
   onContextMenu: (
@@ -2210,7 +2244,7 @@ function TrackList({
   const virtual = useVirtualizer({
     count: rows.length + (tracks.length < total ? 1 : 0),
     getScrollElement: () => ref.current,
-    estimateSize: (index) => (rows[index]?.type === "album" ? 98 : 42),
+    estimateSize: (index) => (rows[index]?.type === "album" ? 64 : 42),
     overscan: 8,
   });
   const visible = virtual.getVirtualItems();
@@ -2283,7 +2317,18 @@ function TrackList({
             return entry.type === "album" ? (
               <div
                 key={`album-${track.albumKey}`}
-                className="track-album-header"
+                className={`track-album-header ${selectedAlbumId === track.albumKey ? "selected" : ""}`}
+                role="button"
+                tabIndex={0}
+                aria-pressed={selectedAlbumId === track.albumKey}
+                aria-label={`Альбом «${track.albumTitle || "Без альбома"}»`}
+                onClick={() => void onSelectAlbum(track.albumKey)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    void onSelectAlbum(track.albumKey);
+                  }
+                }}
                 onContextMenu={(event) =>
                   onContextMenu(event, "album", track.albumKey)
                 }
@@ -2318,7 +2363,6 @@ function TrackList({
                   onChange={onBookmarkChange}
                   className="track-album-bookmark-toggle"
                 />
-                <ChevronRight size={15} />
               </div>
             ) : (
               <ListTile
@@ -2326,7 +2370,9 @@ function TrackList({
                 testId="track-row"
                 dataFormat={track.format}
                 className="track-row"
-                selected={selected.has(track.id)}
+                selected={
+                  selected.has(track.id) && selectedAlbumId !== track.albumKey
+                }
                 current={currentId === track.id}
                 prefix={track.trackNumber ?? undefined}
                 value={track.title}

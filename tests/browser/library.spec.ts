@@ -424,8 +424,35 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(firstAlbum).toHaveClass(/selected/);
   await expect(firstAlbum.locator(".album-cover")).toHaveCSS(
     "border-color",
-    /rgb\(185, 212, 183\)/,
+    /rgb\(198, 202, 145\)/,
   );
+  const firstTrackAlbumHeader = page
+    .locator(".track-album-header")
+    .filter({ hasText: "Исполнитель альбома" });
+  await expect(firstTrackAlbumHeader.locator(".tiny-cover")).toHaveCSS(
+    "width",
+    "40px",
+  );
+  await expect(firstTrackAlbumHeader).toHaveCSS("height", "64px");
+  await expect(firstTrackAlbumHeader.locator(":scope > svg")).toHaveCount(0);
+  await expect(firstTrackAlbumHeader.locator("small")).toContainText(
+    /^\d{4} · /,
+  );
+  await firstTrackAlbumHeader.click();
+  await expect(firstTrackAlbumHeader).toHaveClass(/selected/);
+  await expect(page.locator('[data-testid="track-row"].selected')).toHaveCount(0);
+  await firstTrackRow.locator(".list-tile-main").click();
+  await expect(firstTrackRow).toHaveClass(/selected/);
+  await firstTrackAlbumHeader.click();
+  await expect(firstTrackAlbumHeader).toHaveClass(/selected/);
+  await expect(page.locator('[data-testid="track-row"].selected')).toHaveCount(0);
+  await firstTrackAlbumHeader.click();
+  await expect
+    .poll(() =>
+      page.locator("audio").evaluate((a: HTMLAudioElement) => a.readyState),
+    )
+    .toBeGreaterThanOrEqual(2);
+  await page.getByRole("button", { name: "Сбросить выбор треков" }).click();
   await genreButton.click();
   await expect(genreRow).toHaveClass(/selected/);
   await expect(artistRow).toHaveClass(/selected/);
@@ -472,16 +499,6 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(firstAlbum.locator(".album-details")).toContainText(/^\d{4} · /);
   await expect(firstAlbum.locator(".album-track-count")).toHaveText(
     /^\d+ трек(?:а|ов)?$/,
-  );
-  const firstTrackAlbumHeader = page
-    .locator(".track-album-header")
-    .filter({ hasText: "Исполнитель альбома" });
-  await expect(firstTrackAlbumHeader.locator(".tiny-cover")).toHaveCSS(
-    "width",
-    "52px",
-  );
-  await expect(firstTrackAlbumHeader.locator("small")).toContainText(
-    /^\d{4} · /,
   );
   await firstAlbumButton.click();
   await expect(firstAlbum).toHaveClass(/selected/);

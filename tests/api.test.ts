@@ -77,6 +77,50 @@ describe("HTTP boundary", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json().error).toContain("абсолютный");
   });
+  it("returns IDs only for tracks in the requested filter", async () => {
+    const library = context.service.catalog.addLibrary("Library", root);
+    const addTrack = (id: string, albumKey: string, genres: string[]) =>
+      context.service.catalog.upsert({
+        id,
+        libraryId: library.id,
+        relativePath: `${id}.flac`,
+        title: id,
+        artists: ["Artist"],
+        albumTitle: albumKey,
+        albumArtists: ["Artist"],
+        albumKey,
+        genres,
+        year: null,
+        trackNumber: 1,
+        discNumber: 1,
+        duration: 1,
+        format: "flac",
+        size: 1,
+        mtimeMs: 1,
+        coverId: null,
+        available: true,
+      });
+    addTrack("included", "selected-album", ["Rock"]);
+    addTrack("wrong-genre", "selected-album", ["Pop"]);
+    addTrack("wrong-album", "other-album", ["Rock"]);
+    const session = await context.app.inject({
+      url: "/api/session",
+      headers: { host: "127.0.0.1:4317" },
+    });
+    const response = await context.app.inject({
+      method: "POST",
+      url: "/api/track-ids",
+      headers: {
+        host: "127.0.0.1:4317",
+        cookie: String(session.headers["set-cookie"]).split(";")[0],
+        "x-csrf-token": session.json().csrf,
+      },
+      payload: { genres: ["Rock"], albumIds: ["selected-album"] },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ trackIds: ["included"] });
+  });
   it("removes a library only with CSRF and reports an unknown library", async () => {
     const library = context.service.catalog.addLibrary("Library", root);
     const session = await context.app.inject({
