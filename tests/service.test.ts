@@ -203,6 +203,43 @@ describe("catalog and safe filesystem operations", () => {
       { name: "Rock", count: 2 },
     ]);
   });
+  it("indexes track artists when album artists are absent", () => {
+    const catalog = service.catalog;
+    const lib = catalog.addLibrary(
+      "Fallback artists",
+      path.join(root, "Fallback artists"),
+    );
+    catalog.upsert({
+      id: "fallback-artist",
+      libraryId: lib.id,
+      relativePath: "track.flac",
+      title: "Track",
+      artists: ["Исполнитель трека"],
+      albumTitle: "Album",
+      albumArtists: [],
+      albumKey: "fallback-album",
+      genres: [],
+      year: null,
+      trackNumber: 1,
+      discNumber: 1,
+      duration: 1,
+      format: "flac",
+      size: 1,
+      mtimeMs: 1,
+      coverId: null,
+      available: true,
+    });
+
+    expect(catalog.artists(emptyFilter).items).toEqual([
+      { name: "Исполнитель трека", count: 1 },
+    ]);
+    expect(
+      catalog.tracks({ ...emptyFilter, artists: ["Исполнитель трека"] }).total,
+    ).toBe(1);
+    expect(catalog.quickSearch("Исполнитель").artists).toEqual([
+      { name: "Исполнитель трека", count: 1 },
+    ]);
+  });
   it("quick-searches and ranks tracks, albums, artists and genres", () => {
     const catalog = service.catalog;
     const lib = catalog.addLibrary(
@@ -365,27 +402,28 @@ describe("catalog and safe filesystem operations", () => {
         .items.map((album) => album.artists),
     ).toEqual([["Другой исполнитель альбома", "Исполнитель альбома"]]);
   });
-  it("migrates album artist relations without rescanning", async () => {
+  it("migrates fallback artist relations without rescanning", async () => {
     const lib = await library("Downloads");
     const t = tracks().find((track) => track.libraryId === lib.id)!;
     service.catalog.upsert({
       ...t,
       artists: ["Исполнитель трека"],
-      albumArtists: ["Исполнитель альбома"],
+      albumArtists: [],
     });
     service.catalog.db.prepare("DELETE FROM track_album_artists").run();
-    service.catalog.db.pragma("user_version = 3");
+    service.catalog.db.pragma("user_version = 5");
     await service.close();
     service = new MusicService(path.join(root, "data"));
     expect(service.catalog.artists(emptyFilter).items).toEqual([
-      { name: "Исполнитель альбома", count: 1 },
+      { name: "Исполнитель трека", count: 1 },
     ]);
     expect(
       service.catalog.tracks({
         ...emptyFilter,
-        artists: ["Исполнитель альбома"],
+        artists: ["Исполнитель трека"],
       }).total,
     ).toBe(1);
+    expect(service.catalog.track(t.id)?.albumArtists).toEqual([]);
   });
   it("prevents a second service from mutating the same catalog", () => {
     expect(() => new MusicService(path.join(root, "data"))).toThrow(

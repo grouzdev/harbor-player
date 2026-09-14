@@ -126,6 +126,19 @@ export class Catalog {
         this.db.pragma("user_version = 4");
       })();
     if (version < 5) this.db.pragma("user_version = 5");
+    if (version < 6)
+      this.db.transaction(() => {
+        this.db.exec(`
+          DELETE FROM track_album_artists;
+          INSERT OR IGNORE INTO track_album_artists(trackId,artist)
+          SELECT t.id,j.value
+          FROM tracks t,
+               json_each(
+                 CASE WHEN t.albumArtists='[]' THEN t.artists ELSE t.albumArtists END
+               ) j
+        `);
+        this.db.pragma("user_version = 6");
+      })();
   }
   libraries(): Library[] {
     return (
@@ -202,7 +215,8 @@ export class Catalog {
              WHERE a.artist=bookmarks.id AND t.available=1
            ))
            OR (kind='artist' AND bookmarks.id='' AND NOT EXISTS (
-             SELECT 1 FROM tracks t WHERE t.albumArtists='[]' AND t.available=1
+             SELECT 1 FROM tracks t
+             WHERE t.albumArtists='[]' AND t.artists='[]' AND t.available=1
            ))
       `);
     })();
@@ -255,7 +269,7 @@ export class Catalog {
                 .get(id)
             : this.db
                 .prepare(
-                  "SELECT 1 FROM tracks WHERE albumArtists='[]' AND available=1",
+                  "SELECT 1 FROM tracks WHERE albumArtists='[]' AND artists='[]' AND available=1",
                 )
                 .get();
     if (!exists)
@@ -307,7 +321,8 @@ export class Catalog {
         );
         args.push(...values);
       }
-      if (filter.artists.includes("")) parts.push("t.albumArtists='[]'");
+      if (filter.artists.includes(""))
+        parts.push("t.albumArtists='[]' AND t.artists='[]'");
       clauses.push(`(${parts.join(" OR ")})`);
     }
     if (filter.genres.length) {
@@ -338,7 +353,7 @@ export class Catalog {
           JOIN bookmarks b ON b.kind='artist' AND b.id=a.artist
           WHERE a.trackId=t.id
         )
-        OR (t.albumArtists='[]' AND EXISTS (
+        OR (t.albumArtists='[]' AND t.artists='[]' AND EXISTS (
           SELECT 1 FROM bookmarks b WHERE b.kind='artist' AND b.id=''
         ))
       )`);
@@ -443,7 +458,8 @@ export class Catalog {
       );
       args.push(...artists);
     }
-    if (filter.artists.includes("")) relations.push("t.albumArtists='[]'");
+    if (filter.artists.includes(""))
+      relations.push("t.albumArtists='[]' AND t.artists='[]'");
     if (filter.albumIds.length) {
       relations.push(
         `t.albumKey IN (${filter.albumIds.map(() => "?").join(",")})`,
@@ -635,7 +651,10 @@ export class Catalog {
       const albumArtistInsert = this.db.prepare(
         "INSERT OR IGNORE INTO track_album_artists VALUES (?,?)",
       );
-      for (const artist of track.albumArtists)
+      const catalogArtists = track.albumArtists.length
+        ? track.albumArtists
+        : track.artists;
+      for (const artist of catalogArtists)
         albumArtistInsert.run(track.id, artist);
     })();
   }
