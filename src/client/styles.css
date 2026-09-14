@@ -2225,15 +2225,16 @@ body {
 :root {
   --room-inset-x: clamp(32px, 5vw, 80px);
   --room-inset-y: clamp(28px, 5vh, 60px);
-  --metal-0: #101514;
-  --metal-1: #151b1a;
-  --metal-2: #1b2220;
-  --metal-edge: #d8e0cc1c;
-  --metal-line: #e6ecdf0d;
-  --metal-shadow: #030706b8;
-  --soft-highlight: #dce7cf12;
-  --accent: #bdcca0;
-  --teal: #a9c9bc;
+  --metal-0: #0d0e0e;
+  --metal-1: #141514;
+  --metal-2: #1b1c1a;
+  --metal-edge: #e9e9d91c;
+  --metal-line: #f0f0e40d;
+  --metal-shadow: #010101bd;
+  --soft-highlight: #f1f0db10;
+  --accent: #b8bd82;
+  --teal: #a8ad91;
+  --fine-noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.72' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E");
   --line: var(--metal-line);
   --muted: #8b9790;
   --panel: var(--metal-1);
@@ -2249,21 +2250,20 @@ body {
 
 body::before {
   position: fixed;
-  z-index: 0;
+  z-index: 2;
   inset: 0;
   pointer-events: none;
-  content: none;
+  content: "";
+  opacity: 0.075;
+  background: var(--fine-noise) 0 0 / 180px 180px repeat;
+  mix-blend-mode: soft-light;
 }
 
 html:fullscreen body {
   padding: var(--room-inset-y) var(--room-inset-x);
   background:
     url("../../assets/bg_lounge.jpg") center / cover fixed,
-    #0d1110;
-}
-
-html:fullscreen body::before {
-  content: none;
+    #0a0b0b;
 }
 
 #root,
@@ -2277,7 +2277,9 @@ html:fullscreen body::before {
   min-height: 520px;
   border: 0;
   border-radius: 0;
-  background: var(--metal-0);
+  background:
+    radial-gradient(ellipse at 65% -15%, #e7e6cc05, transparent 42%),
+    linear-gradient(145deg, #121313, var(--metal-0) 52%, #090a0a);
   box-shadow: none;
 }
 
@@ -2294,28 +2296,28 @@ html:fullscreen .app-shell {
 .topbar,
 .player {
   background:
-    linear-gradient(180deg, #252d29d9, #111715eb),
-    repeating-linear-gradient(0deg, #ffffff10 0 1px, transparent 1px 4px);
+    linear-gradient(90deg, #171816, #292a26 50%, #171816),
+    var(--fine-noise) 0 0 / 180px 180px repeat;
 }
 
 .topbar {
-  border-bottom-color: #e2ebd811;
-  box-shadow: 0 1px #eff5dd0d inset;
+  border-bottom-color: #eeeedf11;
+  box-shadow: 0 1px #f4f3e50b inset;
 }
 
 .search,
 input:not([type="checkbox"]):not([type="range"]),
 select {
-  border-color: #dfe9d31c;
-  background: linear-gradient(145deg, #0b100e, #161d1a) !important;
+  border-color: #e5e5d81b;
+  background: linear-gradient(145deg, #0a0b0b, #171816) !important;
   box-shadow:
-    0 1px #dce7cc12 inset,
-    0 -1px #00000082 inset,
+    0 1px #f0efdf0e inset,
+    0 -1px #0000008a inset,
     0 1px 2px #0000004d;
 }
 
 .search {
-  color: #9aa79e;
+  color: #a3a59d;
 }
 
 .search input:not([type="checkbox"]):not([type="range"]) {
@@ -2324,7 +2326,7 @@ select {
 }
 
 .workspace {
-  background: #0f1513e8;
+  background: #101111e8;
 }
 
 .libraries-panel,
@@ -2333,79 +2335,80 @@ select {
 .albums-panel,
 .tracks-panel {
   background:
-    linear-gradient(108deg, #202824e6, #141a18f0 46%, #111715f2),
-    repeating-linear-gradient(0deg, #ffffff08 0 1px, transparent 1px 5px);
+    var(--fine-noise) 0 0 / 180px 180px repeat,
+    #181917;
+  background-blend-mode: soft-light, normal;
 }
 
 .genres-panel,
 .artists-panel {
   background:
-    linear-gradient(108deg, #1c2421e8, #121916f2),
-    repeating-linear-gradient(0deg, #ffffff08 0 1px, transparent 1px 5px);
+    var(--fine-noise) 0 0 / 180px 180px repeat,
+    #171816;
 }
 
 .albums-panel {
   background:
-    radial-gradient(ellipse at 84% 5%, #bbc9a608, transparent 34%),
-    linear-gradient(108deg, #1c2421e8, #111714f4);
+    var(--fine-noise) 0 0 / 180px 180px repeat,
+    #1a1b19;
 }
 
 .tracks-panel {
   background:
-    radial-gradient(ellipse at 91% 14%, #c5b58d07, transparent 30%),
-    linear-gradient(108deg, #1b2320ec, #101614f5);
+    var(--fine-noise) 0 0 / 180px 180px repeat,
+    #191a18;
 }
 
 .panel-heading,
 .panel-heading {
   border-color: var(--metal-line);
-  box-shadow: 0 1px #eff5dd08 inset;
+  box-shadow: 0 1px #f0f0e508 inset;
 }
 
 .resizer,
 .row-resizer {
-  background: linear-gradient(90deg, #0000005e, #dce7cc09, #0000005e);
+  background: linear-gradient(90deg, #0000005e, #eeeee209, #0000005e);
 }
 
 .resizer:hover,
 .resizer:active,
 .row-resizer:hover,
 .row-resizer:active {
-  background: #aebd9a72;
+  background: #b5b98072;
 }
 
 .panel-count,
 .format-badge {
-  border: 1px solid #dbe5cd13;
-  background: #e3efd007;
-  color: #84928b;
+  border: 1px solid #e5e5d713;
+  background: #f0efdb07;
+  color: #91938b;
 }
 
 .list-tile:hover .list-tile-main,
 .list-tile-main:focus-visible,
 .track-album-header:hover {
-  background: linear-gradient(90deg, #dce9cf0d, #dce9cf04 62%, transparent);
+  background: #e7e7d809;
 }
 
 .list-tile.selected .list-tile-main {
-  background:
-    linear-gradient(90deg, #c9d8ad20, #c9d8ad0d 68%, transparent), #bdcca007;
+  background: #9da35f1b;
   box-shadow:
-    1px 0 #d9eab561 inset,
-    0 1px #e9f5d70b inset;
-  color: #d5e0c3;
+    0 1px #00000066 inset,
+    0 -1px #d9dc9b14 inset,
+    0 0 6px #00000024 inset;
+  color: #dbddbb;
 }
 
 .list-tile.selected .list-tile-prefix,
 .list-tile.selected .list-tile-suffix {
-  color: #a8b997;
+  color: #b2b681;
 }
 
 .all-albums {
-  border-color: #dfe9d314;
-  background: #dfe9d305;
+  border-color: #e5e5d714;
+  background: #eeeee005;
   border-radius: 7px;
-  box-shadow: 0 1px #e9f5d708 inset;
+  box-shadow: 0 1px #efefdf08 inset;
 }
 
 .album-cover,
@@ -2413,29 +2416,29 @@ select {
 .tiny-cover {
   border-radius: 7px;
   box-shadow:
-    0 8px 20px #02050478,
-    0 1px #ecf5da18 inset;
+    0 8px 20px #02020278,
+    0 1px #efefdf18 inset;
 }
 
 .now-cover,
 .tiny-cover {
-  border-color: #dce7cc1c;
+  border-color: #e5e5d81c;
 }
 
 .album-card.selected .album-cover {
-  border-color: #b9d4b7;
+  border-color: #c6ca91;
   box-shadow:
-    0 0 0 1px #c3d6a633,
-    0 8px 20px #02050478,
-    0 1px #ecf5da18 inset;
+    0 0 0 1px #c7ca9233,
+    0 8px 20px #02020278,
+    0 1px #efefdf18 inset;
 }
 
 .track-row {
-  box-shadow: inset 0 -1px #e4eddc0c;
+  box-shadow: inset 0 -1px #eeeee00c;
 }
 
 .track-row .list-tile-main {
-  color: #cbd2cc;
+  color: #cdcfca;
 }
 
 .album-details > small {
@@ -2445,49 +2448,62 @@ select {
 .button.secondary,
 .icon-button:hover:not(:disabled),
 .bookmark-toggle {
-  border: 1px solid #dce7cc14;
-  background: linear-gradient(145deg, #242c28, #131917);
+  border: 1px solid #e5e5d714;
+  background: linear-gradient(145deg, #252624, #131413);
   box-shadow:
-    0 1px #e7f0d315 inset,
+    0 1px #f0f0e315 inset,
     0 -1px #0000007a inset,
-    0 4px 11px #0205043d;
+    0 4px 11px #0202023d;
 }
 
-.button.primary,
 .play-button {
-  background: linear-gradient(145deg, #d2ddb6, #aab88e);
-  color: #243028;
+  border: 0;
+  background: var(--accent);
+  color: #253a2d;
+  box-shadow: none;
+}
+
+.play-button:hover:not(:disabled) {
+  background: #c8cd92;
+  color: #253a2d;
+}
+
+.button.primary {
+  background: linear-gradient(145deg, #c4c78d, #a8ad75);
+  color: #24251d;
   box-shadow:
     0 1px #ffffffe0 inset,
     0 7px 16px #00000052,
-    0 -1px #62705985 inset;
+    0 -1px #65694685 inset;
 }
 
-.button.primary:hover:not(:disabled),
-.play-button:hover:not(:disabled) {
-  background: linear-gradient(145deg, #dde9c0, #b8c99b);
+.button.primary:hover:not(:disabled) {
+  background: linear-gradient(145deg, #d0d39a, #b5ba7e);
 }
 
 .player {
-  border-top-color: #e2ebd815;
+  border-top-color: #eeeee015;
   box-shadow:
-    0 1px #eff5dd0d inset,
-    0 -10px 30px #0508063b;
+    0 1px #f0f0e50d inset,
+    0 -10px 30px #0505054a;
 }
 
 input[type="range"] {
   accent-color: var(--accent);
-  filter: saturate(0.8) brightness(1.08);
+  filter: saturate(0.68) brightness(1.04);
 }
 
 .context-menu,
 .modal-content,
 .toast {
-  border-color: #dce7cc1b;
-  background: linear-gradient(145deg, #27302bdc, #151c19f2), #161d1a;
+  border-color: #e5e5d81b;
+  background:
+    linear-gradient(145deg, #292a27dc, #161715f2),
+    var(--fine-noise) 0 0 / 180px 180px repeat,
+    #161715;
   box-shadow:
-    0 22px 60px #020403b0,
-    0 1px #f0f6e21a inset;
+    0 22px 60px #020202b0,
+    0 1px #f1f1e31a inset;
 }
 
 @media (max-width: 900px), (max-height: 650px) {
@@ -2495,10 +2511,6 @@ input[type="range"] {
     padding: 0;
     overflow: auto;
     background: var(--metal-0);
-  }
-
-  html:not(:fullscreen) body::before {
-    display: none;
   }
 
   html:not(:fullscreen) .app-shell {
