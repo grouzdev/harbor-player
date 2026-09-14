@@ -76,30 +76,30 @@ export function usePlayer(notify: (message: string) => void) {
     );
     setLength(queue.track.duration);
   }, [queue]);
-  const start = async (track: Track, filter: CatalogFilter) => {
+  const loadQueue = async (
+    body:
+      | { filter: CatalogFilter; startId?: string }
+      | { albumId: string; startId?: string },
+  ) => {
     const sequence = ++transition.current;
     try {
-      const q = await api<Queue>("/queue", { filter, startId: track.id });
-      if (sequence !== transition.current) return;
+      const q = await api<Queue>("/queue", body);
+      if (sequence !== transition.current) return false;
       shouldPlay.current = true;
       seekAfterLoad.current = 0;
       setQueue(q);
+      return true;
     } catch (e) {
       notify((e as Error).message);
+      return false;
     }
   };
-  const startAlbum = async (albumId: string) => {
-    const sequence = ++transition.current;
-    try {
-      const q = await api<Queue>("/queue", { albumId });
-      if (sequence !== transition.current) return;
-      shouldPlay.current = true;
-      seekAfterLoad.current = 0;
-      setQueue(q);
-    } catch (e) {
-      notify((e as Error).message);
-    }
-  };
+  const start = (track: Track, filter: CatalogFilter) =>
+    loadQueue({ filter, startId: track.id });
+  const startFilter = (filter: CatalogFilter, startId?: string) =>
+    loadQueue({ filter, startId });
+  const startAlbum = (albumId: string, startId?: string) =>
+    loadQueue({ albumId, startId });
   const step = async (direction: number, ended = false) => {
     if (!queue) return;
     if (direction < 0 && position > 3) {
@@ -258,6 +258,7 @@ export function usePlayer(notify: (message: string) => void) {
     audioElement,
     events,
     start,
+    startFilter,
     startAlbum,
     toggle,
     step,
@@ -274,23 +275,37 @@ export function Player({
   player,
   onNavigateToAlbum,
   onNavigateToArtist,
+  coverMode,
+  onToggleCoverMode,
 }: {
   player: ReturnType<typeof usePlayer>;
   onNavigateToAlbum: (albumId: string, albumArtists: string[]) => void;
   onNavigateToArtist: (artist: string) => void;
+  coverMode: boolean;
+  onToggleCoverMode: () => void;
 }) {
   const track = player.queue?.track;
   return (
     <footer className="player">
       {player.audioElement}
       <div className="now-playing">
-        <div className="now-cover">
+        <button
+          type="button"
+          className="now-cover"
+          aria-label={
+            coverMode ? "Вернуться в каталог" : "Открыть режим обложки"
+          }
+          aria-pressed={coverMode}
+          disabled={!track}
+          title={coverMode ? "Вернуться в каталог" : "Открыть режим обложки"}
+          onClick={onToggleCoverMode}
+        >
           {track?.coverId ? (
             <img src={`/api/covers/${track.coverId}`} alt="" />
           ) : (
             <Music2 size={22} />
           )}
-        </div>
+        </button>
         <div className="now-copy">
           {track ? (
             <button

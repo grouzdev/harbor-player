@@ -69,6 +69,7 @@ import {
 import { selectFacetValue } from "./facet-selection";
 import { ListTile } from "./ListTile";
 import { Player, usePlayer } from "./Player";
+import { CoverMode, QuickSearchDialog } from "./CoverMode";
 import { ContextMenu, type ContextMenuState } from "./ContextMenu";
 
 type DroppedCover = {
@@ -206,6 +207,8 @@ export function App() {
   const bookmarkCatalogDirty = useRef(false);
   const notify = useCallback((message: string) => setToast(message), []);
   const player = usePlayer(notify);
+  const [coverMode, setCoverMode] = useState(false);
+  const [quickSearchOpen, setQuickSearchOpen] = useState(false);
   const [artistScrollTarget, setArtistScrollTarget] = useState<{
     artist: string;
     requestId: number;
@@ -222,6 +225,8 @@ export function App() {
       value: string,
       albumArtists: string[] = [],
     ) => {
+      setCoverMode(false);
+      setQuickSearchOpen(false);
       const artists =
         target === "album"
           ? albumArtists.length
@@ -288,6 +293,12 @@ export function App() {
     const timer = setTimeout(() => setFilter((f) => ({ ...f, search })), 200);
     return () => clearTimeout(timer);
   }, [search]);
+  useEffect(() => {
+    if (!player.queue?.track) {
+      setCoverMode(false);
+      setQuickSearchOpen(false);
+    }
+  }, [player.queue?.track]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(""), 9000);
@@ -1101,24 +1112,36 @@ export function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <label className="search">
-          <Search size={18} />
-          <input
-            aria-label="Поиск музыки"
-            placeholder="Треки, артисты, альбомы"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          {search && (
-            <button
-              className="icon-button"
-              aria-label="Очистить поиск"
-              onClick={() => setSearch("")}
-            >
-              <X size={15} />
-            </button>
-          )}
-        </label>
+        {coverMode ? (
+          <button
+            type="button"
+            className="search cover-search-trigger"
+            aria-label="Открыть быстрый поиск"
+            onClick={() => setQuickSearchOpen(true)}
+          >
+            <Search size={18} />
+            <span>Жанры, исполнители, альбомы, треки</span>
+          </button>
+        ) : (
+          <label className="search">
+            <Search size={18} />
+            <input
+              aria-label="Поиск музыки"
+              placeholder="Треки, артисты, альбомы"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && (
+              <button
+                className="icon-button"
+                aria-label="Очистить поиск"
+                onClick={() => setSearch("")}
+              >
+                <X size={15} />
+              </button>
+            )}
+          </label>
+        )}
         <button
           className={`icon-button bookmarks-button ${filter.bookmarksOnly ? "active" : ""} ${bookmarks.isError ? "error" : ""}`}
           aria-label={
@@ -1173,7 +1196,7 @@ export function App() {
       </header>
       <main
         ref={workspaceRef}
-        className="workspace"
+        className={`workspace ${coverMode ? "workspace-hidden" : ""}`}
         style={
           {
             "--library-weight": `${panelWeights[0]}fr`,
@@ -1628,13 +1651,34 @@ export function App() {
           </section>
         </div>
       </main>
+      {coverMode && player.queue?.track && (
+        <CoverMode
+          track={player.queue.track}
+          playing={player.playing}
+          onClose={() => setCoverMode(false)}
+          onPlayTrack={(track) => player.startAlbum(track.albumKey, track.id)}
+        />
+      )}
       <Player
         player={player}
         onNavigateToAlbum={(albumId, albumArtists) =>
           navigateFromPlayer("album", albumId, albumArtists)
         }
         onNavigateToArtist={(artist) => navigateFromPlayer("artist", artist)}
+        coverMode={coverMode}
+        onToggleCoverMode={() => {
+          if (!player.queue?.track) return;
+          setQuickSearchOpen(false);
+          setCoverMode((current) => !current);
+        }}
       />
+      {quickSearchOpen && coverMode && (
+        <QuickSearchDialog
+          onClose={() => setQuickSearchOpen(false)}
+          onPlayFilter={player.startFilter}
+          onPlayAlbum={(albumId) => player.startAlbum(albumId)}
+        />
+      )}
       <ContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
       {toast && (
         <div className="toast" role="status">

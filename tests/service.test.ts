@@ -203,6 +203,75 @@ describe("catalog and safe filesystem operations", () => {
       { name: "Rock", count: 2 },
     ]);
   });
+  it("quick-searches and ranks tracks, albums, artists and genres", () => {
+    const catalog = service.catalog;
+    const lib = catalog.addLibrary(
+      "Quick search",
+      path.join(root, "Quick search"),
+    );
+    const addTrack = (
+      id: string,
+      title: string,
+      albumKey: string,
+      albumTitle: string,
+      artist: string,
+      genre: string,
+      available = true,
+    ) =>
+      catalog.upsert({
+        id,
+        libraryId: lib.id,
+        relativePath: `${id}.flac`,
+        title,
+        artists: [artist],
+        albumTitle,
+        albumArtists: [artist],
+        albumKey,
+        genres: [genre],
+        year: 2026,
+        trackNumber: 1,
+        discNumber: 1,
+        duration: 60,
+        format: "flac",
+        size: 1,
+        mtimeMs: 1,
+        coverId: null,
+        available,
+      });
+    addTrack("exact", "Miracle", "miracle", "Miracle", "Miracle", "Miracle");
+    addTrack(
+      "prefix",
+      "Miracle Road",
+      "road",
+      "Miracle Road",
+      "Miracle Band",
+      "Miracle Pop",
+    );
+    addTrack("contains", "A Miracle Song", "other", "Other", "Other", "Rock");
+    addTrack("offline", "Miracle Lost", "lost", "Lost", "Lost", "Lost", false);
+
+    const result = catalog.quickSearch("Miracle", 6);
+    expect(result.tracks.map((track) => track.id)).toEqual([
+      "exact",
+      "prefix",
+      "contains",
+    ]);
+    expect(result.albums.map((album) => album.id)).toEqual(["miracle", "road"]);
+    expect(result.artists.map((artist) => artist.name)).toEqual([
+      "Miracle",
+      "Miracle Band",
+    ]);
+    expect(result.genres.map((genre) => genre.name)).toEqual([
+      "Miracle",
+      "Miracle Pop",
+    ]);
+    expect(catalog.quickSearch("%", 6)).toEqual({
+      genres: [],
+      artists: [],
+      albums: [],
+      tracks: [],
+    });
+  });
   it("finds libraries and genres related to selected artists or albums", () => {
     const catalog = service.catalog;
     const first = catalog.addLibrary("First", path.join(root, "First"));

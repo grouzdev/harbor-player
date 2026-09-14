@@ -14,6 +14,7 @@ import type {
   LibraryFolder,
   OperationPreview,
   Page,
+  QuickSearchResults,
   Selection,
   Track,
 } from "../shared/contracts.js";
@@ -528,6 +529,73 @@ export class Catalog {
       )
       .all(...args, limit, offset) as { name: string; count: number }[];
     return { items, total, offset };
+  }
+  quickSearch(query: string, limit = 6): QuickSearchResults {
+    const value = query.trim();
+    if (!value) return { genres: [], artists: [], albums: [], tracks: [] };
+    const escaped = value.replace(/[\\%_]/g, "\\$&");
+    const prefix = `${escaped}%`;
+    const contains = `%${escaped}%`;
+    const available = "t.available=1 AND l.available=1";
+    const genres = this.db
+      .prepare(
+        `SELECT g.genre name, count(DISTINCT t.id) count
+         FROM track_genres g JOIN tracks t ON t.id=g.trackId JOIN libraries l ON l.id=t.libraryId
+         WHERE ${available} AND g.genre LIKE ? ESCAPE '\\'
+         GROUP BY g.genre
+         ORDER BY CASE WHEN g.genre=? COLLATE NOCASE THEN 0 WHEN g.genre LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END,
+                  g.genre COLLATE NOCASE
+         LIMIT ?`,
+      )
+      .all(contains, value, prefix, limit) as { name: string; count: number }[];
+    const artists = this.db
+      .prepare(
+        `SELECT a.artist name, count(DISTINCT t.albumKey) count
+         FROM track_album_artists a JOIN tracks t ON t.id=a.trackId JOIN libraries l ON l.id=t.libraryId
+         WHERE ${available} AND a.artist LIKE ? ESCAPE '\\'
+         GROUP BY a.artist
+         ORDER BY CASE WHEN a.artist=? COLLATE NOCASE THEN 0 WHEN a.artist LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END,
+                  a.artist COLLATE NOCASE
+         LIMIT ?`,
+      )
+      .all(contains, value, prefix, limit) as { name: string; count: number }[];
+    const albumRows = this.db
+      .prepare(
+        `SELECT t.albumKey id, t.albumTitle title, t.albumArtists artists, t.year,
+                max(t.coverId) coverId, count(*) trackCount
+         FROM tracks t JOIN libraries l ON l.id=t.libraryId
+         WHERE ${available} AND t.albumTitle LIKE ? ESCAPE '\\'
+         GROUP BY t.albumKey
+         ORDER BY CASE WHEN t.albumTitle=? COLLATE NOCASE THEN 0 WHEN t.albumTitle LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END,
+                  t.albumTitle COLLATE NOCASE, t.albumKey
+         LIMIT ?`,
+      )
+      .all(contains, value, prefix, limit) as Row[];
+    const trackRows = this.db
+      .prepare(
+        `SELECT t.* FROM tracks t JOIN libraries l ON l.id=t.libraryId
+         WHERE ${available} AND (
+           t.title LIKE ? ESCAPE '\\' OR t.albumTitle LIKE ? ESCAPE '\\' OR t.artists LIKE ? ESCAPE '\\'
+         )
+         ORDER BY CASE
+           WHEN t.title=? COLLATE NOCASE THEN 0
+           WHEN t.title LIKE ? ESCAPE '\\' THEN 1
+           WHEN t.albumTitle LIKE ? ESCAPE '\\' THEN 2
+           ELSE 3
+         END,
+         t.albumTitle COLLATE NOCASE, t.albumKey, coalesce(t.discNumber,0), coalesce(t.trackNumber,0), t.relativePath
+         LIMIT ?`,
+      )
+      .all(contains, contains, contains, value, prefix, prefix, limit) as Row[];
+    return {
+      genres,
+      artists,
+      albums: albumRows.map((row) => ({
+        ...row,
+        artists: JSON.parse(row.artists),
+      })) as Album[],
+      tracks: trackRows.map(fromRow),
+    };
   }
   upsert(track: Track, scanId: string | null = null): void {
     this.db.transaction(() => {

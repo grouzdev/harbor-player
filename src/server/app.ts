@@ -25,6 +25,10 @@ const pageSchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(200),
   filter: z.string().max(100000).default("{}"),
 });
+const quickSearchSchema = z.object({
+  query: z.string().trim().min(1).max(300),
+  limit: z.coerce.number().int().min(1).max(10).default(6),
+});
 const idParam = z.object({ id: z.string().min(1).max(100) });
 export function rangeFor(
   header: string | undefined,
@@ -208,6 +212,10 @@ export async function createApp(options: {
       q.offset,
       q.limit,
     );
+  });
+  app.get("/api/quick-search", async (request) => {
+    const query = quickSearchSchema.parse(request.query);
+    return service.catalog.quickSearch(query.query, query.limit);
   });
   app.get("/api/filter-validity", async (request) => {
     const q = pageSchema.parse(request.query);
@@ -505,15 +513,15 @@ export async function createApp(options: {
   app.post("/api/queue", async (request) => {
     const body = z
       .union([
-        z.object({ filter: filterSchema, startId: z.string() }),
-        z.object({ albumId: z.string() }),
+        z.object({ filter: filterSchema, startId: z.string().optional() }),
+        z.object({ albumId: z.string(), startId: z.string().optional() }),
       ])
       .parse(request.body);
     const ids =
       "albumId" in body
         ? service.catalog.trackIds({ ...emptyFilter, albumIds: [body.albumId] })
         : service.catalog.trackIds(body.filter);
-    const position = "albumId" in body ? 0 : ids.indexOf(body.startId);
+    const position = body.startId ? ids.indexOf(body.startId) : 0;
     if (position < 0 || !ids.length)
       throw new Error(
         "albumId" in body

@@ -47,6 +47,16 @@ export interface Album {
   coverId: string | null;
   trackCount: number;
 }
+export interface QuickSearchFacet {
+  name: string;
+  count: number;
+}
+export interface QuickSearchResults {
+  genres: QuickSearchFacet[];
+  artists: QuickSearchFacet[];
+  albums: Album[];
+  tracks: Track[];
+}
 export type BookmarkKind = "artist" | "album" | "track";
 export interface CatalogBookmark {
   kind: BookmarkKind;

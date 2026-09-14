@@ -958,6 +958,111 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   expect(errors).toEqual([]);
 });
 
+test("cover mode shows the album, artwork and quick playback search", async ({
+  page,
+}, info) => {
+  const browser = info.project.name;
+  const source = path.resolve(".test-data/browser", browser, "Downloads");
+  const libraryName = `Downloads ${browser}`;
+  await page.goto("/");
+
+  let libraryTile = page
+    .locator(".libraries-panel .list-tile")
+    .filter({ hasText: libraryName });
+  if ((await libraryTile.count()) === 0) {
+    await page.locator(".add-library").click();
+    await page.getByLabel("Путь к папке", { exact: true }).fill(source);
+    await page.getByLabel("Название библиотеки").fill(libraryName);
+    await page.getByRole("button", { name: "Подключить", exact: true }).click();
+    await expect(page.getByRole("dialog")).not.toBeVisible();
+    libraryTile = page
+      .locator(".libraries-panel .list-tile")
+      .filter({ hasText: libraryName });
+  }
+  await expect(libraryTile).toBeVisible();
+  await libraryTile.locator(".list-tile-main").click();
+  await expect(page.getByTestId("track-row")).toHaveCount(7, {
+    timeout: 20_000,
+  });
+  await page.getByTestId("track-row").first().dblclick();
+  await expect
+    .poll(() =>
+      page
+        .locator("audio")
+        .evaluate((audio: HTMLAudioElement) => audio.readyState),
+    )
+    .toBeGreaterThanOrEqual(2);
+
+  await page.getByRole("button", { name: "Открыть режим обложки" }).click();
+  const coverMode = page.getByRole("main", { name: "Режим обложки" });
+  await expect(coverMode).toBeVisible();
+  await expect(page.locator(".workspace")).toBeHidden();
+  await expect(page.locator(".topbar")).toBeVisible();
+  await expect(page.locator(".player")).toBeVisible();
+  await expect(coverMode.getByRole("heading", { level: 1 })).toContainText(
+    "Первый трек",
+  );
+  await expect(coverMode.locator(".cover-track-row")).toHaveCount(6);
+  await expect(coverMode.locator(".cover-track-row.current")).toHaveCount(1);
+  await page.screenshot({ path: `.test-data/cover-mode-${browser}.png` });
+
+  await coverMode.locator(".cover-track-row").nth(1).click();
+  await expect(coverMode.locator(".cover-track-row").nth(1)).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
+
+  await page.getByRole("button", { name: "Открыть быстрый поиск" }).click();
+  const quickSearch = page.getByRole("dialog", { name: "Быстрый поиск" });
+  await quickSearch.getByLabel("Быстрый поиск музыки").fill("Первый трек");
+  await expect(
+    quickSearch.getByRole("heading", { name: "Треки" }),
+  ).toBeVisible();
+  await quickSearch
+    .locator(".quick-search-result")
+    .filter({ hasText: "Первый трек" })
+    .first()
+    .click();
+  await expect(quickSearch).not.toBeVisible();
+
+  await coverMode
+    .getByRole("button", { name: "Открыть обложку в оригинальном размере" })
+    .click();
+  const artworkViewer = page.getByRole("dialog", {
+    name: "Обложка в оригинальном размере",
+  });
+  await expect(artworkViewer).toBeVisible();
+  await expect(artworkViewer.locator("img")).toHaveClass(/original/);
+  await expect(artworkViewer.locator("img")).not.toHaveClass(/zoomable/);
+  await page.keyboard.press("Escape");
+  await expect(artworkViewer).not.toBeVisible();
+
+  await page.setViewportSize({ width: 500, height: 500 });
+  await coverMode
+    .getByRole("button", { name: "Открыть обложку в оригинальном размере" })
+    .click();
+  await expect(artworkViewer.locator("img")).toHaveClass(/zoomable/);
+  await artworkViewer.locator("img").click();
+  await expect(artworkViewer.locator("img")).toHaveClass(/fit/);
+  await artworkViewer.locator("img").click();
+  await expect(artworkViewer.locator("img")).toHaveClass(/original/);
+  await page.keyboard.press("Escape");
+  await page.setViewportSize({ width: 1600, height: 1000 });
+
+  await page
+    .getByRole("button", { name: "Вернуться в каталог" })
+    .filter({ visible: true })
+    .first()
+    .click();
+  await expect(coverMode).not.toBeVisible();
+  await expect(page.locator(".workspace")).toBeVisible();
+  await expect(libraryTile).toHaveClass(/selected/);
+
+  await page.getByRole("button", { name: "Открыть режим обложки" }).click();
+  await coverMode.getByRole("button", { name: "Вернуться в каталог" }).click();
+  await expect(coverMode).not.toBeVisible();
+});
+
 test("library folders expand independently and support Ctrl selection", async ({
   page,
 }, info) => {

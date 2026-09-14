@@ -498,6 +498,36 @@ describe("Explorer endpoint", () => {
     });
     expect(queue.statusCode).toBe(200);
     expect(queue.json().track.id).toBe("second");
+
+    const fromSelected = await context.app.inject({
+      method: "POST",
+      url: "/api/queue",
+      headers,
+      payload: { albumId: "album", startId: "second" },
+    });
+    expect(fromSelected.statusCode).toBe(200);
+    expect(fromSelected.json()).toMatchObject({ position: 1, total: 2 });
+    expect(fromSelected.json().track.id).toBe("second");
+
+    const fromFilter = await context.app.inject({
+      method: "POST",
+      url: "/api/queue",
+      headers,
+      payload: {
+        filter: {
+          libraryIds: [],
+          folders: [],
+          genres: [],
+          artists: [],
+          albumIds: ["album"],
+          search: "",
+          bookmarksOnly: false,
+        },
+      },
+    });
+    expect(fromFilter.statusCode).toBe(200);
+    expect(fromFilter.json()).toMatchObject({ position: 0, total: 2 });
+    expect(fromFilter.json().track.id).toBe("first");
   });
   it("builds Windows Explorer arguments for folders and selected files", () => {
     expect(explorerArgs({ directory: "C:\\Music\\Album" })).toEqual([
