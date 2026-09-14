@@ -468,11 +468,28 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(secondAlbum).toHaveClass(/selected/);
 
   await expect(firstAlbum.locator(".album-details")).toHaveCount(1);
-  await expect(firstAlbum.locator(".album-details > small")).toHaveCount(2);
-  await expect(firstAlbum.locator(".album-year")).toHaveCount(1);
+  await expect(firstAlbum.locator(".album-details > small")).toHaveCount(1);
+  await expect(firstAlbum.locator(".album-title-year")).toHaveCount(1);
+  await expect(firstAlbum.locator(".album-title-line")).toContainText(/^\d{4}/);
   await expect(firstAlbum.locator(".album-track-count")).toHaveText(
     /^\d+ трек(?:а|ов)?$/,
   );
+  const firstTrackAlbumHeader = page
+    .locator(".track-album-header")
+    .filter({ hasText: "Исполнитель альбома" });
+  await expect(firstTrackAlbumHeader.locator(".tiny-cover")).toHaveCSS(
+    "width",
+    "52px",
+  );
+  await expect(firstTrackAlbumHeader.locator(".track-album-year")).toHaveCount(
+    1,
+  );
+  await expect(
+    firstTrackAlbumHeader.locator(".track-album-title-line"),
+  ).toContainText(/^\d{4}/);
+  await expect(
+    firstTrackAlbumHeader.locator(".track-album-artists"),
+  ).not.toContainText(/ · \d{4}$/);
   await firstAlbumButton.click();
   await expect(firstAlbum).toHaveClass(/selected/);
   await firstAlbumButton.click();

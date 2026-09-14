@@ -2120,15 +2120,19 @@ function AlbumGrid({
                           </span>
                         )}
                       </div>
-                      <strong>{album.title || "Без альбома"}</strong>
+                      <span className="album-title-line">
+                        {album.year && (
+                          <small className="album-title-year">
+                            {album.year}
+                          </small>
+                        )}
+                        <strong>{album.title || "Без альбома"}</strong>
+                      </span>
                       <span className="album-details">
                         <small>
                           {album.artists.join(", ") ||
                             "Неизвестный исполнитель"}
                         </small>
-                        {album.year && (
-                          <small className="album-year">{album.year}</small>
-                        )}
                       </span>
                     </button>
                   </div>
@@ -2303,11 +2307,15 @@ function TrackList({
                     <Disc3 size={20} />
                   )}
                 </div>
-                <div>
-                  <strong>{track.albumTitle || "Без альбома"}</strong>
-                  <small>
+                <div className="track-album-copy">
+                  <span className="track-album-title-line">
+                    {track.year && (
+                      <small className="track-album-year">{track.year}</small>
+                    )}
+                    <strong>{track.albumTitle || "Без альбома"}</strong>
+                  </span>
+                  <small className="track-album-artists">
                     {entry.artists.join(", ") || "Неизвестный исполнитель"}
-                    {track.year ? ` · ${track.year}` : ""}
                   </small>
                 </div>
                 <BookmarkToggle

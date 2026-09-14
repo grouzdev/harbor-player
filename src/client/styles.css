@@ -557,15 +557,28 @@ a {
   font-weight: 500;
   text-align: center;
 }
-.album-main > strong {
-  display: block;
+.album-title-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  margin: 10px 2px 5px;
+}
+.album-title-line > strong {
+  min-width: 0;
+  flex: 1;
   color: #c5cdd1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: var(--type-caption);
   font-weight: 500;
-  margin: 10px 2px 5px;
+}
+.album-title-year {
+  flex: 0 0 auto;
+  color: #75858e;
+  font-size: var(--type-caption);
+  font-weight: 400;
 }
 .album-details {
   display: flex;
@@ -583,9 +596,6 @@ a {
 }
 .album-details > small:first-child {
   flex: 1;
-}
-.album-year {
-  flex: 0 0 auto;
 }
 .cover-placeholder {
   position: absolute;
@@ -693,8 +703,8 @@ a {
   color: #c6cfd5;
 }
 .tiny-cover {
-  width: 34px;
-  height: 34px;
+  width: 52px;
+  height: 52px;
   background: #ffffff06;
   color: #839488;
   border-radius: 4px;
@@ -703,11 +713,19 @@ a {
   overflow: hidden;
   flex-shrink: 0;
 }
-.track-album-header > div:nth-child(2) {
+.track-album-copy {
   min-width: 0;
   flex: 1;
 }
-.track-album-header strong {
+.track-album-title-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.track-album-title-line strong {
+  min-width: 0;
+  flex: 1;
   font-size: var(--type-caption);
   font-weight: 600;
   white-space: nowrap;
@@ -715,7 +733,13 @@ a {
   text-overflow: ellipsis;
   display: block;
 }
-.track-album-header small {
+.track-album-year {
+  flex: 0 0 auto;
+  color: #7c8b96;
+  font-size: var(--type-caption);
+  font-weight: 400;
+}
+.track-album-artists {
   font-size: var(--type-caption);
   color: #7c8b96;
   display: block;
@@ -1548,7 +1572,7 @@ body {
 .panel-heading h2,
 .track-album-header strong,
 .track-copy strong,
-.album-main > strong,
+.album-title-line > strong,
 .now-copy strong,
 .now-track-link {
   font-size: var(--type-body);
@@ -2219,11 +2243,6 @@ body {
     border-radius: 9px;
   }
 }
-.album-year {
-  color: #647681 !important;
-  margin-top: 4px !important;
-}
-
 /* Soft-metal lounge visual layer. Structure and control geometry stay intact. */
 :root {
   --room-inset-x: clamp(32px, 5vw, 80px);
