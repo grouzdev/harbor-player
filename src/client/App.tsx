@@ -2029,12 +2029,20 @@ function AlbumGrid({
     if (ref.current) observer.observe(ref.current);
     return () => observer.disconnect();
   }, []);
-  const columns = Math.max(1, Math.floor((width - 20) / 144));
-  const cellWidth = (width - 28 - (columns - 1) * 14) / columns;
+  const gridGap = 8;
+  const gridPadding = 14;
+  const columns = Math.max(1, Math.floor((width - 20) / 138));
+  const cellWidth =
+    (width - gridPadding * 2 - (columns - 1) * gridGap) / columns;
   const rows = useMemo(() => {
     const result: Array<
       | { type: "artist"; key: string; label: string }
-      | { type: "albums"; key: string; albums: Album[] }
+      | {
+          type: "albums";
+          key: string;
+          albums: Album[];
+          endsArtistGroup: boolean;
+        }
     > = [];
     let group: Album[] = [];
     let groupKey = "";
@@ -2047,6 +2055,7 @@ function AlbumGrid({
           type: "albums",
           key: `${groupKey}:${index}`,
           albums: group.slice(index, index + columns),
+          endsArtistGroup: index + columns >= group.length,
         });
     };
     for (const album of albums) {
@@ -2072,7 +2081,9 @@ function AlbumGrid({
     count: rows.length + (albums.length < total ? 1 : 0),
     getScrollElement: () => ref.current,
     estimateSize: (index) =>
-      rows[index]?.type === "artist" ? 23 : cellWidth + 72,
+      rows[index]?.type === "artist"
+        ? 23
+        : cellWidth + 64 + (rows[index]?.endsArtistGroup ? 12 : 0),
     overscan: 3,
   });
   const visible = virtual.getVirtualItems();

@@ -509,7 +509,7 @@ a {
 }
 .album-grid-row {
   display: grid;
-  gap: 14px;
+  gap: 8px;
   padding: 0 14px;
 }
 .album-artist-header {
@@ -542,6 +542,7 @@ a {
   border-radius: 6px;
   overflow: hidden;
   border: 2px solid transparent;
+  background-clip: padding-box;
   transition:
     filter 0.15s,
     border-color 0.15s;
@@ -2433,14 +2434,18 @@ select {
 .now-cover,
 .tiny-cover {
   border-radius: 7px;
-  box-shadow:
-    0 8px 20px #02020278,
-    0 1px #efefdf18 inset;
+}
+
+.album-cover {
+  box-shadow: 0 8px 20px #02020278;
 }
 
 .now-cover,
 .tiny-cover {
   border-color: #e5e5d81c;
+  box-shadow:
+    0 8px 20px #02020278,
+    0 1px #efefdf18 inset;
 }
 
 .album-card.selected .album-cover {

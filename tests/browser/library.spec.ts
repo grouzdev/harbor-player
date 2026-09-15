@@ -425,6 +425,17 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     "border-color",
     /transparent|rgba\(0, 0, 0, 0\)/,
   );
+  await expect(firstAlbum.locator(".album-cover")).toHaveCSS(
+    "background-clip",
+    "padding-box",
+  );
+  const albumGridGeometry = await page.locator(".album-grid-row").evaluate(
+    (grid) => {
+      const style = getComputedStyle(grid);
+      return { gap: style.gap };
+    },
+  );
+  expect(albumGridGeometry.gap).toBe("8px");
   await firstAlbumButton.click();
   await expect(firstAlbum).toHaveClass(/selected/);
   await expect(firstAlbum.locator(".album-cover")).toHaveCSS(
