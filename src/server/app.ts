@@ -17,6 +17,7 @@ import {
 import type { BookmarkKind } from "../shared/contracts.js";
 import { MusicService } from "./service.js";
 import { errorMessage } from "./config.js";
+import { normalizeWebpCover } from "./cover-image.js";
 import { openInExplorer, type ExplorerLauncher } from "./explorer.js";
 import type { MusicBrainzOptions } from "./musicbrainz.js";
 
@@ -307,6 +308,12 @@ export async function createApp(options: {
       .header("Cache-Control", "private, max-age=86400")
       .type(id.endsWith(".png") ? "image/png" : "image/jpeg")
       .send(createReadStream(file));
+  });
+  app.post("/api/covers/normalize-webp", async (request) => {
+    const body = z
+      .object({ data: z.string().min(1).max(14_000_000) })
+      .parse(request.body);
+    return normalizeWebpCover(Buffer.from(body.data, "base64"));
   });
   app.get("/api/audio/:id", async (request, reply) => {
     const id = idParam.parse(request.params).id;

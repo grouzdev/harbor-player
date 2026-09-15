@@ -60,6 +60,7 @@ import {
   catalogUrl,
   count,
   duration,
+  prepareCoverFile,
   setCsrf,
   reconnectSession,
 } from "./api";
@@ -1174,38 +1175,22 @@ export function App() {
     [queryClient, refresh, scheduleRefresh],
   );
   const prepareDroppedCover = useCallback(
-    (album: Album, files: File[]) => {
+    async (album: Album, files: File[]) => {
       if (files.length !== 1) {
-        notify("Перетащите один файл JPEG или PNG до 10 МБ");
+        notify("Перетащите один файл JPEG, PNG или WebP до 10 МБ");
         return;
       }
       const [file] = files;
-      if (
-        file.size > 10 * 1024 * 1024 ||
-        !["image/jpeg", "image/png"].includes(file.type)
-      ) {
-        notify("Выберите JPEG или PNG до 10 МБ");
-        return;
-      }
-      const reader = new FileReader();
-      reader.onerror = () => notify("Не удалось прочитать файл обложки");
-      reader.onload = () => {
-        const result = typeof reader.result === "string" ? reader.result : "";
-        const data = result.split(",")[1];
-        if (!data) {
-          notify("Не удалось прочитать файл обложки");
-          return;
-        }
+      try {
+        const cover = await prepareCoverFile(file);
         setDroppedCover({
           album,
           name: file.name,
-          cover: {
-            data,
-            mime: file.type as "image/jpeg" | "image/png",
-          },
+          cover,
         });
-      };
-      reader.readAsDataURL(file);
+      } catch (error) {
+        notify(error instanceof Error ? error.message : "Не удалось обработать обложку");
+      }
     },
     [notify],
   );

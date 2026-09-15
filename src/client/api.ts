@@ -39,6 +39,29 @@ export async function api<T>(url: string, body?: unknown): Promise<T> {
   }
   return response.json();
 }
+export type CoverFilePatch = {
+  data: string;
+  mime: "image/jpeg" | "image/png";
+};
+export async function prepareCoverFile(file: File): Promise<CoverFilePatch> {
+  if (file.size > 10 * 1024 * 1024)
+    throw new Error("Выберите JPEG, PNG или WebP до 10 МБ");
+  const webp = file.type === "image/webp" || /\.webp$/i.test(file.name);
+  const supported = webp || ["image/jpeg", "image/png"].includes(file.type);
+  if (!supported) throw new Error("Выберите JPEG, PNG или WebP до 10 МБ");
+  const data = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Не удалось прочитать файл обложки"));
+    reader.onload = () => {
+      const value = typeof reader.result === "string" ? reader.result.split(",")[1] : "";
+      if (value) resolve(value);
+      else reject(new Error("Не удалось прочитать файл обложки"));
+    };
+    reader.readAsDataURL(file);
+  });
+  if (webp) return api<CoverFilePatch>("/covers/normalize-webp", { data });
+  return { data, mime: file.type as CoverFilePatch["mime"] };
+}
 export function catalogUrl(
   endpoint: string,
   filter: CatalogFilter,

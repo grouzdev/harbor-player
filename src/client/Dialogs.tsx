@@ -33,7 +33,14 @@ import type {
   TagPatch,
 } from "../shared/contracts";
 import { emptyFilter } from "../shared/contracts";
-import { api, catalogUrl, count, fieldLabels, operationLabels } from "./api";
+import {
+  api,
+  catalogUrl,
+  count,
+  fieldLabels,
+  operationLabels,
+  prepareCoverFile,
+} from "./api";
 import { AutocompleteInput } from "./AutocompleteInput";
 import { Modal } from "./Modal";
 
@@ -853,27 +860,21 @@ export function ActionDialog({
               {coverName || "Добавить обложку"}
               <input
                 type="file"
-                accept="image/png,image/jpeg"
+                accept="image/png,image/jpeg,image/webp,.webp"
                 hidden
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
-                  if (
-                    file.size > 10 * 1024 * 1024 ||
-                    !["image/jpeg", "image/png"].includes(file.type)
-                  ) {
-                    setError("Выберите JPEG или PNG до 10 МБ");
-                    return;
-                  }
-                  const reader = new FileReader();
-                  reader.onload = () => {
-                    setCover({
-                      data: String(reader.result).split(",")[1],
-                      mime: file.type as "image/jpeg" | "image/png",
-                    });
+                  try {
+                    setCover(await prepareCoverFile(file));
                     setCoverName(file.name);
-                  };
-                  reader.readAsDataURL(file);
+                  } catch (error) {
+                    setError(
+                      error instanceof Error
+                        ? error.message
+                        : "Не удалось обработать обложку",
+                    );
+                  }
                 }}
               />
             </label>
