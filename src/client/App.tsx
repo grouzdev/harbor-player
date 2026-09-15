@@ -20,6 +20,7 @@ import {
   CircleUserRound,
   ChevronRight,
   Clock3,
+  Copy,
   Disc3,
   FolderOpen,
   FolderInput,
@@ -245,6 +246,23 @@ function trackCountLabel(trackCount: number) {
           ? "трека"
           : "треков";
   return `${count(trackCount)} ${word}`;
+}
+
+function copyArtistLabel(artists: string[]) {
+  return artists.join(", ") || "Неизвестный исполнитель";
+}
+
+function copyTrackLabel(track: Track) {
+  return `${copyArtistLabel(track.artists)} — ${track.title}`;
+}
+
+function copyAlbumLabel(album: {
+  artists: string[];
+  title: string;
+  year: number | null;
+}) {
+  const title = `${copyArtistLabel(album.artists)} — ${album.title || "Без альбома"}`;
+  return album.year === null ? title : `${title} (${album.year})`;
 }
 
 function sameStringArray(left: string[], right: string[]) {
@@ -863,10 +881,19 @@ export function App() {
     [bookmarkKeys, bookmarksUnavailable, notify, queryClient],
   );
   const showCatalogMenu = useCallback(
-    (event: React.MouseEvent, kind: BookmarkKind, id: string) => {
+    (
+      event: React.MouseEvent,
+      kind: BookmarkKind,
+      id: string,
+      copyText?: string,
+    ) => {
       event.preventDefault();
       const bookmarked = bookmarkKeys.has(`${kind}:${id}`);
       const bookmarkPending = pendingBookmarkKeys.has(`${kind}:${id}`);
+      const selection: Selection =
+        kind === "album"
+          ? { filter: { ...emptyFilter, albumIds: [id] } }
+          : { trackIds: [id] };
       setContextMenu({
         x: event.clientX,
         y: event.clientY,
@@ -893,18 +920,52 @@ export function App() {
             disabled: bookmarksUnavailable || bookmarkPending,
             onSelect: () => changeBookmark(kind, id, !bookmarked),
           },
-          ...(kind === "album"
+          ...(kind !== "artist"
             ? [
                 {
                   label: "Редактировать теги",
                   icon: <Tag size={16} />,
                   onSelect: () => {
-                    setModalSelection({
-                      filter: { ...emptyFilter, albumIds: [id] },
-                    });
+                    setModalSelection(selection);
                     setModal("tags");
                   },
                 },
+                {
+                  label: "Перенести треки",
+                  icon: <FolderInput size={16} />,
+                  onSelect: () => {
+                    setModalSelection(selection);
+                    setModal("move");
+                  },
+                },
+                {
+                  label: "Удалить треки",
+                  icon: <Trash2 size={16} />,
+                  onSelect: () => {
+                    setModalSelection(selection);
+                    setModal("trash");
+                  },
+                },
+                ...(copyText
+                  ? [
+                      {
+                        label: "Копировать данные",
+                        icon: <Copy size={16} />,
+                        onSelect: async () => {
+                          try {
+                            await navigator.clipboard.writeText(copyText);
+                            notify("Данные скопированы");
+                          } catch (error) {
+                            notify(
+                              error instanceof Error
+                                ? `Не удалось скопировать данные: ${error.message}`
+                                : "Не удалось скопировать данные",
+                            );
+                          }
+                        },
+                      },
+                    ]
+                  : []),
               ]
             : []),
           ...(kind !== "artist"
@@ -2121,42 +2182,6 @@ export function App() {
                     <X size={15} />
                   </button>
                 )}
-                <button
-                  className="icon-button"
-                  aria-label="Редактировать теги"
-                  title="Редактировать теги"
-                  disabled={!total}
-                  onClick={() => {
-                    setModalSelection(null);
-                    setModal("tags");
-                  }}
-                >
-                  <Tag size={16} />
-                </button>
-                <button
-                  className="icon-button"
-                  aria-label="Перенести треки"
-                  title="Перенести в библиотеку"
-                  disabled={!total}
-                  onClick={() => {
-                    setModalSelection(null);
-                    setModal("move");
-                  }}
-                >
-                  <FolderInput size={17} />
-                </button>
-                <button
-                  className="icon-button danger"
-                  aria-label="Удалить треки"
-                  title="Удалить с возможностью восстановления"
-                  disabled={!total}
-                  onClick={() => {
-                    setModalSelection(null);
-                    setModal("trash");
-                  }}
-                >
-                  <Trash2 size={16} />
-                </button>
               </div>
             </div>
             {queryError && (
@@ -2540,6 +2565,7 @@ function AlbumGrid({
     event: React.MouseEvent,
     kind: BookmarkKind,
     id: string,
+    copyText?: string,
   ) => void;
   onPlay: (id: string) => void;
   onCoverDrop: (album: Album, files: File[]) => void;
@@ -2666,7 +2692,12 @@ function AlbumGrid({
                       className={`album-card ${selected.includes(album.id) ? "selected" : ""}`}
                       title={`${album.title || "Без альбома"} · ${album.artists.join(", ")}`}
                       onContextMenu={(event) =>
-                        onContextMenu(event, "album", album.id)
+                        onContextMenu(
+                          event,
+                          "album",
+                          album.id,
+                          copyAlbumLabel(album),
+                        )
                       }
                     >
                       <BookmarkToggle
@@ -2794,6 +2825,7 @@ function TrackList({
     event: React.MouseEvent,
     kind: BookmarkKind,
     id: string,
+    copyText?: string,
   ) => void;
   bookmarkKeys: Set<string>;
   bookmarksUnavailable: boolean;
@@ -2919,7 +2951,16 @@ function TrackList({
                   }
                 }}
                 onContextMenu={(event) =>
-                  onContextMenu(event, "album", track.albumKey)
+                  onContextMenu(
+                    event,
+                    "album",
+                    track.albumKey,
+                    copyAlbumLabel({
+                      artists: entry.artists,
+                      title: track.albumTitle,
+                      year: track.year,
+                    }),
+                  )
                 }
                 style={{
                   position: "absolute",
@@ -2975,7 +3016,7 @@ function TrackList({
                 onSelect={(event) => onSelect(track.id, event.ctrlKey)}
                 onDoubleClick={() => onPlay(track)}
                 onContextMenu={(event) =>
-                  onContextMenu(event, "track", track.id)
+                  onContextMenu(event, "track", track.id, copyTrackLabel(track))
                 }
                 endAction={
                   <BookmarkToggle
