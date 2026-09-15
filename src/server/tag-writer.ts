@@ -15,6 +15,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { TagPatch } from "../shared/contracts.js";
 import { audioDigest } from "./audio-digest.js";
 import { writeMp3Cover } from "./mp3-cover.js";
+import { writeMp3TagsLosslessly } from "./mp3-id3.js";
 
 const fields: Record<string, string[]> = {
   title: ["title"],
@@ -109,7 +110,14 @@ export async function writeTags(file: string, patch: TagPatch): Promise<void> {
     patch.cover !== undefined &&
     Object.keys(patch).every((key) => key === "cover");
   if (coverOnlyMp3) await writeMp3Cover(file, patch.cover!);
-  if (!coverOnlyMp3) {
+  const losslessMp3 =
+    !coverOnlyMp3 && path.extname(file).toLowerCase() === ".mp3"
+      ? await writeMp3TagsLosslessly(file, patch, {
+          track: before.common.track.of || undefined,
+          disc: before.common.disk.of || undefined,
+        })
+      : false;
+  if (!coverOnlyMp3 && !losslessMp3) {
     const tagged = File.createFromPath(file);
     try {
       if (

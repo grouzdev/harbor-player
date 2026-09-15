@@ -144,6 +144,13 @@ describe("MP3 cover writer", () => {
     const sampleTagSize = size(sample.subarray(6, 10));
     const audio = sample.subarray(10 + sampleTagSize);
     const file = path.join(root, "conflicting-genres.mp3");
+    const tmcl = version4RawFrame(
+      "TMCL",
+      Buffer.concat([
+        Buffer.from([3]),
+        Buffer.from("performer\0Kevin Parker", "utf8"),
+      ]),
+    );
     await writeFile(
       file,
       Buffer.concat([
@@ -160,7 +167,7 @@ describe("MP3 cover writer", () => {
             ),
           ]),
         ),
-        id3v2(4, version4Frame("TCON", "Electronic")),
+        id3v2(4, Buffer.concat([version4Frame("TCON", "Electronic"), tmcl])),
         audio,
         id3v1Genre(111), // Rave in the standard ID3v1 genre table.
       ]),
@@ -186,6 +193,10 @@ describe("MP3 cover writer", () => {
         (tag) => tag.value,
       ),
     ).toEqual(["Rave"]);
+    expect(
+      metadata.native["ID3v2.4"]?.find((tag) => tag.id === "TMCL")?.value,
+    ).toEqual({ performer: ["Kevin Parker"] });
+    expect((await readFile(file)).indexOf(tmcl)).toBeGreaterThanOrEqual(0);
     expect(await audioDigest(file)).toBe(beforeAudio);
   });
 
