@@ -316,6 +316,17 @@ body.selection-dragging * {
   background: #c6ca91;
   box-shadow: 0 0 6px #c6ca91a6;
 }
+.list-tile-status-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  margin-right: 6px;
+  place-items: center;
+}
+.list-tile-status-icon > svg {
+  display: block;
+}
 .list-tile.related .list-tile-label {
   color: #d7d9b2;
   text-shadow: 0 0 6px #c6ca915c;
@@ -2777,6 +2788,23 @@ select {
 
 .track-row .list-tile-main {
   color: #cdcfca;
+}
+.list-tile.playing .list-tile-main,
+.list-tile.playing .list-tile-label,
+.list-tile.playing .list-tile-prefix,
+.list-tile.playing .list-tile-suffix,
+.list-tile.playing .list-tile-status-icon {
+  color: #b9d4b7;
+}
+.list-tile.playing .list-tile-label {
+  text-shadow: 0 0 6px #b9d4b766;
+}
+.list-tile.playing.selected .list-tile-main {
+  background: #b9d4b716;
+  box-shadow:
+    0 1px #00000074 inset,
+    0 -1px #b9d4b726 inset,
+    0 0 7px #02020230 inset;
 }
 
 .album-details > small {

@@ -31,6 +31,7 @@ import {
   Music4,
   ListMusic,
   Pencil,
+  Play,
   Plus,
   RefreshCw,
   Search,
@@ -1456,13 +1457,26 @@ export function App() {
     () => artists.data?.pages.flatMap((p) => p.items) || [],
     [artists.data],
   );
+  const currentPlayerTrack = player.queue?.track;
   const currentPlayerArtists = useMemo(() => {
-    const track = player.queue?.track;
-    if (!track) return new Set<string>();
+    if (!currentPlayerTrack) return new Set<string>();
     return new Set(
-      track.albumArtists.length ? track.albumArtists : track.artists,
+      currentPlayerTrack.albumArtists.length
+        ? currentPlayerTrack.albumArtists
+        : currentPlayerTrack.artists,
     );
-  }, [player.queue?.track]);
+  }, [currentPlayerTrack]);
+  const currentPlayerGenres = useMemo(
+    () =>
+      new Set(
+        currentPlayerTrack
+          ? currentPlayerTrack.genres.length
+            ? currentPlayerTrack.genres
+            : [""]
+          : [],
+      ),
+    [currentPlayerTrack],
+  );
   const previousArtistFilterKey = useRef<string | null>(null);
   useEffect(() => {
     const key = JSON.stringify(artistFilter);
@@ -2140,6 +2154,12 @@ export function App() {
                       hasFacetRelevance &&
                       !!facetRelevance.data?.libraryIds.includes(library.id)
                     }
+                    playing={currentPlayerTrack?.libraryId === library.id}
+                    statusIcon={
+                      currentPlayerTrack?.libraryId === library.id ? (
+                        <Play size={13} fill="currentColor" />
+                      ) : undefined
+                    }
                     selected={highlightedLocations.has(
                       librarySelectionKey(library.id),
                     )}
@@ -2244,6 +2264,7 @@ export function App() {
               {genres.data?.map((g) => {
                 const label = g.name || "Без жанра";
                 const checked = highlightedGenres.has(g.name);
+                const playing = currentPlayerGenres.has(g.name);
                 return (
                   <ListTile
                     key={g.name}
@@ -2251,6 +2272,12 @@ export function App() {
                     related={
                       hasFacetRelevance &&
                       !!facetRelevance.data?.genres.includes(g.name)
+                    }
+                    playing={playing}
+                    statusIcon={
+                      playing ? (
+                        <Play size={13} fill="currentColor" />
+                      ) : undefined
                     }
                     selected={checked}
                     selectionKey={g.name}
@@ -2772,14 +2799,18 @@ function ArtistList({
             ? "Без исполнителя"
             : item.name;
           const checked = highlighted.has(item.name);
+          const current = currentArtists.has(item.name);
           return (
             <ListTile
               key={item.name}
               className="genre-row artist-row"
               title={label}
               selected={checked}
-              related={
-                selected.includes(item.name) || currentArtists.has(item.name)
+              current={current}
+              playing={current}
+              related={selected.includes(item.name) && !current}
+              statusIcon={
+                current ? <Play size={13} fill="currentColor" /> : undefined
               }
               selectionKey={item.name}
               value={label}
@@ -3413,6 +3444,12 @@ function TrackList({
                 }
                 selectionKey={track.id}
                 current={currentId === track.id}
+                playing={currentId === track.id}
+                statusIcon={
+                  currentId === track.id ? (
+                    <Play size={13} fill="currentColor" />
+                  ) : undefined
+                }
                 prefix={track.trackNumber ?? undefined}
                 value={track.title}
                 suffix={duration(track.duration)}

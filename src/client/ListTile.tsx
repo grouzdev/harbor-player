@@ -7,6 +7,8 @@ type ListTileProps = {
   selected?: boolean;
   current?: boolean;
   related?: boolean;
+  playing?: boolean;
+  statusIcon?: ReactNode;
   expanded?: boolean;
   disabled?: boolean;
   title?: string;
@@ -29,6 +31,8 @@ export function ListTile({
   selected = false,
   current = false,
   related = false,
+  playing = false,
+  statusIcon,
   expanded,
   disabled = false,
   title,
@@ -45,7 +49,7 @@ export function ListTile({
 }: ListTileProps) {
   return (
     <div
-      className={`list-tile ${selected ? "selected" : ""} ${current ? "current" : ""} ${related ? "related" : ""} ${startAction ? "has-start-action" : ""} ${endAction ? "has-end-action" : ""} ${className}`}
+      className={`list-tile ${selected ? "selected" : ""} ${current ? "current" : ""} ${related ? "related" : ""} ${playing ? "playing" : ""} ${startAction ? "has-start-action" : ""} ${endAction ? "has-end-action" : ""} ${className}`}
       style={style}
       data-testid={testId}
       data-format={dataFormat}
@@ -67,9 +71,13 @@ export function ListTile({
           <span className="list-tile-prefix">{prefix}</span>
         )}
         <span className="list-tile-value">
-          {related && (
+          {statusIcon ? (
+            <span className="list-tile-status-icon" aria-hidden="true">
+              {statusIcon}
+            </span>
+          ) : related ? (
             <span className="list-tile-related-marker" aria-hidden="true" />
-          )}
+          ) : null}
           <span className="list-tile-label">{value}</span>
         </span>
         {suffix !== undefined && (

@@ -1409,8 +1409,16 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
       page.locator("audio").evaluate((a: HTMLAudioElement) => a.readyState),
     )
     .toBeGreaterThanOrEqual(2);
-  await expect(artistRow).toHaveClass(/related/);
-  await expect(artistRow.locator(".list-tile-related-marker")).toBeVisible();
+  await expect(flac()).toHaveClass(/current/);
+  await expect(flac().locator(".list-tile-status-icon svg")).toBeVisible();
+  await flac().locator(".list-tile-main").click();
+  await expect(flac()).toHaveClass(/selected/);
+  await expect(flac().locator(".list-tile-main")).toHaveCSS(
+    "box-shadow",
+    /inset/,
+  );
+  await expect(artistRow).toHaveClass(/current/);
+  await expect(artistRow.locator(".list-tile-status-icon svg")).toBeVisible();
   const nowPlaying = page.locator(".now-playing");
   await expect(
     nowPlaying.getByRole("button", { name: /Открыть альбом/ }),
@@ -1573,6 +1581,27 @@ test("cover mode shows the album, artwork and quick playback search", async ({
         .evaluate((audio: HTMLAudioElement) => audio.readyState),
     )
     .toBeGreaterThanOrEqual(2);
+  const currentTrack = page.getByTestId("track-row").first();
+  await expect(currentTrack).toHaveClass(/playing/);
+  await expect(
+    currentTrack.locator(".list-tile-status-icon svg"),
+  ).toBeVisible();
+  await currentTrack.locator(".list-tile-main").click();
+  await expect(currentTrack).toHaveClass(/selected/);
+  await expect(libraryTile).toHaveClass(/playing/);
+  await expect(libraryTile.locator(".list-tile-status-icon svg")).toBeVisible();
+  await expect
+    .poll(() => page.locator(".genres-panel .list-tile.playing").count())
+    .toBeGreaterThan(0);
+  await expect
+    .poll(() => page.locator(".artists-panel .artist-row.playing").count())
+    .toBeGreaterThan(0);
+  await expect(
+    page
+      .locator(".artists-panel .artist-row.playing")
+      .first()
+      .locator(".list-tile-status-icon svg"),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "Открыть режим обложки" }).click();
   const coverMode = page.getByRole("main", { name: "Режим обложки" });
