@@ -32,7 +32,6 @@ import {
   Tag,
   Trash2,
   X,
-  Play,
 } from "lucide-react";
 import {
   emptyFilter,
@@ -1950,14 +1949,6 @@ export function App() {
                   }}
                 >
                   <Trash2 size={16} />
-                </button>
-                <button
-                  className="button primary small"
-                  disabled={!trackItems.length}
-                  onClick={() => void player.start(trackItems[0], filter)}
-                >
-                  <Play size={13} fill="currentColor" />
-                  Слушать
                 </button>
               </div>
             </div>

@@ -734,9 +734,6 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.track-row {
-  box-shadow: inset 0 -1px #ffffff03;
-}
 .track-row.has-end-action .list-tile-main {
   height: 100%;
   padding: 0 36px 0 24px;
@@ -2599,10 +2596,6 @@ select {
     0 0 0 1px #c7ca9233,
     0 8px 20px #02020278,
     0 1px #efefdf18 inset;
-}
-
-.track-row {
-  box-shadow: inset 0 -1px #eeeee00c;
 }
 
 .track-row .list-tile-main {
