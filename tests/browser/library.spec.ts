@@ -91,6 +91,76 @@ test("fullscreen button changes the application shell", async ({ page }) => {
   expect(restored!.width).toBeCloseTo(moved!.width, 0);
 });
 
+test("fullscreen window adapts to its own orientation and reaches screen edges", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 900 });
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Развернуть окно на весь экран" })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => Boolean(document.fullscreenElement)))
+    .toBe(true);
+
+  const initial = await page.locator(".app-shell").boundingBox();
+  expect(initial).not.toBeNull();
+  expect(initial!.x).toBeGreaterThan(0);
+  expect(initial!.y).toBeGreaterThan(0);
+  await expect(page.locator(".app-shell")).not.toHaveClass(/layout--portrait/);
+
+  const resizeHandle = page.locator(".fullscreen-window-resize--se");
+  const resizeBox = await resizeHandle.boundingBox();
+  expect(resizeBox).not.toBeNull();
+  await page.mouse.move(
+    resizeBox!.x + resizeBox!.width / 2,
+    resizeBox!.y + resizeBox!.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(resizeBox!.x - 510, resizeBox!.y - 10);
+  await page.mouse.up();
+
+  await expect(page.locator(".app-shell")).toHaveClass(/layout--portrait/);
+  const portraitTops = await page
+    .locator(".panel")
+    .evaluateAll((panels) =>
+      panels.map((panel) => panel.getBoundingClientRect().top),
+    );
+  expect(portraitTops[0]).toBeCloseTo(portraitTops[1], 1);
+  expect(portraitTops[0]).toBeLessThan(portraitTops[3]);
+
+  const topbar = page.locator(".topbar");
+  const topbarBox = await topbar.boundingBox();
+  expect(topbarBox).not.toBeNull();
+  await page.mouse.move(topbarBox!.x + 20, topbarBox!.y + 30);
+  await page.mouse.down();
+  await page.mouse.move(20, 30);
+  await page.mouse.up();
+
+  const atScreenEdge = await page.locator(".app-shell").boundingBox();
+  expect(atScreenEdge).not.toBeNull();
+  expect(atScreenEdge!.x).toBeCloseTo(0, 1);
+  expect(atScreenEdge!.y).toBeCloseTo(0, 1);
+
+  const portraitResizeBox = await resizeHandle.boundingBox();
+  expect(portraitResizeBox).not.toBeNull();
+  await page.mouse.move(
+    portraitResizeBox!.x + portraitResizeBox!.width / 2,
+    portraitResizeBox!.y + portraitResizeBox!.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(portraitResizeBox!.x + 300, portraitResizeBox!.y - 100);
+  await page.mouse.up();
+
+  await expect(page.locator(".app-shell")).not.toHaveClass(/layout--portrait/);
+  const landscapeTops = await page
+    .locator(".panel")
+    .evaluateAll((panels) =>
+      panels.map((panel) => panel.getBoundingClientRect().top),
+    );
+  expect(landscapeTops.every((top) => top === landscapeTops[0])).toBe(true);
+});
+
 test("portrait workspace uses two independently resizable rows", async ({
   page,
 }) => {

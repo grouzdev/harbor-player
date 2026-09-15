@@ -269,6 +269,7 @@ export function App() {
     () => document.fullscreenElement === document.documentElement,
   );
   const appShellRef = useRef<HTMLDivElement>(null);
+  const [isPortraitLayout, setIsPortraitLayout] = useState(false);
   const [fullscreenWindowMode, setFullscreenWindowMode] =
     useState<FullscreenWindowMode>("default");
   const [fullscreenWindowBounds, setFullscreenWindowBounds] =
@@ -284,6 +285,17 @@ export function App() {
       artist,
       requestId: (current?.requestId || 0) + 1,
     }));
+  }, []);
+  useEffect(() => {
+    const shell = appShellRef.current;
+    if (!shell) return;
+    const updateLayout = ({ width, height }: DOMRectReadOnly) =>
+      setIsPortraitLayout(height > width);
+    const observer = new ResizeObserver(([entry]) =>
+      updateLayout(entry.contentRect),
+    );
+    observer.observe(shell);
+    return () => observer.disconnect();
   }, []);
   useEffect(() => {
     const syncFullscreen = () => {
@@ -1475,7 +1487,9 @@ export function App() {
   return (
     <div
       ref={appShellRef}
-      className={`app-shell fullscreen-window--${fullscreenWindowMode}`}
+      className={`app-shell fullscreen-window--${fullscreenWindowMode}${
+        isPortraitLayout ? " layout--portrait" : ""
+      }`}
       style={fullscreenWindowStyle}
     >
       {isFullscreen && (
