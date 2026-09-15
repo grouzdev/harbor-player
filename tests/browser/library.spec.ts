@@ -841,6 +841,26 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await secondAlbumButton.dispatchEvent("click", { ctrlKey: true });
   await expect(firstAlbum).toHaveClass(/selected/);
   await expect(secondAlbum).toHaveClass(/selected/);
+  await firstAlbum.dispatchEvent("contextmenu", { clientX: 300, clientY: 300 });
+  await expect(
+    page.getByRole("menuitem", { name: "Редактировать теги (2)" }),
+  ).toBeVisible();
+  await page.getByRole("menuitem", { name: "Редактировать теги (2)" }).click();
+  const groupedAlbumTrackCount =
+    Number(
+      (await firstAlbum.locator(".album-track-count").textContent())?.match(
+        /\d+/,
+      )?.[0],
+    ) +
+    Number(
+      (await secondAlbum.locator(".album-track-count").textContent())?.match(
+        /\d+/,
+      )?.[0],
+    );
+  await expect(page.getByRole("dialog")).toContainText(
+    `Выбрано треков: ${groupedAlbumTrackCount}`,
+  );
+  await page.getByRole("button", { name: "Отмена" }).click();
   await firstAlbumButton.click();
   await expect(firstAlbum).toHaveClass(/selected/);
   await expect(secondAlbum).toHaveClass(/selected/);

@@ -79,7 +79,7 @@ import {
   RemoveLibraryDialog,
 } from "./Dialogs";
 import { ListTile } from "./ListTile";
-import { usePanelSelection } from "./panel-selection";
+import { resolveContextSelection, usePanelSelection } from "./panel-selection";
 import { selectionScrollAnchor } from "./selection-scroll";
 import {
   folderSelectionKey,
@@ -99,6 +99,13 @@ type BookmarkChange = (
   kind: BookmarkKind,
   id: string,
   bookmarked: boolean,
+) => void;
+type CatalogContextMenuHandler = (
+  event: React.MouseEvent,
+  kind: BookmarkKind,
+  id: string,
+  selectedIds: string[],
+  copyTexts?: string[],
 ) => void;
 
 type PanelId = "libraries" | "genres" | "artists" | "albums" | "tracks";
@@ -879,85 +886,123 @@ export function App() {
     bookmarkErrorNotified.current = bookmarks.error;
     notify(`Не удалось загрузить закладки: ${bookmarks.error.message}`);
   }, [bookmarks.error, notify]);
-  const changeBookmark = useCallback(
-    (kind: BookmarkKind, id: string, bookmarked: boolean) => {
-      const key = `${kind}:${id}`;
-      if (bookmarksUnavailable || pendingBookmarkKeysRef.current.has(key))
-        return;
-      const previous = bookmarkKeys.has(key);
-      pendingBookmarkKeysRef.current.add(key);
-      setPendingBookmarkKeys(new Set(pendingBookmarkKeysRef.current));
-      queryClient.setQueryData<CatalogBookmark[]>(["bookmarks"], (current) =>
-        updateBookmarkList(current, kind, id, bookmarked),
+  const changeBookmarks = useCallback(
+    (kind: BookmarkKind, ids: readonly string[], bookmarked: boolean) => {
+      const targets = [...new Set(ids)].filter(
+        (id) => !pendingBookmarkKeysRef.current.has(`${kind}:${id}`),
       );
+      if (bookmarksUnavailable || !targets.length) return;
+      const previous = new Map(
+        targets.map((id) => [id, bookmarkKeys.has(`${kind}:${id}`)]),
+      );
+      for (const id of targets)
+        pendingBookmarkKeysRef.current.add(`${kind}:${id}`);
+      setPendingBookmarkKeys(new Set(pendingBookmarkKeysRef.current));
+      queryClient.setQueryData<CatalogBookmark[]>(["bookmarks"], (current) => {
+        let next = current;
+        for (const id of targets)
+          next = updateBookmarkList(next, kind, id, bookmarked);
+        return next;
+      });
 
       bookmarkWriteChain.current = bookmarkWriteChain.current
         .catch(() => undefined)
         .then(async () => {
-          try {
-            await api<CatalogBookmark[]>("/bookmarks", {
-              kind,
-              id,
-              bookmarked,
-            });
-            bookmarkCatalogDirty.current = true;
-          } catch (error) {
-            queryClient.setQueryData<CatalogBookmark[]>(
-              ["bookmarks"],
-              (current) => updateBookmarkList(current, kind, id, previous),
-            );
-            notify(error instanceof Error ? error.message : String(error));
-          } finally {
-            pendingBookmarkKeysRef.current.delete(key);
-            setPendingBookmarkKeys(new Set(pendingBookmarkKeysRef.current));
-            if (!pendingBookmarkKeysRef.current.size) {
-              await queryClient.invalidateQueries({
-                queryKey: ["bookmarks"],
+          let failed = 0;
+          let firstError: unknown;
+          for (const id of targets) {
+            try {
+              await api<CatalogBookmark[]>("/bookmarks", {
+                kind,
+                id,
+                bookmarked,
               });
-              if (bookmarkCatalogDirty.current) {
-                bookmarkCatalogDirty.current = false;
-                await queryClient.invalidateQueries({
-                  predicate: (query) => {
-                    if (
-                      ![
-                        "genres",
-                        "artists",
-                        "albums",
-                        "tracks",
-                        "filter-validity",
-                      ].includes(String(query.queryKey[0]))
-                    )
-                      return false;
-                    const queryFilter = query.queryKey[1];
-                    return Boolean(
-                      queryFilter &&
-                      typeof queryFilter === "object" &&
-                      "bookmarksOnly" in queryFilter &&
-                      queryFilter.bookmarksOnly,
-                    );
-                  },
-                });
-              }
+              bookmarkCatalogDirty.current = true;
+            } catch (error) {
+              failed += 1;
+              firstError ||= error;
+              queryClient.setQueryData<CatalogBookmark[]>(
+                ["bookmarks"],
+                (current) =>
+                  updateBookmarkList(
+                    current,
+                    kind,
+                    id,
+                    previous.get(id) || false,
+                  ),
+              );
+            } finally {
+              pendingBookmarkKeysRef.current.delete(`${kind}:${id}`);
+              setPendingBookmarkKeys(new Set(pendingBookmarkKeysRef.current));
+            }
+          }
+          if (failed)
+            notify(
+              targets.length === 1
+                ? firstError instanceof Error
+                  ? firstError.message
+                  : String(firstError)
+                : `Не удалось изменить закладки: ${failed} из ${targets.length}`,
+            );
+          if (!pendingBookmarkKeysRef.current.size) {
+            await queryClient.invalidateQueries({
+              queryKey: ["bookmarks"],
+            });
+            if (bookmarkCatalogDirty.current) {
+              bookmarkCatalogDirty.current = false;
+              await queryClient.invalidateQueries({
+                predicate: (query) => {
+                  if (
+                    ![
+                      "genres",
+                      "artists",
+                      "albums",
+                      "tracks",
+                      "filter-validity",
+                    ].includes(String(query.queryKey[0]))
+                  )
+                    return false;
+                  const queryFilter = query.queryKey[1];
+                  return Boolean(
+                    queryFilter &&
+                    typeof queryFilter === "object" &&
+                    "bookmarksOnly" in queryFilter &&
+                    queryFilter.bookmarksOnly,
+                  );
+                },
+              });
             }
           }
         });
     },
     [bookmarkKeys, bookmarksUnavailable, notify, queryClient],
   );
+  const changeBookmark = useCallback(
+    (kind: BookmarkKind, id: string, bookmarked: boolean) =>
+      changeBookmarks(kind, [id], bookmarked),
+    [changeBookmarks],
+  );
   const showCatalogMenu = useCallback(
     (
       event: React.MouseEvent,
       kind: BookmarkKind,
       id: string,
-      copyText?: string,
+      selectedIds: string[],
+      copyTexts?: string[],
     ) => {
       event.preventDefault();
-      const bookmarked = bookmarkKeys.has(`${kind}:${id}`);
-      const bookmarkPending = pendingBookmarkKeys.has(`${kind}:${id}`);
+      const ids = [...new Set(selectedIds)];
+      const allBookmarked = ids.every((item) =>
+        bookmarkKeys.has(`${kind}:${item}`),
+      );
+      const bookmarkPending = ids.some((item) =>
+        pendingBookmarkKeys.has(`${kind}:${item}`),
+      );
+      const suffix = ids.length > 1 ? ` (${ids.length})` : "";
       const selection: Selection =
         kind === "album"
-          ? { filter: { ...emptyFilter, albumIds: [id] } }
-          : { trackIds: [id] };
+          ? { filter: { ...emptyFilter, albumIds: ids } }
+          : { trackIds: ids };
       setContextMenu({
         x: event.clientX,
         y: event.clientY,
@@ -969,25 +1014,25 @@ export function App() {
                 ? "Закладки загружаются…"
                 : bookmarks.isError
                   ? "Закладки недоступны"
-                  : bookmarked
-                    ? "Удалить из закладок"
-                    : "Добавить в закладки",
+                  : allBookmarked
+                    ? `Удалить из закладок${suffix}`
+                    : `Добавить в закладки${suffix}`,
             icon:
               bookmarkPending || bookmarks.isPending ? (
                 <RefreshCw size={16} className="spinning" />
               ) : (
                 <BookmarkIcon
                   size={16}
-                  fill={bookmarked ? "currentColor" : "none"}
+                  fill={allBookmarked ? "currentColor" : "none"}
                 />
               ),
             disabled: bookmarksUnavailable || bookmarkPending,
-            onSelect: () => changeBookmark(kind, id, !bookmarked),
+            onSelect: () => changeBookmarks(kind, ids, !allBookmarked),
           },
           ...(kind !== "artist"
             ? [
                 {
-                  label: "Редактировать теги",
+                  label: `Редактировать теги${suffix}`,
                   icon: <Tag size={16} />,
                   onSelect: () => {
                     setModalSelection(selection);
@@ -995,7 +1040,7 @@ export function App() {
                   },
                 },
                 {
-                  label: "Перенести треки",
+                  label: `Перенести треки${suffix}`,
                   icon: <FolderInput size={16} />,
                   onSelect: () => {
                     setModalSelection(selection);
@@ -1003,21 +1048,23 @@ export function App() {
                   },
                 },
                 {
-                  label: "Удалить треки",
+                  label: `Удалить треки${suffix}`,
                   icon: <Trash2 size={16} />,
                   onSelect: () => {
                     setModalSelection(selection);
                     setModal("trash");
                   },
                 },
-                ...(copyText
+                ...(copyTexts?.length
                   ? [
                       {
-                        label: "Копировать данные",
+                        label: `Копировать данные${suffix}`,
                         icon: <Copy size={16} />,
                         onSelect: async () => {
                           try {
-                            await navigator.clipboard.writeText(copyText);
+                            await navigator.clipboard.writeText(
+                              copyTexts.join("\n"),
+                            );
                             notify("Данные скопированы");
                           } catch (error) {
                             notify(
@@ -1035,11 +1082,24 @@ export function App() {
           ...(kind !== "artist"
             ? [
                 {
-                  label: "Открыть в проводнике",
+                  label: `Открыть в проводнике${suffix}`,
                   icon: <FolderOpen size={16} />,
                   onSelect: async () => {
                     try {
-                      await api("/explorer", { kind, id });
+                      const results = await Promise.allSettled(
+                        ids.map((item) => api("/explorer", { kind, id: item })),
+                      );
+                      const failed = results.filter(
+                        (result) => result.status === "rejected",
+                      ).length;
+                      if (failed)
+                        notify(
+                          ids.length === 1
+                            ? String(
+                                (results[0] as PromiseRejectedResult).reason,
+                              )
+                            : `Не удалось открыть в проводнике: ${failed} из ${ids.length}`,
+                        );
                     } catch (error) {
                       notify(
                         error instanceof Error ? error.message : String(error),
@@ -1057,7 +1117,7 @@ export function App() {
       bookmarks.isError,
       bookmarks.isPending,
       bookmarksUnavailable,
-      changeBookmark,
+      changeBookmarks,
       notify,
       pendingBookmarkKeys,
     ],
@@ -2603,11 +2663,7 @@ function ArtistList({
   loading: boolean;
   onSelectionChange: (names: string[]) => void;
   onMore: () => void;
-  onContextMenu: (
-    event: React.MouseEvent,
-    kind: BookmarkKind,
-    id: string,
-  ) => void;
+  onContextMenu: CatalogContextMenuHandler;
   bookmarkKeys: Set<string>;
   bookmarksUnavailable: boolean;
   pendingBookmarkKeys: Set<string>;
@@ -2727,9 +2783,15 @@ function ArtistList({
                   items.map((entry) => entry.name),
                 )
               }
-              onContextMenu={(event) =>
-                onContextMenu(event, "artist", item.name)
-              }
+              onContextMenu={(event) => {
+                const selectedIds = resolveContextSelection(
+                  selected,
+                  item.name,
+                );
+                if (!selected.includes(item.name))
+                  onSelectionChange(selectedIds);
+                onContextMenu(event, "artist", item.name, selectedIds);
+              }}
               style={{
                 position: "absolute",
                 top: 0,
@@ -2780,12 +2842,7 @@ function AlbumGrid({
   onSelectionChange: (ids: string[]) => void;
   onMore: () => void;
   loading: boolean;
-  onContextMenu: (
-    event: React.MouseEvent,
-    kind: BookmarkKind,
-    id: string,
-    copyText?: string,
-  ) => void;
+  onContextMenu: CatalogContextMenuHandler;
   onPlay: (id: string) => void;
   onSelectArtist: (artist: string) => void;
   onCoverDrop: (album: Album, files: File[]) => void;
@@ -2806,6 +2863,10 @@ function AlbumGrid({
     onChange: onSelectionChange,
   });
   const highlighted = selection.previewKeys || new Set(selected);
+  const albumById = useMemo(
+    () => new Map(albums.map((album) => [album.id, album])),
+    [albums],
+  );
   const [width, setWidth] = useState(330);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   useEffect(() => {
@@ -2975,14 +3036,25 @@ function AlbumGrid({
                       className={`album-card ${highlighted.has(album.id) ? "selected" : ""}`}
                       data-selection-key={album.id}
                       title={`${album.title || "Без альбома"} · ${album.artists.join(", ")}`}
-                      onContextMenu={(event) =>
+                      onContextMenu={(event) => {
+                        const selectedIds = resolveContextSelection(
+                          selected,
+                          album.id,
+                        );
+                        if (!selected.includes(album.id))
+                          onSelectionChange(selectedIds);
+                        const copyTexts = selectedIds
+                          .map((id) => albumById.get(id))
+                          .filter((item): item is Album => Boolean(item))
+                          .map(copyAlbumLabel);
                         onContextMenu(
                           event,
                           "album",
                           album.id,
-                          copyAlbumLabel(album),
-                        )
-                      }
+                          selectedIds,
+                          copyTexts,
+                        );
+                      }}
                     >
                       <BookmarkToggle
                         kind="album"
@@ -3112,12 +3184,7 @@ function TrackList({
   onSelectAlbum: (albumId: string) => Promise<void>;
   onSelectionChange: (ids: string[]) => void;
   onMore: () => void;
-  onContextMenu: (
-    event: React.MouseEvent,
-    kind: BookmarkKind,
-    id: string,
-    copyText?: string,
-  ) => void;
+  onContextMenu: CatalogContextMenuHandler;
   bookmarkKeys: Set<string>;
   bookmarksUnavailable: boolean;
   pendingBookmarkKeys: Set<string>;
@@ -3136,6 +3203,10 @@ function TrackList({
     onChange: onSelectionChange,
   });
   const highlighted = selection.previewKeys || selected;
+  const trackById = useMemo(
+    () => new Map(tracks.map((track) => [track.id, track])),
+    [tracks],
+  );
   const rows = useMemo(() => {
     const result: (
       | { type: "album"; track: Track; artists: string[] }
@@ -3279,11 +3350,14 @@ function TrackList({
                     event,
                     "album",
                     track.albumKey,
-                    copyAlbumLabel({
-                      artists: entry.artists,
-                      title: track.albumTitle,
-                      year: track.year,
-                    }),
+                    [track.albumKey],
+                    [
+                      copyAlbumLabel({
+                        artists: entry.artists,
+                        title: track.albumTitle,
+                        year: track.year,
+                      }),
+                    ],
                   )
                 }
                 style={{
@@ -3348,9 +3422,24 @@ function TrackList({
                   )
                 }
                 onDoubleClick={() => onPlay(track)}
-                onContextMenu={(event) =>
-                  onContextMenu(event, "track", track.id, copyTrackLabel(track))
-                }
+                onContextMenu={(event) => {
+                  const selectedIds = resolveContextSelection(
+                    [...selected],
+                    track.id,
+                  );
+                  if (!selected.has(track.id)) onSelectionChange(selectedIds);
+                  const copyTexts = selectedIds
+                    .map((id) => trackById.get(id))
+                    .filter((item): item is Track => Boolean(item))
+                    .map(copyTrackLabel);
+                  onContextMenu(
+                    event,
+                    "track",
+                    track.id,
+                    selectedIds,
+                    copyTexts,
+                  );
+                }}
                 endAction={
                   <BookmarkToggle
                     kind="track"

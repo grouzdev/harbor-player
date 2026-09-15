@@ -13,6 +13,13 @@ export type SelectionClickResult = {
   anchor: string;
 };
 
+export function resolveContextSelection(
+  currentKeys: readonly string[],
+  targetKey: string,
+) {
+  return currentKeys.includes(targetKey) ? [...currentKeys] : [targetKey];
+}
+
 export function resolveSelectionClick(
   currentKeys: readonly string[],
   orderedKeys: readonly string[],
