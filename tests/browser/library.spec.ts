@@ -643,7 +643,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     });
   });
   for (const geometry of listTileGeometry) {
-    expect(geometry.height).toBe(42);
+    expect(geometry.height).toBe(36);
     expect(Math.abs(geometry.left)).toBeLessThan(0.5);
     expect(Math.abs(geometry.right)).toBeLessThan(0.5);
     expect(geometry.radius).toBe("0px");
@@ -651,7 +651,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   }
   await expect(firstTrackRow.locator(".list-tile-main")).toHaveCSS(
     "height",
-    "42px",
+    "36px",
   );
   const trackDurationInset = await firstTrackRow.evaluate((row) => {
     const scroll = row.closest<HTMLElement>(".track-scroll")!;

@@ -234,7 +234,7 @@ a {
   display: flex;
   min-width: 0;
   width: 100%;
-  height: 42px;
+  height: 36px;
   flex-shrink: 0;
   color: #a2aeb5;
 }
@@ -1980,7 +1980,7 @@ body {
   display: none;
 }
 .cover-search-trigger {
-  height: 42px;
+  height: 36px;
   text-align: left;
 }
 .cover-search-trigger span {

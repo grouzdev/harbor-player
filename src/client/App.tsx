@@ -2496,7 +2496,7 @@ function ArtistList({
   const virtual = useVirtualizer({
     count: items.length + (items.length < total ? 1 : 0),
     getScrollElement: () => ref.current,
-    estimateSize: () => 42,
+    estimateSize: () => 36,
     overscan: 6,
   });
   const visible = virtual.getVirtualItems();
@@ -2550,7 +2550,7 @@ function ArtistList({
                 position: "absolute",
                 top: 0,
                 transform: `translateY(${row.start}px)`,
-                height: 42,
+                height: 36,
               }}
               endAction={
                 <BookmarkToggle
@@ -2897,7 +2897,7 @@ function TrackList({
   const virtual = useVirtualizer({
     count: rows.length + (tracks.length < total ? 1 : 0),
     getScrollElement: () => ref.current,
-    estimateSize: (index) => (rows[index]?.type === "album" ? 64 : 42),
+    estimateSize: (index) => (rows[index]?.type === "album" ? 64 : 36),
     overscan: 8,
   });
   const visible = virtual.getVirtualItems();
