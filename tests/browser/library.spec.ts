@@ -737,12 +737,16 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await artistButton.click();
   await expect(artistRow).toHaveClass(/selected/);
 
-  await expect(downloadsTile).not.toHaveClass(/unrelated/);
-  await expect(collectionTile).toHaveClass(/unrelated/);
-  await expect(collectionTile.locator(".list-tile-value")).toHaveCSS(
-    "opacity",
-    "0.45",
+  await expect(downloadsTile).toHaveClass(/related/);
+  await expect(
+    downloadsTile.locator(".list-tile-related-marker"),
+  ).toBeVisible();
+  await expect(collectionTile).not.toHaveClass(/related/);
+  await expect(collectionTile.locator(".list-tile-related-marker")).toHaveCount(
+    0,
   );
+  await expect(artistRow).toHaveClass(/related/);
+  await expect(artistRow.locator(".list-tile-related-marker")).toBeVisible();
 
   const firstAlbum = page.getByTitle("Тестовый альбом · Исполнитель альбома", {
     exact: true,
@@ -1405,6 +1409,8 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
       page.locator("audio").evaluate((a: HTMLAudioElement) => a.readyState),
     )
     .toBeGreaterThanOrEqual(2);
+  await expect(artistRow).toHaveClass(/related/);
+  await expect(artistRow.locator(".list-tile-related-marker")).toBeVisible();
   const nowPlaying = page.locator(".now-playing");
   await expect(
     nowPlaying.getByRole("button", { name: /Открыть альбом/ }),

@@ -297,9 +297,28 @@ body.selection-dragging * {
 .list-tile-value {
   min-width: 0;
   flex: 1;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+.list-tile-label {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.list-tile-related-marker {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: #c6ca91;
+  box-shadow: 0 0 6px #c6ca91a6;
+}
+.list-tile.related .list-tile-label {
+  color: #d7d9b2;
+  text-shadow: 0 0 6px #c6ca915c;
 }
 .list-tile-suffix {
   margin-left: auto;
@@ -423,9 +442,6 @@ body.selection-dragging * {
 }
 .list-tile.offline {
   opacity: 0.5;
-}
-.list-tile.unrelated .list-tile-value {
-  opacity: 0.45;
 }
 .add-library {
   font-size: var(--type-caption);

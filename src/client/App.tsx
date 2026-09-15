@@ -1456,6 +1456,13 @@ export function App() {
     () => artists.data?.pages.flatMap((p) => p.items) || [],
     [artists.data],
   );
+  const currentPlayerArtists = useMemo(() => {
+    const track = player.queue?.track;
+    if (!track) return new Set<string>();
+    return new Set(
+      track.albumArtists.length ? track.albumArtists : track.artists,
+    );
+  }, [player.queue?.track]);
   const previousArtistFilterKey = useRef<string | null>(null);
   useEffect(() => {
     const key = JSON.stringify(artistFilter);
@@ -1821,10 +1828,10 @@ export function App() {
       );
       const selectionKey = folderSelectionKey(libraryId, folder.relativePath);
       const selected = highlightedLocations.has(selectionKey);
-      const unrelated =
+      const related =
         hasFacetRelevance &&
         facetRelevance.data &&
-        !facetRelevance.data.folders.some(
+        facetRelevance.data.folders.some(
           (item) =>
             item.libraryId === libraryId &&
             item.relativePath === folder.relativePath,
@@ -1832,7 +1839,8 @@ export function App() {
       return (
         <div key={folder.relativePath} className="library-folder-node">
           <ListTile
-            className={`library-folder-tile ${unrelated ? "unrelated" : ""}`}
+            className="library-folder-tile"
+            related={related}
             selected={selected}
             current={expanded && !selected}
             expanded={folder.hasChildren ? expanded : undefined}
@@ -2127,16 +2135,11 @@ export function App() {
               {libraries.data?.map((library) => (
                 <div key={library.id} className="library-container">
                   <ListTile
-                    className={[
-                      !library.available ? "offline" : "",
+                    className={!library.available ? "offline" : ""}
+                    related={
                       hasFacetRelevance &&
-                      facetRelevance.data &&
-                      !facetRelevance.data.libraryIds.includes(library.id)
-                        ? "unrelated"
-                        : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
+                      !!facetRelevance.data?.libraryIds.includes(library.id)
+                    }
                     selected={highlightedLocations.has(
                       librarySelectionKey(library.id),
                     )}
@@ -2244,13 +2247,11 @@ export function App() {
                 return (
                   <ListTile
                     key={g.name}
-                    className={`genre-row ${
+                    className="genre-row"
+                    related={
                       hasFacetRelevance &&
-                      facetRelevance.data &&
-                      !facetRelevance.data.genres.includes(g.name)
-                        ? "unrelated"
-                        : ""
-                    }`}
+                      !!facetRelevance.data?.genres.includes(g.name)
+                    }
                     selected={checked}
                     selectionKey={g.name}
                     value={label}
@@ -2303,6 +2304,7 @@ export function App() {
               bookmarksUnavailable={bookmarksUnavailable}
               pendingBookmarkKeys={pendingBookmarkKeys}
               onBookmarkChange={changeBookmark}
+              currentArtists={currentPlayerArtists}
               scrollTarget={
                 artistScrollTarget?.filterKey === filterKey
                   ? artistScrollTarget
@@ -2656,6 +2658,7 @@ function ArtistList({
   bookmarksUnavailable,
   pendingBookmarkKeys,
   onBookmarkChange,
+  currentArtists,
   scrollTarget,
 }: {
   items: { name: string; count: number }[];
@@ -2669,6 +2672,7 @@ function ArtistList({
   bookmarksUnavailable: boolean;
   pendingBookmarkKeys: Set<string>;
   onBookmarkChange: BookmarkChange;
+  currentArtists: ReadonlySet<string>;
   scrollTarget: {
     artist: string;
     requestId: number;
@@ -2774,6 +2778,9 @@ function ArtistList({
               className="genre-row artist-row"
               title={label}
               selected={checked}
+              related={
+                selected.includes(item.name) || currentArtists.has(item.name)
+              }
               selectionKey={item.name}
               value={label}
               suffix={count(item.count)}
