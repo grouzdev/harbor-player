@@ -432,34 +432,51 @@ export function App() {
   const [artistScrollTarget, setArtistScrollTarget] = useState<{
     artist: string;
     requestId: number;
+    filterKey: string;
   } | null>(null);
   const [albumScrollTarget, setAlbumScrollTarget] = useState<{
     album: string;
     requestId: number;
+    filterKey: string;
   } | null>(null);
-  const requestArtistScroll = useCallback((artist: string) => {
-    setArtistScrollTarget((current) => ({
-      artist,
-      requestId: (current?.requestId || 0) + 1,
-    }));
-  }, []);
-  const requestAlbumScroll = useCallback((album: string) => {
-    setAlbumScrollTarget((current) => ({
-      album,
-      requestId: (current?.requestId || 0) + 1,
-    }));
-  }, []);
-  useEffect(() => {
-    if (
-      artistScrollTarget &&
-      !filter.artists.includes(artistScrollTarget.artist)
-    )
-      setArtistScrollTarget(null);
-  }, [artistScrollTarget, filter.artists]);
-  useEffect(() => {
-    if (albumScrollTarget && !filter.albumIds.includes(albumScrollTarget.album))
-      setAlbumScrollTarget(null);
-  }, [albumScrollTarget, filter.albumIds]);
+  const [trackScrollTarget, setTrackScrollTarget] = useState<{
+    track: string;
+    requestId: number;
+    filterKey: string;
+  } | null>(null);
+  const filterKey = JSON.stringify(filter);
+  const filterKeyRef = useRef(filterKey);
+  filterKeyRef.current = filterKey;
+  const requestArtistScroll = useCallback(
+    (artist: string, targetFilterKey = filterKey) => {
+      setArtistScrollTarget((current) => ({
+        artist,
+        requestId: (current?.requestId || 0) + 1,
+        filterKey: targetFilterKey,
+      }));
+    },
+    [filterKey],
+  );
+  const requestAlbumScroll = useCallback(
+    (album: string, targetFilterKey = filterKey) => {
+      setAlbumScrollTarget((current) => ({
+        album,
+        requestId: (current?.requestId || 0) + 1,
+        filterKey: targetFilterKey,
+      }));
+    },
+    [filterKey],
+  );
+  const requestTrackScroll = useCallback(
+    (track: string, targetFilterKey = filterKey) => {
+      setTrackScrollTarget((current) => ({
+        track,
+        requestId: (current?.requestId || 0) + 1,
+        filterKey: targetFilterKey,
+      }));
+    },
+    [filterKey],
+  );
   useEffect(() => {
     const shell = appShellRef.current;
     if (!shell) return;
@@ -742,33 +759,6 @@ export function App() {
       }
     },
     [panelVisibility, setPanelVisible],
-  );
-  const navigateFromPlayer = useCallback(
-    (
-      target: "album" | "artist",
-      value: string,
-      albumArtists: string[] = [],
-    ) => {
-      setPanelVisible(target === "album" ? "albums" : "artists", true);
-      setCoverMode(false);
-      setQuickSearchOpen(false);
-      const artists =
-        target === "album"
-          ? albumArtists.length
-            ? albumArtists
-            : [""]
-          : [value];
-      setSearch("");
-      setExpandedLibraryIds(new Set());
-      setExpandedFolderKeys(new Set());
-      setFilter({
-        ...emptyFilter,
-        artists,
-        ...(target === "album" ? { albumIds: [value] } : {}),
-      });
-      requestArtistScroll(artists[0]);
-    },
-    [requestArtistScroll, setPanelVisible],
   );
   const workspaceRef = useRef<HTMLElement>(null);
   const [panelWeights, setPanelWeights] = useState<number[]>(() => {
@@ -1464,6 +1454,80 @@ export function App() {
       filter.artists,
       filter.search,
       filter.bookmarksOnly,
+    ],
+  );
+  const navigateFromPlayer = useCallback(
+    async (
+      target: "album" | "artist",
+      value: string,
+      albumArtists: string[] = [],
+      trackId?: string,
+    ) => {
+      const navigationFilterKey = filterKey;
+      setCoverMode(false);
+      setQuickSearchOpen(false);
+      const artists =
+        target === "album"
+          ? albumArtists.length
+            ? albumArtists
+            : [""]
+          : [value];
+      const targetFilter =
+        target === "album"
+          ? { ...albumFilter, albumIds: [value] }
+          : { ...artistFilter, artists };
+      try {
+        const { trackIds } = await api<{ trackIds: string[] }>(
+          "/track-ids",
+          targetFilter,
+        );
+        if (filterKeyRef.current !== navigationFilterKey) return;
+        if (trackIds.length) {
+          if (target === "artist") {
+            requestArtistScroll(value);
+            return;
+          }
+          const [artistResult, trackResult] = await Promise.all([
+            api<{ trackIds: string[] }>("/track-ids", {
+              ...artistFilter,
+              artists: [artists[0]],
+            }),
+            trackId
+              ? api<{ trackIds: string[] }>("/track-ids", filter)
+              : Promise.resolve({ trackIds: [] }),
+          ]);
+          if (filterKeyRef.current !== navigationFilterKey) return;
+          if (artistResult.trackIds.length) requestArtistScroll(artists[0]);
+          requestAlbumScroll(value);
+          if (trackId && trackResult.trackIds.includes(trackId))
+            requestTrackScroll(trackId);
+          return;
+        }
+      } catch {
+        // Fall back to the established navigation when the presence check fails.
+      }
+      if (filterKeyRef.current !== navigationFilterKey) return;
+      setPanelVisible(target === "album" ? "albums" : "artists", true);
+      setSearch("");
+      setExpandedLibraryIds(new Set());
+      setExpandedFolderKeys(new Set());
+      const fallbackFilter = {
+        ...emptyFilter,
+        artists,
+        ...(target === "album" ? { albumIds: [value] } : {}),
+      };
+      setFilter(fallbackFilter);
+      requestArtistScroll(artists[0], JSON.stringify(fallbackFilter));
+    },
+    [
+      albumFilter,
+      artistFilter,
+      filter,
+      requestAlbumScroll,
+      requestArtistScroll,
+      requestTrackScroll,
+      setPanelVisible,
+      filterKey,
     ],
   );
   const albums = useInfiniteQuery({
@@ -2165,7 +2229,11 @@ export function App() {
               bookmarksUnavailable={bookmarksUnavailable}
               pendingBookmarkKeys={pendingBookmarkKeys}
               onBookmarkChange={changeBookmark}
-              scrollTarget={artistScrollTarget}
+              scrollTarget={
+                artistScrollTarget?.filterKey === filterKey
+                  ? artistScrollTarget
+                  : null
+              }
             />
           </section>
           {panelVisibility.artists && renderPanelResizer("artists")}
@@ -2215,7 +2283,11 @@ export function App() {
               bookmarksUnavailable={bookmarksUnavailable}
               pendingBookmarkKeys={pendingBookmarkKeys}
               onBookmarkChange={changeBookmark}
-              scrollTarget={albumScrollTarget}
+              scrollTarget={
+                albumScrollTarget?.filterKey === filterKey
+                  ? albumScrollTarget
+                  : null
+              }
             />
           </section>
           {panelVisibility.albums && renderPanelResizer("albums")}
@@ -2341,6 +2413,11 @@ export function App() {
                   setExpandedFolderKeys(new Set());
                   setFilter({ ...emptyFilter, bookmarksOnly: true });
                 }}
+                scrollTarget={
+                  trackScrollTarget?.filterKey === filterKey
+                    ? trackScrollTarget
+                    : null
+                }
               />
             )}
           </section>
@@ -2357,9 +2434,16 @@ export function App() {
       <Player
         player={player}
         onNavigateToAlbum={(albumId, albumArtists) =>
-          navigateFromPlayer("album", albumId, albumArtists)
+          void navigateFromPlayer(
+            "album",
+            albumId,
+            albumArtists,
+            player.queue?.track?.id,
+          )
         }
-        onNavigateToArtist={(artist) => navigateFromPlayer("artist", artist)}
+        onNavigateToArtist={(artist) =>
+          void navigateFromPlayer("artist", artist)
+        }
         coverMode={coverMode}
         onToggleCoverMode={() => {
           if (!player.queue?.track) return;
@@ -2514,7 +2598,11 @@ function ArtistList({
   bookmarksUnavailable: boolean;
   pendingBookmarkKeys: Set<string>;
   onBookmarkChange: BookmarkChange;
-  scrollTarget: { artist: string; requestId: number } | null;
+  scrollTarget: {
+    artist: string;
+    requestId: number;
+    filterKey: string;
+  } | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const selection = usePanelSelection({
@@ -2651,7 +2739,11 @@ function AlbumGrid({
   bookmarksUnavailable: boolean;
   pendingBookmarkKeys: Set<string>;
   onBookmarkChange: BookmarkChange;
-  scrollTarget: { album: string; requestId: number } | null;
+  scrollTarget: {
+    album: string;
+    requestId: number;
+    filterKey: string;
+  } | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const selection = usePanelSelection({
@@ -2928,6 +3020,7 @@ function TrackList({
   hasOtherFilters,
   onDisableBookmarks,
   onResetBookmarkFilters,
+  scrollTarget,
 }: {
   tracks: Track[];
   total: number;
@@ -2954,6 +3047,7 @@ function TrackList({
   hasOtherFilters: boolean;
   onDisableBookmarks: () => void;
   onResetBookmarkFilters: () => void;
+  scrollTarget: { track: string; requestId: number; filterKey: string } | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const selection = usePanelSelection({
@@ -2997,6 +3091,26 @@ function TrackList({
   useEffect(() => {
     if (last >= rows.length - 10 && tracks.length < total && !loading) onMore();
   }, [last, rows.length, tracks.length, total, loading, onMore]);
+  const centeredRequestId = useRef<number | null>(null);
+  const requestedPageKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (!scrollTarget || loading) return;
+    const targetRow = rows.findIndex(
+      (row) => row.type === "track" && row.track.id === scrollTarget.track,
+    );
+    if (targetRow >= 0) {
+      if (centeredRequestId.current !== scrollTarget.requestId) {
+        virtual.scrollToIndex(targetRow, { align: "center" });
+        centeredRequestId.current = scrollTarget.requestId;
+      }
+      return;
+    }
+    const pageKey = `${scrollTarget.requestId}:${tracks.length}`;
+    if (tracks.length < total && requestedPageKey.current !== pageKey) {
+      requestedPageKey.current = pageKey;
+      onMore();
+    }
+  }, [scrollTarget, loading, rows, tracks.length, total, onMore, virtual]);
   return (
     <div
       ref={ref}

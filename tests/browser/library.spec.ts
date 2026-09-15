@@ -1312,6 +1312,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .filter({ hasText: "Исполнитель альбома" })
     .click();
   await expect(rows).toHaveCount(6);
+  await page.getByRole("button", { name: "Сбросить исполнителей" }).click();
   await flac().dblclick();
   await expect
     .poll(() =>
@@ -1325,15 +1326,15 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await page.getByRole("button", { name: "Скрыть панель «Альбомы»" }).click();
   await expect(page.locator(".albums-panel")).toBeHidden();
   await nowPlaying.getByRole("button", { name: /Открыть альбом/ }).click();
-  await expect(page.locator(".albums-panel")).toBeVisible();
+  await expect(page.locator(".albums-panel")).toBeHidden();
   await expect(page.locator(".albums-panel .album-card.selected")).toHaveCount(
-    1,
+    0,
   );
   await expect(
     page
       .locator(".artists-panel .list-tile.selected")
       .filter({ hasText: "Исполнитель альбома" }),
-  ).toHaveCount(1);
+  ).toHaveCount(0);
   await expect(rows).toHaveCount(6);
   await page
     .getByRole("button", { name: "Скрыть панель «Исполнители»" })
@@ -1343,13 +1344,13 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await nowPlaying
     .getByRole("button", { name: "Открыть исполнителя «Исполнитель альбома»" })
     .click();
-  await expect(page.locator(".artists-panel")).toBeVisible();
+  await expect(page.locator(".artists-panel")).toBeHidden();
   await expect(page.locator(".albums-panel")).toBeHidden();
   await expect(
     page
       .locator(".artists-panel .list-tile.selected")
       .filter({ hasText: "Исполнитель альбома" }),
-  ).toHaveCount(1);
+  ).toHaveCount(0);
   await expect(rows).toHaveCount(6);
   await downloadsTile.locator(".list-tile-main").click();
   await page.locator("audio").evaluate((a: HTMLAudioElement) => {
