@@ -2271,6 +2271,11 @@ html:fullscreen body {
     #0a0b0b;
 }
 
+html:fullscreen #root {
+  position: relative;
+  height: calc(100dvh - var(--room-inset-y) - var(--room-inset-y));
+}
+
 #root,
 .app-shell {
   position: relative;
@@ -2289,13 +2294,127 @@ html:fullscreen body {
 }
 
 html:fullscreen .app-shell {
-  height: calc(100dvh - var(--room-inset-y) - var(--room-inset-y));
+  height: 100%;
   border: 1px solid var(--metal-edge);
   border-radius: 14px;
   box-shadow:
     0 24px 70px #0204038c,
     0 2px 0 #eff5dd12 inset,
     0 -1px 0 #0000008c inset;
+}
+
+html:fullscreen .app-shell.fullscreen-window--custom {
+  position: absolute;
+  left: var(--fullscreen-window-x);
+  top: var(--fullscreen-window-y);
+  width: var(--fullscreen-window-width);
+  height: var(--fullscreen-window-height);
+  min-height: 0;
+}
+
+html:fullscreen .app-shell.fullscreen-window--maximized {
+  position: fixed;
+  z-index: 3;
+  inset: 0;
+  width: auto;
+  height: 100dvh;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+html:fullscreen .topbar {
+  cursor: grab;
+  user-select: none;
+}
+
+html:fullscreen .topbar button,
+html:fullscreen .topbar input,
+html:fullscreen .topbar select {
+  cursor: pointer;
+}
+
+html:fullscreen .topbar input {
+  cursor: text;
+  user-select: text;
+}
+
+.fullscreen-window-resize {
+  position: absolute;
+  z-index: 5;
+}
+
+.fullscreen-window-resize--n,
+.fullscreen-window-resize--s {
+  left: 10px;
+  right: 10px;
+  height: 8px;
+}
+
+.fullscreen-window-resize--n {
+  top: 0;
+  cursor: ns-resize;
+}
+
+.fullscreen-window-resize--s {
+  bottom: 0;
+  cursor: ns-resize;
+}
+
+.fullscreen-window-resize--e,
+.fullscreen-window-resize--w {
+  top: 10px;
+  bottom: 10px;
+  width: 8px;
+}
+
+.fullscreen-window-resize--e {
+  right: 0;
+  cursor: ew-resize;
+}
+
+.fullscreen-window-resize--w {
+  left: 0;
+  cursor: ew-resize;
+}
+
+.fullscreen-window-resize--ne,
+.fullscreen-window-resize--se,
+.fullscreen-window-resize--sw,
+.fullscreen-window-resize--nw {
+  width: 14px;
+  height: 14px;
+}
+
+.fullscreen-window-resize--ne {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+}
+
+.fullscreen-window-resize--se {
+  right: 0;
+  bottom: 0;
+  cursor: nwse-resize;
+}
+
+.fullscreen-window-resize--sw {
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
+}
+
+.fullscreen-window-resize--nw {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+
+html:fullscreen
+  .app-shell.fullscreen-window--maximized
+  .fullscreen-window-resize {
+  display: none;
 }
 
 .topbar,

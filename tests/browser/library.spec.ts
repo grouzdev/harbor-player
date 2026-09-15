@@ -34,12 +34,61 @@ test("fullscreen button changes the application shell", async ({ page }) => {
   ).toBeVisible();
   await expect(page.locator(".app-shell")).toHaveCSS("border-radius", "14px");
 
+  const resizeHandle = page.locator(".fullscreen-window-resize--se");
+  const resizeBox = await resizeHandle.boundingBox();
+  expect(resizeBox).not.toBeNull();
+  await page.mouse.move(
+    resizeBox!.x + resizeBox!.width / 2,
+    resizeBox!.y + resizeBox!.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(resizeBox!.x - 160, resizeBox!.y - 120);
+  await page.mouse.up();
+
+  const resized = await page.locator(".app-shell").boundingBox();
+  expect(resized).not.toBeNull();
+  expect(resized!.width).toBeLessThan(await page.evaluate(() => innerWidth));
+
+  const topbar = page.locator(".topbar");
+  const topbarBox = await topbar.boundingBox();
+  expect(topbarBox).not.toBeNull();
+  await page.mouse.move(topbarBox!.x + 20, topbarBox!.y + 30);
+  await page.mouse.down();
+  await page.mouse.move(topbarBox!.x + 70, topbarBox!.y + 70);
+  await page.mouse.up();
+  const moved = await page.locator(".app-shell").boundingBox();
+  expect(moved).not.toBeNull();
+  expect(moved!.x).toBeGreaterThan(resized!.x + 20);
+
+  await topbar.dblclick({ position: { x: 20, y: 30 } });
+  await expect(page.locator(".app-shell")).toHaveCSS("border-radius", "14px");
+
+  await topbar.dblclick({ position: { x: 20, y: 30 } });
+  await expect(page.locator(".app-shell")).toHaveCSS("border-radius", "0px");
+  await expect(page.locator(".fullscreen-window-resize").first()).toBeHidden();
+
+  await topbar.dblclick({ position: { x: 20, y: 30 } });
+  await expect(page.locator(".app-shell")).toHaveCSS("border-radius", "14px");
+
   await page
     .getByRole("button", { name: "Свернуть окно из полноэкранного режима" })
     .click();
   await expect
     .poll(() => page.evaluate(() => document.fullscreenElement === null))
     .toBe(true);
+
+  await page
+    .getByRole("button", { name: "Развернуть окно на весь экран" })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => Boolean(document.fullscreenElement)))
+    .toBe(true);
+  await expect(page.locator(".app-shell")).toHaveClass(
+    /fullscreen-window--custom/,
+  );
+  const restored = await page.locator(".app-shell").boundingBox();
+  expect(restored).not.toBeNull();
+  expect(restored!.width).toBeCloseTo(moved!.width, 0);
 });
 
 test("portrait workspace uses two independently resizable rows", async ({

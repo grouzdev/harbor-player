@@ -84,6 +84,63 @@ type BookmarkChange = (
   bookmarked: boolean,
 ) => void;
 
+type FullscreenWindowBounds = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type FullscreenWindowMode = "default" | "custom" | "maximized";
+type FullscreenResizeEdge = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
+
+const fullscreenWindowStorageKey = "mml-fullscreen-window-v1";
+const fullscreenWindowMinWidth = 640;
+const fullscreenWindowMinHeight = 520;
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+function fitFullscreenWindowBounds(
+  bounds: FullscreenWindowBounds,
+  roomWidth: number,
+  roomHeight: number,
+): FullscreenWindowBounds {
+  const width = clamp(
+    bounds.width,
+    Math.min(fullscreenWindowMinWidth, roomWidth),
+    roomWidth,
+  );
+  const height = clamp(
+    bounds.height,
+    Math.min(fullscreenWindowMinHeight, roomHeight),
+    roomHeight,
+  );
+  return {
+    x: clamp(bounds.x, 0, roomWidth - width),
+    y: clamp(bounds.y, 0, roomHeight - height),
+    width,
+    height,
+  };
+}
+
+function readFullscreenWindowBounds(): FullscreenWindowBounds | null {
+  try {
+    const value = JSON.parse(
+      localStorage.getItem(fullscreenWindowStorageKey) || "null",
+    );
+    return value &&
+      [value.x, value.y, value.width, value.height].every(
+        (number) => typeof number === "number" && Number.isFinite(number),
+      )
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 const bookmarkEntityLabels: Record<BookmarkKind, string> = {
   artist: "исполнителя",
   album: "альбом",
@@ -211,6 +268,11 @@ export function App() {
   const [isFullscreen, setIsFullscreen] = useState(
     () => document.fullscreenElement === document.documentElement,
   );
+  const appShellRef = useRef<HTMLDivElement>(null);
+  const [fullscreenWindowMode, setFullscreenWindowMode] =
+    useState<FullscreenWindowMode>("default");
+  const [fullscreenWindowBounds, setFullscreenWindowBounds] =
+    useState<FullscreenWindowBounds | null>(null);
   const [coverMode, setCoverMode] = useState(false);
   const [quickSearchOpen, setQuickSearchOpen] = useState(false);
   const [artistScrollTarget, setArtistScrollTarget] = useState<{
@@ -225,7 +287,23 @@ export function App() {
   }, []);
   useEffect(() => {
     const syncFullscreen = () => {
-      setIsFullscreen(document.fullscreenElement === document.documentElement);
+      const fullscreen =
+        document.fullscreenElement === document.documentElement;
+      setIsFullscreen(fullscreen);
+      if (!fullscreen) return;
+      window.requestAnimationFrame(() => {
+        const room =
+          appShellRef.current?.parentElement?.getBoundingClientRect();
+        const savedBounds = readFullscreenWindowBounds();
+        if (!room || !savedBounds) {
+          setFullscreenWindowMode("default");
+          return;
+        }
+        setFullscreenWindowBounds(
+          fitFullscreenWindowBounds(savedBounds, room.width, room.height),
+        );
+        setFullscreenWindowMode("custom");
+      });
     };
     document.addEventListener("fullscreenchange", syncFullscreen);
     return () =>
@@ -238,6 +316,211 @@ export function App() {
     }
     void document.documentElement.requestFullscreen();
   }, []);
+  const getFullscreenRoom = useCallback(() => {
+    const room = appShellRef.current?.parentElement?.getBoundingClientRect();
+    return room && room.width > 0 && room.height > 0 ? room : null;
+  }, []);
+  const getCurrentFullscreenBounds = useCallback(() => {
+    const room = getFullscreenRoom();
+    const shell = appShellRef.current?.getBoundingClientRect();
+    if (!room || !shell) return null;
+    return fitFullscreenWindowBounds(
+      {
+        x: shell.left - room.left,
+        y: shell.top - room.top,
+        width: shell.width,
+        height: shell.height,
+      },
+      room.width,
+      room.height,
+    );
+  }, [getFullscreenRoom]);
+  const saveFullscreenWindowBounds = useCallback(
+    (bounds: FullscreenWindowBounds) => {
+      try {
+        localStorage.setItem(
+          fullscreenWindowStorageKey,
+          JSON.stringify(bounds),
+        );
+      } catch {
+        // Geometry remains usable for the current fullscreen session.
+      }
+    },
+    [],
+  );
+  const beginFullscreenWindowMove = useCallback(
+    (event: React.PointerEvent<HTMLElement>) => {
+      if (!isFullscreen || event.button !== 0) return;
+      const target = event.target as Element;
+      if (
+        target.closest(
+          "button, input, select, a, .search, .local-status, [data-window-control]",
+        )
+      )
+        return;
+      const initial = getCurrentFullscreenBounds();
+      if (!initial) return;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      let moved = false;
+      event.preventDefault();
+      const move = (pointerEvent: PointerEvent) => {
+        const room = getFullscreenRoom();
+        if (!room) return;
+        moved = true;
+        setFullscreenWindowMode("custom");
+        setFullscreenWindowBounds(
+          fitFullscreenWindowBounds(
+            {
+              ...initial,
+              x: initial.x + pointerEvent.clientX - startX,
+              y: initial.y + pointerEvent.clientY - startY,
+            },
+            room.width,
+            room.height,
+          ),
+        );
+      };
+      const stop = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", stop);
+        if (!moved) return;
+        setFullscreenWindowBounds((current) => {
+          if (current) saveFullscreenWindowBounds(current);
+          return current;
+        });
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", stop);
+    },
+    [
+      getCurrentFullscreenBounds,
+      getFullscreenRoom,
+      isFullscreen,
+      saveFullscreenWindowBounds,
+    ],
+  );
+  const beginFullscreenWindowResize = useCallback(
+    (edge: FullscreenResizeEdge, event: React.PointerEvent<HTMLDivElement>) => {
+      if (!isFullscreen || event.button !== 0) return;
+      const initial = getCurrentFullscreenBounds();
+      if (!initial) return;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      let moved = false;
+      event.preventDefault();
+      event.stopPropagation();
+      const move = (pointerEvent: PointerEvent) => {
+        const room = getFullscreenRoom();
+        if (!room) return;
+        moved = true;
+        setFullscreenWindowMode("custom");
+        const deltaX = pointerEvent.clientX - startX;
+        const deltaY = pointerEvent.clientY - startY;
+        const minimumWidth = Math.min(fullscreenWindowMinWidth, room.width);
+        const minimumHeight = Math.min(fullscreenWindowMinHeight, room.height);
+        const next = { ...initial };
+        if (edge.includes("e")) next.width += deltaX;
+        if (edge.includes("s")) next.height += deltaY;
+        if (edge.includes("w")) {
+          next.x += deltaX;
+          next.width -= deltaX;
+          if (next.width < minimumWidth) {
+            next.x = initial.x + initial.width - minimumWidth;
+            next.width = minimumWidth;
+          }
+        }
+        if (edge.includes("n")) {
+          next.y += deltaY;
+          next.height -= deltaY;
+          if (next.height < minimumHeight) {
+            next.y = initial.y + initial.height - minimumHeight;
+            next.height = minimumHeight;
+          }
+        }
+        setFullscreenWindowBounds(
+          fitFullscreenWindowBounds(next, room.width, room.height),
+        );
+      };
+      const stop = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", stop);
+        if (!moved) return;
+        setFullscreenWindowBounds((current) => {
+          if (current) saveFullscreenWindowBounds(current);
+          return current;
+        });
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", stop);
+    },
+    [
+      getCurrentFullscreenBounds,
+      getFullscreenRoom,
+      isFullscreen,
+      saveFullscreenWindowBounds,
+    ],
+  );
+  const toggleFullscreenWindowSize = useCallback(
+    (event: React.MouseEvent<HTMLElement>) => {
+      const target = event.target as Element;
+      if (
+        !isFullscreen ||
+        target.closest(
+          "button, input, select, a, .search, .local-status, [data-window-control]",
+        )
+      )
+        return;
+      if (fullscreenWindowMode === "maximized") {
+        setFullscreenWindowMode("default");
+        return;
+      }
+      const room = getFullscreenRoom();
+      const bounds = getCurrentFullscreenBounds();
+      const hasDefaultGeometry =
+        !!room &&
+        !!bounds &&
+        Math.abs(bounds.x) < 1 &&
+        Math.abs(bounds.y) < 1 &&
+        Math.abs(bounds.width - room.width) < 1 &&
+        Math.abs(bounds.height - room.height) < 1;
+      if (fullscreenWindowMode === "default" || hasDefaultGeometry) {
+        setFullscreenWindowMode("maximized");
+        return;
+      }
+      setFullscreenWindowMode("default");
+    },
+    [
+      fullscreenWindowMode,
+      getCurrentFullscreenBounds,
+      getFullscreenRoom,
+      isFullscreen,
+    ],
+  );
+  useEffect(() => {
+    if (!isFullscreen || fullscreenWindowMode !== "custom") return;
+    const constrainToRoom = () => {
+      const room = getFullscreenRoom();
+      if (!room) return;
+      setFullscreenWindowBounds((current) => {
+        if (!current) return current;
+        const next = fitFullscreenWindowBounds(
+          current,
+          room.width,
+          room.height,
+        );
+        saveFullscreenWindowBounds(next);
+        return next;
+      });
+    };
+    window.addEventListener("resize", constrainToRoom);
+    return () => window.removeEventListener("resize", constrainToRoom);
+  }, [
+    fullscreenWindowMode,
+    getFullscreenRoom,
+    isFullscreen,
+    saveFullscreenWindowBounds,
+  ]);
   const navigateFromPlayer = useCallback(
     (
       target: "album" | "artist",
@@ -1180,9 +1463,43 @@ export function App() {
         </button>
       </main>
     );
+  const fullscreenWindowStyle =
+    isFullscreen && fullscreenWindowMode === "custom" && fullscreenWindowBounds
+      ? ({
+          "--fullscreen-window-x": `${fullscreenWindowBounds.x}px`,
+          "--fullscreen-window-y": `${fullscreenWindowBounds.y}px`,
+          "--fullscreen-window-width": `${fullscreenWindowBounds.width}px`,
+          "--fullscreen-window-height": `${fullscreenWindowBounds.height}px`,
+        } as CSSProperties)
+      : undefined;
   return (
-    <div className="app-shell">
-      <header className="topbar">
+    <div
+      ref={appShellRef}
+      className={`app-shell fullscreen-window--${fullscreenWindowMode}`}
+      style={fullscreenWindowStyle}
+    >
+      {isFullscreen && (
+        <>
+          {(["n", "ne", "e", "se", "s", "sw", "w", "nw"] as const).map(
+            (edge) => (
+              <div
+                key={edge}
+                aria-hidden="true"
+                className={`fullscreen-window-resize fullscreen-window-resize--${edge}`}
+                data-window-control
+                onPointerDown={(event) =>
+                  beginFullscreenWindowResize(edge, event)
+                }
+              />
+            ),
+          )}
+        </>
+      )}
+      <header
+        className="topbar"
+        onPointerDown={beginFullscreenWindowMove}
+        onDoubleClick={toggleFullscreenWindowSize}
+      >
         {coverMode ? (
           <button
             type="button"
