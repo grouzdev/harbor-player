@@ -1,4 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -29,6 +34,33 @@ import type {
 } from "../shared/contracts";
 import { api, count, fieldLabels, operationLabels } from "./api";
 import { Modal } from "./Modal";
+
+function activatePrimaryOnEnter(
+  event: ReactKeyboardEvent<HTMLDialogElement>,
+  button: HTMLButtonElement | null,
+) {
+  if (
+    event.key !== "Enter" ||
+    event.defaultPrevented ||
+    event.nativeEvent.isComposing ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.shiftKey
+  )
+    return;
+
+  const target = event.target;
+  if (
+    target instanceof HTMLElement &&
+    (target.tagName === "BUTTON" || target.tagName === "TEXTAREA")
+  )
+    return;
+
+  if (!button || button.disabled) return;
+  event.preventDefault();
+  button.click();
+}
 
 export function CoverDropConfirmDialog({
   albumTitle,
@@ -269,6 +301,7 @@ export function ActionDialog({
     new Set(),
   );
   const [replaceFields, setReplaceFields] = useState<Set<TagField>>(new Set());
+  const primaryButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (summary.data) {
       setValues(
@@ -388,6 +421,9 @@ export function ActionDialog({
           : "Проверяем выбранные треки…"
       }
       onClose={onClose}
+      onKeyDown={(event) =>
+        activatePrimaryOnEnter(event, primaryButtonRef.current)
+      }
     >
       {summary.error && <p className="error-text">{summary.error.message}</p>}
       {kind === "tags" && (
@@ -795,6 +831,7 @@ export function ActionDialog({
           Отмена
         </button>
         <button
+          ref={primaryButtonRef}
           className="button primary"
           disabled={
             busy ||
@@ -806,7 +843,7 @@ export function ActionDialog({
           }
           onClick={submit}
         >
-          {busy ? "Проверяем файлы…" : "Посмотреть изменения"}
+          {busy ? "Проверяем файлы…" : "Далее"}
           <ArrowRight size={16} />
         </button>
       </footer>
@@ -824,6 +861,7 @@ export function PreviewDialog({
   onExecute: (id: string) => Promise<void>;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const primaryButtonRef = useRef<HTMLButtonElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const virtual = useVirtualizer({
@@ -840,6 +878,9 @@ export function PreviewDialog({
       title={`${operationLabels[preview.kind]}: предварительный просмотр`}
       subtitle={`${count(valid.length)} файлов готовы${conflicts ? ` · ${count(conflicts)} будут пропущены` : ""}`}
       onClose={busy ? () => {} : onClose}
+      onKeyDown={(event) =>
+        activatePrimaryOnEnter(event, primaryButtonRef.current)
+      }
     >
       <div ref={ref} className="preview-list">
         <div style={{ height: virtual.getTotalSize(), position: "relative" }}>
@@ -913,6 +954,7 @@ export function PreviewDialog({
           Отмена
         </button>
         <button
+          ref={primaryButtonRef}
           className="button primary"
           disabled={busy || !valid.length}
           onClick={async () => {

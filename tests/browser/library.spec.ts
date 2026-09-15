@@ -1086,7 +1086,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .filter({ hasText: "Обложка" });
   await coverField.getByRole("checkbox").first().check();
   await coverField.getByRole("checkbox").nth(1).check();
-  await page.getByRole("button", { name: "Посмотреть изменения" }).click();
+  await page.getByRole("button", { name: "Далее" }).click();
   await page.getByRole("button", { name: /^Применить к/ }).click();
   await expect
     .poll(() => firstAlbum.locator("img").getAttribute("src"))
@@ -1275,12 +1275,14 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(page.getByLabel("Название", { exact: true })).toHaveValue(
     "Первый трек",
   );
+  await page.getByLabel("Название", { exact: true }).press("Enter");
+  await expect(page.getByRole("dialog")).toContainText("Редактировать теги");
   await page.getByLabel("Название", { exact: true }).fill("Обновлённый трек");
   await page.getByLabel("Изменить: Жанры").check();
   await page.getByLabel("Жанры", { exact: true }).fill("E2E Fresh");
-  await page.getByRole("button", { name: "Посмотреть изменения" }).click();
+  await page.getByLabel("Жанры", { exact: true }).press("Enter");
   await expect(page.getByText("Первый трек → Обновлённый трек")).toBeVisible();
-  await page.getByRole("button", { name: /^Применить к/ }).click();
+  await page.getByRole("dialog").press("Enter");
   await expect(flac()).toContainText("Обновлённый трек");
   await expect(
     page.locator(".genres-panel .list-tile").filter({ hasText: "E2E Fresh" }),
@@ -1299,7 +1301,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await page
     .getByLabel("Куда перенести")
     .selectOption({ label: `Collection ${browser}` });
-  await page.getByRole("button", { name: "Посмотреть изменения" }).click();
+  await page.getByRole("button", { name: "Далее" }).click();
   await page.getByRole("button", { name: /^Применить к/ }).click();
   await expect(rows).toHaveCount(5);
   await page.getByRole("button", { name: "Сбросить библиотеки" }).click();
@@ -1310,7 +1312,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(rows).toHaveCount(1);
   await flac().locator(".list-tile-main").click();
   await page.getByRole("button", { name: "Удалить треки" }).click();
-  await page.getByRole("button", { name: "Посмотреть изменения" }).click();
+  await page.getByRole("button", { name: "Далее" }).click();
   await page.getByRole("button", { name: /^Применить к/ }).click();
   await expect(rows).toHaveCount(0);
   await page
