@@ -704,6 +704,23 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
       .locator(".album-artist-header")
       .filter({ hasText: "Исполнитель альбома" }),
   ).toHaveCount(1);
+  const albumArtistLink = page.getByRole("button", {
+    name: "Выбрать исполнителя «Исполнитель альбома»",
+  });
+  await page
+    .getByRole("button", { name: "Сбросить исполнителей" })
+    .click();
+  await expect(
+    page
+      .locator(".artists-panel .list-tile.selected")
+      .filter({ hasText: "Исполнитель альбома" }),
+  ).toHaveCount(0);
+  await albumArtistLink.click();
+  await expect(
+    page
+      .locator(".artists-panel .list-tile.selected")
+      .filter({ hasText: "Исполнитель альбома" }),
+  ).toHaveCount(1);
   await expect(firstAlbum.getByRole("checkbox")).toHaveCount(0);
   await expect(firstAlbum.locator(".album-cover")).toHaveCSS(
     "border-color",

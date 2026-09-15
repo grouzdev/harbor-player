@@ -1535,6 +1535,14 @@ export function App() {
       filterKey,
     ],
   );
+  const selectAlbumArtist = useCallback(
+    (artist: string) => {
+      const nextFilter = { ...filter, artists: [artist] };
+      setFilter(nextFilter);
+      requestArtistScroll(artist, JSON.stringify(nextFilter));
+    },
+    [filter, requestArtistScroll],
+  );
   const albums = useInfiniteQuery({
     queryKey: ["albums", albumFilter],
     initialPageParam: 0,
@@ -2283,6 +2291,7 @@ export function App() {
               loading={albums.isFetching}
               onContextMenu={showCatalogMenu}
               onPlay={(id) => void player.startAlbum(id)}
+              onSelectArtist={selectAlbumArtist}
               onCoverDrop={prepareDroppedCover}
               bookmarkKeys={bookmarkKeys}
               bookmarksUnavailable={bookmarksUnavailable}
@@ -2757,6 +2766,7 @@ function AlbumGrid({
   loading,
   onContextMenu,
   onPlay,
+  onSelectArtist,
   onCoverDrop,
   bookmarkKeys,
   bookmarksUnavailable,
@@ -2777,6 +2787,7 @@ function AlbumGrid({
     copyText?: string,
   ) => void;
   onPlay: (id: string) => void;
+  onSelectArtist: (artist: string) => void;
   onCoverDrop: (album: Album, files: File[]) => void;
   bookmarkKeys: Set<string>;
   bookmarksUnavailable: boolean;
@@ -2811,7 +2822,7 @@ function AlbumGrid({
     (width - gridPadding * 2 - (columns - 1) * gridGap) / columns;
   const rows = useMemo(() => {
     const result: Array<
-      | { type: "artist"; key: string; label: string }
+      | { type: "artist"; key: string; artists: string[] }
       | {
           type: "albums";
           key: string;
@@ -2821,10 +2832,13 @@ function AlbumGrid({
     > = [];
     let group: Album[] = [];
     let groupKey = "";
-    let groupLabel = "";
     const appendGroup = () => {
       if (!group.length) return;
-      result.push({ type: "artist", key: groupKey, label: groupLabel });
+      result.push({
+        type: "artist",
+        key: groupKey,
+        artists: group[0].artists,
+      });
       for (let index = 0; index < group.length; index += columns)
         result.push({
           type: "albums",
@@ -2834,7 +2848,6 @@ function AlbumGrid({
         });
     };
     for (const album of albums) {
-      const label = album.artists.join(", ") || "Неизвестный исполнитель";
       const key = album.artists.length
         ? [...album.artists]
             .map((artist) => artist.toLocaleLowerCase())
@@ -2846,7 +2859,6 @@ function AlbumGrid({
         group = [];
       }
       groupKey = key;
-      groupLabel = label;
       group.push(album);
     }
     appendGroup();
@@ -2917,7 +2929,32 @@ function AlbumGrid({
                     transform: `translateY(${row.start}px)`,
                   }}
                 >
-                  {entry.label}
+                  {entry.artists.length ? (
+                    entry.artists.map((artist, index) => (
+                      <span key={`${artist}-${index}`}>
+                        {index > 0 && ", "}
+                        <button
+                          type="button"
+                          className="album-artist-link"
+                          aria-label={`Выбрать исполнителя «${artist}»`}
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onClick={() => onSelectArtist(artist)}
+                        >
+                          {artist}
+                        </button>
+                      </span>
+                    ))
+                  ) : (
+                    <button
+                      type="button"
+                      className="album-artist-link"
+                      aria-label="Выбрать неизвестного исполнителя"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={() => onSelectArtist("")}
+                    >
+                      Неизвестный исполнитель
+                    </button>
+                  )}
                 </div>
               );
             return (
