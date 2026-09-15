@@ -32,8 +32,27 @@ import type {
   TagField,
   TagPatch,
 } from "../shared/contracts";
-import { api, count, fieldLabels, operationLabels } from "./api";
+import { emptyFilter } from "../shared/contracts";
+import { api, catalogUrl, count, fieldLabels, operationLabels } from "./api";
+import { AutocompleteInput } from "./AutocompleteInput";
 import { Modal } from "./Modal";
+
+function genreSegment(value: string, caret: number) {
+  const start = value.lastIndexOf(";", caret - 1) + 1;
+  const endAt = value.indexOf(";", caret);
+  const end = endAt === -1 ? value.length : endAt;
+  return { start, end, text: value.slice(start, end) };
+}
+
+function applyGenreOption(option: string, value: string, caret: number) {
+  const { start, end } = genreSegment(value, caret);
+  const leadingWhitespace = value.slice(start, end).match(/^\s*/)?.[0] || "";
+  const next = `${value.slice(0, start)}${leadingWhitespace}${option}${value.slice(end)}`;
+  return {
+    value: next,
+    caret: start + leadingWhitespace.length + option.length,
+  };
+}
 
 function activatePrimaryOnEnter(
   event: ReactKeyboardEvent<HTMLDialogElement>,
@@ -277,6 +296,12 @@ export function ActionDialog({
   const summary = useQuery({
     queryKey: ["selection-summary", selection],
     queryFn: () => api<SelectionSummary>("/selection-summary", selection),
+  });
+  const genreOptions = useQuery({
+    queryKey: ["tag-genre-options"],
+    queryFn: () =>
+      api<{ name: string; count: number }[]>(catalogUrl("genres", emptyFilter)),
+    enabled: kind === "tags",
   });
   const [target, setTarget] = useState(
     libraries[1]?.id || libraries[0]?.id || "",
@@ -712,22 +737,47 @@ export function ActionDialog({
                     />
                     {label}
                   </label>
-                  <input
-                    aria-label={label}
-                    type={
-                      ["year", "trackNumber", "discNumber"].includes(key)
-                        ? "number"
-                        : "text"
-                    }
-                    min="0"
-                    value={values[key] || ""}
-                    placeholder={
-                      summary.data?.fields[key]?.mixed
-                        ? "Разные значения"
-                        : "Не указано"
-                    }
-                    onChange={(e) => edit(key, e.target.value)}
-                  />
+                  {key === "genres" ? (
+                    <AutocompleteInput
+                      aria-label={label}
+                      value={values[key] || ""}
+                      options={
+                        genreOptions.data
+                          ?.map((genre) => genre.name)
+                          .filter(Boolean) || []
+                      }
+                      loading={genreOptions.isLoading}
+                      clearLabel="Очистить жанры"
+                      getQuery={(value, caret) =>
+                        genreSegment(value, caret).text
+                      }
+                      applyOption={applyGenreOption}
+                      onValueChange={(value) => edit(key, value)}
+                      placeholder={
+                        summary.data?.fields[key]?.mixed
+                          ? "Разные значения"
+                          : "Не указано"
+                      }
+                      className="tag-value-input"
+                    />
+                  ) : (
+                    <input
+                      aria-label={label}
+                      type={
+                        ["year", "trackNumber", "discNumber"].includes(key)
+                          ? "number"
+                          : "text"
+                      }
+                      min="0"
+                      value={values[key] || ""}
+                      placeholder={
+                        summary.data?.fields[key]?.mixed
+                          ? "Разные значения"
+                          : "Не указано"
+                      }
+                      onChange={(e) => edit(key, e.target.value)}
+                    />
+                  )}
                 </div>
               ))}
           </div>

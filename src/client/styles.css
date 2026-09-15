@@ -1153,6 +1153,67 @@ a {
   font-size: var(--type-caption);
   width: 100%;
 }
+.autocomplete-input {
+  position: relative;
+}
+.autocomplete-input input:not([type="checkbox"]):not([type="range"]) {
+  width: 100%;
+  padding-right: 38px;
+}
+.autocomplete-clear {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: #98a6a5;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+}
+.autocomplete-clear:hover,
+.autocomplete-clear:focus-visible {
+  color: #d7e1db;
+  background: #ffffff10;
+}
+.autocomplete-menu {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 5px);
+  right: 0;
+  left: 0;
+  max-height: 218px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid #ffffff1c;
+  border-radius: 8px;
+  background: #141a1d;
+  box-shadow: 0 12px 28px #00000066;
+}
+.autocomplete-option,
+.autocomplete-empty {
+  min-height: 34px;
+  padding: 7px 9px;
+  font-size: var(--type-caption);
+  line-height: 20px;
+}
+.autocomplete-option {
+  border-radius: 5px;
+  color: #d2dbd9;
+  cursor: pointer;
+}
+.autocomplete-option:hover,
+.autocomplete-option.active {
+  background: #b9d4b71a;
+  color: #e6efe8;
+}
+.autocomplete-empty {
+  color: #829199;
+}
 .tag-field.changed input:not([type="checkbox"]) {
   border-color: #99bc9866;
 }

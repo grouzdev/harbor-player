@@ -785,6 +785,7 @@ export function App() {
           "libraries",
           "library-folders",
           "genres",
+          "tag-genre-options",
           "artists",
           "albums",
           "tracks",
