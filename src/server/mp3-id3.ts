@@ -119,10 +119,12 @@ export async function writeMp3TagsLosslessly(file: string, patch: TagPatch, coun
     });
     for (const [key, value] of Object.entries(patch)) {
       const id = ids(tag.version)[key];
-      if (!id || value === undefined || value === null || (Array.isArray(value) && !value.length)) continue;
+      if (!id || value === undefined || (Array.isArray(value) && !value.length)) continue;
+      const count = key === "trackNumber" ? counts.track : key === "discNumber" ? counts.disc : undefined;
+      // Clearing a number must retain its total: 1/7 becomes /7, not an absent frame.
+      if (value === null && !count) continue;
       const values = Array.isArray(value) ? value : [
-        key === "trackNumber" && counts.track ? `${value}/${counts.track}` :
-        key === "discNumber" && counts.disc ? `${value}/${counts.disc}` : String(value),
+        value === null ? `/${count}` : count ? `${value}/${count}` : String(value),
       ];
       current.push(textFrame(id, values, tag.version));
     }

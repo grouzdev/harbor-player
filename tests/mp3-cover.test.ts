@@ -200,6 +200,55 @@ describe("MP3 cover writer", () => {
     expect(await audioDigest(file)).toBe(beforeAudio);
   });
 
+  it("retains track and disc totals when clearing their numbers", async () => {
+    root = await mkdtemp(path.join(os.tmpdir(), "mymusiclib-mp3-numbers-"));
+    const sample = await readFile(path.join(fixtures, "sample.mp3"));
+    const sampleTagSize = size(sample.subarray(6, 10));
+    const audio = sample.subarray(10 + sampleTagSize);
+    const file = path.join(root, "number-totals.mp3");
+    await writeFile(
+      file,
+      Buffer.concat([
+        id3v2(
+          3,
+          Buffer.concat([
+            frame("TRCK", Buffer.from([0, ...Buffer.from("1/7", "latin1")])),
+            frame("TPOS", Buffer.from([0, ...Buffer.from("1/1", "latin1")])),
+          ]),
+        ),
+        id3v2(
+          4,
+          Buffer.concat([
+            version4Frame("TRCK", "1/7"),
+            version4Frame("TPOS", "1/1"),
+          ]),
+        ),
+        audio,
+      ]),
+    );
+    const beforeAudio = await audioDigest(file);
+
+    await writeTags(file, {
+      genres: ["Dream Pop"],
+      trackNumber: null,
+      discNumber: null,
+    });
+
+    const metadata = await parseFile(file, { duration: false });
+    expect(metadata.common.genre).toEqual(["Dream Pop"]);
+    expect(metadata.common.track).toEqual({ no: null, of: 7 });
+    expect(metadata.common.disk).toEqual({ no: null, of: 1 });
+    for (const format of ["ID3v2.3", "ID3v2.4"] as const) {
+      expect(
+        metadata.native[format]?.find((tag) => tag.id === "TRCK")?.value,
+      ).toBe("/7");
+      expect(
+        metadata.native[format]?.find((tag) => tag.id === "TPOS")?.value,
+      ).toBe("/1");
+    }
+    expect(await audioDigest(file)).toBe(beforeAudio);
+  });
+
   it("accepts TagLib removing a leading BOM from an unselected lyric", async () => {
     root = await mkdtemp(path.join(os.tmpdir(), "mymusiclib-mp3-lyrics-"));
     const sample = await readFile(path.join(fixtures, "sample.mp3"));
