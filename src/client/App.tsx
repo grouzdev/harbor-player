@@ -184,6 +184,7 @@ function getPanelDefinition(id: PanelId) {
 }
 
 function panelGridTemplate(ids: PanelId[], weights: number[]) {
+  if (ids.length === 1) return "minmax(0, 1fr)";
   return ids
     .map((id) => {
       const panel = getPanelDefinition(id);

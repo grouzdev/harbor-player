@@ -390,6 +390,55 @@ test("panel visibility controls reshape and persist the catalog", async ({
   );
 });
 
+test("a single visible panel fills the workspace width", async ({ page }) => {
+  const panels = [
+    ["Библиотеки", ".libraries-panel"],
+    ["Жанры", ".genres-panel"],
+    ["Исполнители", ".artists-panel"],
+    ["Альбомы", ".albums-panel"],
+    ["Треки", ".tracks-panel"],
+  ] as const;
+
+  for (const [viewport, label] of [
+    [{ width: 1200, height: 800 }, "landscape"],
+    [{ width: 1000, height: 1200 }, "portrait"],
+  ] as const) {
+    await page.setViewportSize(viewport);
+
+    for (const [visibleLabel, selector] of panels) {
+      await page.goto("/");
+      await page.evaluate((visible) => {
+        localStorage.setItem(
+          "mml-panel-visibility-v1",
+          JSON.stringify({
+            libraries: visible === "Библиотеки",
+            genres: visible === "Жанры",
+            artists: visible === "Исполнители",
+            albums: visible === "Альбомы",
+            tracks: visible === "Треки",
+          }),
+        );
+      }, visibleLabel);
+      await page.reload();
+
+      const dimensions = await page.locator(".workspace").evaluate(
+        (workspace, panelSelector) => {
+          const panel = workspace.querySelector<HTMLElement>(panelSelector)!;
+          return {
+            workspaceWidth: workspace.getBoundingClientRect().width,
+            panelWidth: panel.getBoundingClientRect().width,
+          };
+        },
+        selector,
+      );
+      expect(dimensions.panelWidth, `${label}: ${visibleLabel}`).toBeCloseTo(
+        dimensions.workspaceWidth,
+        1,
+      );
+    }
+  }
+});
+
 test("local library: readable UI, playback, tags, move, delete and restore", async ({
   page,
 }, info) => {
