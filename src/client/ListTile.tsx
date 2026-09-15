@@ -13,6 +13,7 @@ type ListTileProps = {
   style?: CSSProperties;
   testId?: string;
   dataFormat?: string;
+  selectionKey?: string;
   startAction?: ReactNode;
   endAction?: ReactNode;
   onSelect: (event: MouseEvent<HTMLButtonElement>) => void;
@@ -33,6 +34,7 @@ export function ListTile({
   style,
   testId,
   dataFormat,
+  selectionKey,
   startAction,
   endAction,
   onSelect,
@@ -45,6 +47,7 @@ export function ListTile({
       style={style}
       data-testid={testId}
       data-format={dataFormat}
+      data-selection-key={selectionKey}
       onContextMenu={onContextMenu}
     >
       {startAction}

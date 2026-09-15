@@ -304,9 +304,8 @@ export class Catalog {
         args.push(...values);
       }
     };
-    list(filter.libraryIds, "t.libraryId");
     const selectedFolders = filter.folders || [];
-    if (selectedFolders.length) {
+    if (filter.libraryIds.length || selectedFolders.length) {
       const folders = selectedFolders.map((selection) => {
         const folder = checkedFolderPath(selection.relativePath);
         return {
@@ -314,11 +313,18 @@ export class Catalog {
           prefix: `${folder}${path.sep}`,
         };
       });
-      clauses.push(
-        `(${folders
-          .map(() => "t.libraryId=? AND substr(t.relativePath,1,?)=?")
-          .join(" OR ")})`,
+      const locationClauses: string[] = [];
+      if (filter.libraryIds.length)
+        locationClauses.push(
+          `t.libraryId IN (${filter.libraryIds.map(() => "?").join(",")})`,
+        );
+      locationClauses.push(
+        ...folders.map(
+          () => "(t.libraryId=? AND substr(t.relativePath,1,?)=?)",
+        ),
       );
+      clauses.push(`(${locationClauses.join(" OR ")})`);
+      args.push(...filter.libraryIds);
       for (const folder of folders)
         args.push(folder.libraryId, folder.prefix.length, folder.prefix);
     }

@@ -72,8 +72,13 @@ import {
   RenameLibraryDialog,
   RemoveLibraryDialog,
 } from "./Dialogs";
-import { selectFacetValue } from "./facet-selection";
 import { ListTile } from "./ListTile";
+import { usePanelSelection } from "./panel-selection";
+import {
+  folderSelectionKey,
+  librarySelectionKey,
+  locationsFromSelectionKeys,
+} from "./location-selection";
 import { Player, usePlayer } from "./Player";
 import { CoverMode, QuickSearchDialog } from "./CoverMode";
 import { ContextMenu, type ContextMenuState } from "./ContextMenu";
@@ -344,6 +349,7 @@ function BookmarkToggle({
     <button
       type="button"
       className={`bookmark-toggle ${bookmarked ? "bookmarked" : ""} ${className}`}
+      data-selection-ignore
       aria-label={action}
       aria-pressed={bookmarked}
       aria-busy={pending || undefined}
@@ -1575,54 +1581,35 @@ export function App() {
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
   };
-  const chooseLibrary = (id: string, additive: boolean) => {
-    setFilter((f) => ({
-      ...f,
-      libraryIds: selectFacetValue(
-        f.folders.length ? [] : f.libraryIds,
-        id,
-        additive,
+  const libraryListRef = useRef<HTMLDivElement>(null);
+  const genreListRef = useRef<HTMLDivElement>(null);
+  const locationSelectionKeys = useMemo(
+    () => [
+      ...filter.libraryIds.map(librarySelectionKey),
+      ...filter.folders.map((folder) =>
+        folderSelectionKey(folder.libraryId, folder.relativePath),
       ),
-      folders: [],
-    }));
-  };
-  const chooseFolder = (
-    libraryId: string,
-    folder: LibraryFolder,
-    additive: boolean,
-  ) => {
-    setFilter((current) => ({
-      ...current,
-      libraryIds: [],
-      folders: (() => {
-        const selected = { libraryId, relativePath: folder.relativePath };
-        if (!additive) return [selected];
-        const key = folderKey(libraryId, folder.relativePath);
-        const selectedAlready = current.folders.some(
-          (item) => folderKey(item.libraryId, item.relativePath) === key,
-        );
-        if (selectedAlready)
-          return current.folders.filter(
-            (item) => folderKey(item.libraryId, item.relativePath) !== key,
-          );
-        return [
-          ...current.folders.filter(
-            (item) =>
-              !(
-                item.libraryId === libraryId &&
-                item.relativePath.startsWith(`${folder.relativePath}\\`)
-              ),
-          ),
-          selected,
-        ];
-      })(),
-    }));
-  };
-  const chooseGenre = (genre: string, additive: boolean) =>
-    setFilter((f) => ({
-      ...f,
-      genres: selectFacetValue(f.genres, genre, additive),
-    }));
+    ],
+    [filter.libraryIds, filter.folders],
+  );
+  const applyLocationSelection = useCallback((keys: string[]) => {
+    const locations = locationsFromSelectionKeys(keys);
+    setFilter((current) => ({ ...current, ...locations }));
+  }, []);
+  const librarySelection = usePanelSelection({
+    scrollRef: libraryListRef,
+    selectedKeys: locationSelectionKeys,
+    onChange: applyLocationSelection,
+  });
+  const genreSelection = usePanelSelection({
+    scrollRef: genreListRef,
+    selectedKeys: filter.genres,
+    onChange: (genres) => setFilter((current) => ({ ...current, genres })),
+  });
+  const highlightedLocations =
+    librarySelection.previewKeys || new Set(locationSelectionKeys);
+  const highlightedGenres =
+    genreSelection.previewKeys || new Set(filter.genres);
   const queryError =
     libraries.error ||
     genres.error ||
@@ -1671,11 +1658,8 @@ export function App() {
       const expanded = expandedFolderKeys.has(
         folderKey(libraryId, folder.relativePath),
       );
-      const selected = filter.folders.some(
-        (item) =>
-          item.libraryId === libraryId &&
-          item.relativePath === folder.relativePath,
-      );
+      const selectionKey = folderSelectionKey(libraryId, folder.relativePath);
+      const selected = highlightedLocations.has(selectionKey);
       const unrelated =
         hasFacetRelevance &&
         facetRelevance.data &&
@@ -1693,11 +1677,13 @@ export function App() {
             expanded={folder.hasChildren ? expanded : undefined}
             title={folder.relativePath}
             value={folder.name}
+            selectionKey={selectionKey}
             startAction={
               folder.hasChildren ? (
                 <button
                   type="button"
                   className="tree-toggle"
+                  data-selection-ignore
                   aria-label={`${expanded ? "Свернуть" : "Развернуть"} папку «${folder.name}»`}
                   aria-expanded={expanded}
                   onClick={() =>
@@ -1715,7 +1701,9 @@ export function App() {
             }
             suffix={count(folder.trackCount)}
             style={{ "--folder-depth": depth + 1 } as CSSProperties}
-            onSelect={(event) => chooseFolder(libraryId, folder, event.ctrlKey)}
+            onSelect={(event) =>
+              librarySelection.selectFromClick(event, selectionKey)
+            }
             onContextMenu={(event) => showFolderMenu(event, libraryId, folder)}
           />
           {expanded &&
@@ -1957,7 +1945,9 @@ export function App() {
               <PanelSelectionIndicator
                 total={libraries.data?.length || 0}
                 selected={filter.libraryIds.length}
-                active={filter.libraryIds.length > 0 || filter.folders.length > 0}
+                active={
+                  filter.libraryIds.length > 0 || filter.folders.length > 0
+                }
                 resetLabel="Сбросить библиотеки"
                 onReset={() =>
                   setFilter((f) => ({
@@ -1968,7 +1958,11 @@ export function App() {
                 }
               />
             </div>
-            <div className="library-list">
+            <div
+              className="library-list selection-surface"
+              ref={libraryListRef}
+              {...librarySelection.surfaceProps}
+            >
               {libraries.data?.map((library) => (
                 <div key={library.id} className="library-container">
                   <ListTile
@@ -1982,20 +1976,21 @@ export function App() {
                     ]
                       .filter(Boolean)
                       .join(" ")}
-                    selected={
-                      !filter.folders.length &&
-                      filter.libraryIds.includes(library.id)
-                    }
+                    selected={highlightedLocations.has(
+                      librarySelectionKey(library.id),
+                    )}
                     current={filter.folders.some(
                       (folder) => folder.libraryId === library.id,
                     )}
                     expanded={expandedLibraryIds.has(library.id)}
                     title={library.path}
                     value={library.name}
+                    selectionKey={librarySelectionKey(library.id)}
                     startAction={
                       <button
                         type="button"
                         className="tree-toggle"
+                        data-selection-ignore
                         aria-label={`${expandedLibraryIds.has(library.id) ? "Свернуть" : "Развернуть"} библиотеку «${library.name}»`}
                         aria-expanded={expandedLibraryIds.has(library.id)}
                         onClick={() =>
@@ -2015,7 +2010,10 @@ export function App() {
                     }
                     suffix={count(library.trackCount)}
                     onSelect={(event) =>
-                      chooseLibrary(library.id, event.ctrlKey)
+                      librarySelection.selectFromClick(
+                        event,
+                        librarySelectionKey(library.id),
+                      )
                     }
                     onContextMenu={(event) => showLibraryMenu(event, library)}
                   />
@@ -2023,6 +2021,7 @@ export function App() {
                     renderFolderLevel(library.id)}
                 </div>
               ))}
+              {librarySelection.marquee}
             </div>
             <button className="add-library" onClick={() => setModal("add")}>
               <Plus size={16} />
@@ -2073,10 +2072,14 @@ export function App() {
                 onReset={() => setFilter((f) => ({ ...f, genres: [] }))}
               />
             </div>
-            <div className="genre-list">
+            <div
+              className="genre-list selection-surface"
+              ref={genreListRef}
+              {...genreSelection.surfaceProps}
+            >
               {genres.data?.map((g) => {
                 const label = g.name || "Без жанра";
-                const checked = filter.genres.includes(g.name);
+                const checked = highlightedGenres.has(g.name);
                 return (
                   <ListTile
                     key={g.name}
@@ -2088,12 +2091,20 @@ export function App() {
                         : ""
                     }`}
                     selected={checked}
+                    selectionKey={g.name}
                     value={label}
                     suffix={count(g.count)}
-                    onSelect={(event) => chooseGenre(g.name, event.ctrlKey)}
+                    onSelect={(event) =>
+                      genreSelection.selectFromClick(
+                        event,
+                        g.name,
+                        genres.data?.map((item) => item.name) || [],
+                      )
+                    }
                   />
                 );
               })}
+              {genreSelection.marquee}
             </div>
           </section>
           {panelVisibility.genres && renderPanelResizer("genres")}
@@ -2116,10 +2127,10 @@ export function App() {
               total={artists.data?.pages[0]?.total || 0}
               selected={filter.artists}
               loading={artists.isFetching}
-              onSelect={(name, additive) =>
+              onSelectionChange={(artists) =>
                 setFilter((f) => ({
                   ...f,
-                  artists: selectFacetValue(f.artists, name, additive),
+                  artists,
                 }))
               }
               onMore={() => {
@@ -2163,10 +2174,10 @@ export function App() {
               albums={albumItems}
               total={albumTotal}
               selected={filter.albumIds}
-              onSelect={(id, additive) =>
+              onSelectionChange={(albumIds) =>
                 setFilter((f) => ({
                   ...f,
-                  albumIds: selectFacetValue(f.albumIds, id, additive),
+                  albumIds,
                 }))
               }
               onMore={() => {
@@ -2271,18 +2282,9 @@ export function App() {
                     );
                   }
                 }}
-                onSelect={(id, additive) => {
+                onSelectionChange={(ids) => {
                   setSelectedAlbumId(null);
-                  if (!additive) {
-                    setSelected(new Set([id]));
-                    return;
-                  }
-                  setSelected((current) => {
-                    const next = new Set(current);
-                    if (next.has(id)) next.delete(id);
-                    else next.add(id);
-                    return next;
-                  });
+                  setSelected(new Set(ids));
                 }}
                 onMore={() => {
                   if (tracks.hasNextPage && !tracks.isFetchingNextPage)
@@ -2464,7 +2466,7 @@ function ArtistList({
   total,
   selected,
   loading,
-  onSelect,
+  onSelectionChange,
   onMore,
   onContextMenu,
   bookmarkKeys,
@@ -2477,7 +2479,7 @@ function ArtistList({
   total: number;
   selected: string[];
   loading: boolean;
-  onSelect: (name: string, additive: boolean) => void;
+  onSelectionChange: (names: string[]) => void;
   onMore: () => void;
   onContextMenu: (
     event: React.MouseEvent,
@@ -2491,6 +2493,12 @@ function ArtistList({
   scrollTarget: { artist: string; requestId: number } | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const selection = usePanelSelection({
+    scrollRef: ref,
+    selectedKeys: selected,
+    onChange: onSelectionChange,
+  });
+  const highlighted = selection.previewKeys || new Set(selected);
   const centeredRequestId = useRef<number | null>(null);
   const requestedPageKey = useRef<string | null>(null);
   const virtual = useVirtualizer({
@@ -2527,22 +2535,33 @@ function ArtistList({
     }
   }, [scrollTarget, items, total, loading, onMore, virtual]);
   return (
-    <div className="artist-scroll" ref={ref}>
+    <div
+      className="artist-scroll selection-surface"
+      ref={ref}
+      {...selection.surfaceProps}
+    >
       <div style={{ height: virtual.getTotalSize(), position: "relative" }}>
         {visible.map((row) => {
           const item = items[row.index];
           if (!item) return null;
           const label = item.name || "Без исполнителя";
-          const checked = selected.includes(item.name);
+          const checked = highlighted.has(item.name);
           return (
             <ListTile
               key={item.name}
               className="genre-row artist-row"
               title={label}
               selected={checked}
+              selectionKey={item.name}
               value={label}
               suffix={count(item.count)}
-              onSelect={(event) => onSelect(item.name, event.ctrlKey)}
+              onSelect={(event) =>
+                selection.selectFromClick(
+                  event,
+                  item.name,
+                  items.map((entry) => entry.name),
+                )
+              }
               onContextMenu={(event) =>
                 onContextMenu(event, "artist", item.name)
               }
@@ -2568,6 +2587,7 @@ function ArtistList({
           );
         })}
       </div>
+      {selection.marquee}
     </div>
   );
 }
@@ -2576,7 +2596,7 @@ function AlbumGrid({
   albums,
   total,
   selected,
-  onSelect,
+  onSelectionChange,
   onMore,
   loading,
   onContextMenu,
@@ -2590,7 +2610,7 @@ function AlbumGrid({
   albums: Album[];
   total: number;
   selected: string[];
-  onSelect: (id: string, additive: boolean) => void;
+  onSelectionChange: (ids: string[]) => void;
   onMore: () => void;
   loading: boolean;
   onContextMenu: (
@@ -2607,6 +2627,12 @@ function AlbumGrid({
   onBookmarkChange: BookmarkChange;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const selection = usePanelSelection({
+    scrollRef: ref,
+    selectedKeys: selected,
+    onChange: onSelectionChange,
+  });
+  const highlighted = selection.previewKeys || new Set(selected);
   const [width, setWidth] = useState(330);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   useEffect(() => {
@@ -2682,7 +2708,11 @@ function AlbumGrid({
     virtual.measure();
   }, [cellWidth]);
   return (
-    <div ref={ref} className="album-scroll">
+    <div
+      ref={ref}
+      className="album-scroll selection-surface"
+      {...selection.surfaceProps}
+    >
       {!albums.length ? (
         <div className="empty-small">
           <Disc3 size={30} />
@@ -2721,7 +2751,8 @@ function AlbumGrid({
                   entry.albums.map((album) => (
                     <div
                       key={album.id}
-                      className={`album-card ${selected.includes(album.id) ? "selected" : ""}`}
+                      className={`album-card ${highlighted.has(album.id) ? "selected" : ""}`}
+                      data-selection-key={album.id}
                       title={`${album.title || "Без альбома"} · ${album.artists.join(", ")}`}
                       onContextMenu={(event) =>
                         onContextMenu(
@@ -2746,15 +2777,20 @@ function AlbumGrid({
                         className="album-main"
                         aria-pressed={selected.includes(album.id)}
                         onClick={(event) => {
-                          if (event.ctrlKey) {
-                            onSelect(album.id, true);
-                            return;
-                          }
-                          if (selected.includes(album.id)) {
+                          if (
+                            !event.ctrlKey &&
+                            !event.metaKey &&
+                            !event.shiftKey &&
+                            selected.includes(album.id)
+                          ) {
                             onPlay(album.id);
                             return;
                           }
-                          onSelect(album.id, false);
+                          selection.selectFromClick(
+                            event,
+                            album.id,
+                            albums.map((item) => item.id),
+                          );
                         }}
                       >
                         <div
@@ -2817,6 +2853,7 @@ function AlbumGrid({
           })}
         </div>
       )}
+      {selection.marquee}
     </div>
   );
 }
@@ -2830,7 +2867,7 @@ function TrackList({
   loading,
   onPlay,
   onSelectAlbum,
-  onSelect,
+  onSelectionChange,
   onMore,
   onContextMenu,
   bookmarkKeys,
@@ -2851,7 +2888,7 @@ function TrackList({
   loading: boolean;
   onPlay: (track: Track) => void;
   onSelectAlbum: (albumId: string) => Promise<void>;
-  onSelect: (id: string, additive: boolean) => void;
+  onSelectionChange: (ids: string[]) => void;
   onMore: () => void;
   onContextMenu: (
     event: React.MouseEvent,
@@ -2870,6 +2907,12 @@ function TrackList({
   onResetBookmarkFilters: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const selection = usePanelSelection({
+    scrollRef: ref,
+    selectedKeys: [...selected],
+    onChange: onSelectionChange,
+  });
+  const highlighted = selection.previewKeys || selected;
   const rows = useMemo(() => {
     const result: (
       | { type: "album"; track: Track; artists: string[] }
@@ -2906,7 +2949,12 @@ function TrackList({
     if (last >= rows.length - 10 && tracks.length < total && !loading) onMore();
   }, [last, rows.length, tracks.length, total, loading, onMore]);
   return (
-    <div ref={ref} className="track-scroll" aria-label="Список треков">
+    <div
+      ref={ref}
+      className="track-scroll selection-surface"
+      aria-label="Список треков"
+      {...selection.surfaceProps}
+    >
       {!tracks.length ? (
         <div className="empty-small track-empty">
           {bookmarksOnly && !loading ? (
@@ -2971,6 +3019,7 @@ function TrackList({
               <div
                 key={`album-${track.albumKey}`}
                 className={`track-album-header ${selectedAlbumId === track.albumKey ? "selected" : ""}`}
+                data-selection-ignore
                 role="button"
                 tabIndex={0}
                 aria-pressed={selectedAlbumId === track.albumKey}
@@ -3033,8 +3082,11 @@ function TrackList({
                 dataFormat={track.format}
                 className="track-row"
                 selected={
-                  selected.has(track.id) && selectedAlbumId !== track.albumKey
+                  highlighted.has(track.id) &&
+                  (selection.previewKeys !== null ||
+                    selectedAlbumId !== track.albumKey)
                 }
+                selectionKey={track.id}
                 current={currentId === track.id}
                 prefix={track.trackNumber ?? undefined}
                 value={track.title}
@@ -3045,7 +3097,13 @@ function TrackList({
                   height: row.size,
                   transform: `translateY(${row.start}px)`,
                 }}
-                onSelect={(event) => onSelect(track.id, event.ctrlKey)}
+                onSelect={(event) =>
+                  selection.selectFromClick(
+                    event,
+                    track.id,
+                    tracks.map((item) => item.id),
+                  )
+                }
                 onDoubleClick={() => onPlay(track)}
                 onContextMenu={(event) =>
                   onContextMenu(event, "track", track.id, copyTrackLabel(track))
@@ -3067,6 +3125,7 @@ function TrackList({
           })}
         </div>
       )}
+      {selection.marquee}
     </div>
   );
 }

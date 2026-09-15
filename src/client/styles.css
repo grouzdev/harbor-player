@@ -193,6 +193,39 @@ a {
   flex-direction: column;
   overflow: hidden;
 }
+
+.app-shell {
+  user-select: none;
+}
+
+.app-shell input,
+.app-shell textarea,
+.app-shell [contenteditable="true"] {
+  user-select: text;
+}
+
+.selection-surface {
+  position: relative;
+  user-select: none;
+}
+
+.selection-surface img {
+  -webkit-user-drag: none;
+}
+
+.selection-marquee {
+  position: absolute;
+  z-index: 20;
+  pointer-events: none;
+  border: 1px solid #c6ca91a8;
+  background: #9da35f1f;
+  box-shadow: 0 0 0 1px #05060566 inset;
+}
+
+body.selection-dragging,
+body.selection-dragging * {
+  cursor: crosshair !important;
+}
 .panel-heading {
   height: 65px;
   min-height: 65px;

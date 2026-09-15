@@ -722,6 +722,38 @@ describe("catalog and safe filesystem operations", () => {
         .items.map((track) => track.id)
         .sort(),
     ).toEqual(["rock-album", "rock-live", "same-name"]);
+
+    const other = catalog.addLibrary("Other", path.join(root, "Other"));
+    catalog.upsert({
+      id: "other-track",
+      libraryId: other.id,
+      relativePath: path.join("Album", "other.flac"),
+      title: "other-track",
+      artists: ["Other artist"],
+      albumTitle: "Other album",
+      albumArtists: ["Other artist"],
+      albumKey: "other-album",
+      genres: [],
+      year: null,
+      trackNumber: 1,
+      discNumber: 1,
+      duration: 1,
+      format: "flac",
+      size: 1,
+      mtimeMs: 1,
+      coverId: null,
+      available: true,
+    });
+    expect(
+      catalog
+        .tracks({
+          ...emptyFilter,
+          libraryIds: [other.id],
+          folders: [rockFolder],
+        })
+        .items.map((track) => track.id)
+        .sort(),
+    ).toEqual(["other-track", "rock-album", "rock-live"]);
   });
   it("moves across volumes with original structure, ID and byte identity", async () => {
     const lib = await library("Downloads");
