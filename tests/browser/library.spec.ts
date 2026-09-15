@@ -436,6 +436,14 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     "height",
     "42px",
   );
+  const trackDurationInset = await firstTrackRow.evaluate((row) => {
+    const scroll = row.closest<HTMLElement>(".track-scroll")!;
+    const duration = row.querySelector<HTMLElement>(".list-tile-suffix")!;
+    const scrollRect = scroll.getBoundingClientRect();
+    const durationRect = duration.getBoundingClientRect();
+    return scrollRect.left + scroll.clientWidth - durationRect.right;
+  });
+  expect(Math.abs(trackDurationInset - 36)).toBeLessThan(0.5);
   await expect(
     page.getByRole("button", { name: "Сбросить выбор треков" }),
   ).toHaveCount(0);
