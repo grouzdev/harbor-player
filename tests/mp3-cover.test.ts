@@ -44,6 +44,27 @@ function version4Frame(id: string, text: string) {
   ]);
 }
 
+function version4RawFrame(id: string, body: Buffer) {
+  return Buffer.concat([
+    Buffer.from(id),
+    syncsafe(body.length),
+    Buffer.from([0, 0]),
+    body,
+  ]);
+}
+
+function lyrics(language: string, text: string) {
+  return version4RawFrame(
+    "USLT",
+    Buffer.concat([
+      Buffer.from([3]),
+      Buffer.from(language, "ascii"),
+      Buffer.from([0]),
+      Buffer.from(text, "utf8"),
+    ]),
+  );
+}
+
 function id3v2(version: 3 | 4, tag: Buffer) {
   const header = Buffer.from([0x49, 0x44, 0x33, version, 0, 0]);
   return Buffer.concat([header, syncsafe(tag.length), tag]);
@@ -165,6 +186,40 @@ describe("MP3 cover writer", () => {
         (tag) => tag.value,
       ),
     ).toEqual(["Rave"]);
+    expect(await audioDigest(file)).toBe(beforeAudio);
+  });
+
+  it("accepts TagLib removing a leading BOM from an unselected lyric", async () => {
+    root = await mkdtemp(path.join(os.tmpdir(), "mymusiclib-mp3-lyrics-"));
+    const sample = await readFile(path.join(fixtures, "sample.mp3"));
+    const sampleTagSize = size(sample.subarray(6, 10));
+    const audio = sample.subarray(10 + sampleTagSize);
+    const file = path.join(root, "lyrics-with-bom.mp3");
+    await writeFile(
+      file,
+      Buffer.concat([
+        id3v2(
+          4,
+          Buffer.concat([
+            version4Frame("TIT2", "Track"),
+            version4Frame("TCON", "Alternative"),
+            lyrics("XXX", "Первый текст"),
+            lyrics("eng", "\uFEFFВторой текст"),
+          ]),
+        ),
+        audio,
+      ]),
+    );
+    const beforeAudio = await audioDigest(file);
+
+    await writeTags(file, { genres: ["Indie Pop"] });
+
+    const metadata = await parseFile(file, { duration: false });
+    expect(metadata.common.genre).toEqual(["Indie Pop"]);
+    expect(metadata.common.lyrics).toEqual([
+      { language: "XXX", descriptor: "", text: "Первый текст" },
+      { language: "eng", descriptor: "", text: "Второй текст" },
+    ]);
     expect(await audioDigest(file)).toBe(beforeAudio);
   });
 

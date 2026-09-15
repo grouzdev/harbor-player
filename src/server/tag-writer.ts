@@ -27,6 +27,42 @@ const fields: Record<string, string[]> = {
   discNumber: ["disk"],
   cover: ["picture"],
 };
+
+function normalizeLyrics(value: unknown) {
+  if (!Array.isArray(value)) return value;
+  return value.map((lyric) => {
+    if (!lyric || typeof lyric !== "object") return lyric;
+    const entry = lyric as Record<string, unknown>;
+    return {
+      ...entry,
+      text:
+        typeof entry.text === "string"
+          ? entry.text.replace(/^\uFEFF/, "")
+          : entry.text,
+    };
+  });
+}
+
+function nativeTagEqual(
+  id: string,
+  before: unknown,
+  after: unknown,
+): boolean {
+  if (id !== "USLT") return isDeepStrictEqual(after, before);
+  const normalize = (value: unknown) => {
+    if (!value || typeof value !== "object") return value;
+    const lyric = value as Record<string, unknown>;
+    return {
+      ...lyric,
+      text:
+        typeof lyric.text === "string"
+          ? lyric.text.replace(/^\uFEFF/, "")
+          : lyric.text,
+    };
+  };
+  return isDeepStrictEqual(normalize(after), normalize(before));
+}
+
 function unchangedCommon(
   meta: IAudioMetadata,
   patch: TagPatch,
@@ -47,6 +83,7 @@ function unchangedCommon(
       language: c.language && c.language !== "XXX" ? c.language : "",
       descriptor: c.descriptor || "",
     }));
+  result.lyrics = normalizeLyrics(result.lyrics);
   return result;
 }
 
@@ -197,7 +234,8 @@ export async function writeTags(file: string, patch: TagPatch): Promise<void> {
       if (
         !(after.native[format] || []).some(
           (other) =>
-            other.id === tag.id && isDeepStrictEqual(other.value, tag.value),
+            other.id === tag.id &&
+            nativeTagEqual(tag.id, tag.value, other.value),
         )
       )
         throw new Error(`Запись отклонена: потеря тега ${tag.id}`);
