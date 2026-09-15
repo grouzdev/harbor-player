@@ -2506,6 +2506,21 @@ html:fullscreen .app-shell {
     0 -1px 0 #0000008c inset;
 }
 
+html:fullscreen .app-shell.app-shell--cover-mode {
+  background: transparent;
+}
+
+html:fullscreen .app-shell.app-shell--cover-mode .cover-mode {
+  background: linear-gradient(
+    135deg,
+    #000000b8 0%,
+    #000000c9 52%,
+    #000000d9 100%
+  );
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
 html:fullscreen .app-shell.fullscreen-window--default {
   position: absolute;
   inset: var(--room-inset-y) var(--room-inset-x);

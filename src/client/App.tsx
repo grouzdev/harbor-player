@@ -1934,6 +1934,8 @@ export function App() {
     <div
       ref={appShellRef}
       className={`app-shell fullscreen-window--${fullscreenWindowMode}${
+        coverMode ? " app-shell--cover-mode" : ""
+      }${
         isPortraitLayout ? " layout--portrait" : ""
       }`}
       style={fullscreenWindowStyle}

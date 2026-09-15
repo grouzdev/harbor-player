@@ -1607,12 +1607,30 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   const coverMode = page.getByRole("main", { name: "Режим обложки" });
   await expect(coverMode).toBeVisible();
   await expect(page.locator(".workspace")).toBeHidden();
+  await expect(page.locator(".app-shell")).toHaveClass(/app-shell--cover-mode/);
   await expect(page.locator(".panel-visibility-controls")).toHaveCount(0);
   await expect(page.locator(".topbar")).toBeVisible();
   await expect(page.locator(".player")).toBeVisible();
   await expect(coverMode.getByRole("heading", { level: 1 })).toContainText(
     "Первый трек",
   );
+  await page
+    .getByRole("button", { name: "Развернуть окно на весь экран" })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => Boolean(document.fullscreenElement)))
+    .toBe(true);
+  await expect(page.locator(".app-shell")).toHaveCSS(
+    "background-color",
+    "rgba(0, 0, 0, 0)",
+  );
+  await expect(coverMode).toHaveCSS("background-image", /linear-gradient/);
+  await page
+    .getByRole("button", { name: "Свернуть окно из полноэкранного режима" })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => document.fullscreenElement === null))
+    .toBe(true);
   await expect
     .poll(() => coverMode.locator(".cover-track-row").count())
     .toBeGreaterThan(0);
