@@ -18,6 +18,7 @@ import type {
   Selection,
   Track,
 } from "../shared/contracts.js";
+import { compareArtistNames } from "../shared/artist-grouping.js";
 
 type Row = Record<string, any>;
 const checkedFolderPath = (relativePath: string) => {
@@ -618,17 +619,17 @@ export class Catalog {
       search: "",
     });
     const group = `FROM tracks t JOIN libraries l ON l.id=t.libraryId LEFT JOIN track_album_artists a ON a.trackId=t.id WHERE ${sql} GROUP BY coalesce(a.artist,'')`;
-    const total = (
-      this.db
-        .prepare(`SELECT count(*) n FROM (SELECT 1 ${group})`)
-        .get(...args) as { n: number }
-    ).n;
-    const items = this.db
+    const allItems = this.db
       .prepare(
-        `SELECT coalesce(a.artist,'') name,count(DISTINCT t.albumKey) count ${group} ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?`,
+        `SELECT coalesce(a.artist,'') name,count(DISTINCT t.albumKey) count ${group}`,
       )
-      .all(...args, limit, offset) as { name: string; count: number }[];
-    return { items, total, offset };
+      .all(...args) as { name: string; count: number }[];
+    allItems.sort((a, b) => compareArtistNames(a.name, b.name));
+    return {
+      items: allItems.slice(offset, offset + limit),
+      total: allItems.length,
+      offset,
+    };
   }
   quickSearch(query: string, limit = 6): QuickSearchResults {
     const value = query.trim();

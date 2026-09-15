@@ -17,6 +17,7 @@ import { execFileSync } from "node:child_process";
 import { MusicService } from "../dist/server/service.js";
 import { readTrack } from "../dist/server/metadata.js";
 import { emptyFilter } from "../src/shared/contracts.js";
+import { compareArtistNames } from "../src/shared/artist-grouping.js";
 import { audioDigest } from "../src/server/audio-digest.js";
 import { parseFile } from "music-metadata";
 
@@ -202,6 +203,56 @@ describe("catalog and safe filesystem operations", () => {
       { name: "Jazz", count: 1 },
       { name: "Rock", count: 2 },
     ]);
+  });
+  it("uses Unicode artist ordering consistently across pages", () => {
+    const catalog = service.catalog;
+    const lib = catalog.addLibrary(
+      "Unicode artists",
+      path.join(root, "Unicode artists"),
+    );
+    for (const [index, artist] of [
+      "écho",
+      "Eels",
+      "Би-2",
+      "🎵 Artist",
+      "7 Seconds",
+    ].entries()) {
+      catalog.upsert({
+        id: `unicode-${index}`,
+        libraryId: lib.id,
+        relativePath: `unicode-${index}.flac`,
+        title: artist,
+        artists: [artist],
+        albumTitle: artist,
+        albumArtists: [artist],
+        albumKey: `unicode-${index}`,
+        genres: [],
+        year: null,
+        trackNumber: 1,
+        discNumber: 1,
+        duration: 1,
+        format: "flac",
+        size: 1,
+        mtimeMs: 1,
+        coverId: null,
+        available: true,
+      });
+    }
+
+    const full = catalog.artists(emptyFilter).items.map((item) => item.name);
+    const paged = [
+      ...catalog.artists(emptyFilter, 0, 2).items,
+      ...catalog.artists(emptyFilter, 2, 2).items,
+      ...catalog.artists(emptyFilter, 4, 2).items,
+    ].map((item) => item.name);
+    expect(paged).toEqual(full);
+    expect(
+      full.every(
+        (name, index) =>
+          index === 0 || compareArtistNames(full[index - 1], name) <= 0,
+      ),
+    ).toBe(true);
+    expect(full.slice(0, 2).sort()).toEqual(["7 Seconds", "🎵 Artist"]);
   });
   it("indexes track artists when album artists are absent", () => {
     const catalog = service.catalog;

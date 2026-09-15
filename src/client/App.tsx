@@ -56,6 +56,11 @@ import {
   type Track,
 } from "../shared/contracts";
 import {
+  artistGroupKey,
+  isMissingArtistName,
+  startsNewArtistGroup,
+} from "../shared/artist-grouping";
+import {
   api,
   catalogUrl,
   count,
@@ -2605,6 +2610,25 @@ function ArtistList({
   } | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const rows = useMemo(() => {
+    const result: (
+      | { type: "group"; key: string; label: string }
+      | { type: "artist"; item: (typeof items)[number] }
+    )[] = [];
+    for (const [index, item] of items.entries()) {
+      if (
+        !isMissingArtistName(item.name) &&
+        (index === 0 || startsNewArtistGroup(item.name, items[index - 1]?.name))
+      )
+        result.push({
+          type: "group",
+          key: `group:${index}:${artistGroupKey(item.name) || "#"}`,
+          label: artistGroupKey(item.name) || "#",
+        });
+      result.push({ type: "artist", item });
+    }
+    return result;
+  }, [items]);
   const selection = usePanelSelection({
     scrollRef: ref,
     selectedKeys: selected,
@@ -2614,21 +2638,21 @@ function ArtistList({
   const centeredRequestId = useRef<number | null>(null);
   const requestedPageKey = useRef<string | null>(null);
   const virtual = useVirtualizer({
-    count: items.length + (items.length < total ? 1 : 0),
+    count: rows.length + (items.length < total ? 1 : 0),
     getScrollElement: () => ref.current,
-    estimateSize: () => 36,
+    estimateSize: (index) => (rows[index]?.type === "group" ? 56 : 36),
     overscan: 6,
   });
   const visible = virtual.getVirtualItems();
   const last = visible.at(-1)?.index ?? 0;
   useEffect(() => {
-    if (last >= items.length - 5 && items.length < total && !loading) onMore();
-  }, [last, items.length, total, loading, onMore]);
+    if (last >= rows.length - 6 && items.length < total && !loading) onMore();
+  }, [last, rows.length, items.length, total, loading, onMore]);
   useEffect(() => {
     if (!scrollTarget) return;
     if (loading) return;
-    const targetIndex = items.findIndex(
-      (item) => item.name === scrollTarget.artist,
+    const targetIndex = rows.findIndex(
+      (row) => row.type === "artist" && row.item.name === scrollTarget.artist,
     );
     if (targetIndex >= 0) {
       if (centeredRequestId.current !== scrollTarget.requestId) {
@@ -2646,7 +2670,7 @@ function ArtistList({
       requestedPageKey.current = pageKey;
       onMore();
     }
-  }, [scrollTarget, items, total, loading, onMore, virtual]);
+  }, [scrollTarget, items, rows, total, loading, onMore, virtual]);
   return (
     <div
       className="artist-scroll selection-surface"
@@ -2655,9 +2679,28 @@ function ArtistList({
     >
       <div style={{ height: virtual.getTotalSize(), position: "relative" }}>
         {visible.map((row) => {
-          const item = items[row.index];
-          if (!item) return null;
-          const label = item.name || "Без исполнителя";
+          const entry = rows[row.index];
+          if (!entry) return null;
+          if (entry.type === "group")
+            return (
+              <div
+                key={entry.key}
+                className="artist-group-label"
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  transform: `translateY(${row.start}px)`,
+                  height: 56,
+                }}
+              >
+                {entry.label}
+              </div>
+            );
+          const { item } = entry;
+          const label = isMissingArtistName(item.name)
+            ? "Без исполнителя"
+            : item.name;
           const checked = highlighted.has(item.name);
           return (
             <ListTile
