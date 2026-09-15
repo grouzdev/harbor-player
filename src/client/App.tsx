@@ -75,6 +75,7 @@ import {
 } from "./Dialogs";
 import { ListTile } from "./ListTile";
 import { usePanelSelection } from "./panel-selection";
+import { selectionScrollAnchor } from "./selection-scroll";
 import {
   folderSelectionKey,
   librarySelectionKey,
@@ -432,12 +433,33 @@ export function App() {
     artist: string;
     requestId: number;
   } | null>(null);
+  const [albumScrollTarget, setAlbumScrollTarget] = useState<{
+    album: string;
+    requestId: number;
+  } | null>(null);
   const requestArtistScroll = useCallback((artist: string) => {
     setArtistScrollTarget((current) => ({
       artist,
       requestId: (current?.requestId || 0) + 1,
     }));
   }, []);
+  const requestAlbumScroll = useCallback((album: string) => {
+    setAlbumScrollTarget((current) => ({
+      album,
+      requestId: (current?.requestId || 0) + 1,
+    }));
+  }, []);
+  useEffect(() => {
+    if (
+      artistScrollTarget &&
+      !filter.artists.includes(artistScrollTarget.artist)
+    )
+      setArtistScrollTarget(null);
+  }, [artistScrollTarget, filter.artists]);
+  useEffect(() => {
+    if (albumScrollTarget && !filter.albumIds.includes(albumScrollTarget.album))
+      setAlbumScrollTarget(null);
+  }, [albumScrollTarget, filter.albumIds]);
   useEffect(() => {
     const shell = appShellRef.current;
     if (!shell) return;
@@ -1378,6 +1400,14 @@ export function App() {
     () => artists.data?.pages.flatMap((p) => p.items) || [],
     [artists.data],
   );
+  const previousArtistFilterKey = useRef<string | null>(null);
+  useEffect(() => {
+    const key = JSON.stringify(artistFilter);
+    const previous = previousArtistFilterKey.current;
+    previousArtistFilterKey.current = key;
+    const artist = selectionScrollAnchor(previous, key, filter.artists);
+    if (artist) requestArtistScroll(artist);
+  }, [artistFilter, filter.artists, requestArtistScroll]);
   const valid = useQuery({
     queryKey: ["filter-validity", filter],
     queryFn: () => api<FilterValidity>(catalogUrl("filter-validity", filter)),
@@ -1462,6 +1492,14 @@ export function App() {
     () => albums.data?.pages.flatMap((p) => p.items) || [],
     [albums.data],
   );
+  const previousAlbumFilterKey = useRef<string | null>(null);
+  useEffect(() => {
+    const key = JSON.stringify(albumFilter);
+    const previous = previousAlbumFilterKey.current;
+    previousAlbumFilterKey.current = key;
+    const album = selectionScrollAnchor(previous, key, filter.albumIds);
+    if (album) requestAlbumScroll(album);
+  }, [albumFilter, filter.albumIds, requestAlbumScroll]);
   const trackItems = useMemo(
     () => tracks.data?.pages.flatMap((p) => p.items) || [],
     [tracks.data],
@@ -2177,6 +2215,7 @@ export function App() {
               bookmarksUnavailable={bookmarksUnavailable}
               pendingBookmarkKeys={pendingBookmarkKeys}
               onBookmarkChange={changeBookmark}
+              scrollTarget={albumScrollTarget}
             />
           </section>
           {panelVisibility.albums && renderPanelResizer("albums")}
@@ -2499,6 +2538,7 @@ function ArtistList({
   }, [last, items.length, total, loading, onMore]);
   useEffect(() => {
     if (!scrollTarget) return;
+    if (loading) return;
     const targetIndex = items.findIndex(
       (item) => item.name === scrollTarget.artist,
     );
@@ -2591,6 +2631,7 @@ function AlbumGrid({
   bookmarksUnavailable,
   pendingBookmarkKeys,
   onBookmarkChange,
+  scrollTarget,
 }: {
   albums: Album[];
   total: number;
@@ -2610,6 +2651,7 @@ function AlbumGrid({
   bookmarksUnavailable: boolean;
   pendingBookmarkKeys: Set<string>;
   onBookmarkChange: BookmarkChange;
+  scrollTarget: { album: string; requestId: number } | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const selection = usePanelSelection({
@@ -2692,6 +2734,28 @@ function AlbumGrid({
   useEffect(() => {
     virtual.measure();
   }, [cellWidth]);
+  const centeredRequestId = useRef<number | null>(null);
+  const requestedPageKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (!scrollTarget || loading) return;
+    const targetRow = rows.findIndex(
+      (row) =>
+        row.type === "albums" &&
+        row.albums.some((album) => album.id === scrollTarget.album),
+    );
+    if (targetRow >= 0) {
+      if (centeredRequestId.current !== scrollTarget.requestId) {
+        virtual.scrollToIndex(targetRow, { align: "center" });
+        centeredRequestId.current = scrollTarget.requestId;
+      }
+      return;
+    }
+    const pageKey = `${scrollTarget.requestId}:${albums.length}`;
+    if (albums.length < total && requestedPageKey.current !== pageKey) {
+      requestedPageKey.current = pageKey;
+      onMore();
+    }
+  }, [scrollTarget, loading, rows, albums.length, total, onMore, virtual]);
   return (
     <div
       ref={ref}
