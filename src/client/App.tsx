@@ -17,6 +17,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   AudioLines,
   Bookmark as BookmarkIcon,
+  CircleUserRound,
   ChevronRight,
   Clock3,
   Disc3,
@@ -26,6 +27,8 @@ import {
   Maximize2,
   Minimize2,
   Music2,
+  Music4,
+  ListMusic,
   Plus,
   RefreshCw,
   Search,
@@ -82,6 +85,90 @@ type BookmarkChange = (
   id: string,
   bookmarked: boolean,
 ) => void;
+
+type PanelId = "libraries" | "genres" | "artists" | "albums" | "tracks";
+type PanelVisibility = Record<PanelId, boolean>;
+
+const panelVisibilityStorageKey = "mml-panel-visibility-v1";
+const defaultPanelVisibility: PanelVisibility = {
+  libraries: true,
+  genres: true,
+  artists: true,
+  albums: true,
+  tracks: true,
+};
+const panelDefinitions = [
+  {
+    id: "libraries",
+    label: "Библиотеки",
+    Icon: FolderOpen,
+    weightIndex: 0,
+    minimumWidth: 110,
+    group: "facets",
+  },
+  {
+    id: "genres",
+    label: "Жанры",
+    Icon: Music4,
+    weightIndex: 1,
+    minimumWidth: 110,
+    group: "facets",
+  },
+  {
+    id: "artists",
+    label: "Исполнители",
+    Icon: CircleUserRound,
+    weightIndex: 2,
+    minimumWidth: 110,
+    group: "facets",
+  },
+  {
+    id: "albums",
+    label: "Альбомы",
+    Icon: Disc3,
+    weightIndex: 3,
+    minimumWidth: 150,
+    group: "catalog",
+  },
+  {
+    id: "tracks",
+    label: "Треки",
+    Icon: ListMusic,
+    weightIndex: 4,
+    minimumWidth: 180,
+    group: "catalog",
+  },
+] as const;
+
+function readPanelVisibility(): PanelVisibility {
+  try {
+    const value = JSON.parse(
+      localStorage.getItem(panelVisibilityStorageKey) || "null",
+    );
+    if (!value || typeof value !== "object") return defaultPanelVisibility;
+    return Object.fromEntries(
+      panelDefinitions.map(({ id }) => [
+        id,
+        typeof value[id] === "boolean" ? value[id] : true,
+      ]),
+    ) as PanelVisibility;
+  } catch {
+    return defaultPanelVisibility;
+  }
+}
+
+function getPanelDefinition(id: PanelId) {
+  return panelDefinitions.find((panel) => panel.id === id)!;
+}
+
+function panelGridTemplate(ids: PanelId[], weights: number[]) {
+  return ids
+    .map((id) => {
+      const panel = getPanelDefinition(id);
+      return `minmax(${panel.minimumWidth}px, ${weights[panel.weightIndex]}fr)`;
+    })
+    .join(" 4px ");
+}
 
 type FullscreenWindowBounds = {
   x: number;
@@ -247,6 +334,8 @@ export function App() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
+  const [panelVisibility, setPanelVisibility] =
+    useState<PanelVisibility>(readPanelVisibility);
   const [modal, setModal] = useState<
     "add" | "move" | "trash" | "tags" | "history" | "remove-library" | null
   >(null);
@@ -532,12 +621,49 @@ export function App() {
     isFullscreen,
     saveFullscreenWindowBounds,
   ]);
+  const setPanelVisible = useCallback((id: PanelId, visible: boolean) => {
+    setPanelVisibility((current) => {
+      if (current[id] === visible) return current;
+      const next = { ...current, [id]: visible };
+      try {
+        localStorage.setItem(panelVisibilityStorageKey, JSON.stringify(next));
+      } catch {
+        // Visibility remains usable for the current session.
+      }
+      return next;
+    });
+  }, []);
+  const togglePanelVisibility = useCallback(
+    (id: PanelId) => {
+      const visible = !panelVisibility[id];
+      setPanelVisible(id, visible);
+      if (visible) return;
+      if (id === "libraries") {
+        setFilter((current) => ({
+          ...current,
+          libraryIds: [],
+          folders: [],
+        }));
+      } else if (id === "genres") {
+        setFilter((current) => ({ ...current, genres: [] }));
+      } else if (id === "artists") {
+        setFilter((current) => ({ ...current, artists: [] }));
+      } else if (id === "albums") {
+        setFilter((current) => ({ ...current, albumIds: [] }));
+      } else {
+        setSelected(new Set());
+        setSelectedAlbumId(null);
+      }
+    },
+    [panelVisibility, setPanelVisible],
+  );
   const navigateFromPlayer = useCallback(
     (
       target: "album" | "artist",
       value: string,
       albumArtists: string[] = [],
     ) => {
+      setPanelVisible(target === "album" ? "albums" : "artists", true);
       setCoverMode(false);
       setQuickSearchOpen(false);
       const artists =
@@ -556,7 +682,7 @@ export function App() {
       });
       requestArtistScroll(artists[0]);
     },
-    [requestArtistScroll],
+    [requestArtistScroll, setPanelVisible],
   );
   const workspaceRef = useRef<HTMLElement>(null);
   const [panelWeights, setPanelWeights] = useState<number[]>(() => {
@@ -589,6 +715,19 @@ export function App() {
       return [1, 1];
     }
   });
+  const visiblePanelIds = panelDefinitions
+    .filter(({ id }) => panelVisibility[id])
+    .map(({ id }) => id);
+  const visibleFacetPanelIds = panelDefinitions
+    .filter(({ id, group }) => group === "facets" && panelVisibility[id])
+    .map(({ id }) => id);
+  const visibleCatalogPanelIds = panelDefinitions
+    .filter(({ id, group }) => group === "catalog" && panelVisibility[id])
+    .map(({ id }) => id);
+  const nextVisiblePanel = (id: PanelId) => {
+    const index = visiblePanelIds.indexOf(id);
+    return index >= 0 ? visiblePanelIds[index + 1] : undefined;
+  };
   const pendingRefresh = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
@@ -1239,30 +1378,43 @@ export function App() {
     setModalSelection(null);
     setPreview(p);
   };
-  const resize = (index: number, e: React.PointerEvent<HTMLDivElement>) => {
+  const resize = (
+    leftId: PanelId,
+    rightId: PanelId,
+    e: React.PointerEvent<HTMLDivElement>,
+  ) => {
     const start = e.clientX;
     const initial = panelWeights;
+    const leftPanel = getPanelDefinition(leftId);
+    const rightPanel = getPanelDefinition(rightId);
+    const leftIndex = leftPanel.weightIndex;
+    const rightIndex = rightPanel.weightIndex;
+    const leftElement = workspaceRef.current?.querySelector<HTMLElement>(
+      `[data-panel-id="${leftId}"]`,
+    );
+    const rightElement = workspaceRef.current?.querySelector<HTMLElement>(
+      `[data-panel-id="${rightId}"]`,
+    );
+    if (!leftElement || !rightElement) return;
+    const initialLeftPixels = leftElement.getBoundingClientRect().width;
+    const pairPixels =
+      initialLeftPixels + rightElement.getBoundingClientRect().width;
+    const pairWeight = initial[leftIndex] + initial[rightIndex];
     e.currentTarget.setPointerCapture(e.pointerId);
     const move = (event: PointerEvent) => {
-      const available = Math.max(
-        1,
-        (workspaceRef.current?.getBoundingClientRect().width || 1) - 16,
-      );
-      const total = initial.reduce((sum, weight) => sum + weight, 0);
-      const pairWeight = initial[index] + initial[index + 1];
-      const pairPixels = (pairWeight / total) * available;
       const leftPixels = Math.max(
-        110,
+        leftPanel.minimumWidth,
         Math.min(
-          pairPixels - 110,
-          (initial[index] / total) * available + event.clientX - start,
+          pairPixels - rightPanel.minimumWidth,
+          initialLeftPixels + event.clientX - start,
         ),
       );
       setPanelWeights(
         initial.map((weight, currentIndex) => {
-          if (currentIndex === index) return (leftPixels / available) * total;
-          if (currentIndex === index + 1)
-            return ((pairPixels - leftPixels) / available) * total;
+          if (currentIndex === leftIndex)
+            return (leftPixels / pairPixels) * pairWeight;
+          if (currentIndex === rightIndex)
+            return ((pairPixels - leftPixels) / pairPixels) * pairWeight;
           return weight;
         }),
       );
@@ -1483,6 +1635,21 @@ export function App() {
           "--fullscreen-window-height": `${fullscreenWindowBounds.height}px`,
         } as CSSProperties)
       : undefined;
+  const renderPanelResizer = (leftId: PanelId) => {
+    const rightId = nextVisiblePanel(leftId);
+    if (!rightId) return null;
+    const leftPanel = getPanelDefinition(leftId);
+    const rightPanel = getPanelDefinition(rightId);
+    const crossesPortraitRows = leftPanel.group !== rightPanel.group;
+    return (
+      <div
+        className={`resizer ${crossesPortraitRows ? "cross-row-resizer" : ""}`}
+        role="separator"
+        aria-label={`Ширина: ${leftPanel.label} — ${rightPanel.label}`}
+        onPointerDown={(event) => resize(leftId, rightId, event)}
+      />
+    );
+  };
   return (
     <div
       ref={appShellRef}
@@ -1513,6 +1680,31 @@ export function App() {
         onPointerDown={beginFullscreenWindowMove}
         onDoubleClick={toggleFullscreenWindowSize}
       >
+        {!coverMode && (
+          <div
+            className="panel-visibility-controls"
+            role="group"
+            aria-label="Видимость панелей каталога"
+          >
+            {panelDefinitions.map(({ id, label, Icon }) => {
+              const visible = panelVisibility[id];
+              const action = visible ? "Скрыть" : "Показать";
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  className={`icon-button panel-visibility-button ${visible ? "" : "is-hidden"}`}
+                  aria-label={`${action} панель «${label}»`}
+                  aria-pressed={visible}
+                  title={`${action} панель «${label}»`}
+                  onClick={() => togglePanelVisibility(id)}
+                >
+                  <Icon size={19} />
+                </button>
+              );
+            })}
+          </div>
+        )}
         {coverMode ? (
           <button
             type="button"
@@ -1615,7 +1807,7 @@ export function App() {
       </header>
       <main
         ref={workspaceRef}
-        className={`workspace ${coverMode ? "workspace-hidden" : ""}`}
+        className={`workspace ${coverMode ? "workspace-hidden" : ""} ${visiblePanelIds.length ? "" : "workspace-empty"}`}
         style={
           {
             "--library-weight": `${panelWeights[0]}fr`,
@@ -1625,11 +1817,32 @@ export function App() {
             "--track-weight": `${panelWeights[4]}fr`,
             "--facet-row-weight": `${rowWeights[0]}fr`,
             "--catalog-row-weight": `${rowWeights[1]}fr`,
+            "--workspace-columns": panelGridTemplate(
+              visiblePanelIds,
+              panelWeights,
+            ),
+            "--facet-columns": panelGridTemplate(
+              visibleFacetPanelIds,
+              panelWeights,
+            ),
+            "--catalog-columns": panelGridTemplate(
+              visibleCatalogPanelIds,
+              panelWeights,
+            ),
+            "--workspace-rows":
+              visibleFacetPanelIds.length && visibleCatalogPanelIds.length
+                ? `minmax(160px, ${rowWeights[0]}fr) 4px minmax(160px, ${rowWeights[1]}fr)`
+                : "minmax(0, 1fr)",
           } as CSSProperties
         }
       >
-        <div className="workspace-row workspace-facets">
-          <aside className="panel libraries-panel">
+        <div
+          className={`workspace-row workspace-facets ${visibleFacetPanelIds.length ? "" : "workspace-row-hidden"}`}
+        >
+          <aside
+            className={`panel libraries-panel ${panelVisibility.libraries ? "" : "panel-hidden"}`}
+            data-panel-id="libraries"
+          >
             <div className="panel-heading">
               <h2>Библиотеки</h2>
               {(filter.libraryIds.length > 0 || filter.folders.length > 0) && (
@@ -1739,13 +1952,11 @@ export function App() {
               </div>
             )}
           </aside>
-          <div
-            className="resizer"
-            role="separator"
-            aria-label="Ширина библиотек"
-            onPointerDown={(e) => resize(0, e)}
-          />
-          <section className="panel genres-panel">
+          {panelVisibility.libraries && renderPanelResizer("libraries")}
+          <section
+            className={`panel genres-panel ${panelVisibility.genres ? "" : "panel-hidden"}`}
+            data-panel-id="genres"
+          >
             <div className="panel-heading">
               <h2>Жанры</h2>
               <div className="panel-heading-actions">
@@ -1785,13 +1996,11 @@ export function App() {
               })}
             </div>
           </section>
-          <div
-            className="resizer"
-            role="separator"
-            aria-label="Ширина жанров"
-            onPointerDown={(e) => resize(1, e)}
-          />
-          <section className="panel artists-panel">
+          {panelVisibility.genres && renderPanelResizer("genres")}
+          <section
+            className={`panel artists-panel ${panelVisibility.artists ? "" : "panel-hidden"}`}
+            data-panel-id="artists"
+          >
             <div className="panel-heading">
               <h2>Исполнители</h2>
               <div className="panel-heading-actions">
@@ -1833,21 +2042,21 @@ export function App() {
               scrollTarget={artistScrollTarget}
             />
           </section>
-          <div
-            className="resizer artist-album-resizer"
-            role="separator"
-            aria-label="Ширина исполнителей"
-            onPointerDown={(e) => resize(2, e)}
-          />
+          {panelVisibility.artists && renderPanelResizer("artists")}
         </div>
         <div
-          className="row-resizer"
+          className={`row-resizer ${visibleFacetPanelIds.length && visibleCatalogPanelIds.length ? "" : "row-resizer-hidden"}`}
           role="separator"
           aria-label="Высота строк"
           onPointerDown={resizeRows}
         />
-        <div className="workspace-row workspace-catalog">
-          <section className="panel albums-panel">
+        <div
+          className={`workspace-row workspace-catalog ${visibleCatalogPanelIds.length ? "" : "workspace-row-hidden"}`}
+        >
+          <section
+            className={`panel albums-panel ${panelVisibility.albums ? "" : "panel-hidden"}`}
+            data-panel-id="albums"
+          >
             <div className="panel-heading">
               <h2>Альбомы</h2>
               <div className="panel-heading-actions">
@@ -1888,13 +2097,11 @@ export function App() {
               onBookmarkChange={changeBookmark}
             />
           </section>
-          <div
-            className="resizer"
-            role="separator"
-            aria-label="Ширина альбомов"
-            onPointerDown={(e) => resize(3, e)}
-          />
-          <section className="panel tracks-panel">
+          {panelVisibility.albums && renderPanelResizer("albums")}
+          <section
+            className={`panel tracks-panel ${panelVisibility.tracks ? "" : "panel-hidden"}`}
+            data-panel-id="tracks"
+          >
             <div className="panel-heading tracks-heading">
               <div>
                 <h2>Треки</h2>

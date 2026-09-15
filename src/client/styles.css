@@ -1742,6 +1742,28 @@ body {
 .topbar {
   position: relative;
 }
+.panel-visibility-controls {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.panel-visibility-button {
+  color: #a6ada6;
+  transition:
+    color 0.15s,
+    opacity 0.15s,
+    background 0.15s;
+}
+.panel-visibility-button.is-hidden {
+  color: #626861;
+  opacity: 0.55;
+}
+.panel-visibility-button.is-hidden:hover,
+.panel-visibility-button.is-hidden:focus-visible {
+  opacity: 1;
+}
 .search {
   position: absolute;
   left: 50%;
@@ -1826,23 +1848,18 @@ body {
 .workspace-row {
   display: contents;
 }
+.app-shell .panel-hidden {
+  display: none;
+}
 .row-resizer {
   display: none;
 }
 .workspace {
-  grid-template-columns:
-    minmax(110px, var(--library-weight)) 4px minmax(110px, var(--genre-weight))
-    4px minmax(110px, var(--artist-weight)) 4px minmax(
-      150px,
-      var(--album-weight)
-    )
-    4px minmax(180px, var(--track-weight));
+  grid-template-columns: var(--workspace-columns);
 }
 .app-shell.layout--portrait .workspace {
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows:
-    minmax(160px, var(--facet-row-weight)) 4px
-    minmax(160px, var(--catalog-row-weight));
+  grid-template-rows: var(--workspace-rows);
   overflow: hidden;
 }
 .app-shell.layout--portrait .workspace-row {
@@ -1850,11 +1867,15 @@ body {
   min-height: 0;
   overflow: hidden;
 }
+.app-shell.layout--portrait .workspace-row-hidden,
+.app-shell.layout--portrait .row-resizer.row-resizer-hidden {
+  display: none;
+}
 .app-shell.layout--portrait .workspace-row > .panel,
 .app-shell.layout--portrait .workspace-row > .resizer {
   height: 100%;
 }
-.app-shell.layout--portrait .artist-album-resizer {
+.app-shell.layout--portrait .cross-row-resizer {
   display: none;
 }
 .app-shell.layout--portrait .row-resizer {
@@ -1869,15 +1890,30 @@ body {
   background: #8bae9980;
 }
 .app-shell.layout--portrait .workspace-facets {
-  grid-template-columns:
-    minmax(110px, var(--library-weight)) 4px minmax(110px, var(--genre-weight))
-    4px minmax(110px, var(--artist-weight));
+  grid-template-columns: var(--facet-columns);
 }
 .app-shell.layout--portrait .workspace-catalog {
-  grid-template-columns: minmax(150px, var(--album-weight)) 4px minmax(
-      180px,
-      var(--track-weight)
-    );
+  grid-template-columns: var(--catalog-columns);
+}
+
+@media (max-width: 1100px) {
+  .panel-visibility-controls {
+    gap: 0;
+  }
+  .panel-visibility-button {
+    padding: 5px;
+  }
+  .bookmarks-button span,
+  .local-status {
+    display: none;
+  }
+  .bookmarks-button {
+    padding-left: 7px;
+    padding-right: 7px;
+  }
+  .search {
+    width: min(280px, calc(100% - 360px));
+  }
 }
 
 /* Immersive cover mode and its quick-play surfaces. */

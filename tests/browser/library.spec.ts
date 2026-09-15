@@ -166,6 +166,7 @@ test("portrait workspace uses two independently resizable rows", async ({
 }) => {
   await page.goto("/");
   await page.setViewportSize({ width: 1000, height: 1200 });
+  await expect(page.locator(".app-shell")).toHaveClass(/layout--portrait/);
 
   const portraitLayout = await page
     .locator(".workspace")
@@ -231,7 +232,7 @@ test("portrait workspace uses two independently resizable rows", async ({
     .evaluateAll((panels) =>
       panels.map((panel) => panel.getBoundingClientRect().width),
     );
-  await resizeSeparator("Ширина библиотек", 24);
+  await resizeSeparator("Ширина: Библиотеки — Жанры", 24);
   const afterFacetResize = await page
     .locator(".panel")
     .evaluateAll((panels) =>
@@ -242,7 +243,7 @@ test("portrait workspace uses two independently resizable rows", async ({
   expect(afterFacetResize[4]).toBeCloseTo(beforeFacetResize[4], 1);
 
   const beforeArtistResize = afterFacetResize;
-  await resizeSeparator("Ширина жанров", -24);
+  await resizeSeparator("Ширина: Жанры — Исполнители", -24);
   const afterArtistResize = await page
     .locator(".panel")
     .evaluateAll((panels) =>
@@ -253,7 +254,7 @@ test("portrait workspace uses two independently resizable rows", async ({
   expect(afterArtistResize[4]).toBeCloseTo(beforeArtistResize[4], 1);
 
   const beforeCatalogResize = afterArtistResize;
-  await resizeSeparator("Ширина альбомов", 24);
+  await resizeSeparator("Ширина: Альбомы — Треки", 24);
   const afterCatalogResize = await page
     .locator(".panel")
     .evaluateAll((panels) =>
@@ -285,6 +286,106 @@ test("portrait workspace uses two independently resizable rows", async ({
       panels.map((panel) => panel.getBoundingClientRect().top),
     );
   expect(landscapeTops.every((top) => top === landscapeTops[0])).toBe(true);
+});
+
+test("panel visibility controls reshape and persist the catalog", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const workspace = page.locator(".workspace");
+
+  await page.getByRole("button", { name: "Скрыть панель «Жанры»" }).click();
+  await expect(page.locator(".genres-panel")).toBeHidden();
+  await page.mouse.move(500, 500);
+  await expect(
+    page.getByRole("button", { name: "Показать панель «Жанры»" }),
+  ).toHaveCSS("opacity", "0.55");
+  await expect(
+    page.getByRole("separator", {
+      name: "Ширина: Библиотеки — Исполнители",
+    }),
+  ).toBeVisible();
+
+  const libraryBefore = await page
+    .locator(".libraries-panel")
+    .evaluate((panel) => panel.getBoundingClientRect().width);
+  const nonAdjacentSeparator = page.getByRole("separator", {
+    name: "Ширина: Библиотеки — Исполнители",
+  });
+  const separatorBox = await nonAdjacentSeparator.boundingBox();
+  expect(separatorBox).not.toBeNull();
+  await page.mouse.move(
+    separatorBox!.x + separatorBox!.width / 2,
+    separatorBox!.y + separatorBox!.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(separatorBox!.x + 40, separatorBox!.y);
+  await page.mouse.up();
+  const libraryAfter = await page
+    .locator(".libraries-panel")
+    .evaluate((panel) => panel.getBoundingClientRect().width);
+  expect(libraryAfter).toBeGreaterThan(libraryBefore);
+
+  for (const label of ["Библиотеки", "Исполнители", "Альбомы", "Треки"]) {
+    await page
+      .getByRole("button", { name: `Скрыть панель «${label}»` })
+      .click();
+  }
+  await expect(workspace.locator(".panel:visible")).toHaveCount(0);
+  await expect(workspace.getByRole("separator")).toHaveCount(0);
+  await expect(page.locator(".topbar")).toBeVisible();
+  await expect(page.locator(".player")).toBeVisible();
+
+  await page.getByRole("button", { name: "Показать панель «Альбомы»" }).click();
+  await page.reload();
+  await expect(page.locator(".panel:visible")).toHaveCount(1);
+  await expect(page.locator(".albums-panel")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Скрыть панель «Альбомы»" }),
+  ).toHaveAttribute("aria-pressed", "true");
+
+  await page.setViewportSize({ width: 1000, height: 1200 });
+  await expect(
+    page.getByRole("separator", { name: "Высота строк" }),
+  ).toHaveCount(0);
+  const albumOnlyHeight = await page
+    .locator(".workspace-catalog")
+    .evaluate((row) => row.getBoundingClientRect().height);
+  expect(albumOnlyHeight).toBeCloseTo(
+    await workspace.evaluate(
+      (element) => element.getBoundingClientRect().height,
+    ),
+    1,
+  );
+
+  await page
+    .getByRole("button", { name: "Показать панель «Библиотеки»" })
+    .click();
+  await expect(
+    page.getByRole("separator", { name: "Высота строк" }),
+  ).toBeVisible();
+  const twoRowHeights = await page
+    .locator(".workspace-row")
+    .evaluateAll((rows) =>
+      rows.map((row) => row.getBoundingClientRect().height),
+    );
+  expect(twoRowHeights).toHaveLength(2);
+  expect(twoRowHeights[0]).toBeGreaterThan(0);
+  expect(twoRowHeights[1]).toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: "Скрыть панель «Альбомы»" }).click();
+  await expect(
+    page.getByRole("separator", { name: "Высота строк" }),
+  ).toHaveCount(0);
+  const libraryOnlyHeight = await page
+    .locator(".workspace-facets")
+    .evaluate((row) => row.getBoundingClientRect().height);
+  expect(libraryOnlyHeight).toBeCloseTo(
+    await workspace.evaluate(
+      (element) => element.getBoundingClientRect().height,
+    ),
+    1,
+  );
 });
 
 test("local library: readable UI, playback, tags, move, delete and restore", async ({
@@ -449,6 +550,21 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(
     page.locator(".libraries-panel .list-tile.selected"),
   ).toHaveCount(1);
+  await page
+    .getByRole("button", { name: "Скрыть панель «Библиотеки»" })
+    .click();
+  await page
+    .getByRole("button", { name: "Показать панель «Библиотеки»" })
+    .click();
+  await expect(
+    page.locator(".libraries-panel .list-tile.selected"),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", {
+      name: `Свернуть библиотеку «Downloads ${browser}»`,
+    }),
+  ).toBeVisible();
+  await downloadsTile.locator(".list-tile-main").click();
 
   const genreRow = page
     .locator(".genres-panel .list-tile")
@@ -522,7 +638,8 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(
     page.getByRole("button", { name: "Сбросить выбор треков" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Сбросить выбор треков" }).click();
+  await page.getByRole("button", { name: "Скрыть панель «Треки»" }).click();
+  await page.getByRole("button", { name: "Показать панель «Треки»" }).click();
   await expect(firstTrackRow).not.toHaveClass(/selected/);
   await artistButton.click();
   await expect(artistRow).toHaveClass(/selected/);
@@ -556,12 +673,12 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     "background-clip",
     "padding-box",
   );
-  const albumGridGeometry = await page.locator(".album-grid-row").evaluate(
-    (grid) => {
+  const albumGridGeometry = await page
+    .locator(".album-grid-row")
+    .evaluate((grid) => {
       const style = getComputedStyle(grid);
       return { gap: style.gap };
-    },
-  );
+    });
   expect(albumGridGeometry.gap).toBe("8px");
   await firstAlbumButton.click();
   await expect(firstAlbum).toHaveClass(/selected/);
@@ -1116,7 +1233,10 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(
     nowPlaying.getByRole("button", { name: /Открыть альбом/ }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Скрыть панель «Альбомы»" }).click();
+  await expect(page.locator(".albums-panel")).toBeHidden();
   await nowPlaying.getByRole("button", { name: /Открыть альбом/ }).click();
+  await expect(page.locator(".albums-panel")).toBeVisible();
   await expect(page.locator(".albums-panel .album-card.selected")).toHaveCount(
     1,
   );
@@ -1126,15 +1246,23 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
       .filter({ hasText: "Исполнитель альбома" }),
   ).toHaveCount(1);
   await expect(rows).toHaveCount(6);
+  await page
+    .getByRole("button", { name: "Скрыть панель «Исполнители»" })
+    .click();
+  await page.getByRole("button", { name: "Скрыть панель «Альбомы»" }).click();
+  await expect(page.locator(".artists-panel")).toBeHidden();
   await nowPlaying
     .getByRole("button", { name: "Открыть исполнителя «Исполнитель альбома»" })
     .click();
+  await expect(page.locator(".artists-panel")).toBeVisible();
+  await expect(page.locator(".albums-panel")).toBeHidden();
   await expect(
     page
       .locator(".artists-panel .list-tile.selected")
       .filter({ hasText: "Исполнитель альбома" }),
   ).toHaveCount(1);
   await expect(rows).toHaveCount(6);
+  await downloadsTile.locator(".list-tile-main").click();
   await page.locator("audio").evaluate((a: HTMLAudioElement) => {
     a.loop = true;
     a.currentTime = 0.8;
@@ -1178,10 +1306,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(
     page.getByRole("button", { name: "Сбросить библиотеки" }),
   ).toHaveCount(0);
-  await page
-    .getByRole("button", { name: new RegExp(`Collection ${browser}`) })
-    .first()
-    .click();
+  await collectionTile.locator(".list-tile-main").click();
   await expect(rows).toHaveCount(1);
   await flac().locator(".list-tile-main").click();
   await page.getByRole("button", { name: "Удалить треки" }).click();
@@ -1214,7 +1339,12 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   const browser = info.project.name;
   const source = path.resolve(".test-data/browser", browser, "Downloads");
   const libraryName = `Downloads ${browser}`;
+  const librariesLoaded = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/api/libraries" && response.ok(),
+  );
   await page.goto("/");
+  await librariesLoaded;
 
   let libraryTile = page
     .locator(".libraries-panel .list-tile")
@@ -1247,6 +1377,7 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   const coverMode = page.getByRole("main", { name: "Режим обложки" });
   await expect(coverMode).toBeVisible();
   await expect(page.locator(".workspace")).toBeHidden();
+  await expect(page.locator(".panel-visibility-controls")).toHaveCount(0);
   await expect(page.locator(".topbar")).toBeVisible();
   await expect(page.locator(".player")).toBeVisible();
   await expect(coverMode.getByRole("heading", { level: 1 })).toContainText(
@@ -1306,6 +1437,7 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     .click();
   await expect(coverMode).not.toBeVisible();
   await expect(page.locator(".workspace")).toBeVisible();
+  await expect(page.locator(".panel-visibility-controls")).toBeVisible();
   await expect(libraryTile).toHaveClass(/selected/);
 
   await page.getByRole("button", { name: "Открыть режим обложки" }).click();
