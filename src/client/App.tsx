@@ -265,6 +265,35 @@ function copyAlbumLabel(album: {
   return album.year === null ? title : `${title} (${album.year})`;
 }
 
+function PanelSelectionIndicator({
+  total,
+  selected,
+  active,
+  resetLabel,
+  onReset,
+}: {
+  total: number;
+  selected: number;
+  active: boolean;
+  resetLabel: string;
+  onReset: () => void;
+}) {
+  if (!active) return <span className="panel-count">{count(total)}</span>;
+  return (
+    <div className="panel-selection-chip">
+      <span>{`${count(selected)} из ${count(total)}`}</span>
+      <button
+        className="icon-button facet-reset"
+        aria-label={resetLabel}
+        title={resetLabel}
+        onClick={onReset}
+      >
+        <X size={15} />
+      </button>
+    </div>
+  );
+}
+
 function sameStringArray(left: string[], right: string[]) {
   return (
     left.length === right.length &&
@@ -1907,22 +1936,19 @@ export function App() {
           >
             <div className="panel-heading">
               <h2>Библиотеки</h2>
-              {(filter.libraryIds.length > 0 || filter.folders.length > 0) && (
-                <button
-                  className="icon-button facet-reset"
-                  aria-label="Сбросить библиотеки"
-                  title="Сбросить библиотеки"
-                  onClick={() =>
-                    setFilter((f) => ({
-                      ...f,
-                      libraryIds: [],
-                      folders: [],
-                    }))
-                  }
-                >
-                  <X size={15} />
-                </button>
-              )}
+              <PanelSelectionIndicator
+                total={libraries.data?.length || 0}
+                selected={filter.libraryIds.length}
+                active={filter.libraryIds.length > 0 || filter.folders.length > 0}
+                resetLabel="Сбросить библиотеки"
+                onReset={() =>
+                  setFilter((f) => ({
+                    ...f,
+                    libraryIds: [],
+                    folders: [],
+                  }))
+                }
+              />
             </div>
             <div className="library-list">
               {libraries.data?.map((library) => (
@@ -2021,19 +2047,13 @@ export function App() {
           >
             <div className="panel-heading">
               <h2>Жанры</h2>
-              <div className="panel-heading-actions">
-                <span className="panel-count">{genres.data?.length || 0}</span>
-                {filter.genres.length > 0 && (
-                  <button
-                    className="icon-button facet-reset"
-                    aria-label="Сбросить жанры"
-                    title="Сбросить жанры"
-                    onClick={() => setFilter((f) => ({ ...f, genres: [] }))}
-                  >
-                    <X size={15} />
-                  </button>
-                )}
-              </div>
+              <PanelSelectionIndicator
+                total={genres.data?.length || 0}
+                selected={filter.genres.length}
+                active={filter.genres.length > 0}
+                resetLabel="Сбросить жанры"
+                onReset={() => setFilter((f) => ({ ...f, genres: [] }))}
+              />
             </div>
             <div className="genre-list">
               {genres.data?.map((g) => {
@@ -2065,21 +2085,13 @@ export function App() {
           >
             <div className="panel-heading">
               <h2>Исполнители</h2>
-              <div className="panel-heading-actions">
-                <span className="panel-count">
-                  {count(artists.data?.pages[0]?.total || 0)}
-                </span>
-                {filter.artists.length > 0 && (
-                  <button
-                    className="icon-button facet-reset"
-                    aria-label="Сбросить исполнителей"
-                    title="Сбросить исполнителей"
-                    onClick={() => setFilter((f) => ({ ...f, artists: [] }))}
-                  >
-                    <X size={15} />
-                  </button>
-                )}
-              </div>
+              <PanelSelectionIndicator
+                total={artists.data?.pages[0]?.total || 0}
+                selected={filter.artists.length}
+                active={filter.artists.length > 0}
+                resetLabel="Сбросить исполнителей"
+                onReset={() => setFilter((f) => ({ ...f, artists: [] }))}
+              />
             </div>
             <ArtistList
               items={artistItems}
@@ -2121,19 +2133,13 @@ export function App() {
           >
             <div className="panel-heading">
               <h2>Альбомы</h2>
-              <div className="panel-heading-actions">
-                <span className="panel-count">{count(albumTotal)}</span>
-                {filter.albumIds.length > 0 && (
-                  <button
-                    className="icon-button facet-reset"
-                    aria-label="Сбросить альбомы"
-                    title="Сбросить альбомы"
-                    onClick={() => setFilter((f) => ({ ...f, albumIds: [] }))}
-                  >
-                    <X size={15} />
-                  </button>
-                )}
-              </div>
+              <PanelSelectionIndicator
+                total={albumTotal}
+                selected={filter.albumIds.length}
+                active={filter.albumIds.length > 0}
+                resetLabel="Сбросить альбомы"
+                onReset={() => setFilter((f) => ({ ...f, albumIds: [] }))}
+              />
             </div>
             <AlbumGrid
               albums={albumItems}
@@ -2167,22 +2173,16 @@ export function App() {
             <div className="panel-heading tracks-heading">
               <div>
                 <h2>Треки</h2>
-                <span className="panel-count">{count(total)}</span>
-              </div>
-              <div className="tracks-heading-actions">
-                {selected.size > 0 && (
-                  <button
-                    className="icon-button facet-reset"
-                    aria-label="Сбросить выбор треков"
-                    title="Сбросить выбор треков"
-                    onClick={() => {
-                      setSelected(new Set());
-                      setSelectedAlbumId(null);
-                    }}
-                  >
-                    <X size={15} />
-                  </button>
-                )}
+                <PanelSelectionIndicator
+                  total={total}
+                  selected={selected.size}
+                  active={selected.size > 0}
+                  resetLabel="Сбросить выбор треков"
+                  onReset={() => {
+                    setSelected(new Set());
+                    setSelectedAlbumId(null);
+                  }}
+                />
               </div>
             </div>
             {queryError && (
