@@ -205,6 +205,11 @@ export class Catalog {
       .run(id, name, folder);
     return this.library(id);
   }
+  renameLibrary(id: string, name: string): Library {
+    this.library(id);
+    this.db.prepare("UPDATE libraries SET name=? WHERE id=?").run(name, id);
+    return this.library(id);
+  }
   removeLibrary(id: string): Library {
     const library = this.library(id);
     this.db.transaction(() => {

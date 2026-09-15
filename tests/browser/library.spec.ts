@@ -498,6 +498,28 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(
     libraryMenu.getByRole("menuitem", { name: "Удалить" }),
   ).toBeVisible();
+  await expect(
+    libraryMenu.getByRole("menuitem", { name: "Переименовать" }),
+  ).toBeVisible();
+  await libraryMenu.getByRole("menuitem", { name: "Переименовать" }).click();
+  const renameLibraryDialog = page.getByRole("dialog");
+  await expect(renameLibraryDialog).toBeVisible();
+  await renameLibraryDialog
+    .getByLabel("Название библиотеки")
+    .fill(`Collection renamed ${browser}`);
+  await renameLibraryDialog.getByRole("button", { name: "Сохранить" }).click();
+  await expect(renameLibraryDialog).not.toBeVisible();
+  await expect(
+    page
+      .getByRole("button", {
+        name: new RegExp(`Collection renamed ${browser}`),
+      })
+      .first(),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: new RegExp(`Collection renamed ${browser}`) })
+    .first()
+    .click({ button: "right" });
   const scanResponse = page.waitForResponse(
     (response) =>
       response.request().method() === "POST" &&
@@ -506,7 +528,10 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   );
   await libraryMenu.getByRole("menuitem", { name: "Обновить" }).click();
   expect((await scanResponse).ok()).toBe(true);
-  await collection.click({ button: "right" });
+  await page
+    .getByRole("button", { name: new RegExp(`Collection renamed ${browser}`) })
+    .first()
+    .click({ button: "right" });
   await libraryMenu.getByRole("menuitem", { name: "Удалить" }).click();
   const removeLibraryDialog = page.getByRole("dialog");
   await expect(removeLibraryDialog).toContainText(
@@ -540,7 +565,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   ).toHaveCount(0);
   const collectionTile = page
     .locator(".libraries-panel .list-tile")
-    .filter({ hasText: `Collection ${browser}` });
+    .filter({ hasText: `Collection renamed ${browser}` });
   await collectionTile
     .locator(".list-tile-main")
     .click({ modifiers: ["Control"] });
@@ -1372,7 +1397,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await page.getByRole("menuitem", { name: "Перенести треки" }).click();
   await page
     .getByLabel("Куда перенести")
-    .selectOption({ label: `Collection ${browser}` });
+    .selectOption({ label: `Collection renamed ${browser}` });
   await page.getByRole("button", { name: "Далее" }).click();
   await page.getByRole("button", { name: /^Применить к/ }).click();
   await expect(rows).toHaveCount(5);
@@ -1399,11 +1424,16 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .click();
   await page.getByRole("button", { name: /^Применить к/ }).click();
   await expect(rows).toHaveCount(1);
-  await collection.click({ button: "right" });
+  await page
+    .getByRole("button", { name: new RegExp(`Collection renamed ${browser}`) })
+    .first()
+    .click({ button: "right" });
   await libraryMenu.getByRole("menuitem", { name: "Удалить" }).click();
   await page.getByRole("button", { name: "Отключить", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: new RegExp(`Collection ${browser}`) }),
+    page.getByRole("button", {
+      name: new RegExp(`Collection renamed ${browser}`),
+    }),
   ).toHaveCount(0);
   expect(errors).toEqual([]);
 });

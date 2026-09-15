@@ -157,6 +157,62 @@ describe("HTTP boundary", () => {
     await context.service.idle();
     expect(context.service.catalog.libraries()).toEqual([]);
   });
+  it("renames a library only with CSRF and keeps its path and ID", async () => {
+    const library = context.service.catalog.addLibrary("Library", root);
+    const session = await context.app.inject({
+      url: "/api/session",
+      headers: { host: "127.0.0.1:4317" },
+    });
+    const headers = {
+      host: "127.0.0.1:4317",
+      cookie: String(session.headers["set-cookie"]).split(";")[0],
+    };
+
+    expect(
+      (
+        await context.app.inject({
+          method: "POST",
+          url: `/api/libraries/${library.id}/rename`,
+          headers,
+          payload: { name: "Renamed" },
+        })
+      ).statusCode,
+    ).toBe(403);
+
+    const empty = await context.app.inject({
+      method: "POST",
+      url: `/api/libraries/${library.id}/rename`,
+      headers: { ...headers, "x-csrf-token": session.json().csrf },
+      payload: { name: "   " },
+    });
+    expect(empty.statusCode).toBe(400);
+
+    const missing = await context.app.inject({
+      method: "POST",
+      url: "/api/libraries/missing/rename",
+      headers: { ...headers, "x-csrf-token": session.json().csrf },
+      payload: { name: "Renamed" },
+    });
+    expect(missing.statusCode).toBe(400);
+    expect(missing.json().error).toContain("не найдена");
+
+    const renamed = await context.app.inject({
+      method: "POST",
+      url: `/api/libraries/${library.id}/rename`,
+      headers: { ...headers, "x-csrf-token": session.json().csrf },
+      payload: { name: "  Renamed  " },
+    });
+    expect(renamed.statusCode).toBe(200);
+    expect(renamed.json()).toMatchObject({
+      id: library.id,
+      name: "Renamed",
+      path: root,
+    });
+    expect(context.service.catalog.library(library.id)).toMatchObject({
+      name: "Renamed",
+      path: root,
+    });
+  });
   it("returns facet relevance independently of the active library filter", async () => {
     const first = context.service.catalog.addLibrary("First", root);
     const second = context.service.catalog.addLibrary(

@@ -224,6 +224,72 @@ export function AddLibraryDialog({
   );
 }
 
+export function RenameLibraryDialog({
+  library,
+  onClose,
+  onRename,
+}: {
+  library: Library;
+  onClose: () => void;
+  onRename: (name: string) => Promise<void>;
+}) {
+  const [name, setName] = useState(library.name);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <Modal
+      title="Переименовать библиотеку"
+      subtitle={library.path}
+      onClose={busy ? () => {} : onClose}
+    >
+      <form
+        onSubmit={async (event) => {
+          event.preventDefault();
+          setBusy(true);
+          setError("");
+          try {
+            await onRename(name);
+            onClose();
+          } catch (cause) {
+            setError(cause instanceof Error ? cause.message : String(cause));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <label className="field">
+          Название библиотеки
+          <input
+            autoFocus
+            required
+            maxLength={100}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </label>
+        {error && (
+          <p className="error-text" role="alert">
+            {error}
+          </p>
+        )}
+        <footer className="modal-footer">
+          <button
+            type="button"
+            className="button secondary"
+            disabled={busy}
+            onClick={onClose}
+          >
+            Отмена
+          </button>
+          <button className="button primary" disabled={busy || !name.trim()}>
+            {busy ? "Сохранение…" : "Сохранить"}
+          </button>
+        </footer>
+      </form>
+    </Modal>
+  );
+}
+
 export function RemoveLibraryDialog({
   library,
   onClose,

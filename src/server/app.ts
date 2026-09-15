@@ -169,6 +169,13 @@ export async function createApp(options: {
       .parse(request.body);
     return service.addLibrary(body.name, body.path);
   });
+  app.post("/api/libraries/:id/rename", async (request) => {
+    const body = z
+      .object({ name: z.string().trim().min(1).max(100) })
+      .strict()
+      .parse(request.body);
+    return service.renameLibrary(idParam.parse(request.params).id, body.name);
+  });
   app.post("/api/libraries/:id/remove", async (request) =>
     service.removeLibrary(idParam.parse(request.params).id),
   );

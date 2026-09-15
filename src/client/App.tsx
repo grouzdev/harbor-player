@@ -30,6 +30,7 @@ import {
   Music2,
   Music4,
   ListMusic,
+  Pencil,
   Plus,
   RefreshCw,
   Search,
@@ -68,6 +69,7 @@ import {
   CoverDropConfirmDialog,
   HistoryDialog,
   PreviewDialog,
+  RenameLibraryDialog,
   RemoveLibraryDialog,
 } from "./Dialogs";
 import { selectFacetValue } from "./facet-selection";
@@ -384,8 +386,16 @@ export function App() {
   const [panelVisibility, setPanelVisibility] =
     useState<PanelVisibility>(readPanelVisibility);
   const [modal, setModal] = useState<
-    "add" | "move" | "trash" | "tags" | "history" | "remove-library" | null
+    | "add"
+    | "move"
+    | "trash"
+    | "tags"
+    | "history"
+    | "rename-library"
+    | "remove-library"
+    | null
   >(null);
+  const [libraryToRename, setLibraryToRename] = useState<Library | null>(null);
   const [libraryToRemove, setLibraryToRemove] = useState<Library | null>(null);
   const [modalSelection, setModalSelection] = useState<Selection | null>(null);
   const [preview, setPreview] = useState<OperationPreview | null>(null);
@@ -1059,6 +1069,14 @@ export function App() {
               } catch (error) {
                 notify(error instanceof Error ? error.message : String(error));
               }
+            },
+          },
+          {
+            label: "Переименовать",
+            icon: <Pencil size={16} />,
+            onSelect: () => {
+              setLibraryToRename(library);
+              setModal("rename-library");
             },
           },
           {
@@ -2345,6 +2363,19 @@ export function App() {
       )}
       {modal === "add" && (
         <AddLibraryDialog onClose={() => setModal(null)} onAdded={refresh} />
+      )}
+      {modal === "rename-library" && libraryToRename && (
+        <RenameLibraryDialog
+          library={libraryToRename}
+          onClose={() => {
+            setModal(null);
+            setLibraryToRename(null);
+          }}
+          onRename={async (name) => {
+            await api(`/libraries/${libraryToRename.id}/rename`, { name });
+            refresh();
+          }}
+        />
       )}
       {modal === "remove-library" && libraryToRemove && (
         <RemoveLibraryDialog
