@@ -13,6 +13,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { usesPortraitWorkspaceLayout } from "./workspace-layout";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   AudioLines,
@@ -448,6 +449,7 @@ export function App() {
   );
   const appShellRef = useRef<HTMLDivElement>(null);
   const [isPortraitLayout, setIsPortraitLayout] = useState(false);
+  const [appShellWidth, setAppShellWidth] = useState(0);
   const [fullscreenWindowMode, setFullscreenWindowMode] =
     useState<FullscreenWindowMode>("default");
   const [fullscreenWindowBounds, setFullscreenWindowBounds] =
@@ -505,8 +507,10 @@ export function App() {
   useEffect(() => {
     const shell = appShellRef.current;
     if (!shell) return;
-    const updateLayout = ({ width, height }: DOMRectReadOnly) =>
+    const updateLayout = ({ width, height }: DOMRectReadOnly) => {
+      setAppShellWidth(width);
       setIsPortraitLayout(height > width);
+    };
     const observer = new ResizeObserver(([entry]) =>
       updateLayout(entry.contentRect),
     );
@@ -825,6 +829,11 @@ export function App() {
   const visibleCatalogPanelIds = panelDefinitions
     .filter(({ id, group }) => group === "catalog" && panelVisibility[id])
     .map(({ id }) => id);
+  const portraitWorkspaceLayout = usesPortraitWorkspaceLayout(
+    isPortraitLayout,
+    appShellWidth,
+    visiblePanelIds.length,
+  );
   const nextVisiblePanel = (id: PanelId) => {
     const index = visiblePanelIds.indexOf(id);
     return index >= 0 ? visiblePanelIds[index + 1] : undefined;
@@ -2145,7 +2154,7 @@ export function App() {
       </header>
       <main
         ref={workspaceRef}
-        className={`workspace ${coverMode ? "workspace-hidden" : ""} ${visiblePanelIds.length ? "" : "workspace-empty"}`}
+        className={`workspace ${portraitWorkspaceLayout ? "workspace--portrait" : ""} ${coverMode ? "workspace-hidden" : ""} ${visiblePanelIds.length ? "" : "workspace-empty"}`}
         style={
           {
             "--library-weight": `${panelWeights[0]}fr`,

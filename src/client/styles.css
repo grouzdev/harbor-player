@@ -2122,42 +2122,42 @@ body {
 .workspace {
   grid-template-columns: var(--workspace-columns);
 }
-.app-shell.layout--portrait .workspace {
+.workspace.workspace--portrait {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: var(--workspace-rows);
   overflow: hidden;
 }
-.app-shell.layout--portrait .workspace-row {
+.workspace.workspace--portrait .workspace-row {
   display: grid;
   min-height: 0;
   overflow: hidden;
 }
-.app-shell.layout--portrait .workspace-row-hidden,
-.app-shell.layout--portrait .row-resizer.row-resizer-hidden {
+.workspace.workspace--portrait .workspace-row-hidden,
+.workspace.workspace--portrait .row-resizer.row-resizer-hidden {
   display: none;
 }
-.app-shell.layout--portrait .workspace-row > .panel,
-.app-shell.layout--portrait .workspace-row > .resizer {
+.workspace.workspace--portrait .workspace-row > .panel,
+.workspace.workspace--portrait .workspace-row > .resizer {
   height: 100%;
 }
-.app-shell.layout--portrait .cross-row-resizer {
+.workspace.workspace--portrait .cross-row-resizer {
   display: none;
 }
-.app-shell.layout--portrait .row-resizer {
+.workspace.workspace--portrait .row-resizer {
   display: block;
   background: #ffffff06;
   cursor: row-resize;
   touch-action: none;
   transition: background 0.15s;
 }
-.app-shell.layout--portrait .row-resizer:hover,
-.app-shell.layout--portrait .row-resizer:active {
+.workspace.workspace--portrait .row-resizer:hover,
+.workspace.workspace--portrait .row-resizer:active {
   background: #8bae9980;
 }
-.app-shell.layout--portrait .workspace-facets {
+.workspace.workspace--portrait .workspace-facets {
   grid-template-columns: var(--facet-columns);
 }
-.app-shell.layout--portrait .workspace-catalog {
+.workspace.workspace--portrait .workspace-catalog {
   grid-template-columns: var(--catalog-columns);
 }
 

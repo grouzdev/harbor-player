@@ -197,14 +197,57 @@ test("fullscreen window adapts to its own orientation and reaches screen edges",
   await page.mouse.up();
 
   await expect(page.locator(".app-shell")).not.toHaveClass(/layout--portrait/);
-  const landscapeTops = await page
+  await expect(page.locator(".workspace")).toHaveClass(/workspace--portrait/);
+  const narrowWorkspaceTops = await page
     .locator(".panel")
     .evaluateAll((panels) =>
       panels.map((panel) => panel.getBoundingClientRect().top),
     );
-  expect(
-    landscapeTops.every((top) => Math.abs(top - landscapeTops[0]) < 0.5),
-  ).toBe(true);
+  expect(narrowWorkspaceTops[0]).toBeCloseTo(narrowWorkspaceTops[1], 1);
+  expect(narrowWorkspaceTops[0]).toBeLessThan(narrowWorkspaceTops[3]);
+});
+
+test("workspace switches to rows below the fixed visible-panel width threshold", async ({
+  page,
+}) => {
+  const panels = ["libraries", "genres", "artists", "albums", "tracks"];
+  const cases = [
+    { visibleCount: 5, threshold: 1200 },
+    { visibleCount: 4, threshold: 1000 },
+    { visibleCount: 3, threshold: 800 },
+    { visibleCount: 2, threshold: 600 },
+  ];
+
+  for (const { visibleCount, threshold } of cases) {
+    await page.setViewportSize({ width: threshold, height: 520 });
+    await page.goto("/");
+    await page.evaluate(
+      ({ visiblePanelIds }) => {
+        localStorage.setItem(
+          "mml-panel-visibility-v1",
+          JSON.stringify(
+            Object.fromEntries(
+              ["libraries", "genres", "artists", "albums", "tracks"].map(
+                (id) => [id, visiblePanelIds.includes(id)],
+              ),
+            ),
+          ),
+        );
+      },
+      { visiblePanelIds: panels.slice(0, visibleCount) },
+    );
+    await page.reload();
+
+    await expect(page.locator(".app-shell")).not.toHaveClass(
+      /layout--portrait/,
+    );
+    await expect(page.locator(".workspace")).not.toHaveClass(
+      /workspace--portrait/,
+    );
+
+    await page.setViewportSize({ width: threshold - 1, height: 520 });
+    await expect(page.locator(".workspace")).toHaveClass(/workspace--portrait/);
+  }
 });
 
 test("portrait workspace uses two independently resizable rows", async ({
