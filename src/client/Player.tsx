@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import {
   Music2,
   Pause,
@@ -285,6 +286,16 @@ export function Player({
   onToggleCoverMode: () => void;
 }) {
   const track = player.queue?.track;
+  const seekProgress =
+    player.length > 0
+      ? Math.min(100, Math.max(0, (player.position / player.length) * 100))
+      : 0;
+  const seekStyle = {
+    "--range-progress": `${seekProgress}%`,
+  } as CSSProperties;
+  const volumeStyle = {
+    "--range-progress": `${Math.min(100, Math.max(0, player.volume * 100))}%`,
+  } as CSSProperties;
   const albumArtists = track?.albumArtists.length
     ? track.albumArtists
     : track?.artists || [];
@@ -415,16 +426,18 @@ export function Player({
         </div>
         <div className="seek">
           <span>{duration(player.position)}</span>
-          <input
-            aria-label="Позиция воспроизведения"
-            type="range"
-            min="0"
-            max={Number.isFinite(player.length) ? player.length : 0}
-            step="0.1"
-            value={player.position}
-            disabled={!track}
-            onChange={(e) => player.seek(Number(e.target.value))}
-          />
+          <div className="range-shell seek-range" style={seekStyle}>
+            <input
+              aria-label="Позиция воспроизведения"
+              type="range"
+              min="0"
+              max={Number.isFinite(player.length) ? player.length : 0}
+              step="0.1"
+              value={player.position}
+              disabled={!track}
+              onChange={(e) => player.seek(Number(e.target.value))}
+            />
+          </div>
           <span>{duration(player.length)}</span>
         </div>
       </div>
@@ -441,15 +454,17 @@ export function Player({
         >
           {player.volume ? <Volume2 size={18} /> : <VolumeX size={18} />}
         </button>
-        <input
-          aria-label="Громкость"
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          value={player.volume}
-          onChange={(e) => player.setVolume(Number(e.target.value))}
-        />
+        <div className="range-shell volume-range" style={volumeStyle}>
+          <input
+            aria-label="Громкость"
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={player.volume}
+            onChange={(e) => player.setVolume(Number(e.target.value))}
+          />
+        </div>
       </div>
     </footer>
   );

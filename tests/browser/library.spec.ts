@@ -501,6 +501,34 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     "width",
     "240px",
   );
+  const rangeStyles = await page.locator(".seek-range").evaluate((shell) => {
+    const styles = getComputedStyle(shell);
+    return {
+      height: styles.height,
+      backgroundImage: styles.backgroundImage,
+      backgroundSize: styles.backgroundSize,
+      borderRadius: styles.borderRadius,
+      progress: shell.style.getPropertyValue("--range-progress"),
+    };
+  });
+  expect(rangeStyles.height).toBe("18px");
+  expect(rangeStyles.backgroundImage).toContain("linear-gradient");
+  expect(rangeStyles.backgroundSize).toBe("100% 5px");
+  expect(rangeStyles.borderRadius).toBe("999px");
+  expect(rangeStyles.progress).toBe("0%");
+  const volumeStyles = await page.locator(".volume-range").evaluate((shell) => {
+    const styles = getComputedStyle(shell);
+    return {
+      height: styles.height,
+      backgroundImage: styles.backgroundImage,
+      backgroundSize: styles.backgroundSize,
+      borderRadius: styles.borderRadius,
+    };
+  });
+  expect(volumeStyles.height).toBe("18px");
+  expect(volumeStyles.backgroundImage).toContain("linear-gradient");
+  expect(volumeStyles.backgroundSize).toBe("100% 5px");
+  expect(volumeStyles.borderRadius).toBe("999px");
   const playerLayout = await page.locator(".player").evaluate((player) => {
     const panel = player.getBoundingClientRect();
     const transport = player.querySelector<HTMLElement>(".transport")!;
