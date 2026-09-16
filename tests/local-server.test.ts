@@ -71,4 +71,20 @@ describe("local server lifecycle", () => {
       "Сервис останавливается",
     );
   });
+
+  it("cancels a queued scan while allowing shutdown to drain safely", async () => {
+    const server = await startLocalServer({
+      dataDir: path.join(root, "data"),
+      port: 0,
+    });
+    servers.push(server);
+    const library = server.service.catalog.addLibrary("Test", root);
+    const scan = server.service.scan(library.id);
+    server.service.beginShutdown();
+    await server.service.idle();
+    expect(server.service.catalog.jobs().find((job) => job.id === scan.id)).toMatchObject({
+      status: "error",
+      errors: ["Сканирование отменено при подготовке к обновлению"],
+    });
+  });
 });

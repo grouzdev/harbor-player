@@ -4,6 +4,7 @@ import {
   dialog,
   ipcMain,
   Menu,
+  Notification,
   session,
   shell,
   Tray,
@@ -14,11 +15,13 @@ import { mkdirSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { autoUpdater } from "electron-updater";
 import type {
   BackendToMainMessage,
   MainToBackendMessage,
   MainToTagWriterMessage,
   TagWriterToMainMessage,
+  UpdateState,
 } from "../shared/desktop-contract.js";
 
 const appId = "com.grouzdev.mymusiclib";
@@ -55,6 +58,79 @@ let resolveBackendStop: (() => void) | undefined;
 let applicationExit: Promise<void> | undefined;
 let isQuitting = false;
 const tagProcesses = new Set<UtilityProcess>();
+let updateState: UpdateState = isPortable ? { status: "unsupported" } : { status: "idle" };
+let updateTimer: NodeJS.Timeout | undefined;
+
+function publishUpdateState(state: UpdateState) {
+  updateState = state;
+  mainWindow?.webContents.send("desktop:update-state", state);
+}
+
+function updateError(error: unknown) {
+  publishUpdateState({ status: "error", message: errorText(error) });
+}
+
+async function checkForUpdates(manual = false) {
+  if (isPortable) {
+    void shell.openExternal("https://github.com/grouzdev/my-music-lib/releases");
+    publishUpdateState({ status: "unsupported" });
+    return;
+  }
+  try {
+    publishUpdateState({ status: "checking" });
+    await autoUpdater.checkForUpdates();
+    if (manual && updateState.status === "checking")
+      publishUpdateState({ status: "upToDate" });
+  } catch (error) {
+    updateError(error);
+  }
+}
+
+async function downloadUpdate() {
+  if (isPortable) return checkForUpdates(true);
+  if (updateState.status !== "available") return;
+  try {
+    await autoUpdater.downloadUpdate();
+  } catch (error) {
+    updateError(error);
+  }
+}
+
+async function installUpdate() {
+  if (updateState.status !== "downloaded") return;
+  publishUpdateState({ status: "preparingInstall", version: updateState.version });
+  try {
+    await quitApplication();
+    autoUpdater.quitAndInstall(false, true);
+  } catch (error) {
+    updateError(error);
+  }
+}
+
+function configureUpdates() {
+  if (isPortable) return;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.channel = app.getVersion().includes("-beta.") ? "beta" : "latest";
+  autoUpdater.on("checking-for-update", () => publishUpdateState({ status: "checking" }));
+  autoUpdater.on("update-available", (info) => {
+    publishUpdateState({ status: "available", version: info.version });
+    void new Notification({ title: "MyMusicLib", body: `Доступна версия ${info.version}` }).show();
+  });
+  autoUpdater.on("update-not-available", () => publishUpdateState({ status: "upToDate" }));
+  autoUpdater.on("download-progress", (progress) => {
+    const version = updateState.status === "available" || updateState.status === "downloading"
+      ? updateState.version : "";
+    publishUpdateState({ status: "downloading", version, percent: Math.round(progress.percent) });
+  });
+  autoUpdater.on("update-downloaded", (info) =>
+    publishUpdateState({ status: "downloaded", version: info.version }),
+  );
+  autoUpdater.on("error", updateError);
+  setTimeout(() => void checkForUpdates(), 30_000).unref();
+  updateTimer = setInterval(() => void checkForUpdates(), 6 * 60 * 60 * 1000);
+  updateTimer.unref();
+}
 
 async function reportSmokeProgress(phase: string) {
   if (smokeReport)
@@ -192,12 +268,13 @@ async function quitApplication(exitCode = 0) {
   if (!applicationExit)
     applicationExit = (async () => {
       isQuitting = true;
+      if (updateTimer) clearInterval(updateTimer);
       await stopBackend();
       for (const writer of tagProcesses) writer.kill();
       tagProcesses.clear();
       tray?.destroy();
       tray = null;
-      app.exit(exitCode);
+      if (exitCode !== 0 || updateState.status !== "preparingInstall") app.exit(exitCode);
     })();
   await applicationExit;
 }
@@ -260,6 +337,8 @@ function createTray() {
             void shell.openExternal(backendUrl);
         },
       },
+      { type: "separator" },
+      { label: "Проверить обновления", click: () => void checkForUpdates(true) },
       { type: "separator" },
       { label: "Выход", click: () => void quitApplication() },
     ]),
@@ -414,6 +493,18 @@ async function bootstrap() {
           throw new Error("Недопустимый IPC sender");
         return { version: app.getVersion(), portable: isPortable };
       });
+      const requireDesktopSender = (event: Electron.IpcMainInvokeEvent) => {
+        if (!mainWindow || event.sender !== mainWindow.webContents || !isAllowedLocalUrl(event.senderFrame?.url || ""))
+          throw new Error("Недопустимый IPC sender");
+      };
+      ipcMain.handle("desktop:get-update-state", (event) => {
+        requireDesktopSender(event);
+        return updateState;
+      });
+      ipcMain.handle("desktop:check-for-updates", (event) => { requireDesktopSender(event); return checkForUpdates(true); });
+      ipcMain.handle("desktop:download-update", (event) => { requireDesktopSender(event); return downloadUpdate(); });
+      ipcMain.handle("desktop:install-update", (event) => { requireDesktopSender(event); return installUpdate(); });
+      configureUpdates();
       createWindow(url);
       createTray();
     }

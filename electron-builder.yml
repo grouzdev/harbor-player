@@ -15,6 +15,11 @@ asarUnpack:
   - node_modules/sharp/**/*
   - node_modules/@img/**/*
 npmRebuild: true
+generateUpdatesFilesForAllChannels: true
+publish:
+  provider: github
+  owner: grouzdev
+  repo: my-music-lib
 afterPack: scripts/after-pack.cjs
 win:
   icon: assets/icon.ico

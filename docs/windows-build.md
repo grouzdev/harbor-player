@@ -122,7 +122,7 @@ Electron 44 использует Node.js 24, то есть соответств�
 
 1. **Desktop core — реализован.** Переиспользуемый lifecycle Fastify, внедряемый `TagWriter`, Electron main/backend/tag utility processes, single instance, tray, безопасное окно и unpacked x64-сборка. Packaged smoke проверяет SQLite, Sharp, worker scan, HTTP Range и запись тега; fuse `runAsNode` отключён.
 2. **Дистрибутивы.** Добавить per-user NSIS installer и portable EXE, ярлыки, корректный uninstall без удаления пользовательских данных и ручную проверку на чистой Windows VM.
-3. **Обновления.** Реализовать preload API и `UpdateState`, beta/latest channels, ручное скачивание и подготовку backend к подтверждённому restart/install. Ожидающие сканирования отменяются, активные файловые операции всегда завершаются безопасно.
+3. **Обновления — реализован.** Preload API и `UpdateState`, beta/latest channels, ручное скачивание, portable fallback на Releases и подготовка backend к подтверждённому restart/install. Ожидающие сканирования отменяются, активные файловые операции завершаются безопасно.
 4. **Release pipeline.** Добавить Windows GitHub Actions, публикацию unsigned beta, update metadata и реальный тест `beta N → beta N+1`.
 5. **Stable.** Подключить выбранного signing provider, Authenticode с timestamp, защищённое environment и проверку подписи перед публичным stable.
 

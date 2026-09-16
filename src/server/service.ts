@@ -68,6 +68,7 @@ export class MusicService extends EventEmitter {
   readonly musicBrainz: MusicBrainzService;
   private readonly unlock: () => void;
   private pending = Promise.resolve();
+  private cancelledJobs = new Set<string>();
   private active = new Set<string>();
   private stopping = false;
   private closePromise?: Promise<void>;
@@ -204,6 +205,9 @@ export class MusicService extends EventEmitter {
     };
     this.publish(job);
     this.pending = this.pending.then(async () => {
+      // A queued scan can be cancelled during a controlled desktop update.
+      // Its already-scheduled callback must not turn it back into a running job.
+      if (job.status !== "queued" || this.cancelledJobs.has(job.id)) return;
       job.status = "running";
       this.publish(job);
       try {
@@ -1150,6 +1154,16 @@ export class MusicService extends EventEmitter {
   }
   beginShutdown() {
     this.stopping = true;
+    for (const job of this.catalog.jobs())
+      if (job.kind === "scan" && job.status === "queued") {
+        this.cancelledJobs.add(job.id);
+        job.status = "error";
+        job.errors.push("Сканирование отменено при подготовке к обновлению");
+        this.publish(job);
+      }
+  }
+  get isStopping() {
+    return this.stopping;
   }
   async close() {
     this.beginShutdown();

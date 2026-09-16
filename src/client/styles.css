@@ -1170,6 +1170,24 @@ body.selection-dragging * {
   font-size: var(--type-caption);
   line-height: 1.6;
 }
+.update-panel {
+  position: fixed;
+  right: 24px;
+  bottom: 92px;
+  z-index: 21;
+  display: flex;
+  max-width: 440px;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #819c8555;
+  border-radius: 8px;
+  background: #34463e;
+  box-shadow: 0 8px 30px #0004;
+  font-size: var(--type-caption);
+  line-height: 1.45;
+}
+.update-panel button { white-space: nowrap; }
 .context-menu {
   position: fixed;
   z-index: 30;

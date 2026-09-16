@@ -114,6 +114,8 @@ export async function createApp(options: {
       `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'${options.dev ? " ws://127.0.0.1:5173 ws://localhost:5173" : ""}; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
     );
     if (request.url.startsWith("/api/")) {
+      if (service.isStopping)
+        return reply.code(503).send({ error: "Сервис подготавливается к обновлению" });
       reply.header("Cache-Control", "no-store");
       if (
         request.url.split("?")[0] !== "/api/session" &&

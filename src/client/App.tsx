@@ -96,6 +96,7 @@ import {
 import { Player, usePlayer } from "./Player";
 import { CoverMode, QuickSearchDialog } from "./CoverMode";
 import { ContextMenu, type ContextMenuState } from "./ContextMenu";
+import { UpdatePanel } from "./UpdatePanel";
 
 type DroppedCover = {
   album: Album;
@@ -2629,6 +2630,7 @@ export function App() {
         />
       )}
       <ContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
+      <UpdatePanel />
       {toast && (
         <div className="toast" role="status">
           <span>{toast}</span>

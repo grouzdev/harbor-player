@@ -1,5 +1,16 @@
 import type { TagPatch } from "./contracts.js";
 
+export type UpdateState =
+  | { status: "idle" }
+  | { status: "checking" }
+  | { status: "available"; version: string }
+  | { status: "downloading"; version: string; percent: number }
+  | { status: "downloaded"; version: string }
+  | { status: "preparingInstall"; version: string }
+  | { status: "upToDate" }
+  | { status: "unsupported" }
+  | { status: "error"; message: string };
+
 export type BackendToMainMessage =
   | { type: "ready"; url: string }
   | { type: "fatal"; error: string }
