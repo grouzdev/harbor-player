@@ -4,15 +4,21 @@ import os from "node:os";
 import path from "node:path";
 import { FuseState, FuseV1Options, getCurrentFuseWire } from "@electron/fuses";
 
-const executable = path.resolve("release", "win-unpacked", "MyMusicLib.exe");
+const executable = path.resolve(
+  process.env.MYMUSICLIB_DESKTOP_EXECUTABLE ||
+    path.join("release", "win-unpacked", "MyMusicLib.exe"),
+);
+const expectedPortable = process.env.MYMUSICLIB_SMOKE_EXPECT_PORTABLE === "1";
 const root = await mkdtemp(path.join(os.tmpdir(), "mymusiclib-desktop-smoke-"));
 const dataDir = path.join(root, "data");
 const libraryDir = path.join(root, "library");
 const fixture = path.join(libraryDir, "sample.mp3");
 const report = path.join(root, "report.json");
-const fuseWire = await getCurrentFuseWire(executable);
-if (fuseWire[FuseV1Options.RunAsNode] !== FuseState.DISABLE)
-  throw new Error("RunAsNode fuse is not disabled");
+if (!expectedPortable) {
+  const fuseWire = await getCurrentFuseWire(executable);
+  if (fuseWire[FuseV1Options.RunAsNode] !== FuseState.DISABLE)
+    throw new Error("RunAsNode fuse is not disabled");
+}
 await mkdir(dataDir, { recursive: true });
 await mkdir(libraryDir, { recursive: true });
 await copyFile(path.resolve(".fixtures", "sample.mp3"), fixture);
@@ -59,6 +65,10 @@ try {
     throw new Error(
       result.error ||
         `MyMusicLib exited with code ${exitCode} at ${result.phase || "unknown"}\n${output}`,
+    );
+  if (result.portable !== expectedPortable)
+    throw new Error(
+      `Expected portable=${expectedPortable}, got ${String(result.portable)}`,
     );
   console.log("Packaged desktop smoke passed");
 } finally {

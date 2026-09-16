@@ -21,17 +21,24 @@ npm start
 
 ## Desktop-сборка для Windows
 
-Первый этап desktop-версии доступен как unpacked x64-приложение без installer и автообновлений:
+Доступны два самостоятельных x64-дистрибутива без автообновлений:
+
+```powershell
+npm run desktop:installer # release\MyMusicLib-<version>-x64-Setup.exe
+npm run desktop:portable  # release\MyMusicLib-<version>-x64-portable.exe
+```
+
+Installer устанавливает MyMusicLib только для текущего пользователя, не требует прав администратора и создаёт ярлыки на рабочем столе и в меню «Пуск». Portable EXE запускается без установки и не создаёт ярлыков. Для сборки обоих вариантов одной командой используйте `npm run desktop:dist`.
+
+Desktop-версия запускает тот же локальный API на `127.0.0.1:4317` во внутреннем utility process. Закрытие окна скрывает приложение в tray; для полной остановки выберите «Выход». В tray также можно открыть интерфейс в обычном браузере. Повторный запуск показывает существующее окно и не создаёт второй backend.
+
+Каталог, recovery и база обеих версий остаются в `%LOCALAPPDATA%\MyMusicLib`; Chromium-профиль Electron находится в `%LOCALAPPDATA%\MyMusicLib\electron`. Portable EXE не переносит эти данные вместе с собой. Удаление установленной версии намеренно не удаляет пользовательские данные. Для unpacked-сборки также поддерживается `MYMUSICLIB_DATA_DIR`:
 
 ```powershell
 npm run desktop:pack
 npm run test:desktop:smoke
 release\win-unpacked\MyMusicLib.exe
 ```
-
-Desktop-версия запускает тот же локальный API на `127.0.0.1:4317` во внутреннем utility process. Закрытие окна скрывает приложение в tray; для полной остановки выберите «Выход». В tray также можно открыть интерфейс в обычном браузере. Повторный запуск показывает существующее окно и не создаёт второй backend.
-
-Каталог, recovery и база остаются в `%LOCALAPPDATA%\MyMusicLib`; Chromium-профиль Electron находится в `%LOCALAPPDATA%\MyMusicLib\electron`. Для unpacked-сборки также поддерживается `MYMUSICLIB_DATA_DIR`.
 
 ## Использование
 
@@ -87,6 +94,6 @@ npm run benchmark
 - `docs/ROADMAP.md` — этапы разработки, границы и ограничения.
 - `THIRD_PARTY_NOTICES.md` — сведения о стороннем коде.
 
-Поддержка macOS/Linux архитектурно предусмотрена; текущие проверки выполнены на Windows. AcoustID/Chromaprint, сетевой доступ к самой библиотеке и gapless в эту версию не входят. Windows desktop shell реализован как проверяемая unpacked-сборка; NSIS installer, portable EXE и автообновления остаются следующими этапами.
+Поддержка macOS/Linux архитектурно предусмотрена; текущие проверки выполнены на Windows. AcoustID/Chromaprint, сетевой доступ к самой библиотеке и gapless в эту версию не входят. Windows desktop shell выпускается как NSIS installer и portable EXE; интерфейс и механизм автообновлений остаются следующим этапом.
 
 Порядок колонок: библиотеки → жанры → исполнители → альбомы → треки. Исполнитель и форматы отображаются у группы альбома; строки треков содержат только номер, название и длительность.

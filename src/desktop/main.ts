@@ -26,6 +26,7 @@ const smokeFixture = process.argv
   .find((argument) => argument.startsWith("--smoke-test="))
   ?.slice("--smoke-test=".length);
 const smokeReport = process.env.MYMUSICLIB_SMOKE_REPORT;
+const isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_DIR);
 if (smokeFixture) {
   process.env.MYMUSICLIB_PORT = "0";
   process.env.MYMUSICLIB_SMOKE = "1";
@@ -398,7 +399,10 @@ async function bootstrap() {
     if (smokeFixture) {
       await runSmoke(url, path.resolve(smokeFixture));
       if (smokeReport)
-        await writeFile(smokeReport, JSON.stringify({ ok: true, url }));
+        await writeFile(
+          smokeReport,
+          JSON.stringify({ ok: true, url, portable: isPortable }),
+        );
       await quitApplication();
     } else {
       ipcMain.handle("desktop:get-app-info", (event) => {
@@ -408,7 +412,7 @@ async function bootstrap() {
           !isAllowedLocalUrl(event.senderFrame?.url || "")
         )
           throw new Error("Недопустимый IPC sender");
-        return { version: app.getVersion(), portable: false };
+        return { version: app.getVersion(), portable: isPortable };
       });
       createWindow(url);
       createTray();

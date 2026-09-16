@@ -19,6 +19,20 @@ afterPack: scripts/after-pack.cjs
 win:
   icon: assets/icon.ico
   target:
-    - target: dir
+    - target: nsis
       arch:
         - x64
+    - target: portable
+      arch:
+        - x64
+nsis:
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: MyMusicLib
+  deleteAppDataOnUninstall: false
+  artifactName: "${productName}-${version}-${arch}-Setup.${ext}"
+portable:
+  artifactName: "${productName}-${version}-${arch}-portable.${ext}"
