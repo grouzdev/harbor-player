@@ -4,11 +4,19 @@ import os from "node:os";
 import path from "node:path";
 import { FuseState, FuseV1Options, getCurrentFuseWire } from "@electron/fuses";
 
-const executable = path.resolve(
-  process.env.MYMUSICLIB_DESKTOP_EXECUTABLE ||
-    path.join("release", "win-unpacked", "MyMusicLib.exe"),
+const packageInfo = JSON.parse(
+  await readFile(path.resolve("package.json"), "utf8"),
 );
 const expectedPortable = process.env.MYMUSICLIB_SMOKE_EXPECT_PORTABLE === "1";
+const executable = path.resolve(
+  process.env.MYMUSICLIB_DESKTOP_EXECUTABLE ||
+    (expectedPortable
+      ? path.join(
+          "release",
+          `MyMusicLib-${packageInfo.version}-x64-unsigned-portable.exe`,
+        )
+      : path.join("release", "win-unpacked", "MyMusicLib.exe")),
+);
 const root = await mkdtemp(path.join(os.tmpdir(), "mymusiclib-desktop-smoke-"));
 const dataDir = path.join(root, "data");
 const libraryDir = path.join(root, "library");

@@ -1,0 +1,43 @@
+name: Publish unsigned beta
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: node scripts/verify-release.mjs
+      - run: npm run fixtures
+      - run: npm run verify:tags
+      - run: npm test
+      - run: npm run desktop:pack
+      - run: npm run test:desktop:smoke
+      - run: npm run desktop:dist
+      - run: npm run test:desktop:smoke:portable
+      - run: node scripts/verify-release.mjs --artifacts
+      - name: Create GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          gh release create "$env:GITHUB_REF_NAME" "release/MyMusicLib-$version-x64-unsigned-Setup.exe" "release/MyMusicLib-$version-x64-unsigned-Setup.exe.blockmap" "release/MyMusicLib-$version-x64-unsigned-portable.exe" "release/beta.yml" --prerelease --title "MyMusicLib $env:GITHUB_REF_NAME (unsigned beta)" --notes "Unsigned beta release. Windows SmartScreen may show a warning. This release updates the beta channel only."

@@ -21,16 +21,18 @@ npm start
 
 ## Desktop-сборка для Windows
 
-Доступны два самостоятельных x64-дистрибутива без автообновлений:
+Доступны два самостоятельных x64-дистрибутива:
 
 ```powershell
-npm run desktop:installer # release\MyMusicLib-<version>-x64-Setup.exe
-npm run desktop:portable  # release\MyMusicLib-<version>-x64-portable.exe
+npm run desktop:installer # release\MyMusicLib-<version>-x64-unsigned-Setup.exe
+npm run desktop:portable  # release\MyMusicLib-<version>-x64-unsigned-portable.exe
 ```
 
 Installer устанавливает MyMusicLib только для текущего пользователя, не требует прав администратора и создаёт ярлыки на рабочем столе и в меню «Пуск». Portable EXE запускается без установки и не создаёт ярлыков. Для сборки обоих вариантов одной командой используйте `npm run desktop:dist`.
 
 Desktop-версия запускает тот же локальный API на `127.0.0.1:4317` во внутреннем utility process. Закрытие окна скрывает приложение в tray; для полной остановки выберите «Выход». В tray также можно открыть интерфейс в обычном браузере. Повторный запуск показывает существующее окно и не создаёт второй backend.
+
+Установленная beta-версия проверяет GitHub Releases, но не начинает загрузку и установку без явных кнопок пользователя. Portable обновляется вручную со страницы Releases. Пока приложение не подписано Windows-сертификатом, beta-файлы намеренно помечены `unsigned`: Windows может показать предупреждение SmartScreen.
 
 Каталог, recovery и база обеих версий остаются в `%LOCALAPPDATA%\MyMusicLib`; Chromium-профиль Electron находится в `%LOCALAPPDATA%\MyMusicLib\electron`. Portable EXE не переносит эти данные вместе с собой. Удаление установленной версии намеренно не удаляет пользовательские данные. Для unpacked-сборки также поддерживается `MYMUSICLIB_DATA_DIR`:
 
@@ -39,6 +41,19 @@ npm run desktop:pack
 npm run test:desktop:smoke
 release\win-unpacked\MyMusicLib.exe
 ```
+
+## Публикация unsigned beta
+
+Release workflow запускается только push-тегом вида `v0.x.y-beta.n`; тег должен в точности соответствовать `version` в `package.json`. Он выполняет проверки, собирает NSIS и portable, запускает packaged smoke и создаёт GitHub prerelease с updater-метаданными канала `beta`.
+
+Перед выпуском обновите версию, прогоните `npm test` и desktop smoke, затем закоммитьте изменение, создайте тег и отправьте его:
+
+```powershell
+git tag v0.x.y-beta.n
+git push origin main --tags
+```
+
+Не перемещайте и не публикуйте повторно существующий beta-тег. Реальную проверку обновления проводят двумя последовательными тегами: установить beta N, выпустить beta N+1, вручную скачать и подтвердить установку из приложения, затем проверить версию и сохранность библиотеки, каталога, закладок, журнала и recovery.
 
 ## Использование
 

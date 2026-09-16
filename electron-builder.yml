@@ -38,6 +38,6 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: MyMusicLib
   deleteAppDataOnUninstall: false
-  artifactName: "${productName}-${version}-${arch}-Setup.${ext}"
+  artifactName: "${productName}-${version}-${arch}-unsigned-Setup.${ext}"
 portable:
-  artifactName: "${productName}-${version}-${arch}-portable.${ext}"
+  artifactName: "${productName}-${version}-${arch}-unsigned-portable.${ext}"
