@@ -589,6 +589,42 @@ describe("catalog and safe filesystem operations", () => {
     });
     expect(track.duration).toBeGreaterThan(0);
   });
+  it("groups descriptive CD folders into one album while keeping ordinary folders separate", async () => {
+    const albumRoot = path.join(root, "descriptive-discs", "Aerial");
+    const discOne = path.join(albumRoot, "CD1 - A Sea Of Honey");
+    const discTwo = path.join(albumRoot, "CD2 - A Sky Of Honey");
+    const bonus = path.join(albumRoot, "Bonus Tracks");
+    const sample = path.join(fixtures, "sample.mp3");
+    await Promise.all([
+      mkdir(discOne, { recursive: true }),
+      mkdir(discTwo, { recursive: true }),
+      mkdir(bonus, { recursive: true }),
+    ]);
+    await Promise.all([
+      copyFile(sample, path.join(discOne, "01.mp3")),
+      copyFile(sample, path.join(discTwo, "01.mp3")),
+      copyFile(sample, path.join(bonus, "01.mp3")),
+    ]);
+
+    const read = (file: string, id: string) =>
+      readTrack(
+        file,
+        "descriptive-discs",
+        root,
+        id,
+        path.join(root, "data"),
+      );
+    const [firstDisc, secondDisc, bonusTrack] = await Promise.all([
+      read(path.join(discOne, "01.mp3"), "disc-one"),
+      read(path.join(discTwo, "01.mp3"), "disc-two"),
+      read(path.join(bonus, "01.mp3"), "bonus"),
+    ]);
+
+    expect(firstDisc.albumKey).toBe(secondDisc.albumKey);
+    expect(firstDisc.albumTitle).toBe(secondDisc.albumTitle);
+    expect(firstDisc.albumArtists).toEqual(secondDisc.albumArtists);
+    expect(bonusTrack.albumKey).not.toBe(firstDisc.albumKey);
+  });
   it("retries a transient music-metadata failure before using TagLib", async () => {
     const file = path.join(fixtures, "sample.mp3");
     let calls = 0;

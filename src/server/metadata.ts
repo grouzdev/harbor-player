@@ -176,7 +176,7 @@ export async function readTrack(
   if (!c.disk?.no) missingTagFields.push("discNumber");
   if (!coverId) missingTagFields.push("cover");
   let albumFolder = path.dirname(path.relative(root, file));
-  if (/^(cd|disc|disk|диск)[\s_-]*\d+$/i.test(path.basename(albumFolder)))
+  if (/^(cd|disc|disk|диск)[\s_-]*\d+\b/i.test(path.basename(albumFolder)))
     albumFolder = path.dirname(albumFolder);
   // Folder identity separates editions; albumArtist (not track artist) keeps compilations together.
   const albumArtists = clean(
