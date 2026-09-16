@@ -3412,16 +3412,10 @@ function TrackList({
                 className={`track-album-header ${selectedAlbumId === track.albumKey ? "selected" : ""}`}
                 data-selection-ignore
                 role="button"
-                tabIndex={0}
+                tabIndex={-1}
                 aria-pressed={selectedAlbumId === track.albumKey}
                 aria-label={`Альбом «${track.albumTitle || "Без альбома"}»`}
                 onClick={() => void onSelectAlbum(track.albumKey)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    void onSelectAlbum(track.albumKey);
-                  }
-                }}
                 onContextMenu={(event) =>
                   onContextMenu(
                     event,

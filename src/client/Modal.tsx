@@ -5,6 +5,7 @@ import {
   type ReactNode,
 } from "react";
 import { X } from "lucide-react";
+import { focusFirstTextEntry } from "./text-input-tab-navigation";
 
 export function Modal({
   title,
@@ -25,12 +26,14 @@ export function Modal({
   useEffect(() => {
     const dialog = ref.current!;
     dialog.showModal();
+    if (!focusFirstTextEntry(dialog)) dialog.focus();
     return () => dialog.close();
   }, []);
   return (
     <dialog
       ref={ref}
       className={wide ? "modal wide" : "modal"}
+      tabIndex={-1}
       onKeyDown={onKeyDown}
       onCancel={(e) => {
         e.preventDefault();

@@ -21,7 +21,6 @@ export function ContextMenu({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const firstItem = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!menu) return;
@@ -35,7 +34,6 @@ export function ContextMenu({
     document.addEventListener("keydown", closeForKey);
     window.addEventListener("scroll", onClose, true);
     window.addEventListener("resize", onClose);
-    firstItem.current?.focus();
     return () => {
       document.removeEventListener("pointerdown", closeForOutsidePress, true);
       document.removeEventListener("keydown", closeForKey);
@@ -60,10 +58,9 @@ export function ContextMenu({
       aria-label="Контекстное меню"
       style={{ left: menu.x, top: menu.y }}
     >
-      {menu.items.map((item, index) => (
+      {menu.items.map((item) => (
         <button
           key={item.label}
-          ref={index === 0 ? firstItem : undefined}
           type="button"
           role="menuitem"
           className="context-menu-item"

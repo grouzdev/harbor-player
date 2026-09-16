@@ -101,6 +101,7 @@ export function CoverDropConfirmDialog({
   onClose: () => void;
   onConfirm: () => Promise<void>;
 }) {
+  const primaryButtonRef = useRef<HTMLButtonElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   return (
@@ -108,6 +109,9 @@ export function CoverDropConfirmDialog({
       title="Применить обложку?"
       subtitle={albumTitle || "Без альбома"}
       onClose={busy ? () => {} : onClose}
+      onKeyDown={(event) =>
+        activatePrimaryOnEnter(event, primaryButtonRef.current)
+      }
     >
       <p className="hint">
         Применить обложку «{coverName}» ко всем {count(trackCount)} трекам
@@ -125,6 +129,7 @@ export function CoverDropConfirmDialog({
         </button>
         <button
           type="button"
+          ref={primaryButtonRef}
           className="button primary"
           disabled={busy}
           onClick={async () => {
@@ -306,6 +311,7 @@ export function RemoveLibraryDialog({
   onClose: () => void;
   onRemove: () => Promise<void>;
 }) {
+  const primaryButtonRef = useRef<HTMLButtonElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   return (
@@ -313,6 +319,9 @@ export function RemoveLibraryDialog({
       title="Отключить библиотеку?"
       subtitle={library.name}
       onClose={busy ? () => {} : onClose}
+      onKeyDown={(event) =>
+        activatePrimaryOnEnter(event, primaryButtonRef.current)
+      }
     >
       <p className="hint">
         Папка будет удалена из каталога MyMusicLib вместе с индексированными
@@ -329,6 +338,7 @@ export function RemoveLibraryDialog({
         </button>
         <button
           type="button"
+          ref={primaryButtonRef}
           className="button danger"
           disabled={busy}
           onClick={async () => {

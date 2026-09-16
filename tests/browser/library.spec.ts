@@ -2,6 +2,50 @@ import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+test("Tab cycles only through text entry fields", async ({ page }) => {
+  await page.goto("/");
+
+  const focusedTags: string[] = [];
+  for (let index = 0; index < 4; index += 1) {
+    await page.keyboard.press("Tab");
+    focusedTags.push(
+      await page.evaluate(() => document.activeElement?.tagName ?? ""),
+    );
+  }
+
+  expect(focusedTags).not.toContain("BUTTON");
+  expect(focusedTags).not.toContain("SELECT");
+  expect(focusedTags).not.toContain("A");
+  expect(focusedTags).toContain("INPUT");
+});
+
+test("a dialog keeps Tab navigation in its text fields", async ({ page }) => {
+  await page.goto("/");
+  await page.locator(".add-library").click();
+
+  const folder = page.getByPlaceholder("D:\\Music\\Collection");
+  const name = page.getByPlaceholder("Например, Коллекция");
+  await expect(folder).toBeFocused();
+
+  await page.keyboard.press("Tab");
+  await expect(name).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(folder).toBeFocused();
+});
+
+test("a dialog without text fields keeps focus off its close button", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const dialog = page.locator("dialog");
+  await page.getByRole("button", { name: "Журнал операций" }).click();
+
+  await expect(dialog).toBeFocused();
+  await expect(dialog).toHaveCSS("outline-style", "none");
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeVisible();
+});
+
 test("icon buttons keep their geometry on hover", async ({ page }) => {
   await page.goto("/");
   const button = page.getByRole("button", { name: "Журнал операций" });
@@ -1332,6 +1376,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(coverDialog).toContainText(
     "Применить обложку «dropped-cover.png»",
   );
+  await expect(coverDialog).toBeFocused();
   await coverDialog.getByRole("button", { name: "Отмена" }).click();
   await expect(coverDialog).not.toBeVisible();
   await expect(firstAlbum.locator("img")).toHaveAttribute(
@@ -1339,9 +1384,8 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     coverAfterMusicBrainz!,
   );
   await dropFile("dropped-cover.png", "image/png", droppedCover);
-  await coverDialog
-    .getByRole("button", { name: "Применить", exact: true })
-    .click();
+  await expect(coverDialog).toBeFocused();
+  await page.keyboard.press("Enter");
   await expect(coverDialog).not.toBeVisible();
   await expect
     .poll(() => firstAlbum.locator("img").getAttribute("src"))
@@ -1482,7 +1526,8 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await genreInput.fill("E2E Fresh");
   await genreInput.press("Enter");
   await expect(page.getByText("Первый трек → Обновлённый трек")).toBeVisible();
-  await page.getByRole("dialog").press("Enter");
+  await expect(page.getByRole("dialog")).toBeFocused();
+  await page.keyboard.press("Enter");
   await expect(flac()).toContainText("Обновлённый трек");
   await expect(
     page.locator(".genres-panel .list-tile").filter({ hasText: "E2E Fresh" }),
@@ -1499,11 +1544,13 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await flac().locator(".list-tile-main").click();
   await flac().dispatchEvent("contextmenu");
   await page.getByRole("menuitem", { name: "Перенести треки" }).click();
+  await expect(page.getByRole("dialog")).toBeFocused();
   await page
     .getByLabel("Куда перенести")
     .selectOption({ label: `Collection renamed ${browser}` });
-  await page.getByRole("button", { name: "Далее" }).click();
-  await page.getByRole("button", { name: /^Применить к/ }).click();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog")).toBeFocused();
+  await page.keyboard.press("Enter");
   await expect(rows).toHaveCount(5);
   await page.getByRole("button", { name: "Сбросить библиотеки" }).click();
   await expect(
@@ -1514,8 +1561,10 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await flac().locator(".list-tile-main").click();
   await flac().dispatchEvent("contextmenu");
   await page.getByRole("menuitem", { name: "Удалить треки" }).click();
-  await page.getByRole("button", { name: "Далее" }).click();
-  await page.getByRole("button", { name: /^Применить к/ }).click();
+  await expect(page.getByRole("dialog")).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog")).toBeFocused();
+  await page.keyboard.press("Enter");
   await expect(rows).toHaveCount(0);
   await page
     .getByRole("button", { name: "Журнал операций", exact: true })
@@ -1533,7 +1582,8 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .first()
     .click({ button: "right" });
   await libraryMenu.getByRole("menuitem", { name: "Удалить" }).click();
-  await page.getByRole("button", { name: "Отключить", exact: true }).click();
+  await expect(page.getByRole("dialog")).toBeFocused();
+  await page.keyboard.press("Enter");
   await expect(
     page.getByRole("button", {
       name: new RegExp(`Collection renamed ${browser}`),
