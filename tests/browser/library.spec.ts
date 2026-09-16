@@ -775,7 +775,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(page.getByTestId("track-row")).toHaveCount(7);
   await expect(
     page.locator(".libraries-panel .panel-selection-chip"),
-  ).toHaveText(/^0 из \d+$/);
+  ).toHaveText(/^0\/\d+$/);
   await downloadsTile.locator(".list-tile-main").click();
   await expect(
     page.locator(".track-row .track-number, .track-row .row-play"),
@@ -812,7 +812,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await downloadsTile.locator(".list-tile-main").click();
   await expect(
     page.locator(".libraries-panel .panel-selection-chip"),
-  ).toHaveText(/^1 из \d+$/);
+  ).toHaveText(/^1\/\d+$/);
 
   const genreRow = page
     .locator(".genres-panel .list-tile")
@@ -892,7 +892,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   ).toBeVisible();
   await expect(
     page.locator(".tracks-panel .panel-selection-chip"),
-  ).toContainText(/^1 из \d+$/);
+  ).toContainText(/^1\/\d+$/);
   await page.getByRole("button", { name: "Скрыть панель «Треки»" }).click();
   await page.getByRole("button", { name: "Показать панель «Треки»" }).click();
   await expect(firstTrackRow).not.toHaveClass(/selected/);
@@ -1003,7 +1003,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(genreRow).toHaveClass(/selected/);
   await expect(
     page.locator(".genres-panel .panel-selection-chip"),
-  ).toContainText(/^1 из \d+$/);
+  ).toContainText(/^1\/\d+$/);
   await expect(artistRow).toHaveClass(/selected/);
   await expect(firstAlbum).toHaveClass(/selected/);
   await page
@@ -1020,7 +1020,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(artistRow).toHaveClass(/selected/);
   await expect(
     page.locator(".artists-panel .panel-selection-chip"),
-  ).toContainText(/^1 из \d+$/);
+  ).toContainText(/^1\/\d+$/);
   await artistButton.dispatchEvent("click", { ctrlKey: true });
   await expect(artistRow).not.toHaveClass(/selected/);
   await artistButton.click();
@@ -1056,7 +1056,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(firstAlbum).toHaveClass(/selected/);
   await expect(
     page.locator(".albums-panel .panel-selection-chip"),
-  ).toContainText(/^1 из \d+$/);
+  ).toContainText(/^1\/\d+$/);
   await firstAlbumButton.click();
   await expect
     .poll(() =>

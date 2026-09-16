@@ -118,6 +118,7 @@ type PanelId = "libraries" | "genres" | "artists" | "albums" | "tracks";
 type PanelVisibility = Record<PanelId, boolean>;
 
 const panelVisibilityStorageKey = "mml-panel-visibility-v1";
+const virtualPanelTopInset = 14;
 const defaultPanelVisibility: PanelVisibility = {
   libraries: true,
   genres: true,
@@ -309,7 +310,7 @@ function PanelSelectionIndicator({
   if (!active) return <span className="panel-count">{count(total)}</span>;
   return (
     <div className="panel-selection-chip">
-      <span>{`${count(selected)} из ${count(total)}`}</span>
+      <span>{`${count(selected)}/${count(total)}`}</span>
       <button
         className="icon-button facet-reset"
         aria-label={resetLabel}
@@ -2458,19 +2459,17 @@ export function App() {
             data-panel-id="tracks"
           >
             <div className="panel-heading tracks-heading">
-              <div>
-                <h2>Треки</h2>
-                <PanelSelectionIndicator
-                  total={total}
-                  selected={selected.size}
-                  active={selected.size > 0}
-                  resetLabel="Сбросить выбор треков"
-                  onReset={() => {
-                    setSelected(new Set());
-                    setSelectedAlbumId(null);
-                  }}
-                />
-              </div>
+              <h2>Треки</h2>
+              <PanelSelectionIndicator
+                total={total}
+                selected={selected.size}
+                active={selected.size > 0}
+                resetLabel="Сбросить выбор треков"
+                onReset={() => {
+                  setSelected(new Set());
+                  setSelectedAlbumId(null);
+                }}
+              />
             </div>
             {queryError && (
               <p className="error-text inline-error" role="alert">
@@ -2813,6 +2812,8 @@ function ArtistList({
     count: rows.length + (items.length < total ? 1 : 0),
     getScrollElement: () => ref.current,
     estimateSize: (index) => (rows[index]?.type === "group" ? 56 : 36),
+    paddingStart: virtualPanelTopInset,
+    scrollPaddingStart: virtualPanelTopInset,
     overscan: 6,
   });
   const visible = virtual.getVirtualItems();
@@ -3048,6 +3049,8 @@ function AlbumGrid({
       rows[index]?.type === "artist"
         ? 23
         : cellWidth + 64 + (rows[index]?.endsArtistGroup ? 12 : 0),
+    paddingStart: virtualPanelTopInset,
+    scrollPaddingStart: virtualPanelTopInset,
     overscan: 3,
   });
   const visible = virtual.getVirtualItems();
@@ -3340,6 +3343,8 @@ function TrackList({
     count: rows.length + (tracks.length < total ? 1 : 0),
     getScrollElement: () => ref.current,
     estimateSize: (index) => (rows[index]?.type === "album" ? 78 : 36),
+    paddingStart: virtualPanelTopInset,
+    scrollPaddingStart: virtualPanelTopInset,
     overscan: 8,
   });
   const visible = virtual.getVirtualItems();

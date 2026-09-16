@@ -69,7 +69,7 @@ input::placeholder {
 input[type="checkbox"] {
   accent-color: var(--accent);
   width: 14px;
-  height: 14px;
+  height: 7px;
   flex-shrink: 0;
   margin: 0;
   cursor: pointer;
@@ -227,20 +227,26 @@ body.selection-dragging * {
   cursor: crosshair !important;
 }
 .panel-heading {
-  height: 65px;
-  min-height: 65px;
+  position: relative;
+  z-index: 1;
+  height: 42px;
+  min-height: 42px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
-  gap: 10px;
+  padding: 0 12px;
+  gap: 8px;
 }
 .panel-heading h2 {
+  min-width: 0;
   font-size: var(--type-caption);
   font-weight: 600;
   letter-spacing: 0.15px;
+  white-space: nowrap;
 }
 .panel-count {
+  margin-left: auto;
+  flex: 0 0 auto;
+  text-align: right;
   font-size: var(--type-caption);
   color: #74818a;
   font-variant-numeric: tabular-nums;
@@ -259,8 +265,7 @@ body.selection-dragging * {
   background: #181e23;
 }
 .libraries-panel .panel-heading {
-  padding-left: 12px;
-  padding-right: 5px;
+  padding: 0 12px;
 }
 .list-tile {
   position: relative;
@@ -708,23 +713,24 @@ body.selection-dragging * {
   background: #1f262d;
 }
 .tracks-heading {
-  padding: 0 24px;
-  height: 65px;
-}
-.tracks-heading > div {
-  display: flex;
-  gap: 9px;
-  align-items: center;
+  padding: 0 12px;
 }
 .panel-selection-chip {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 3px 2px 6px;
+  margin-left: auto;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 1px 1px 1px 5px;
   border-radius: 4px;
   font-size: var(--type-caption);
   color: #74818a;
   font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+.panel-selection-chip .facet-reset {
+  padding: 3px;
 }
 .facet-reset {
   color: #7f8f85;
@@ -2535,6 +2541,8 @@ body {
   --soft-highlight: #f1f0db10;
   --accent: #b8bd82;
   --teal: #a8ad91;
+  /* Panel-header fade: #RRGGBBAA, where AA controls opacity. */
+  --panel-heading-fade: #202221FF;
   --fine-noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.72' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E");
   --line: var(--metal-line);
   --muted: #8b9790;
@@ -2734,7 +2742,11 @@ html:fullscreen
 
 .topbar {
   border-bottom-color: #eeeedf11;
-  box-shadow: 0 1px #f4f3e50b inset;
+  z-index: 3;
+  box-shadow:
+    0 1px #f4f3e50b inset,
+    0 7px 12px #00000052,
+    0 1px 0 #050605cc;
 }
 
 .search,
@@ -2795,6 +2807,55 @@ select {
 .panel-heading {
   border-color: var(--metal-line);
   box-shadow: 0 1px #f0f0e508 inset;
+}
+
+.panel-heading::after {
+  position: absolute;
+  z-index: 1;
+  top: 100%;
+  right: 0;
+  left: 0;
+  height: 14px;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(to bottom, var(--panel-heading-fade), transparent);
+}
+
+.library-list,
+.genre-list {
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  padding-top: 14px;
+}
+
+.artist-scroll,
+.album-scroll,
+.track-scroll {
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
+.genre-list {
+  margin-top: 0;
+}
+
+.library-list::-webkit-scrollbar,
+.genre-list::-webkit-scrollbar,
+.artist-scroll::-webkit-scrollbar,
+.album-scroll::-webkit-scrollbar,
+.track-scroll::-webkit-scrollbar {
+  width: 7px;
+}
+
+.library-list::-webkit-scrollbar-thumb,
+.genre-list::-webkit-scrollbar-thumb,
+.artist-scroll::-webkit-scrollbar-thumb,
+.album-scroll::-webkit-scrollbar-thumb,
+.track-scroll::-webkit-scrollbar-thumb {
+  border: solid transparent;
+  border-width: 0 2px 0 0;
+  border-radius: 999px;
+  background-clip: padding-box;
 }
 
 .resizer,
