@@ -2815,7 +2815,7 @@ select {
   top: 100%;
   right: 0;
   left: 0;
-  height: 14px;
+  height: 10px;
   content: "";
   pointer-events: none;
   background: linear-gradient(to bottom, var(--panel-heading-fade), transparent);
