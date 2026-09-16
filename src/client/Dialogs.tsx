@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import type {
   Capabilities,
+  ArtistFolder,
+  FolderMoveRoot,
   Job,
   Library,
   OperationPreview,
@@ -333,7 +335,12 @@ export function RemoveLibraryDialog({
         </p>
       )}
       <footer className="modal-footer">
-        <button type="button" className="button secondary" onClick={onClose} disabled={busy}>
+        <button
+          type="button"
+          className="button secondary"
+          onClick={onClose}
+          disabled={busy}
+        >
           Отмена
         </button>
         <button
@@ -368,6 +375,7 @@ export function ActionDialog({
   capabilities,
   onClose,
   onPreview,
+  folderRoots,
 }: {
   kind: "move" | "tags" | "trash";
   selection: Selection;
@@ -375,6 +383,7 @@ export function ActionDialog({
   capabilities: Capabilities;
   onClose: () => void;
   onPreview: (preview: OperationPreview) => void;
+  folderRoots?: FolderMoveRoot[];
 }) {
   const summary = useQuery({
     queryKey: ["selection-summary", selection],
@@ -387,7 +396,12 @@ export function ActionDialog({
     enabled: kind === "tags",
   });
   const [target, setTarget] = useState(
-    libraries[1]?.id || libraries[0]?.id || "",
+    () =>
+      libraries.find(
+        (library) =>
+          library.available &&
+          !folderRoots?.some((root) => root.libraryId === library.id),
+      )?.id || "",
   );
   const [companions, setCompanions] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
@@ -492,6 +506,7 @@ export function ActionDialog({
             : undefined,
         coverId: kind === "tags" && remoteCover ? remoteCover.id : undefined,
         coverTrackIds: kind === "tags" ? coverTrackIds : undefined,
+        folderRoots,
       });
       onPreview(preview);
     } catch (e) {
@@ -917,7 +932,11 @@ export function ActionDialog({
             Куда перенести
             <select value={target} onChange={(e) => setTarget(e.target.value)}>
               {libraries
-                .filter((l) => l.available)
+                .filter(
+                  (l) =>
+                    l.available &&
+                    !folderRoots?.some((root) => root.libraryId === l.id),
+                )
                 .map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.name}
@@ -926,17 +945,20 @@ export function ActionDialog({
             </select>
           </label>
           <p className="hint">
-            Структура вложенных папок сохранится. Совпадающие имена будут
-            показаны как конфликты.
+            {folderRoots?.length
+              ? "Будет перенесено всё содержимое выбранных папок, включая неаудиофайлы и пустые подпапки. Совпадения будут показаны как конфликты."
+              : "Структура вложенных папок сохранится. Совпадающие имена будут показаны как конфликты."}
           </p>
-          <label className="check-line">
-            <input
-              type="checkbox"
-              checked={companions}
-              onChange={(e) => setCompanions(e.target.checked)}
-            />
-            Перенести обложки и сопутствующие файлы целых альбомов
-          </label>
+          {!folderRoots?.length && (
+            <label className="check-line">
+              <input
+                type="checkbox"
+                checked={companions}
+                onChange={(e) => setCompanions(e.target.checked)}
+              />
+              Перенести обложки и сопутствующие файлы целых альбомов
+            </label>
+          )}
         </>
       )}
       {kind === "trash" && (
@@ -972,6 +994,86 @@ export function ActionDialog({
         >
           {busy ? "Проверяем файлы…" : "Далее"}
           <ArrowRight size={16} />
+        </button>
+      </footer>
+    </Modal>
+  );
+}
+
+export function ArtistFolderDialog({
+  artists,
+  libraries,
+  onClose,
+  onContinue,
+}: {
+  artists: string[];
+  libraries: Library[];
+  onClose: () => void;
+  onContinue: (roots: FolderMoveRoot[]) => void;
+}) {
+  const folders = useQuery({
+    queryKey: ["artist-folders", artists],
+    queryFn: () => api<ArtistFolder[]>("/artist-folders", { artists }),
+  });
+  const [selected, setSelected] = useState<Set<string> | null>(null);
+  const key = (folder: FolderMoveRoot) =>
+    `${folder.libraryId}\u0000${folder.relativePath}`;
+  const selectedKeys = selected || new Set((folders.data || []).map(key));
+  const libraryName = (id: string) =>
+    libraries.find((library) => library.id === id)?.name || "Библиотека";
+  return (
+    <Modal
+      title="Выберите папки для переноса"
+      subtitle={`Исполнители: ${artists.map((artist) => artist || "Без исполнителя").join(", ")}`}
+      onClose={onClose}
+    >
+      {folders.isPending && <p className="hint">Ищем папки…</p>}
+      {folders.error && <p className="error-text">{folders.error.message}</p>}
+      {!!folders.data?.length && (
+        <div className="tag-fields">
+          {folders.data.map((folder) => {
+            const id = key(folder);
+            return (
+              <label className="check-line" key={id}>
+                <input
+                  type="checkbox"
+                  checked={selectedKeys.has(id)}
+                  onChange={(event) =>
+                    setSelected((current) => {
+                      const next = new Set(current || selectedKeys);
+                      event.target.checked ? next.add(id) : next.delete(id);
+                      return next;
+                    })
+                  }
+                />
+                <span>
+                  {libraryName(folder.libraryId)} · {folder.relativePath} (
+                  {count(folder.trackCount)})
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+      {folders.data && !folders.data.length && (
+        <p className="hint">Для выбранного исполнителя нет доступных папок.</p>
+      )}
+      <footer className="modal-footer">
+        <button className="button secondary" onClick={onClose}>
+          Отмена
+        </button>
+        <button
+          className="button primary"
+          disabled={!selectedKeys.size}
+          onClick={() =>
+            onContinue(
+              (folders.data || []).filter((folder) =>
+                selectedKeys.has(key(folder)),
+              ),
+            )
+          }
+        >
+          Далее <ArrowRight size={16} />
         </button>
       </footer>
     </Modal>
@@ -1228,11 +1330,17 @@ export function HistoryDialog({
                         if (retry.action === "preview")
                           onPreview(retry.preview);
                         else {
-                          onOperationStarted(retry.job.operationId || op.id, retry.job);
+                          onOperationStarted(
+                            retry.job.operationId || op.id,
+                            retry.job,
+                          );
                           await history.refetch();
                         }
                       } else {
-                        const job = await api<Job>(`/operations/${op.id}/execute`, {});
+                        const job = await api<Job>(
+                          `/operations/${op.id}/execute`,
+                          {},
+                        );
                         onOperationStarted(op.id, job);
                         await history.refetch();
                       }

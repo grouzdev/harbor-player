@@ -44,6 +44,7 @@ import {
 import {
   emptyFilter,
   type Album,
+  type FolderMoveRoot,
   type BookmarkKind,
   type Capabilities,
   type CatalogBookmark,
@@ -80,6 +81,7 @@ import {
   PreviewDialog,
   RenameLibraryDialog,
   RemoveLibraryDialog,
+  ArtistFolderDialog,
 } from "./Dialogs";
 import { ListTile } from "./ListTile";
 import { resolveContextSelection, usePanelSelection } from "./panel-selection";
@@ -417,11 +419,16 @@ export function App() {
     | "history"
     | "rename-library"
     | "remove-library"
+    | "artist-folders"
     | null
   >(null);
   const [libraryToRename, setLibraryToRename] = useState<Library | null>(null);
   const [libraryToRemove, setLibraryToRemove] = useState<Library | null>(null);
   const [modalSelection, setModalSelection] = useState<Selection | null>(null);
+  const [folderMoveRoots, setFolderMoveRoots] = useState<
+    FolderMoveRoot[] | null
+  >(null);
+  const [artistMoveNames, setArtistMoveNames] = useState<string[]>([]);
   const [preview, setPreview] = useState<OperationPreview | null>(null);
   const [droppedCover, setDroppedCover] = useState<DroppedCover | null>(null);
   const [toast, setToast] = useState("");
@@ -1033,8 +1040,18 @@ export function App() {
             disabled: bookmarksUnavailable || bookmarkPending,
             onSelect: () => changeBookmarks(kind, ids, !allBookmarked),
           },
-          ...(kind !== "artist"
+          ...(kind === "artist"
             ? [
+                {
+                  label: `Перенести треки${suffix}`,
+                  icon: <FolderInput size={16} />,
+                  onSelect: () => {
+                    setArtistMoveNames(ids);
+                    setModal("artist-folders");
+                  },
+                },
+              ]
+            : [
                 {
                   label: `Редактировать теги${suffix}`,
                   icon: <Tag size={16} />,
@@ -1081,8 +1098,7 @@ export function App() {
                       },
                     ]
                   : []),
-              ]
-            : []),
+              ]),
           ...(kind !== "artist"
             ? [
                 {
@@ -1202,6 +1218,18 @@ export function App() {
               }
             },
           },
+          {
+            label: "Перенести треки",
+            icon: <FolderInput size={16} />,
+            onSelect: () => {
+              const roots = [{ libraryId, relativePath: folder.relativePath }];
+              setFolderMoveRoots(roots);
+              setModalSelection({
+                filter: { ...emptyFilter, folders: roots },
+              });
+              setModal("move");
+            },
+          },
         ],
       });
     },
@@ -1270,7 +1298,11 @@ export function App() {
           cover,
         });
       } catch (error) {
-        notify(error instanceof Error ? error.message : "Не удалось обработать обложку");
+        notify(
+          error instanceof Error
+            ? error.message
+            : "Не удалось обработать обложку",
+        );
       }
     },
     [notify],
@@ -1675,6 +1707,7 @@ export function App() {
   const showPreview = (p: OperationPreview) => {
     setModal(null);
     setModalSelection(null);
+    setFolderMoveRoots(null);
     setPreview(p);
   };
   const resize = (
@@ -1937,9 +1970,7 @@ export function App() {
       ref={appShellRef}
       className={`app-shell fullscreen-window--${fullscreenWindowMode}${
         coverMode ? " app-shell--cover-mode" : ""
-      }${
-        isPortraitLayout ? " layout--portrait" : ""
-      }`}
+      }${isPortraitLayout ? " layout--portrait" : ""}`}
       style={fullscreenWindowStyle}
     >
       {isFullscreen && (
@@ -2659,11 +2690,28 @@ export function App() {
           selection={modalSelection || operationSelection}
           libraries={libraries.data || []}
           capabilities={capabilities}
+          folderRoots={folderMoveRoots || undefined}
           onClose={() => {
             setModal(null);
             setModalSelection(null);
+            setFolderMoveRoots(null);
           }}
           onPreview={showPreview}
+        />
+      )}
+      {modal === "artist-folders" && (
+        <ArtistFolderDialog
+          artists={artistMoveNames}
+          libraries={libraries.data || []}
+          onClose={() => {
+            setModal(null);
+            setArtistMoveNames([]);
+          }}
+          onContinue={(roots) => {
+            setFolderMoveRoots(roots);
+            setModalSelection({ filter: { ...emptyFilter, folders: roots } });
+            setModal("move");
+          }}
         />
       )}
       {modal === "history" && (

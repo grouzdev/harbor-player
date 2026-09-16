@@ -225,6 +225,13 @@ export async function createApp(options: {
       q.limit,
     );
   });
+  app.post("/api/artist-folders", async (request) => {
+    const body = z
+      .object({ artists: z.array(z.string()).min(1).max(500) })
+      .strict()
+      .parse(request.body);
+    return service.catalog.artistFolders([...new Set(body.artists)]);
+  });
   app.get("/api/quick-search", async (request) => {
     const query = quickSearchSchema.parse(request.query);
     return service.catalog.quickSearch(query.query, query.limit);
@@ -511,6 +518,17 @@ export async function createApp(options: {
           .optional(),
         coverTrackIds: z.array(z.string()).max(100000).optional(),
         companions: z.boolean().default(false),
+        folderRoots: z
+          .array(
+            z
+              .object({
+                libraryId: z.string().min(1).max(100),
+                relativePath: z.string().min(1).max(32000),
+              })
+              .strict(),
+          )
+          .max(10000)
+          .optional(),
       })
       .parse(request.body);
     if (body.patch?.cover && body.coverId)
@@ -548,6 +566,7 @@ export async function createApp(options: {
       body.companions,
       body.itemPatches,
       body.coverId ? body.coverTrackIds : undefined,
+      body.folderRoots,
     );
   });
   app.post("/api/operations/:id/execute", async (request) =>

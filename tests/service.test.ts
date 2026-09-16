@@ -825,6 +825,79 @@ describe("catalog and safe filesystem operations", () => {
     );
     expect(service.catalog.track(track.id)?.libraryId).toBe(dest.id);
   });
+  it("moves a selected folder as a complete tree and keeps indexed track IDs", async () => {
+    const source = await library("Folder source");
+    const track = tracks()[0];
+    const empty = path.join(source.path, "Album", "Empty");
+    await mkdir(empty);
+    await writeFile(path.join(source.path, "Album", "booklet.pdf"), "booklet");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const destinationPath = path.join(root, "Folder destination");
+    await mkdir(destinationPath);
+    const destination = (
+      await service.addLibrary("Folder destination", destinationPath)
+    ).library;
+    await service.idle();
+    const op = await service.preview(
+      "move",
+      {
+        filter: {
+          ...emptyFilter,
+          folders: [{ libraryId: source.id, relativePath: "Album" }],
+        },
+      },
+      destination.id,
+      undefined,
+      false,
+      {},
+      undefined,
+      [{ libraryId: source.id, relativePath: "Album" }],
+    );
+    expect(
+      op.items.some((item) => item.directory && item.source.endsWith("Empty")),
+    ).toBe(true);
+    expect(op.items.some((item) => item.source.endsWith("booklet.pdf"))).toBe(
+      true,
+    );
+    service.execute(op.id);
+    await service.idle();
+    expect(
+      service.catalog.operation(op.id).items.filter((item) => item.error),
+    ).toEqual([]);
+    expect(
+      existsSync(path.join(destination.path, "Album", "booklet.pdf")),
+    ).toBe(true);
+    expect(existsSync(path.join(destination.path, "Album", "Empty"))).toBe(
+      true,
+    );
+    expect(existsSync(path.join(source.path, "Album"))).toBe(false);
+    expect(service.catalog.track(track.id)?.libraryId).toBe(destination.id);
+  });
+  it("lists every source folder for an artist, including collaboration folders", async () => {
+    const lib = await library("Artist folders");
+    const first = tracks()[0];
+    const secondFile = path.join(lib.path, "Live", "track.flac");
+    await mkdir(path.dirname(secondFile), { recursive: true });
+    await copyFile(path.join(fixtures, "sample.flac"), secondFile);
+    service.catalog.upsert({
+      ...first,
+      id: "artist-live-track",
+      relativePath: path.join("Live", "track.flac"),
+      albumKey: "artist-live",
+      albumTitle: "Live",
+      artists: ["Artist", "Guest"],
+      albumArtists: ["Artist", "Guest"],
+    });
+    service.catalog.upsert({
+      ...first,
+      artists: ["Artist"],
+      albumArtists: ["Artist"],
+    });
+    expect(service.catalog.artistFolders(["Artist"])).toEqual([
+      { libraryId: lib.id, relativePath: "Album", trackCount: 1 },
+      { libraryId: lib.id, relativePath: "Live", trackCount: 1 },
+    ]);
+  });
   it("never overwrites a conflicting target and rejects changes made after preview", async () => {
     const a = await library("Downloads");
     const b = await library("Collection");

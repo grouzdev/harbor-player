@@ -6,6 +6,7 @@ import {
   copyFile,
   mkdir,
   readdir,
+  rmdir,
   realpath,
   stat,
   lstat,
@@ -31,6 +32,7 @@ import type {
   OperationKind,
   OperationPreview,
   Selection,
+  FolderMoveRoot,
   TagPatch,
   PerTrackTagPatch,
   Track,
@@ -402,14 +404,29 @@ export class MusicService extends EventEmitter {
     companions = false,
     itemPatches: Record<string, PerTrackTagPatch> = {},
     coverTrackIds?: string[],
+    folderRoots?: FolderMoveRoot[],
   ): Promise<OperationPreview> {
-    const tracks = this.catalog.selected(selection);
+    const tracks = folderRoots?.length
+      ? this.catalog.selected({
+          filter: {
+            libraryIds: [],
+            folders: folderRoots,
+            genres: [],
+            artists: [],
+            albumIds: [],
+            search: "",
+            bookmarksOnly: false,
+          },
+        })
+      : this.catalog.selected(selection);
     if (!tracks.length) throw new Error("Выберите треки");
     const target = targetLibraryId
       ? this.catalog.library(targetLibraryId)
       : undefined;
     if (kind === "move" && !target)
       throw new Error("Выберите целевую библиотеку");
+    if (folderRoots?.length && kind !== "move")
+      throw new Error("Папки можно переносить только в другую библиотеку");
     if (
       kind === "tags" &&
       (!patch || !Object.keys(patch).length) &&
@@ -437,7 +454,110 @@ export class MusicService extends EventEmitter {
     await mkdir(path.join(this.dataDir, "recovery", op.id), {
       recursive: true,
     });
+    const tracksBySource = new Map<string, Track>();
     for (const track of tracks) {
+      const library = this.catalog.library(track.libraryId);
+      tracksBySource.set(path.join(library.path, track.relativePath), track);
+    }
+    const normalizedRoots = (folderRoots || []).map((root) => ({
+      ...root,
+      relativePath: path.normalize(root.relativePath),
+    }));
+    if (folderRoots?.length) {
+      const seenRoots = new Set<string>();
+      for (const root of normalizedRoots) {
+        const library = this.catalog.library(root.libraryId);
+        if (
+          !library.available ||
+          !this.catalog.hasFolder(library.id, root.relativePath)
+        )
+          throw new Error("Выбранная папка больше недоступна");
+        if (library.id === target!.id)
+          throw new Error("Целевая библиотека совпадает с источником папки");
+        const key = `${library.id}\u0000${root.relativePath}`;
+        if (seenRoots.has(key)) throw new Error("Папка выбрана повторно");
+        seenRoots.add(key);
+      }
+      for (const root of normalizedRoots)
+        if (
+          normalizedRoots.some(
+            (parent) =>
+              parent !== root &&
+              parent.libraryId === root.libraryId &&
+              root.relativePath.startsWith(`${parent.relativePath}${path.sep}`),
+          )
+        )
+          throw new Error(
+            "Нельзя одновременно переносить папку и её вложенную папку",
+          );
+      const addFolder = async (libraryId: string, relativePath: string) => {
+        const library = this.catalog.library(libraryId);
+        const source = path.join(library.path, relativePath);
+        const destination = path.join(target!.path, relativePath);
+        await this.safePath(source);
+        const walk = async (directory: string, targetDirectory: string) => {
+          op.items.push({
+            id: randomUUID(),
+            trackId: null,
+            title: path.basename(directory),
+            source: directory,
+            destination: targetDirectory,
+            size: 0,
+            mtimeMs: 0,
+            hash: "",
+            phase: "preview",
+            directory: true,
+          });
+          for (const entry of await readdir(directory, {
+            withFileTypes: true,
+          })) {
+            const child = path.join(directory, entry.name);
+            const targetChild = path.join(targetDirectory, entry.name);
+            if (entry.isSymbolicLink())
+              throw new Error(
+                `Символическая ссылка не поддерживается: ${child}`,
+              );
+            if (entry.isDirectory()) await walk(child, targetChild);
+            else if (entry.isFile()) {
+              const track = tracksBySource.get(child);
+              const item: OperationItem = {
+                id: randomUUID(),
+                trackId: track?.id || null,
+                title: track?.title || entry.name,
+                source: child,
+                destination: targetChild,
+                size: track?.size || 0,
+                mtimeMs: track?.mtimeMs || 0,
+                hash: "",
+                phase: "preview",
+                companion: !track,
+              };
+              try {
+                await this.safePath(child);
+                await this.safePath(targetChild, true);
+                Object.assign(item, await this.fingerprint(child, "source"));
+                if (await exists(targetChild))
+                  throw new Error(
+                    "В целевой папке уже есть файл с таким именем",
+                  );
+              } catch (error) {
+                item.error = errorMessage(error);
+              }
+              op.items.push(item);
+            }
+          }
+        };
+        await walk(source, destination);
+      };
+      for (const root of normalizedRoots)
+        await addFolder(root.libraryId, root.relativePath);
+      op.items.sort(
+        (left, right) =>
+          Number(left.directory) - Number(right.directory) ||
+          right.source.length - left.source.length,
+      );
+    }
+    for (const track of folderRoots?.length ? [] : tracks) {
       const library = this.catalog.library(track.libraryId);
       const source = path.join(library.path, track.relativePath);
       const destination =
@@ -487,39 +607,46 @@ export class MusicService extends EventEmitter {
       op.items.push(item);
     }
     // Keep preview item order stable while using both hash workers.
-    for (let start = 0; start < tracks.length; start += 2)
-      await Promise.all(
-        tracks.slice(start, start + 2).map(async (track, offset) => {
-          const item = op.items[start + offset];
-          try {
-            await this.safePath(item.source);
-            const current = await stat(item.source);
-            if (current.size !== track.size)
-              throw new Error(
-                "Файл изменился извне. Сначала обновите библиотеку.",
-              );
-            if (kind === "tags") {
-              item.size = current.size;
-              item.mtimeMs = current.mtimeMs;
-            } else Object.assign(item, await this.fingerprint(item.source, "source"));
-            if (
-              kind === "tags" &&
-              Object.keys(this.effectiveTagPatch(op, item)).length > 0 &&
-              !this.capabilities.writableFormats.includes(track.format)
-            )
-              throw new Error(
-                `Запись ${track.format.toUpperCase()} не прошла проверку безопасности и отключена`,
-              );
-            if (kind === "move") {
-              await this.safePath(item.destination, true);
-              if (await exists(item.destination))
-                throw new Error("В целевой папке уже есть файл с таким именем");
+    if (!folderRoots?.length)
+      for (let start = 0; start < tracks.length; start += 2)
+        await Promise.all(
+          tracks.slice(start, start + 2).map(async (track, offset) => {
+            const item = op.items[start + offset];
+            try {
+              await this.safePath(item.source);
+              const current = await stat(item.source);
+              if (current.size !== track.size)
+                throw new Error(
+                  "Файл изменился извне. Сначала обновите библиотеку.",
+                );
+              if (kind === "tags") {
+                item.size = current.size;
+                item.mtimeMs = current.mtimeMs;
+              } else
+                Object.assign(
+                  item,
+                  await this.fingerprint(item.source, "source"),
+                );
+              if (
+                kind === "tags" &&
+                Object.keys(this.effectiveTagPatch(op, item)).length > 0 &&
+                !this.capabilities.writableFormats.includes(track.format)
+              )
+                throw new Error(
+                  `Запись ${track.format.toUpperCase()} не прошла проверку безопасности и отключена`,
+                );
+              if (kind === "move") {
+                await this.safePath(item.destination, true);
+                if (await exists(item.destination))
+                  throw new Error(
+                    "В целевой папке уже есть файл с таким именем",
+                  );
+              }
+            } catch (e) {
+              item.error = errorMessage(e);
             }
-          } catch (e) {
-            item.error = errorMessage(e);
-          }
-        }),
-      );
+          }),
+        );
     if (kind === "move" && companions) {
       const selectedIds = new Set(tracks.map((t) => t.id));
       const folders = new Set(op.items.map((i) => path.dirname(i.source)));
@@ -768,6 +895,18 @@ export class MusicService extends EventEmitter {
     op: OperationPreview,
     item: JournalItem,
   ): Promise<void> {
+    if (item.directory) {
+      await this.safePath(item.source);
+      await this.safePath(item.destination, true);
+      if (!(await stat(item.source)).isDirectory())
+        throw new Error("Исходная папка больше не существует");
+      if (await exists(item.destination)) {
+        if (!(await stat(item.destination)).isDirectory())
+          throw new Error("Целевой путь занят файлом");
+      } else await mkdir(item.destination, { recursive: true });
+      await rmdir(item.source);
+      return;
+    }
     const restoringTags =
       op.kind === "restore" &&
       this.catalog.operation(op.restoreOf!).kind === "tags";
@@ -862,7 +1001,7 @@ export class MusicService extends EventEmitter {
         if (
           restoringTags &&
           (await this.fingerprint(item.destination)).hash !==
-          item.restoreExpectedHash
+            item.restoreExpectedHash
         )
           throw new Error("Файл изменился перед восстановлением");
         const expectedBackup = restoringTags
@@ -929,21 +1068,32 @@ export class MusicService extends EventEmitter {
     const allowed = op.coverTrackIds ? new Set(op.coverTrackIds) : undefined;
     const folders = new Set(
       op.items
-        .filter((item) => item.trackId && (!allowed || allowed.has(item.trackId)))
+        .filter(
+          (item) => item.trackId && (!allowed || allowed.has(item.trackId)),
+        )
         .map((item) => path.dirname(item.source)),
     );
     for (const folder of folders) {
       if (op.patch.cover === null) {
-        for (const name of ["cover.jpg", "cover.png", "folder.jpg", "folder.png"])
-          await unlink(path.join(folder, name)).catch((error: NodeJS.ErrnoException) => {
-            if (error.code !== "ENOENT") throw error;
-          });
+        for (const name of [
+          "cover.jpg",
+          "cover.png",
+          "folder.jpg",
+          "folder.png",
+        ])
+          await unlink(path.join(folder, name)).catch(
+            (error: NodeJS.ErrnoException) => {
+              if (error.code !== "ENOENT") throw error;
+            },
+          );
         continue;
       }
       const ext = op.patch.cover.mime === "image/png" ? "png" : "jpg";
       const target = path.join(folder, `cover.${ext}`);
       const stage = path.join(folder, `.mymusiclib-cover-${op.id}.${ext}`);
-      await writeFile(stage, Buffer.from(op.patch.cover.data, "base64"), { flag: "wx" });
+      await writeFile(stage, Buffer.from(op.patch.cover.data, "base64"), {
+        flag: "wx",
+      });
       await rename(stage, target);
       const other = path.join(folder, `cover.${ext === "png" ? "jpg" : "png"}`);
       await unlink(other).catch((error: NodeJS.ErrnoException) => {

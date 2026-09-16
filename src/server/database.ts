@@ -4,6 +4,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type {
   Album,
+  ArtistFolder,
   BookmarkKind,
   CatalogBookmark,
   CatalogFilter,
@@ -191,6 +192,49 @@ export class Catalog {
           numeric: true,
           sensitivity: "base",
         }) || a.relativePath.localeCompare(b.relativePath),
+    );
+  }
+  artistFolders(artists: string[]): ArtistFolder[] {
+    const tracks = this.tracks(
+      {
+        libraryIds: [],
+        folders: [],
+        genres: [],
+        artists,
+        albumIds: [],
+        search: "",
+        bookmarksOnly: false,
+      },
+      0,
+      100000,
+    ).items;
+    const folders = new Map<string, ArtistFolder>();
+    for (const track of tracks) {
+      const relativePath = path.dirname(track.relativePath);
+      if (relativePath === ".") continue;
+      const key = `${track.libraryId}\u0000${relativePath}`;
+      const current = folders.get(key);
+      if (current) current.trackCount++;
+      else
+        folders.set(key, {
+          libraryId: track.libraryId,
+          relativePath,
+          trackCount: 1,
+        });
+    }
+    const ordered = [...folders.values()].sort(
+      (left, right) =>
+        left.libraryId.localeCompare(right.libraryId) ||
+        left.relativePath.localeCompare(right.relativePath),
+    );
+    return ordered.filter(
+      (folder) =>
+        !ordered.some(
+          (parent) =>
+            parent !== folder &&
+            parent.libraryId === folder.libraryId &&
+            folder.relativePath.startsWith(`${parent.relativePath}${path.sep}`),
+        ),
     );
   }
   hasFolder(libraryId: string, relativePath: string): boolean {

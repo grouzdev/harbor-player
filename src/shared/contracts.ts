@@ -14,6 +14,15 @@ export interface LibraryFolder {
   trackCount: number;
   hasChildren: boolean;
 }
+export interface ArtistFolder {
+  libraryId: string;
+  relativePath: string;
+  trackCount: number;
+}
+export interface FolderMoveRoot {
+  libraryId: string;
+  relativePath: string;
+}
 export interface Track {
   id: string;
   libraryId: string;
@@ -143,6 +152,7 @@ export interface OperationItem {
   error?: string;
   phase: "preview" | "prepared" | "copied" | "done" | "error" | "interrupted";
   companion?: boolean;
+  directory?: boolean;
   result?: string;
   before?: Partial<TagPatch>;
   patch?: PerTrackTagPatch;
