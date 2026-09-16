@@ -20,7 +20,7 @@ import path from "node:path";
 import { Catalog } from "./database.js";
 import { Workers } from "./workers.js";
 import { acquireInstanceLock } from "./instance-lock.js";
-import { writeTagsIsolated } from "./isolated-tag-writer.js";
+import { forkedTagWriter, type TagWriter } from "./isolated-tag-writer.js";
 import { writeId3InPlace } from "./in-place-id3.js";
 import { audioExtensions, errorMessage, inside } from "./config.js";
 import { readTrack } from "./metadata.js";
@@ -70,11 +70,13 @@ export class MusicService extends EventEmitter {
   private pending = Promise.resolve();
   private active = new Set<string>();
   private stopping = false;
+  private closePromise?: Promise<void>;
   capabilities: Capabilities = { writableFormats: [], verificationDate: null };
   closeStreams: (trackIds: string[]) => Promise<void> = async () => {};
   constructor(
     readonly dataDir: string,
     musicBrainzOptions: MusicBrainzOptions = {},
+    private readonly tagWriter: TagWriter = forkedTagWriter,
   ) {
     super();
     this.unlock = acquireInstanceLock(dataDir);
@@ -996,7 +998,7 @@ export class MusicService extends EventEmitter {
       await copyFile(item.source, stage, constants.COPYFILE_EXCL);
       try {
         if (op.kind === "tags")
-          await writeTagsIsolated(stage, this.effectiveTagPatch(op, item));
+          await this.tagWriter.write(stage, this.effectiveTagPatch(op, item));
         item.producedHash = (await this.fingerprint(stage, "stage")).hash;
         if (
           restoringTags &&
@@ -1146,15 +1148,21 @@ export class MusicService extends EventEmitter {
   async idle() {
     await this.pending;
   }
-  async close() {
-    if (this.stopping) return;
+  beginShutdown() {
     this.stopping = true;
-    try {
-      await this.pending;
-      await this.workers.close();
-      this.catalog.close();
-    } finally {
-      this.unlock();
-    }
+  }
+  async close() {
+    this.beginShutdown();
+    if (!this.closePromise)
+      this.closePromise = (async () => {
+        try {
+          await this.pending;
+          await this.workers.close();
+          this.catalog.close();
+        } finally {
+          this.unlock();
+        }
+      })();
+    await this.closePromise;
   }
 }

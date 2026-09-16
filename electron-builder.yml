@@ -1,0 +1,24 @@
+appId: com.grouzdev.mymusiclib
+productName: MyMusicLib
+electronDist: node_modules/electron/dist
+directories:
+  output: release
+  buildResources: assets
+files:
+  - dist/**/*
+  - verification/tag-support.json
+  - assets/icon.ico
+  - THIRD_PARTY_NOTICES.md
+asar: true
+asarUnpack:
+  - node_modules/better-sqlite3/**/*
+  - node_modules/sharp/**/*
+  - node_modules/@img/**/*
+npmRebuild: true
+afterPack: scripts/after-pack.cjs
+win:
+  icon: assets/icon.ico
+  target:
+    - target: dir
+      arch:
+        - x64

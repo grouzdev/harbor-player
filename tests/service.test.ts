@@ -19,6 +19,7 @@ import { readTrack } from "../dist/server/metadata.js";
 import { emptyFilter } from "../src/shared/contracts.js";
 import { compareArtistNames } from "../src/shared/artist-grouping.js";
 import { audioDigest } from "../src/server/audio-digest.js";
+import { writeTagsIsolated } from "../dist/server/isolated-tag-writer.js";
 import { parseFile } from "music-metadata";
 
 let root: string;
@@ -607,13 +608,7 @@ describe("catalog and safe filesystem operations", () => {
     ]);
 
     const read = (file: string, id: string) =>
-      readTrack(
-        file,
-        "descriptive-discs",
-        root,
-        id,
-        path.join(root, "data"),
-      );
+      readTrack(file, "descriptive-discs", root, id, path.join(root, "data"));
     const [firstDisc, secondDisc, bonusTrack] = await Promise.all([
       read(path.join(discOne, "01.mp3"), "disc-one"),
       read(path.join(discTwo, "01.mp3"), "disc-two"),
@@ -990,6 +985,45 @@ describe("catalog and safe filesystem operations", () => {
       service.catalog.operation(restore.id).items[0].error,
     ).toBeUndefined();
     expect(await readFile(file)).toEqual(bytes);
+  });
+  it("uses an injected tag writer without weakening the verified copy workflow", async () => {
+    await service.close();
+    const calls: { file: string; title: string | undefined }[] = [];
+    service = new MusicService(
+      path.join(root, "data"),
+      {},
+      {
+        async write(file, patch) {
+          calls.push({ file, title: patch.title });
+          await writeTagsIsolated(file, patch);
+        },
+      },
+    );
+    service.capabilities = {
+      writableFormats: ["mp3"],
+      verificationDate: new Date().toISOString(),
+    };
+    const lib = await library("Injected writer", "mp3");
+    const track = tracks()[0];
+    const operation = await service.preview(
+      "tags",
+      { trackIds: [track.id] },
+      undefined,
+      { title: "Injected writer title", genres: ["Injected"] },
+    );
+
+    service.execute(operation.id);
+    await service.idle();
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].title).toBe("Injected writer title");
+    expect(path.basename(calls[0].file)).toMatch(/^\.mymusiclib-/);
+    expect(service.catalog.track(track.id)?.title).toBe(
+      "Injected writer title",
+    );
+    expect(path.dirname(calls[0].file)).toBe(
+      path.dirname(path.join(lib.path, track.relativePath)),
+    );
   });
   it("applies a different safe tag patch to every selected track", async () => {
     const lib = await library("Per track", "flac");

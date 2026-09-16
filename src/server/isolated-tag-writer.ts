@@ -2,6 +2,10 @@ import { fork } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import type { TagPatch } from "../shared/contracts.js";
 
+export interface TagWriter {
+  write(file: string, patch: TagPatch): Promise<void>;
+}
+
 export async function writeTagsIsolated(
   file: string,
   patch: TagPatch,
@@ -43,3 +47,7 @@ export async function writeTagsIsolated(
     });
   });
 }
+
+export const forkedTagWriter: TagWriter = {
+  write: writeTagsIsolated,
+};

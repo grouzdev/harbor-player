@@ -20,6 +20,7 @@ import { errorMessage } from "./config.js";
 import { normalizeWebpCover } from "./cover-image.js";
 import { openInExplorer, type ExplorerLauncher } from "./explorer.js";
 import type { MusicBrainzOptions } from "./musicbrainz.js";
+import type { TagWriter } from "./isolated-tag-writer.js";
 
 const pageSchema = z.object({
   offset: z.coerce.number().int().min(0).max(100000).default(0),
@@ -62,22 +63,33 @@ export async function createApp(options: {
   logger?: boolean;
   openExplorer?: ExplorerLauncher;
   musicBrainz?: MusicBrainzOptions;
+  tagWriter?: TagWriter;
 }) {
   const app = Fastify({
     logger: options.logger || false,
     bodyLimit: 16 * 1024 * 1024,
     requestTimeout: 120000,
   });
-  const service = new MusicService(options.dataDir, options.musicBrainz);
+  const service = new MusicService(
+    options.dataDir,
+    options.musicBrainz,
+    options.tagWriter,
+  );
   const openExplorer = options.openExplorer || openInExplorer;
   await service.initialize();
-  const port = options.port || 4317;
+  const port = options.port ?? 4317;
   const hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
   if (options.dev) {
     hosts.add("127.0.0.1:5173");
     hosts.add("localhost:5173");
   }
   const origins = new Set([...hosts].map((host) => `http://${host}`));
+  const allowLocalPort = (localPort: number) => {
+    for (const host of [`127.0.0.1:${localPort}`, `localhost:${localPort}`]) {
+      hosts.add(host);
+      origins.add(`http://${host}`);
+    }
+  };
   const session = randomBytes(32).toString("hex");
   const csrf = randomBytes(32).toString("hex");
   const streams = new Map<string, Set<ReadStream>>();
@@ -644,5 +656,5 @@ export async function createApp(options: {
       for (const stream of list) stream.destroy();
     await service.close();
   });
-  return { app, service };
+  return { app, service, allowLocalPort };
 }
