@@ -421,13 +421,23 @@ export function Player({
             : "Локальное воспроизведение"}
         </span>
         <button
-          className={`icon-button ${player.shuffle ? "active" : ""}`}
-          aria-label="Перемешать"
-          aria-pressed={player.shuffle}
-          onClick={() => player.setShuffle(!player.shuffle)}
+          className="icon-button"
+          aria-label={player.volume ? "Выключить звук" : "Включить звук"}
+          onClick={() => player.setVolume(player.volume ? 0 : 0.7)}
         >
-          <Shuffle size={17} />
+          {player.volume ? <Volume2 size={18} /> : <VolumeX size={18} />}
         </button>
+        <div className="range-shell volume-range" style={volumeStyle}>
+          <input
+            aria-label="Громкость"
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={player.volume}
+            onChange={(e) => player.setVolume(Number(e.target.value))}
+          />
+        </div>
         <button
           className={`icon-button ${player.repeat !== "off" ? "active" : ""}`}
           aria-label={`Повтор: ${player.repeat === "off" ? "выключен" : player.repeat === "all" ? "вся очередь" : "один трек"}`}
@@ -448,23 +458,13 @@ export function Player({
           )}
         </button>
         <button
-          className="icon-button"
-          aria-label={player.volume ? "Выключить звук" : "Включить звук"}
-          onClick={() => player.setVolume(player.volume ? 0 : 0.7)}
+          className={`icon-button ${player.shuffle ? "active" : ""}`}
+          aria-label="Перемешать"
+          aria-pressed={player.shuffle}
+          onClick={() => player.setShuffle(!player.shuffle)}
         >
-          {player.volume ? <Volume2 size={18} /> : <VolumeX size={18} />}
+          <Shuffle size={17} />
         </button>
-        <div className="range-shell volume-range" style={volumeStyle}>
-          <input
-            aria-label="Громкость"
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={player.volume}
-            onChange={(e) => player.setVolume(Number(e.target.value))}
-          />
-        </div>
       </div>
     </footer>
   );

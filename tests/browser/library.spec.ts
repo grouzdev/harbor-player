@@ -511,6 +511,11 @@ test("player keeps volume visible and reflows progress below controls", async ({
       )!;
       const volumeRange = player.querySelector<HTMLElement>(".volume-range")!;
       const nowPlaying = player.querySelector<HTMLElement>(".now-playing")!;
+      const nowArtistLink = document.createElement("button");
+      nowArtistLink.className = "now-artist-link";
+      nowArtistLink.textContent = "Очень длинное имя исполнителя";
+      nowArtistLink.style.cssText = "position: fixed; visibility: hidden";
+      nowPlaying.append(nowArtistLink);
       const seekRange = player.querySelector<HTMLElement>(".seek-range")!;
       const playerRect = player.getBoundingClientRect();
       const transportRect = player
@@ -523,6 +528,7 @@ test("player keeps volume visible and reflows progress below controls", async ({
       const shuffleRect = shuffle.getBoundingClientRect();
       const repeatRect = repeat.getBoundingClientRect();
       const muteRect = mute.getBoundingClientRect();
+      const volumeRangeRect = volumeRange.getBoundingClientRect();
       return {
         playerHeight: player.getBoundingClientRect().height,
         panelCenter: playerRect.left + playerRect.width / 2,
@@ -536,23 +542,33 @@ test("player keeps volume visible and reflows progress below controls", async ({
         volumeBottom: volumeRect.bottom,
         nowPlayingBottom: nowPlayingRect.bottom,
         shuffleRight: shuffleRect.right,
+        shuffleLeft: shuffleRect.left,
         repeatRight: repeatRect.right,
+        repeatLeft: repeatRect.left,
         muteLeft: muteRect.left,
+        muteRight: muteRect.right,
+        volumeRangeLeft: volumeRangeRect.left,
+        volumeRangeRight: volumeRangeRect.right,
+        artistLinkStyle: getComputedStyle(nowArtistLink).textOverflow,
       };
     });
 
     expect(layout.volumeVisible, `${width}px volume`).toBe(true);
-    expect(layout.volumeRangeWidth, `${width}px volume range`).toBeGreaterThan(
-      0,
+    expect(layout.artistLinkStyle, `${width}px artist ellipsis`).toBe(
+      "ellipsis",
+    );
+    expect(layout.volumeRangeWidth, `${width}px volume range`).toBeGreaterThanOrEqual(
+      64,
     );
     expect(layout.transportCenter, `${width}px transport center`).toBeCloseTo(
       layout.panelCenter,
       1,
     );
-    expect(layout.shuffleRight).toBeLessThanOrEqual(layout.repeatRight);
-    expect(layout.repeatRight).toBeLessThanOrEqual(layout.muteLeft);
+    expect(layout.muteRight).toBeLessThanOrEqual(layout.volumeRangeLeft);
+    expect(layout.volumeRangeRight).toBeLessThanOrEqual(layout.repeatLeft);
+    expect(layout.repeatRight).toBeLessThanOrEqual(layout.shuffleLeft);
     if (expectTwoRows) {
-      expect(layout.playerHeight).toBe(108);
+      expect(layout.playerHeight).toBe(80);
       expect(layout.seekTop).toBeGreaterThanOrEqual(layout.buttonsBottom);
       expect(layout.volumeBottom).toBeLessThanOrEqual(layout.panelBottom);
       expect(layout.nowPlayingBottom).toBeLessThanOrEqual(layout.panelBottom);

@@ -979,6 +979,7 @@ body.selection-dragging * {
   box-shadow: 0 0 0 2px #bfdcb888;
 }
 .now-copy {
+  flex: 1 1 auto;
   min-width: 0;
 }
 .now-copy strong,
@@ -1011,12 +1012,22 @@ body.selection-dragging * {
   text-align: inherit;
   cursor: pointer;
 }
+.now-artist-link {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
 .now-track-link {
   width: 100%;
   text-align: left;
   margin-top: 7px;
 }
 .now-artists {
+  display: block;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -1061,8 +1072,8 @@ body.selection-dragging * {
   color: #bfdcb8;
 }
 .play-button {
-  width: 37px;
-  height: 37px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: var(--accent);
   color: #253a2d;
@@ -1127,8 +1138,8 @@ body.selection-dragging * {
   flex: 1 1 240px;
 }
 .volume-range {
-  width: clamp(48px, 6vw, 96px);
-  min-width: 48px;
+  width: clamp(64px, 7vw, 104px);
+  min-width: 64px;
   flex: 0 1 auto;
 }
 .queue-count {
@@ -1892,14 +1903,14 @@ body {
 
 @media (max-width: 999px) {
   .player {
-    height: 108px;
-    min-height: 108px;
+    height: 80px;
+    min-height: 80px;
     grid-template-areas: "now transport volume" "now transport volume";
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    grid-template-rows: 52px 24px;
+    grid-template-rows: 38px 20px;
     column-gap: 18px;
-    row-gap: 8px;
-    padding: 12px 18px;
+    row-gap: 4px;
+    padding: 8px 18px;
     align-items: stretch;
   }
   .now-playing {
@@ -1912,8 +1923,8 @@ body {
     grid-area: transport;
     display: grid;
     width: clamp(260px, 42vw, 420px);
-    grid-template-rows: 52px 24px;
-    gap: 8px;
+    grid-template-rows: 38px 20px;
+    gap: 4px;
     align-items: center;
   }
   .transport-buttons {
@@ -1929,7 +1940,7 @@ body {
 
 @media (max-width: 720px) {
   .player {
-    padding: 12px;
+    padding: 8px 12px;
     column-gap: 12px;
   }
   .transport {
@@ -1937,9 +1948,6 @@ body {
   }
   .volume {
     gap: 4px;
-  }
-  .volume-range {
-    min-width: 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {
