@@ -369,14 +369,6 @@ export function Player({
       <div className="transport">
         <div className="transport-buttons">
           <button
-            className={`icon-button ${player.shuffle ? "active" : ""}`}
-            aria-label="Перемешать"
-            aria-pressed={player.shuffle}
-            onClick={() => player.setShuffle(!player.shuffle)}
-          >
-            <Shuffle size={17} />
-          </button>
-          <button
             className="icon-button"
             aria-label="Предыдущий трек"
             disabled={!track}
@@ -404,25 +396,6 @@ export function Player({
           >
             <SkipForward size={20} fill="currentColor" />
           </button>
-          <button
-            className={`icon-button ${player.repeat !== "off" ? "active" : ""}`}
-            aria-label={`Повтор: ${player.repeat === "off" ? "выключен" : player.repeat === "all" ? "вся очередь" : "один трек"}`}
-            onClick={() =>
-              player.setRepeat(
-                player.repeat === "off"
-                  ? "all"
-                  : player.repeat === "all"
-                    ? "one"
-                    : "off",
-              )
-            }
-          >
-            {player.repeat === "one" ? (
-              <Repeat1 size={17} />
-            ) : (
-              <Repeat size={17} />
-            )}
-          </button>
         </div>
         <div className="seek">
           <span>{duration(player.position)}</span>
@@ -447,6 +420,33 @@ export function Player({
             ? `${player.queue.position + 1} / ${player.queue.total}`
             : "Локальное воспроизведение"}
         </span>
+        <button
+          className={`icon-button ${player.shuffle ? "active" : ""}`}
+          aria-label="Перемешать"
+          aria-pressed={player.shuffle}
+          onClick={() => player.setShuffle(!player.shuffle)}
+        >
+          <Shuffle size={17} />
+        </button>
+        <button
+          className={`icon-button ${player.repeat !== "off" ? "active" : ""}`}
+          aria-label={`Повтор: ${player.repeat === "off" ? "выключен" : player.repeat === "all" ? "вся очередь" : "один трек"}`}
+          onClick={() =>
+            player.setRepeat(
+              player.repeat === "off"
+                ? "all"
+                : player.repeat === "all"
+                  ? "one"
+                  : "off",
+            )
+          }
+        >
+          {player.repeat === "one" ? (
+            <Repeat1 size={17} />
+          ) : (
+            <Repeat size={17} />
+          )}
+        </button>
         <button
           className="icon-button"
           aria-label={player.volume ? "Выключить звук" : "Включить звук"}

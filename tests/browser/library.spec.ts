@@ -483,6 +483,88 @@ test("a single visible panel fills the workspace width", async ({ page }) => {
   }
 });
 
+test("player keeps volume visible and reflows progress below controls", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  const layouts: Array<{ width: number; seekRangeWidth: number }> = [];
+  for (const [width, expectTwoRows] of [
+    [1600, false],
+    [1000, false],
+    [999, true],
+    [720, true],
+  ] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    const layout = await page.locator(".player").evaluate((player) => {
+      const buttons = player.querySelector<HTMLElement>(".transport-buttons")!;
+      const seek = player.querySelector<HTMLElement>(".seek")!;
+      const volume = player.querySelector<HTMLElement>(".volume")!;
+      const shuffle = player.querySelector<HTMLElement>(
+        '[aria-label="Перемешать"]',
+      )!;
+      const repeat = player.querySelector<HTMLElement>(
+        '[aria-label^="Повтор:"]',
+      )!;
+      const mute = player.querySelector<HTMLElement>(
+        '[aria-label="Выключить звук"], [aria-label="Включить звук"]',
+      )!;
+      const volumeRange = player.querySelector<HTMLElement>(".volume-range")!;
+      const nowPlaying = player.querySelector<HTMLElement>(".now-playing")!;
+      const seekRange = player.querySelector<HTMLElement>(".seek-range")!;
+      const playerRect = player.getBoundingClientRect();
+      const transportRect = player
+        .querySelector<HTMLElement>(".transport")!
+        .getBoundingClientRect();
+      const volumeRect = volume.getBoundingClientRect();
+      const nowPlayingRect = nowPlaying.getBoundingClientRect();
+      const buttonsRect = buttons.getBoundingClientRect();
+      const seekRect = seek.getBoundingClientRect();
+      const shuffleRect = shuffle.getBoundingClientRect();
+      const repeatRect = repeat.getBoundingClientRect();
+      const muteRect = mute.getBoundingClientRect();
+      return {
+        playerHeight: player.getBoundingClientRect().height,
+        panelCenter: playerRect.left + playerRect.width / 2,
+        transportCenter: transportRect.left + transportRect.width / 2,
+        panelBottom: playerRect.bottom,
+        buttonsBottom: buttonsRect.bottom,
+        seekTop: seekRect.top,
+        seekRangeWidth: seekRange.getBoundingClientRect().width,
+        volumeVisible: getComputedStyle(volume).display !== "none",
+        volumeRangeWidth: volumeRange.getBoundingClientRect().width,
+        volumeBottom: volumeRect.bottom,
+        nowPlayingBottom: nowPlayingRect.bottom,
+        shuffleRight: shuffleRect.right,
+        repeatRight: repeatRect.right,
+        muteLeft: muteRect.left,
+      };
+    });
+
+    expect(layout.volumeVisible, `${width}px volume`).toBe(true);
+    expect(layout.volumeRangeWidth, `${width}px volume range`).toBeGreaterThan(
+      0,
+    );
+    expect(layout.transportCenter, `${width}px transport center`).toBeCloseTo(
+      layout.panelCenter,
+      1,
+    );
+    expect(layout.shuffleRight).toBeLessThanOrEqual(layout.repeatRight);
+    expect(layout.repeatRight).toBeLessThanOrEqual(layout.muteLeft);
+    if (expectTwoRows) {
+      expect(layout.playerHeight).toBe(108);
+      expect(layout.seekTop).toBeGreaterThanOrEqual(layout.buttonsBottom);
+      expect(layout.volumeBottom).toBeLessThanOrEqual(layout.panelBottom);
+      expect(layout.nowPlayingBottom).toBeLessThanOrEqual(layout.panelBottom);
+    } else {
+      expect(layout.playerHeight).toBe(72);
+      expect(layout.seekTop).toBeLessThan(layout.buttonsBottom);
+    }
+    layouts.push({ width, seekRangeWidth: layout.seekRangeWidth });
+  }
+  expect(layouts[0].seekRangeWidth).toBeGreaterThan(layouts[1].seekRangeWidth);
+});
+
 test("local library: readable UI, playback, tags, move, delete and restore", async ({
   page,
 }, info) => {
@@ -497,10 +579,6 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(page.locator(".brand, .page-heading")).toHaveCount(0);
   await expect(page.locator(".topbar")).toHaveCSS("height", "65px");
   await expect(page.locator(".player")).toHaveCSS("height", "72px");
-  await expect(page.getByLabel("Позиция воспроизведения")).toHaveCSS(
-    "width",
-    "240px",
-  );
   const rangeStyles = await page.locator(".seek-range").evaluate((shell) => {
     const styles = getComputedStyle(shell);
     return {
