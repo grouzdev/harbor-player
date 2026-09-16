@@ -84,6 +84,7 @@ import {
   ArtistFolderDialog,
 } from "./Dialogs";
 import { ListTile } from "./ListTile";
+import { buildTrackListRows } from "./track-grouping";
 import { resolveContextSelection, usePanelSelection } from "./panel-selection";
 import { selectionScrollAnchor } from "./selection-scroll";
 import {
@@ -3333,28 +3334,7 @@ function TrackList({
     [tracks],
   );
   const rows = useMemo(() => {
-    const result: (
-      | { type: "album"; track: Track; artists: string[] }
-      | { type: "track"; track: Track }
-    )[] = [];
-    for (let index = 0; index < tracks.length;) {
-      const albumTracks: Track[] = [];
-      const albumKey = tracks[index].albumKey;
-      while (index < tracks.length && tracks[index].albumKey === albumKey)
-        albumTracks.push(tracks[index++]);
-      const [track] = albumTracks;
-      const artists = [
-        ...new Set(
-          albumTracks.flatMap((item) =>
-            item.albumArtists.length ? item.albumArtists : item.artists,
-          ),
-        ),
-      ].sort((a, b) => a.localeCompare(b, "ru", { sensitivity: "base" }));
-      result.push({ type: "album", track, artists });
-      for (const item of albumTracks)
-        result.push({ type: "track", track: item });
-    }
-    return result;
+    return buildTrackListRows(tracks);
   }, [tracks]);
   const virtual = useVirtualizer({
     count: rows.length + (tracks.length < total ? 1 : 0),
@@ -3451,6 +3431,23 @@ function TrackList({
                   className="loading-row"
                 >
                   Загружаем…
+                </div>
+              );
+            if (entry.type === "disc")
+              return (
+                <div
+                  key={`disc-${entry.albumKey}-${row.index}`}
+                  className="track-disc-header"
+                  data-selection-ignore
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    width: "100%",
+                    height: row.size,
+                    transform: `translateY(${row.start}px)`,
+                  }}
+                >
+                  Диск {entry.discNumber}
                 </div>
               );
             const track = entry.track;
