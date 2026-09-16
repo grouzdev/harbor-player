@@ -499,6 +499,61 @@ describe("Album catalog sorting", () => {
       "beta-new",
     ]);
   });
+
+  it("sorts track-panel album groups by year and keeps tracks ordered inside each group", () => {
+    const library = context.service.catalog.addLibrary("Library", root);
+    const albums = [
+      { id: "beta-new", title: "Beta", year: 2025 },
+      { id: "alpha-new", title: "Alpha", year: 2025 },
+      { id: "old", title: "Old", year: 2020 },
+      { id: "undated", title: "Undated", year: null },
+    ];
+    for (const album of albums)
+      for (const trackNumber of [2, 1])
+        context.service.catalog.upsert({
+          id: `${album.id}-${trackNumber}`,
+          libraryId: library.id,
+          relativePath: `${album.id}-${trackNumber}.flac`,
+          title: `Track ${trackNumber}`,
+          artists: ["Artist"],
+          albumTitle: album.title,
+          albumArtists: ["Artist"],
+          albumKey: album.id,
+          genres: [],
+          year: album.year,
+          trackNumber,
+          discNumber: 1,
+          duration: 1,
+          format: "flac",
+          size: 1,
+          mtimeMs: 1,
+          coverId: null,
+          available: true,
+        });
+
+    const filter = {
+      libraryIds: [],
+      genres: [],
+      artists: [],
+      albumIds: [],
+      search: "",
+    };
+    const firstPage = context.service.catalog.tracks(filter, 0, 4);
+    const secondPage = context.service.catalog.tracks(filter, 4, 4);
+
+    expect(
+      [...firstPage.items, ...secondPage.items].map((track) => track.id),
+    ).toEqual([
+      "undated-1",
+      "undated-2",
+      "alpha-new-1",
+      "alpha-new-2",
+      "beta-new-1",
+      "beta-new-2",
+      "old-1",
+      "old-2",
+    ]);
+  });
 });
 
 describe("Explorer endpoint", () => {

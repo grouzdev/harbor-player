@@ -389,7 +389,7 @@ export class Catalog {
     ).n;
     const rows = this.db
       .prepare(
-        `SELECT t.* FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql} ORDER BY t.albumTitle COLLATE NOCASE, t.albumKey, coalesce(t.discNumber,0), coalesce(t.trackNumber,0), t.relativePath LIMIT ? OFFSET ?`,
+        `SELECT t.* FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql} ORDER BY t.year IS NOT NULL, t.year DESC, t.albumTitle COLLATE NOCASE, t.albumKey, coalesce(t.discNumber,0), coalesce(t.trackNumber,0), t.relativePath LIMIT ? OFFSET ?`,
       )
       .all(...args, limit, offset) as Row[];
     const formats = new Map<string, string[]>();
