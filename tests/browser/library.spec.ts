@@ -847,10 +847,16 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     "width",
     "40px",
   );
-  await expect(firstTrackAlbumHeader).toHaveCSS("height", "64px");
+  await expect(firstTrackAlbumHeader).toHaveCSS("height", "78px");
   await expect(firstTrackAlbumHeader.locator(":scope > svg")).toHaveCount(0);
-  await expect(firstTrackAlbumHeader.locator("small")).toContainText(
-    /^\d{4} · /,
+  await expect(firstTrackAlbumHeader.locator("small").first()).toHaveText(
+    "Исполнитель альбома",
+  );
+  await expect(firstTrackAlbumHeader.locator("strong")).toHaveText(
+    "Тестовый альбом",
+  );
+  await expect(firstTrackAlbumHeader.locator("small").last()).toContainText(
+    /^2024 · Ambient$/,
   );
   await firstTrackAlbumHeader.click();
   await expect(firstTrackAlbumHeader).toHaveClass(/selected/);
@@ -1467,6 +1473,9 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(
     nowPlaying.getByRole("button", { name: /Открыть альбом/ }),
   ).toBeVisible();
+  await expect(nowPlaying.locator(".now-copy")).evaluate((copy) =>
+    [...copy.children].map((child) => child.className),
+  ).toEqual(["now-artists", "now-track-link"]);
   await page.getByRole("button", { name: "Скрыть панель «Альбомы»" }).click();
   await expect(page.locator(".albums-panel")).toBeHidden();
   await nowPlaying.getByRole("button", { name: /Открыть альбом/ }).click();

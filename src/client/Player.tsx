@@ -311,18 +311,6 @@ export function Player({
         </button>
         <div className="now-copy">
           {track ? (
-            <button
-              type="button"
-              className="now-track-link"
-              aria-label={`Открыть альбом «${track.albumTitle || "Без альбома"}»`}
-              onClick={() => onNavigateToAlbum(track.albumKey, albumArtists)}
-            >
-              {track.title || "Без названия"}
-            </button>
-          ) : (
-            <strong>Ваша музыка — здесь</strong>
-          )}
-          {track ? (
             <span className="now-artists">
               {albumArtists.length ? (
                 albumArtists.map((artist, index) => (
@@ -349,6 +337,18 @@ export function Player({
                 </button>
               )}
             </span>
+          ) : (
+            <strong>Ваша музыка — здесь</strong>
+          )}
+          {track ? (
+            <button
+              type="button"
+              className="now-track-link"
+              aria-label={`Открыть альбом «${track.albumTitle || "Без альбома"}»`}
+              onClick={() => onNavigateToAlbum(track.albumKey, albumArtists)}
+            >
+              {track.title || "Без названия"}
+            </button>
           ) : (
             <span>Выберите трек для воспроизведения</span>
           )}

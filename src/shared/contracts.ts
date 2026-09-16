@@ -33,6 +33,8 @@ export interface Track {
   albumArtists: string[];
   albumKey: string;
   albumFormats?: string[];
+  /** Unique non-empty genres found across all available tracks of this album. */
+  albumGenres?: string[];
   genres: string[];
   year: number | null;
   trackNumber: number | null;

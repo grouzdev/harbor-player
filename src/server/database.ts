@@ -449,10 +449,29 @@ export class Catalog {
               .all(row.albumKey) as { format: string }[]
           ).map((r) => r.format),
         );
+    const albumIds = [...new Set(rows.map((row) => row.albumKey))];
+    const albumGenres = new Map<string, string[]>();
+    if (albumIds.length) {
+      const placeholders = albumIds.map(() => "?").join(",");
+      const genreRows = this.db
+        .prepare(
+          `SELECT DISTINCT t.albumKey id, g.genre
+           FROM track_genres g JOIN tracks t ON t.id=g.trackId
+           WHERE t.available=1 AND t.albumKey IN (${placeholders}) AND g.genre<>''`,
+        )
+        .all(...albumIds) as { id: string; genre: string }[];
+      for (const { id, genre } of genreRows)
+        albumGenres.set(id, [...(albumGenres.get(id) || []), genre]);
+      for (const genres of albumGenres.values())
+        genres.sort((left, right) =>
+          left.localeCompare(right, "ru", { sensitivity: "base" }),
+        );
+    }
     return {
       items: rows.map((r) => ({
         ...fromRow(r),
         albumFormats: formats.get(r.albumKey),
+        albumGenres: albumGenres.get(r.albumKey) || [],
       })),
       total,
       offset,

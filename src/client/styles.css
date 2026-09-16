@@ -995,7 +995,7 @@ body.selection-dragging * {
   display: block;
   font-size: var(--type-caption);
   color: #778f99;
-  margin-top: 7px;
+  margin-top: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1014,6 +1014,7 @@ body.selection-dragging * {
 .now-track-link {
   width: 100%;
   text-align: left;
+  margin-top: 7px;
 }
 .now-artists {
   overflow: hidden;

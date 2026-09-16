@@ -1,7 +1,7 @@
 import type { Track } from "../shared/contracts";
 
 export type TrackListRow =
-  | { type: "album"; track: Track; artists: string[] }
+  | { type: "album"; track: Track; artists: string[]; genres: string[] }
   | { type: "disc"; albumKey: string; discNumber: number }
   | { type: "track"; track: Track };
 
@@ -55,7 +55,12 @@ export function buildTrackListRows(tracks: Track[]): TrackListRow[] {
         ),
       ),
     ].sort((a, b) => a.localeCompare(b, "ru", { sensitivity: "base" }));
-    result.push({ type: "album", track, artists });
+    result.push({
+      type: "album",
+      track,
+      artists,
+      genres: track.albumGenres || [],
+    });
 
     const discs = splitAlbumTracks(albumTracks);
     const hasExplicitDiscNumbers =

@@ -120,6 +120,20 @@ describe("HTTP boundary", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ trackIds: ["included"] });
+    expect(
+      context.service.catalog
+        .tracks({
+          libraryIds: [],
+          folders: [],
+          genres: ["Rock"],
+          artists: [],
+          albumIds: [],
+          search: "",
+          bookmarksOnly: false,
+        })
+        .items.find((track) => track.albumKey === "selected-album")
+        ?.albumGenres,
+    ).toEqual(["Pop", "Rock"]);
   });
   it("removes a library only with CSRF and reports an unknown library", async () => {
     const library = context.service.catalog.addLibrary("Library", root);

@@ -3339,7 +3339,7 @@ function TrackList({
   const virtual = useVirtualizer({
     count: rows.length + (tracks.length < total ? 1 : 0),
     getScrollElement: () => ref.current,
-    estimateSize: (index) => (rows[index]?.type === "album" ? 64 : 36),
+    estimateSize: (index) => (rows[index]?.type === "album" ? 78 : 36),
     overscan: 8,
   });
   const visible = virtual.getVirtualItems();
@@ -3459,7 +3459,7 @@ function TrackList({
                 role="button"
                 tabIndex={-1}
                 aria-pressed={selectedAlbumId === track.albumKey}
-                aria-label={`Альбом «${track.albumTitle || "Без альбома"}»`}
+                aria-label={`Альбом «${track.albumTitle || "Без альбома"}»${entry.genres.length ? `. Жанры: ${entry.genres.join(", ")}` : ""}`}
                 onClick={() => void onSelectAlbum(track.albumKey)}
                 onContextMenu={(event) =>
                   onContextMenu(
@@ -3491,11 +3491,17 @@ function TrackList({
                   )}
                 </div>
                 <div>
-                  <strong>{track.albumTitle || "Без альбома"}</strong>
                   <small>
-                    {track.year ? `${track.year} · ` : ""}
                     {entry.artists.join(", ") || "Неизвестный исполнитель"}
                   </small>
+                  <strong>{track.albumTitle || "Без альбома"}</strong>
+                  {(track.year || entry.genres.length > 0) && (
+                    <small>
+                      {[track.year?.toString(), ...entry.genres]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </small>
+                  )}
                 </div>
                 <BookmarkToggle
                   kind="album"
