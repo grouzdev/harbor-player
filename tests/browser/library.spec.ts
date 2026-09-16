@@ -1908,6 +1908,15 @@ test("panel selection supports Shift ranges and bounded marquee drag", async ({
     await expect(
       page.locator(`${surfaceSelector} ${selectedSelector}`),
     ).toHaveCount(2);
+    const surfaceBox = await page.locator(surfaceSelector).boundingBox();
+    expect(surfaceBox).not.toBeNull();
+    await page.mouse.click(
+      surfaceBox!.x + surfaceBox!.width - 4,
+      surfaceBox!.y + surfaceBox!.height - 4,
+    );
+    await expect(
+      page.locator(`${surfaceSelector} ${selectedSelector}`),
+    ).toHaveCount(0);
     const reset = page.locator(`${surfaceSelector.split(" ")[0]} .facet-reset`);
     if (await reset.count()) await reset.click();
     if (surfaceSelector.includes("libraries")) await libraryTile.click();

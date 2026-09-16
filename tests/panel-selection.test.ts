@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addMarqueeSelection,
+  isEmptySelectionSurfaceClick,
   resolveContextSelection,
   resolveSelectionClick,
 } from "../src/client/panel-selection";
@@ -71,5 +72,22 @@ describe("panel selection", () => {
   it("keeps a context-menu target group only when the target is selected", () => {
     expect(resolveContextSelection(["a", "b"], "b")).toEqual(["a", "b"]);
     expect(resolveContextSelection(["a", "b"], "c")).toEqual(["c"]);
+  });
+
+  it("recognizes a click on empty panel space", () => {
+    const target = (matches: string[]) => ({
+      closest: (selector: string) =>
+        matches.includes(selector) ? ({} as Element) : null,
+    });
+
+    expect(isEmptySelectionSurfaceClick(target([]))).toBe(true);
+    expect(isEmptySelectionSurfaceClick(target(["[data-selection-key]"]))).toBe(
+      false,
+    );
+    expect(
+      isEmptySelectionSurfaceClick(
+        target(["button,a,input,textarea,select,[role=button]"]),
+      ),
+    ).toBe(false);
   });
 });

@@ -86,6 +86,19 @@ export function selectionKeysInDom(element: HTMLElement | null) {
     .filter((key): key is string => Boolean(key));
 }
 
+type SelectionClickTarget = Pick<Element, "closest">;
+
+export function isEmptySelectionSurfaceClick(
+  target: SelectionClickTarget | null,
+) {
+  if (!target) return false;
+  return (
+    !target.closest("[data-selection-key]") &&
+    !target.closest("[data-selection-ignore]") &&
+    !target.closest("button,a,input,textarea,select,[role=button]")
+  );
+}
+
 export function usePanelSelection({
   scrollRef,
   selectedKeys,
@@ -306,10 +319,18 @@ export function usePanelSelection({
   );
 
   const onClickCapture = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    if (!suppressClickRef.current) return;
+    if (suppressClickRef.current) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressClickRef.current = false;
+      return;
+    }
+
+    const target = event.target instanceof Element ? event.target : null;
+    if (!isEmptySelectionSurfaceClick(target)) return;
     event.preventDefault();
-    event.stopPropagation();
-    suppressClickRef.current = false;
+    anchorRef.current = null;
+    onChangeRef.current([]);
   }, []);
 
   const selectFromClick = useCallback(
