@@ -1590,6 +1590,17 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   await expect(currentTrack).toHaveClass(/selected/);
   await expect(libraryTile).toHaveClass(/playing/);
   await expect(libraryTile.locator(".list-tile-status-icon svg")).toBeVisible();
+  const currentAlbum = page.locator(".albums-panel .album-card.playing");
+  await expect(currentAlbum).toHaveCount(1);
+  await expect(currentAlbum.locator(".album-playing-icon")).toBeVisible();
+  await expect(currentAlbum.locator(".album-main > strong")).toHaveCSS(
+    "color",
+    "rgb(185, 212, 183)",
+  );
+  await expect(currentAlbum.locator(".album-cover")).toHaveCSS(
+    "border-top-color",
+    "rgb(185, 212, 183)",
+  );
   await expect
     .poll(() => page.locator(".genres-panel .list-tile.playing").count())
     .toBeGreaterThan(0);

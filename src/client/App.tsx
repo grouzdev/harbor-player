@@ -2393,6 +2393,7 @@ export function App() {
               albums={albumItems}
               total={albumTotal}
               selected={filter.albumIds}
+              currentAlbumId={currentPlayerTrack?.albumKey ?? null}
               onSelectionChange={(albumIds) =>
                 setFilter((f) => ({
                   ...f,
@@ -2887,6 +2888,7 @@ function AlbumGrid({
   albums,
   total,
   selected,
+  currentAlbumId,
   onSelectionChange,
   onMore,
   loading,
@@ -2903,6 +2905,7 @@ function AlbumGrid({
   albums: Album[];
   total: number;
   selected: string[];
+  currentAlbumId: string | null;
   onSelectionChange: (ids: string[]) => void;
   onMore: () => void;
   loading: boolean;
@@ -3097,7 +3100,7 @@ function AlbumGrid({
                   entry.albums.map((album) => (
                     <div
                       key={album.id}
-                      className={`album-card ${highlighted.has(album.id) ? "selected" : ""}`}
+                      className={`album-card ${highlighted.has(album.id) ? "selected" : ""} ${currentAlbumId === album.id ? "playing" : ""}`}
                       data-selection-key={album.id}
                       title={`${album.title || "Без альбома"} · ${album.artists.join(", ")}`}
                       onContextMenu={(event) => {
@@ -3198,7 +3201,17 @@ function AlbumGrid({
                             </span>
                           )}
                         </div>
-                        <strong>{album.title || "Без альбома"}</strong>
+                        <strong>
+                          {currentAlbumId === album.id && (
+                            <Play
+                              className="album-playing-icon"
+                              size={13}
+                              fill="currentColor"
+                              aria-hidden="true"
+                            />
+                          )}
+                          <span>{album.title || "Без альбома"}</span>
+                        </strong>
                         <span className="album-details">
                           <small>{album.year || ""}</small>
                         </span>

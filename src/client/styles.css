@@ -646,14 +646,23 @@ body.selection-dragging * {
   text-align: center;
 }
 .album-main > strong {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 5px;
   color: #c5cdd1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   font-size: var(--type-caption);
   font-weight: 500;
   margin: 10px 2px 5px;
+}
+.album-main > strong > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.album-card.playing .album-main > strong {
+  color: #b9d4b7;
+  text-shadow: 0 0 6px #b9d4b766;
 }
 .album-details {
   display: flex;
@@ -2772,6 +2781,14 @@ select {
   border-color: #c6ca91;
   box-shadow:
     0 0 0 1px #c7ca9233,
+    0 8px 20px #02020278,
+    0 1px #efefdf18 inset;
+}
+.album-card.playing .album-cover,
+.album-card.playing.selected .album-cover {
+  border-color: #b9d4b7;
+  box-shadow:
+    0 0 0 1px #b9d4b733,
     0 8px 20px #02020278,
     0 1px #efefdf18 inset;
 }
