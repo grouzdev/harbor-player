@@ -21,6 +21,7 @@ import {
   ChevronRight,
   Clock3,
   Copy,
+  DiscAlbum,
   Disc3,
   FolderOpen,
   FolderInput,
@@ -35,6 +36,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  SquareLibrary,
   Tag,
   Trash2,
   X,
@@ -2017,52 +2019,73 @@ export function App() {
             )}
           </label>
         )}
-        <button
-          className={`icon-button bookmarks-button ${filter.bookmarksOnly ? "active" : ""} ${bookmarks.isError ? "error" : ""}`}
-          aria-label={
-            bookmarks.isError
-              ? "Не удалось загрузить закладки. Повторить"
-              : filter.bookmarksOnly
-                ? "Отключить фильтр закладок"
-                : "Показать музыку из закладок"
-          }
-          aria-pressed={filter.bookmarksOnly}
-          title={
-            bookmarks.isError
-              ? "Не удалось загрузить закладки. Нажмите, чтобы повторить"
-              : filter.bookmarksOnly
-                ? "Отключить фильтр закладок"
-                : "Показать музыку из закладок"
-          }
-          disabled={bookmarks.isFetching || pendingBookmarkKeys.size > 0}
-          onClick={() => {
-            if (bookmarks.isError) {
-              void bookmarks.refetch();
-              return;
+        {!coverMode && (
+          <button
+            className={`icon-button bookmarks-button ${filter.bookmarksOnly ? "active" : ""} ${bookmarks.isError ? "error" : ""}`}
+            aria-label={
+              bookmarks.isError
+                ? "Не удалось загрузить закладки. Повторить"
+                : filter.bookmarksOnly
+                  ? "Отключить фильтр закладок"
+                  : "Показать музыку из закладок"
             }
-            setFilter((current) => ({
-              ...current,
-              bookmarksOnly: !current.bookmarksOnly,
-            }));
+            aria-pressed={filter.bookmarksOnly}
+            title={
+              bookmarks.isError
+                ? "Не удалось загрузить закладки. Нажмите, чтобы повторить"
+                : filter.bookmarksOnly
+                  ? "Отключить фильтр закладок"
+                  : "Показать музыку из закладок"
+            }
+            disabled={bookmarks.isFetching || pendingBookmarkKeys.size > 0}
+            onClick={() => {
+              if (bookmarks.isError) {
+                void bookmarks.refetch();
+                return;
+              }
+              setFilter((current) => ({
+                ...current,
+                bookmarksOnly: !current.bookmarksOnly,
+              }));
+            }}
+          >
+            {bookmarks.isFetching || pendingBookmarkKeys.size > 0 ? (
+              <RefreshCw size={18} className="spinning" />
+            ) : (
+              <BookmarkIcon
+                size={19}
+                fill={filter.bookmarksOnly ? "currentColor" : "none"}
+              />
+            )}
+            <span>Закладки</span>
+          </button>
+        )}
+        {!coverMode && (
+          <button
+            className="icon-button history-button"
+            aria-label="Журнал операций"
+            title="Журнал операций"
+            onClick={() => setModal("history")}
+          >
+            <History size={21} />
+          </button>
+        )}
+        <button
+          type="button"
+          className="icon-button cover-mode-toggle"
+          aria-label={
+            coverMode ? "Вернуться в каталог" : "Открыть режим обложки"
+          }
+          aria-pressed={coverMode}
+          title={coverMode ? "Вернуться в каталог" : "Открыть режим обложки"}
+          disabled={!player.queue?.track}
+          onClick={() => {
+            if (!player.queue?.track) return;
+            setQuickSearchOpen(false);
+            setCoverMode((current) => !current);
           }}
         >
-          {bookmarks.isFetching || pendingBookmarkKeys.size > 0 ? (
-            <RefreshCw size={18} className="spinning" />
-          ) : (
-            <BookmarkIcon
-              size={19}
-              fill={filter.bookmarksOnly ? "currentColor" : "none"}
-            />
-          )}
-          <span>Закладки</span>
-        </button>
-        <button
-          className="icon-button history-button"
-          aria-label="Журнал операций"
-          title="Журнал операций"
-          onClick={() => setModal("history")}
-        >
-          <History size={21} />
+          {coverMode ? <SquareLibrary size={21} /> : <DiscAlbum size={21} />}
         </button>
         <button
           type="button"

@@ -1603,7 +1603,7 @@ test("cover mode shows the album, artwork and quick playback search", async ({
       .locator(".list-tile-status-icon svg"),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Открыть режим обложки" }).click();
+  await page.locator(".cover-mode-toggle").click();
   const coverMode = page.getByRole("main", { name: "Режим обложки" });
   await expect(coverMode).toBeVisible();
   await expect(page.locator(".workspace")).toBeHidden();
@@ -1611,6 +1611,14 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   await expect(page.locator(".panel-visibility-controls")).toHaveCount(0);
   await expect(page.locator(".topbar")).toBeVisible();
   await expect(page.locator(".player")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Показать музыку из закладок" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Журнал операций" }),
+  ).toHaveCount(0);
+  await expect(page.locator(".cover-mode-toggle")).toBeVisible();
+  await expect(coverMode).toHaveCSS("background-image", /bg_lounge/);
   await expect(coverMode.getByRole("heading", { level: 1 })).toContainText(
     "Первый трек",
   );
@@ -1660,10 +1668,10 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     .getByRole("button", { name: "Открыть обложку в оригинальном размере" })
     .click();
   const artworkViewer = page.getByRole("dialog", {
-    name: "Обложка в оригинальном размере",
+    name: "Просмотр обложки",
   });
   await expect(artworkViewer).toBeVisible();
-  await expect(artworkViewer.locator("img")).toHaveClass(/original/);
+  await expect(artworkViewer.locator("img")).toHaveClass(/fit/);
   await expect(artworkViewer.locator("img")).not.toHaveClass(/zoomable/);
   await page.keyboard.press("Escape");
   await expect(artworkViewer).not.toBeVisible();
@@ -1674,24 +1682,24 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     .click();
   await expect(artworkViewer.locator("img")).toHaveClass(/zoomable/);
   await artworkViewer.locator("img").click();
+  await expect(artworkViewer.locator("img")).toHaveClass(/original/);
+  await artworkViewer.locator(".artwork-viewer-scroll").click({
+    position: { x: 4, y: 4 },
+  });
   await expect(artworkViewer.locator("img")).toHaveClass(/fit/);
   await artworkViewer.locator("img").click();
   await expect(artworkViewer.locator("img")).toHaveClass(/original/);
   await page.keyboard.press("Escape");
   await page.setViewportSize({ width: 1600, height: 1000 });
 
-  await page
-    .getByRole("button", { name: "Вернуться в каталог" })
-    .filter({ visible: true })
-    .first()
-    .click();
+  await page.locator(".cover-mode-toggle").click();
   await expect(coverMode).not.toBeVisible();
   await expect(page.locator(".workspace")).toBeVisible();
   await expect(page.locator(".panel-visibility-controls")).toBeVisible();
   await expect(libraryTile).toHaveClass(/selected/);
 
-  await page.getByRole("button", { name: "Открыть режим обложки" }).click();
-  await coverMode.getByRole("button", { name: "Вернуться в каталог" }).click();
+  await page.locator(".cover-mode-toggle").click();
+  await page.locator(".cover-mode-toggle").click();
   await expect(coverMode).not.toBeVisible();
 });
 

@@ -69,14 +69,6 @@ export function CoverMode({
         if (event.key === "Escape") onClose();
       }}
     >
-      <button
-        className="icon-button cover-mode-close"
-        aria-label="Вернуться в каталог"
-        title="Вернуться в каталог"
-        onClick={onClose}
-      >
-        <X size={24} />
-      </button>
       <div className="cover-mode-layout">
         <button
           type="button"
@@ -195,11 +187,9 @@ function ArtworkViewer({
   alt: string;
   onClose: () => void;
 }) {
-  const [fit, setFit] = useState(false);
+  const [fit, setFit] = useState(true);
   const [canFit, setCanFit] = useState(false);
-  const closeRef = useRef<HTMLButtonElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
-  useEffect(() => closeRef.current?.focus(), []);
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -224,21 +214,18 @@ function ArtworkViewer({
       className="artwork-viewer"
       role="dialog"
       aria-modal="true"
-      aria-label="Обложка в оригинальном размере"
+      aria-label="Просмотр обложки"
       onKeyDown={(event) => {
         event.stopPropagation();
         if (event.key === "Escape") onClose();
       }}
     >
-      <button
-        ref={closeRef}
-        className="icon-button artwork-viewer-close"
-        aria-label="Закрыть обложку"
-        onClick={onClose}
+      <div
+        className="artwork-viewer-scroll"
+        onClick={(event) => {
+          if (!fit && event.target === event.currentTarget) setFit(true);
+        }}
       >
-        <X size={26} />
-      </button>
-      <div className="artwork-viewer-scroll">
         <img
           ref={imageRef}
           className={`${fit ? "fit" : "original"} ${canFit ? "zoomable" : ""}`}

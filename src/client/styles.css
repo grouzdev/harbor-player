@@ -2087,23 +2087,17 @@ body {
   border-color: #ffffff22;
   background: #171e22;
 }
+.app-shell--cover-mode .cover-mode-toggle {
+  margin-left: auto;
+}
 .cover-mode {
   position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;
   background:
-    radial-gradient(circle at 34% 45%, #29342d36 0, transparent 34%), #090c0e;
-}
-.cover-mode-close {
-  position: fixed;
-  z-index: 3;
-  top: 83px;
-  right: 22px;
-  margin: 0;
-  color: #a8b1b5;
-  background: #151b20cc;
-  backdrop-filter: blur(8px);
+    linear-gradient(135deg, #000000b8 0%, #000000c9 52%, #000000d9 100%),
+    url("../../assets/bg_lounge.jpg") center / cover;
 }
 .cover-mode-layout {
   width: min(1100px, calc(100% - 96px));
@@ -2224,14 +2218,6 @@ body {
   z-index: 100;
   inset: 0;
   background: #050708f7;
-}
-.artwork-viewer-close {
-  position: fixed;
-  z-index: 2;
-  top: 20px;
-  right: 22px;
-  color: #dce3df;
-  background: #171d21dd;
 }
 .artwork-viewer-scroll {
   width: 100%;
@@ -2508,17 +2494,6 @@ html:fullscreen .app-shell {
 
 html:fullscreen .app-shell.app-shell--cover-mode {
   background: transparent;
-}
-
-html:fullscreen .app-shell.app-shell--cover-mode .cover-mode {
-  background: linear-gradient(
-    135deg,
-    #000000b8 0%,
-    #000000c9 52%,
-    #000000d9 100%
-  );
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
 }
 
 html:fullscreen .app-shell.fullscreen-window--default {
