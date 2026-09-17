@@ -219,6 +219,11 @@ type FullscreenWindowBounds = {
 };
 
 type FullscreenWindowMode = "default" | "custom" | "maximized";
+type SavedFullscreenWindowMode = Exclude<FullscreenWindowMode, "default">;
+type FullscreenWindowState = {
+  mode: SavedFullscreenWindowMode;
+  bounds: FullscreenWindowBounds;
+};
 type FullscreenResizeEdge = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
 
 const fullscreenWindowStorageKey = "mml-fullscreen-window-v1";
@@ -252,16 +257,26 @@ function fitFullscreenWindowBounds(
   };
 }
 
-function readFullscreenWindowBounds(): FullscreenWindowBounds | null {
+function readFullscreenWindowState(): FullscreenWindowState | null {
   try {
     const value = JSON.parse(
       localStorage.getItem(fullscreenWindowStorageKey) || "null",
     );
-    return value &&
-      [value.x, value.y, value.width, value.height].every(
+    const isBounds = (bounds: unknown): bounds is FullscreenWindowBounds =>
+      !!bounds &&
+      typeof bounds === "object" &&
+      [
+        (bounds as FullscreenWindowBounds).x,
+        (bounds as FullscreenWindowBounds).y,
+        (bounds as FullscreenWindowBounds).width,
+        (bounds as FullscreenWindowBounds).height,
+      ].every(
         (number) => typeof number === "number" && Number.isFinite(number),
-      )
-      ? value
+      );
+    if (isBounds(value)) return { mode: "custom", bounds: value };
+    if (value?.mode !== "custom" && value?.mode !== "maximized") return null;
+    return isBounds(value.bounds)
+      ? { mode: value.mode, bounds: value.bounds }
       : null;
   } catch {
     return null;
@@ -540,6 +555,16 @@ export function App() {
     applyAppearance(next);
     setAppearance(next);
   }, []);
+  const saveFullscreenWindowState = useCallback(
+    (state: FullscreenWindowState) => {
+      try {
+        localStorage.setItem(fullscreenWindowStorageKey, JSON.stringify(state));
+      } catch {
+        // Geometry remains usable for the current fullscreen session.
+      }
+    },
+    [],
+  );
   useEffect(() => {
     if (!ready) return;
     void api<AppearanceSettings>("/appearance")
@@ -562,21 +587,39 @@ export function App() {
       window.requestAnimationFrame(() => {
         const room =
           appShellRef.current?.parentElement?.getBoundingClientRect();
-        const savedBounds = readFullscreenWindowBounds();
-        if (!room || !savedBounds) {
+        if (!room) {
           setFullscreenWindowMode("default");
           return;
         }
-        setFullscreenWindowBounds(
-          fitFullscreenWindowBounds(savedBounds, room.width, room.height),
+        const saved = readFullscreenWindowState();
+        if (saved) {
+          setFullscreenWindowBounds(
+            fitFullscreenWindowBounds(saved.bounds, room.width, room.height),
+          );
+          setFullscreenWindowMode(saved.mode);
+          return;
+        }
+        const shell = appShellRef.current?.getBoundingClientRect();
+        if (!shell) return;
+        const bounds = fitFullscreenWindowBounds(
+          {
+            x: shell.left - room.left,
+            y: shell.top - room.top,
+            width: shell.width,
+            height: shell.height,
+          },
+          room.width,
+          room.height,
         );
+        saveFullscreenWindowState({ mode: "custom", bounds });
+        setFullscreenWindowBounds(bounds);
         setFullscreenWindowMode("custom");
       });
     };
     document.addEventListener("fullscreenchange", syncFullscreen);
     return () =>
       document.removeEventListener("fullscreenchange", syncFullscreen);
-  }, []);
+  }, [saveFullscreenWindowState]);
   const toggleFullscreen = useCallback(() => {
     if (document.fullscreenElement === document.documentElement) {
       void document.exitFullscreen();
@@ -603,19 +646,6 @@ export function App() {
       room.height,
     );
   }, [getFullscreenRoom]);
-  const saveFullscreenWindowBounds = useCallback(
-    (bounds: FullscreenWindowBounds) => {
-      try {
-        localStorage.setItem(
-          fullscreenWindowStorageKey,
-          JSON.stringify(bounds),
-        );
-      } catch {
-        // Geometry remains usable for the current fullscreen session.
-      }
-    },
-    [],
-  );
   const beginFullscreenWindowMove = useCallback(
     (event: React.PointerEvent<HTMLElement>) => {
       if (!isFullscreen || event.button !== 0) return;
@@ -654,7 +684,8 @@ export function App() {
         window.removeEventListener("pointerup", stop);
         if (!moved) return;
         setFullscreenWindowBounds((current) => {
-          if (current) saveFullscreenWindowBounds(current);
+          if (current)
+            saveFullscreenWindowState({ mode: "custom", bounds: current });
           return current;
         });
       };
@@ -665,7 +696,7 @@ export function App() {
       getCurrentFullscreenBounds,
       getFullscreenRoom,
       isFullscreen,
-      saveFullscreenWindowBounds,
+      saveFullscreenWindowState,
     ],
   );
   const beginFullscreenWindowResize = useCallback(
@@ -715,7 +746,8 @@ export function App() {
         window.removeEventListener("pointerup", stop);
         if (!moved) return;
         setFullscreenWindowBounds((current) => {
-          if (current) saveFullscreenWindowBounds(current);
+          if (current)
+            saveFullscreenWindowState({ mode: "custom", bounds: current });
           return current;
         });
       };
@@ -726,7 +758,7 @@ export function App() {
       getCurrentFullscreenBounds,
       getFullscreenRoom,
       isFullscreen,
-      saveFullscreenWindowBounds,
+      saveFullscreenWindowState,
     ],
   );
   const toggleFullscreenWindowSize = useCallback(
@@ -739,30 +771,23 @@ export function App() {
         )
       )
         return;
+      const bounds = fullscreenWindowBounds || getCurrentFullscreenBounds();
+      if (!bounds) return;
       if (fullscreenWindowMode === "maximized") {
-        setFullscreenWindowMode("default");
+        setFullscreenWindowBounds(bounds);
+        setFullscreenWindowMode("custom");
+        saveFullscreenWindowState({ mode: "custom", bounds });
         return;
       }
-      const room = getFullscreenRoom();
-      const bounds = getCurrentFullscreenBounds();
-      const hasDefaultGeometry =
-        !!room &&
-        !!bounds &&
-        Math.abs(bounds.x) < 1 &&
-        Math.abs(bounds.y) < 1 &&
-        Math.abs(bounds.width - room.width) < 1 &&
-        Math.abs(bounds.height - room.height) < 1;
-      if (fullscreenWindowMode === "default" || hasDefaultGeometry) {
-        setFullscreenWindowMode("maximized");
-        return;
-      }
-      setFullscreenWindowMode("default");
+      setFullscreenWindowMode("maximized");
+      saveFullscreenWindowState({ mode: "maximized", bounds });
     },
     [
       fullscreenWindowMode,
+      fullscreenWindowBounds,
       getCurrentFullscreenBounds,
-      getFullscreenRoom,
       isFullscreen,
+      saveFullscreenWindowState,
     ],
   );
   useEffect(() => {
@@ -777,7 +802,6 @@ export function App() {
           room.width,
           room.height,
         );
-        saveFullscreenWindowBounds(next);
         return next;
       });
     };
@@ -787,7 +811,6 @@ export function App() {
     fullscreenWindowMode,
     getFullscreenRoom,
     isFullscreen,
-    saveFullscreenWindowBounds,
   ]);
   const setPanelVisible = useCallback((id: PanelId, visible: boolean) => {
     setPanelVisibility((current) => {

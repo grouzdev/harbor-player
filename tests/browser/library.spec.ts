@@ -105,14 +105,17 @@ test("fullscreen button changes the application shell", async ({ page }) => {
   expect(moved!.x).toBeGreaterThan(resized!.x + 20);
 
   await topbar.dblclick({ position: { x: 20, y: 30 } });
-  await expect(page.locator(".app-shell")).toHaveCSS("border-radius", "14px");
-
-  await topbar.dblclick({ position: { x: 20, y: 30 } });
   await expect(page.locator(".app-shell")).toHaveCSS("border-radius", "0px");
   await expect(page.locator(".fullscreen-window-resize").first()).toBeHidden();
 
   await topbar.dblclick({ position: { x: 20, y: 30 } });
   await expect(page.locator(".app-shell")).toHaveCSS("border-radius", "14px");
+  const restoredAfterMaximize = await page.locator(".app-shell").boundingBox();
+  expect(restoredAfterMaximize).not.toBeNull();
+  expect(restoredAfterMaximize!.x).toBeCloseTo(moved!.x, 0);
+  expect(restoredAfterMaximize!.y).toBeCloseTo(moved!.y, 0);
+  expect(restoredAfterMaximize!.width).toBeCloseTo(moved!.width, 0);
+  expect(restoredAfterMaximize!.height).toBeCloseTo(moved!.height, 0);
 
   await page
     .getByRole("button", { name: "Свернуть окно из полноэкранного режима" })
@@ -132,7 +135,100 @@ test("fullscreen button changes the application shell", async ({ page }) => {
   );
   const restored = await page.locator(".app-shell").boundingBox();
   expect(restored).not.toBeNull();
+  expect(restored!.x).toBeCloseTo(moved!.x, 0);
+  expect(restored!.y).toBeCloseTo(moved!.y, 0);
   expect(restored!.width).toBeCloseTo(moved!.width, 0);
+  expect(restored!.height).toBeCloseTo(moved!.height, 0);
+
+  await topbar.dblclick({ position: { x: 20, y: 30 } });
+  await page
+    .getByRole("button", { name: "Свернуть окно из полноэкранного режима" })
+    .click();
+  await page
+    .getByRole("button", { name: "Развернуть окно на весь экран" })
+    .click();
+  await expect(page.locator(".app-shell")).toHaveClass(
+    /fullscreen-window--maximized/,
+  );
+  await topbar.dblclick({ position: { x: 20, y: 30 } });
+  const restoredFromSavedMaximize = await page.locator(".app-shell").boundingBox();
+  expect(restoredFromSavedMaximize).not.toBeNull();
+  expect(restoredFromSavedMaximize!.x).toBeCloseTo(moved!.x, 0);
+  expect(restoredFromSavedMaximize!.y).toBeCloseTo(moved!.y, 0);
+  expect(restoredFromSavedMaximize!.width).toBeCloseTo(moved!.width, 0);
+  expect(restoredFromSavedMaximize!.height).toBeCloseTo(moved!.height, 0);
+});
+
+test("fullscreen restores legacy saved window bounds", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => {
+    localStorage.setItem(
+      "mml-fullscreen-window-v1",
+      JSON.stringify({ x: 74, y: 58, width: 860, height: 640 }),
+    );
+  });
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Развернуть окно на весь экран" })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => Boolean(document.fullscreenElement)))
+    .toBe(true);
+  await expect(page.locator(".app-shell")).toHaveClass(
+    /fullscreen-window--custom/,
+  );
+  const restored = await page.locator(".app-shell").boundingBox();
+  expect(restored).not.toBeNull();
+  expect(restored!.x).toBeCloseTo(74, 0);
+  expect(restored!.y).toBeCloseTo(58, 0);
+  expect(restored!.width).toBeCloseTo(860, 0);
+  expect(restored!.height).toBeCloseTo(640, 0);
+});
+
+test("fullscreen resize transitions do not overwrite saved window bounds", async ({
+  page,
+}) => {
+  const savedState = JSON.stringify({
+    mode: "custom",
+    bounds: { x: 160, y: 0, width: 1440, height: 1000 },
+  });
+  await page.goto("/");
+  await page.evaluate((state) => {
+    localStorage.setItem("mml-fullscreen-window-v1", state);
+  }, savedState);
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Развернуть окно на весь экран" })
+    .click();
+  await expect(page.locator(".app-shell")).toHaveClass(
+    /fullscreen-window--custom/,
+  );
+
+  await page.evaluate(() => {
+    document.getElementById("root")!.style.height = "700px";
+    window.dispatchEvent(new Event("resize"));
+  });
+  await page.waitForTimeout(50);
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("mml-fullscreen-window-v1")))
+    .toBe(savedState);
+
+  await page
+    .getByRole("button", { name: "Свернуть окно из полноэкранного режима" })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => document.fullscreenElement === null))
+    .toBe(true);
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Развернуть окно на весь экран" })
+    .click();
+  const restored = await page.locator(".app-shell").boundingBox();
+  expect(restored).not.toBeNull();
+  expect(restored!.x).toBeCloseTo(160, 0);
+  expect(restored!.y).toBeCloseTo(0, 0);
+  expect(restored!.width).toBeCloseTo(1440, 0);
+  expect(restored!.height).toBeCloseTo(1000, 0);
 });
 
 test("fullscreen window adapts to its own orientation and reaches screen edges", async ({
