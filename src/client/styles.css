@@ -2007,6 +2007,9 @@ body {
   text-transform: uppercase;
   user-select: none;
 }
+.artist-group-label-compact {
+  padding-top: 0;
+}
 .album-formats {
   color: #718a91 !important;
   font-size: var(--type-caption);

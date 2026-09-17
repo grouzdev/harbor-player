@@ -2873,19 +2873,23 @@ function ArtistList({
   const ref = useRef<HTMLDivElement>(null);
   const rows = useMemo(() => {
     const result: (
-      | { type: "group"; key: string; label: string }
+      | { type: "group"; key: string; label: string; compact: boolean }
       | { type: "artist"; item: (typeof items)[number] }
     )[] = [];
+    let hasGroup = false;
     for (const [index, item] of items.entries()) {
       if (
         !isMissingArtistName(item.name) &&
         (index === 0 || startsNewArtistGroup(item.name, items[index - 1]?.name))
-      )
+      ) {
         result.push({
           type: "group",
           key: `group:${index}:${artistGroupKey(item.name) || "#"}`,
           label: artistGroupKey(item.name) || "#",
+          compact: !hasGroup,
         });
+        hasGroup = true;
+      }
       result.push({ type: "artist", item });
     }
     return result;
@@ -2901,7 +2905,12 @@ function ArtistList({
   const virtual = useVirtualizer({
     count: rows.length + (items.length < total ? 1 : 0),
     getScrollElement: () => ref.current,
-    estimateSize: (index) => (rows[index]?.type === "group" ? 56 : 36),
+    estimateSize: (index) =>
+      rows[index]?.type === "group"
+        ? rows[index].compact
+          ? 36
+          : 56
+        : 36,
     paddingStart: virtualPanelTopInset,
     scrollPaddingStart: virtualPanelTopInset,
     overscan: 6,
@@ -2948,13 +2957,15 @@ function ArtistList({
             return (
               <div
                 key={entry.key}
-                className="artist-group-label"
+                className={`artist-group-label ${
+                  entry.compact ? "artist-group-label-compact" : ""
+                }`}
                 aria-hidden="true"
                 style={{
                   position: "absolute",
                   top: 0,
                   transform: `translateY(${row.start}px)`,
-                  height: 56,
+                  height: entry.compact ? 36 : 56,
                 }}
               >
                 {entry.label}
