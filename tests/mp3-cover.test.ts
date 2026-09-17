@@ -113,7 +113,7 @@ function frontCover(frame: Buffer) {
 }
 
 async function mp3WithSeparateGenres() {
-  root = await mkdtemp(path.join(os.tmpdir(), "mymusiclib-mp3-cover-"));
+  root = await mkdtemp(path.join(os.tmpdir(), "harbor-player-mp3-cover-"));
   const original = await readFile(path.join(fixtures, "sample.mp3"));
   const audio = original.subarray(10 + size(original.subarray(6, 10)));
   const preserved = [
@@ -139,7 +139,7 @@ async function mp3WithSeparateGenres() {
 
 describe("MP3 cover writer", () => {
   it("synchronizes genre across existing ID3v2.3, ID3v2.4 and ID3v1 tags", async () => {
-    root = await mkdtemp(path.join(os.tmpdir(), "mymusiclib-mp3-genre-"));
+    root = await mkdtemp(path.join(os.tmpdir(), "harbor-player-mp3-genre-"));
     const sample = await readFile(path.join(fixtures, "sample.mp3"));
     const sampleTagSize = size(sample.subarray(6, 10));
     const audio = sample.subarray(10 + sampleTagSize);
@@ -201,7 +201,7 @@ describe("MP3 cover writer", () => {
   });
 
   it("retains track and disc totals when clearing their numbers", async () => {
-    root = await mkdtemp(path.join(os.tmpdir(), "mymusiclib-mp3-numbers-"));
+    root = await mkdtemp(path.join(os.tmpdir(), "harbor-player-mp3-numbers-"));
     const sample = await readFile(path.join(fixtures, "sample.mp3"));
     const sampleTagSize = size(sample.subarray(6, 10));
     const audio = sample.subarray(10 + sampleTagSize);
@@ -250,7 +250,7 @@ describe("MP3 cover writer", () => {
   });
 
   it("accepts TagLib removing a leading BOM from an unselected lyric", async () => {
-    root = await mkdtemp(path.join(os.tmpdir(), "mymusiclib-mp3-lyrics-"));
+    root = await mkdtemp(path.join(os.tmpdir(), "harbor-player-mp3-lyrics-"));
     const sample = await readFile(path.join(fixtures, "sample.mp3"));
     const sampleTagSize = size(sample.subarray(6, 10));
     const audio = sample.subarray(10 + sampleTagSize);
@@ -321,7 +321,7 @@ describe("MP3 cover writer", () => {
   });
 
   it("rejects an unsupported ID3 version without changing the file", async () => {
-    root = await mkdtemp(path.join(os.tmpdir(), "mymusiclib-mp3-cover-"));
+    root = await mkdtemp(path.join(os.tmpdir(), "harbor-player-mp3-cover-"));
     const file = path.join(root, "v22.mp3");
     await copyFile(path.join(fixtures, "sample.mp3"), file);
     const before = await readFile(file);

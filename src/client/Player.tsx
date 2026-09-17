@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type { CatalogFilter, Track } from "../shared/contracts";
 import { api, duration } from "./api";
+import { readMigratedStorageValue } from "./storage";
 
 interface Queue {
   id: string;
@@ -28,7 +29,9 @@ export function usePlayer(notify: (message: string) => void) {
   const [position, setPosition] = useState(0);
   const [length, setLength] = useState(0);
   const [volume, setVolume] = useState(() => {
-    const n = Number(localStorage.getItem("mml-volume") ?? 0.7);
+    const n = Number(
+      readMigratedStorageValue("harbor-player-volume", "mml-volume") ?? 0.7,
+    );
     return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0.7;
   });
   const [shuffle, setShuffle] = useState(false);
@@ -44,18 +47,18 @@ export function usePlayer(notify: (message: string) => void) {
   const transition = useRef(0);
   useEffect(() => {
     if (audio.current) audio.current.volume = volume;
-    localStorage.setItem("mml-volume", String(volume));
+    localStorage.setItem("harbor-player-volume", String(volume));
   }, [volume]);
   useEffect(() => {
-    const saved = localStorage.getItem("mml-queue");
+    const saved = readMigratedStorageValue("harbor-player-queue", "mml-queue");
     if (!saved) return;
     try {
       const q = JSON.parse(saved);
       api<Queue>(`/queue/${q.id}?position=${q.position}`)
         .then(setQueue)
-        .catch(() => localStorage.removeItem("mml-queue"));
+        .catch(() => localStorage.removeItem("harbor-player-queue"));
     } catch {
-      localStorage.removeItem("mml-queue");
+      localStorage.removeItem("harbor-player-queue");
     }
   }, []);
   useEffect(() => {
@@ -72,7 +75,7 @@ export function usePlayer(notify: (message: string) => void) {
     element.src = `/api/audio/${queue.track.id}?v=${queue.track.mtimeMs}`;
     element.load();
     localStorage.setItem(
-      "mml-queue",
+      "harbor-player-queue",
       JSON.stringify({ id: queue.id, position: queue.position }),
     );
     setLength(queue.track.duration);

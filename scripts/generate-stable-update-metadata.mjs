@@ -9,7 +9,7 @@ if (!/^\d+\.\d+\.\d+$/.test(version)) {
   throw new Error(`Stable update metadata requires x.y.z, got ${version}`);
 }
 
-const fileName = `MyMusicLib-${version}-x64-Setup.exe`;
+const fileName = `Harbor Player-${version}-x64-Setup.exe`;
 const artifactPath = path.join("release", fileName);
 const [artifact, artifactStats] = await Promise.all([
   readFile(artifactPath),

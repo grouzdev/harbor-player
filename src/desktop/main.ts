@@ -13,9 +13,9 @@ import {
 } from "electron";
 import { mkdirSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import electronUpdater from "electron-updater";
+import { appName, dataDirectory } from "../shared/app-paths.js";
 import type {
   BackendToMainMessage,
   MainToBackendMessage,
@@ -26,23 +26,18 @@ import type {
 
 const { autoUpdater } = electronUpdater;
 
-const appId = "com.grouzdev.mymusiclib";
+const appId = "app.harborplayer.desktop";
 const smokeFixture = process.argv
   .find((argument) => argument.startsWith("--smoke-test="))
   ?.slice("--smoke-test=".length);
-const smokeReport = process.env.MYMUSICLIB_SMOKE_REPORT;
+const smokeReport = process.env.HARBOR_PLAYER_SMOKE_REPORT;
 const isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_DIR);
 if (smokeFixture) {
-  process.env.MYMUSICLIB_PORT = "0";
-  process.env.MYMUSICLIB_SMOKE = "1";
+  process.env.HARBOR_PLAYER_PORT = "0";
+  process.env.HARBOR_PLAYER_SMOKE = "1";
 }
 
-const dataRoot = process.env.MYMUSICLIB_DATA_DIR
-  ? path.resolve(process.env.MYMUSICLIB_DATA_DIR)
-  : path.join(
-      process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"),
-      "MyMusicLib",
-    );
+const dataRoot = dataDirectory();
 const electronData = path.join(dataRoot, "electron");
 const sessionData = path.join(electronData, "session");
 mkdirSync(sessionData, { recursive: true });
@@ -74,7 +69,7 @@ function updateError(error: unknown) {
 
 async function checkForUpdates(manual = false) {
   if (isPortable) {
-    void shell.openExternal("https://github.com/grouzdev/my-music-lib/releases");
+    void shell.openExternal("https://github.com/grouzdev/harbor-player/releases");
     publishUpdateState({ status: "unsupported" });
     return;
   }
@@ -117,7 +112,7 @@ function configureUpdates() {
   autoUpdater.on("checking-for-update", () => publishUpdateState({ status: "checking" }));
   autoUpdater.on("update-available", (info) => {
     publishUpdateState({ status: "available", version: info.version });
-    void new Notification({ title: "MyMusicLib", body: `Доступна версия ${info.version}` }).show();
+    void new Notification({ title: appName, body: `Доступна версия ${info.version}` }).show();
   });
   autoUpdater.on("update-not-available", () => publishUpdateState({ status: "upToDate" }));
   autoUpdater.on("download-progress", (progress) => {
@@ -282,7 +277,7 @@ async function quitApplication(exitCode = 0) {
 }
 
 async function failApplication(message: string) {
-  if (!smokeFixture) dialog.showErrorBox("MyMusicLib не запущен", message);
+  if (!smokeFixture) dialog.showErrorBox(`${appName} не запущен`, message);
   if (smokeReport)
     await writeFile(smokeReport, JSON.stringify({ ok: false, error: message }));
   await quitApplication(1);
@@ -328,7 +323,7 @@ function createWindow(url: string) {
 
 function createTray() {
   tray = new Tray(path.join(app.getAppPath(), "assets", "icon.ico"));
-  tray.setToolTip("MyMusicLib");
+  tray.setToolTip(appName);
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: "Показать", click: showWindow },

@@ -163,7 +163,7 @@ test("fullscreen restores legacy saved window bounds", async ({ page }) => {
   await page.goto("/");
   await page.evaluate(() => {
     localStorage.setItem(
-      "mml-fullscreen-window-v1",
+      "harbor-player-fullscreen-window-v1",
       JSON.stringify({ x: 74, y: 58, width: 860, height: 640 }),
     );
   });
@@ -194,7 +194,7 @@ test("fullscreen resize transitions do not overwrite saved window bounds", async
   });
   await page.goto("/");
   await page.evaluate((state) => {
-    localStorage.setItem("mml-fullscreen-window-v1", state);
+    localStorage.setItem("harbor-player-fullscreen-window-v1", state);
   }, savedState);
   await page.reload();
   await page
@@ -210,7 +210,7 @@ test("fullscreen resize transitions do not overwrite saved window bounds", async
   });
   await page.waitForTimeout(50);
   await expect
-    .poll(() => page.evaluate(() => localStorage.getItem("mml-fullscreen-window-v1")))
+    .poll(() => page.evaluate(() => localStorage.getItem("harbor-player-fullscreen-window-v1")))
     .toBe(savedState);
 
   await page
@@ -320,7 +320,7 @@ test("workspace switches to rows below the fixed visible-panel width threshold",
     await page.evaluate(
       ({ visiblePanelIds }) => {
         localStorage.setItem(
-          "mml-panel-visibility-v1",
+          "harbor-player-panel-visibility-v1",
           JSON.stringify(
             Object.fromEntries(
               ["libraries", "genres", "artists", "albums", "tracks"].map(
@@ -592,7 +592,7 @@ test("a single visible panel fills the workspace width", async ({ page }) => {
       await page.goto("/");
       await page.evaluate((visible) => {
         localStorage.setItem(
-          "mml-panel-visibility-v1",
+          "harbor-player-panel-visibility-v1",
           JSON.stringify({
             libraries: visible === "Библиотеки",
             genres: visible === "Жанры",

@@ -318,7 +318,11 @@ export class MusicService extends EventEmitter {
           }
           const files: string[] = [];
           for (const entry of entries) {
-            if (entry.isSymbolicLink() || entry.name.startsWith(".mymusiclib-"))
+            if (
+              entry.isSymbolicLink() ||
+              entry.name.startsWith(".harbor-player-") ||
+              entry.name.startsWith(".mymusiclib-")
+            )
               continue;
             const file = path.join(folder, entry.name);
             if (entry.isDirectory()) directories.push(file);
@@ -979,7 +983,7 @@ export class MusicService extends EventEmitter {
         item.stage ||
         path.join(
           path.dirname(item.destination),
-          `.mymusiclib-${op.id}-${item.id}${path.extname(item.destination)}`,
+          `.harbor-player-${op.id}-${item.id}${path.extname(item.destination)}`,
         );
       const backup =
         item.backup ||
@@ -1096,7 +1100,7 @@ export class MusicService extends EventEmitter {
       }
       const ext = op.patch.cover.mime === "image/png" ? "png" : "jpg";
       const target = path.join(folder, `cover.${ext}`);
-      const stage = path.join(folder, `.mymusiclib-cover-${op.id}.${ext}`);
+      const stage = path.join(folder, `.harbor-player-cover-${op.id}.${ext}`);
       await writeFile(stage, Buffer.from(op.patch.cover.data, "base64"), {
         flag: "wx",
       });

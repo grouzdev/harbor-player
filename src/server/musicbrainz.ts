@@ -611,7 +611,7 @@ export class MusicBrainzService {
             headers: {
               Accept: accept,
               "User-Agent":
-                "MyMusicLib/0.1.0 (https://github.com/grouzdev/my-music-lib)",
+                "HarborPlayer/0.1.0 (https://github.com/grouzdev/harbor-player)",
             },
           });
         } finally {

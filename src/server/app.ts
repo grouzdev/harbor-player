@@ -126,7 +126,7 @@ export async function createApp(options: {
       reply.header("Cache-Control", "no-store");
       if (
         request.url.split("?")[0] !== "/api/session" &&
-        request.cookies.mml_session !== session
+        request.cookies.harbor_player_session !== session
       )
         return reply
           .code(401)
@@ -147,7 +147,7 @@ export async function createApp(options: {
     });
   });
   app.get("/api/session", async (_request, reply) => {
-    reply.setCookie("mml_session", session, {
+    reply.setCookie("harbor_player_session", session, {
       path: "/",
       httpOnly: true,
       sameSite: "strict",

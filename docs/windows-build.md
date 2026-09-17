@@ -1,14 +1,14 @@
-Windows standalone-версия MyMusicLib с обновлениями
+Windows standalone-версия Harbor Player с обновлениями
 
 ## Кратко и простыми словами
 
-MyMusicLib следует упаковать в Electron-приложение: пользователь устанавливает обычный Windows installer, запускает программу из меню «Пуск» и не устанавливает Node.js, npm или Git. Текущий React-интерфейс открывается в отдельном окне, а существующий Node/Fastify backend работает внутри дистрибутива.
+Harbor Player следует упаковать в Electron-приложение: пользователь устанавливает обычный Windows installer, запускает программу из меню «Пуск» и не устанавливает Node.js, npm или Git. Текущий React-интерфейс открывается в отдельном окне, а существующий Node/Fastify backend работает внутри дистрибутива.
 
 Выбранная схема:
 
 - Windows 10/11 x64.
 - Основной дистрибутив — NSIS installer для текущего пользователя без UAC.
-- Дополнительно — no-install portable EXE; каталог, recovery и база обеих версий остаются в `%LOCALAPPDATA%\MyMusicLib`, а Chromium-профиль — в подпапке `electron`.
+- Дополнительно — no-install portable EXE; каталог, recovery и база обеих версий остаются в `%LOCALAPPDATA%\Harbor Player`, а Chromium-профиль — в подпапке `electron`.
 - Закрытие окна сворачивает приложение в tray; явный «Выход» останавливает backend.
 - Пункт меню «Открыть в браузере» открывает тот же локальный интерфейс.
 - Приложение само проверяет GitHub Releases, но ничего не скачивает без кнопки пользователя.
@@ -19,7 +19,7 @@ Electron 44 использует Node.js 24, то есть соответств�
 ## Архитектура приложения
 
 - Добавить Electron main process, который:
-  - до `ready` переносит `userData` и `sessionData` в `%LOCALAPPDATA%\MyMusicLib\electron`;
+  - до `ready` переносит `userData` и `sessionData` в `%LOCALAPPDATA%\Harbor Player\electron`;
   - получает single-instance lock и при повторном запуске показывает существующее окно;
   - запускает backend в отдельном `utilityProcess`;
   - ждёт сообщения `ready` и только после этого открывает `BrowserWindow`;
@@ -31,7 +31,7 @@ Electron 44 использует Node.js 24, то есть соответств�
 - Вынести запуск Fastify из CLI-entrypoint в переиспользуемый `startLocalServer()`:
   - возвращать фактический URL и асинхронный `stop()`;
   - сохранять текущий CLI-запуск для разработки;
-  - использовать прежний `%LOCALAPPDATA%\MyMusicLib`, порт 4317, instance lock, сканирование и пятиминутный таймер;
+  - использовать `%LOCALAPPDATA%\Harbor Player`, порт 4317, instance lock, сканирование и пятиминутный таймер;
   - при занятом порте показывать понятную ошибку и завершаться, не переключаясь молча на другой адрес.
   - перед остановкой запрещать новые jobs, убирать таймер сканирования, прекращать приём HTTP-запросов и дожидаться текущей очереди.
 
@@ -84,13 +84,13 @@ Electron 44 использует Node.js 24, то есть соответств�
 
 - Зафиксировать `electron@44.4.1`, `electron-builder@26.15.3`, `@electron/fuses@2.1.3`; на этапе обновлений добавить `electron-updater@6.8.9`.
 - Настроить electron-builder:
-  - `appId: com.grouzdev.mymusiclib`;
-  - `productName: MyMusicLib`;
+  - `appId: app.harborplayer.desktop`;
+  - `productName: Harbor Player`;
   - x64 targets: `nsis` и `portable`;
   - per-user one-click installer без прав администратора;
   - ярлыки в меню «Пуск» и на рабочем столе;
   - существующий ICO;
-  - GitHub provider `grouzdev/my-music-lib`;
+  - GitHub provider `grouzdev/harbor-player`;
   - понятные имена артефактов с версией, архитектурой и отметкой `unsigned` для beta.
 
 - Версию брать только из `package.json`; release tag обязан точно совпадать с `v<version>`.
@@ -137,7 +137,7 @@ Electron 44 использует Node.js 24, то есть соответств�
   - открытие браузера из меню;
   - закрытие в tray, продолжение работы браузерной вкладки и полный выход;
   - повторный запуск без второго backend/SQLite-процесса;
-  - запуск portable EXE и использование того же `%LOCALAPPDATA%\MyMusicLib`.
+  - запуск portable EXE и использование того же `%LOCALAPPDATA%\Harbor Player`.
 
 - Провести реальный update-тест `beta N → beta N+1`:
   - уведомление появляется, но загрузка сама не начинается;

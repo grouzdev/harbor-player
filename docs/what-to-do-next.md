@@ -1,6 +1,6 @@
 # Что делать дальше: бесплатная подпись stable-версий
 
-Это инструкция для владельца MyMusicLib. Ничего из этого не нужно делать для обычных unsigned beta-релизов: они уже можно публиковать как GitHub prerelease.
+Это инструкция для владельца Harbor Player. Ничего из этого не нужно делать для обычных unsigned beta-релизов: они уже можно публиковать как GitHub prerelease.
 
 ## 1. Сначала опубликовать изменения GPL
 
@@ -11,7 +11,7 @@
 ## 2. Подать заявку в SignPath Foundation
 
 1. Откройте [SignPath Foundation](https://signpath.org/) и подайте заявку на бесплатную code signing для open-source проекта.
-2. Укажите репозиторий `https://github.com/grouzdev/my-music-lib`, лицензию GPL-3.0-only и назначение: Windows Electron installer и portable EXE.
+2. Укажите репозиторий `https://github.com/grouzdev/harbor-player`, лицензию GPL-3.0-only и назначение: Windows Electron installer и portable EXE.
 3. Подтвердите, что вы поддерживаете проект и имеете право выпускать его сборки.
 4. Дождитесь одобрения. До этого stable-тег создавать не нужно: workflow специально остановится без credentials.
 
@@ -19,9 +19,9 @@
 
 ## 3. Настроить SignPath после одобрения
 
-В кабинете SignPath создайте один проект MyMusicLib и release signing policy с GitHub origin verification:
+В кабинете SignPath создайте один проект Harbor Player и release signing policy с GitHub origin verification:
 
-- repository: только `grouzdev/my-music-lib`;
+- repository: только `grouzdev/harbor-player`;
 - источник: GitHub Actions;
 - runner: только GitHub-hosted;
 - разрешённые refs: stable-теги `vX.Y.Z`, без `-beta.N`;
@@ -68,8 +68,8 @@
 3. Закоммитьте версию, отправьте `main`, затем создайте и отправьте тег `v0.1.0`.
 4. В GitHub Actions откройте job **Publish Windows releases → publish-stable**, проверьте commit/tag и подтвердите environment `stable`.
 5. Дождитесь конца job. В GitHub Release должны быть только:
-   - `MyMusicLib-0.1.0-x64-Setup.exe`;
-   - `MyMusicLib-0.1.0-x64-portable.exe`;
+   - `Harbor Player-0.1.0-x64-Setup.exe`;
+   - `Harbor Player-0.1.0-x64-portable.exe`;
    - `latest.yml`.
 
 Не должно быть `unsigned` в именах stable-файлов. `blockmap` не публикуется намеренно: подпись меняет Setup EXE, а `latest.yml` создаётся уже после подписи.
@@ -83,7 +83,7 @@
 3. В PowerShell выполнить:
 
 ```powershell
-Get-AuthenticodeSignature .\MyMusicLib-0.1.0-x64-Setup.exe
+Get-AuthenticodeSignature '.\Harbor Player-0.1.0-x64-Setup.exe'
 ```
 
 Ожидается `Status: Valid`.

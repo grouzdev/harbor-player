@@ -89,7 +89,7 @@ describe("MusicBrainz client", () => {
       (fetcher.mock.calls[0][1]?.headers as Record<string, string>)[
         "User-Agent"
       ],
-    ).toContain("MyMusicLib/0.1.0");
+    ).toContain("HarborPlayer/0.1.0");
   });
 
   it("retries a throttled MusicBrainz response", async () => {

@@ -1,18 +1,6 @@
 import path from "node:path";
-import os from "node:os";
+export { dataDirectory } from "../shared/app-paths.js";
 
-export function dataDirectory(): string {
-  if (process.env.MYMUSICLIB_DATA_DIR)
-    return path.resolve(process.env.MYMUSICLIB_DATA_DIR);
-  const base =
-    process.platform === "win32"
-      ? process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local")
-      : process.platform === "darwin"
-        ? path.join(os.homedir(), "Library", "Application Support")
-        : process.env.XDG_DATA_HOME ||
-          path.join(os.homedir(), ".local", "share");
-  return path.join(base, "MyMusicLib");
-}
 export function inside(root: string, file: string): boolean {
   const relative = path.relative(root, file);
   return (

@@ -76,6 +76,7 @@ import {
   setCsrf,
   reconnectSession,
 } from "./api";
+import { readMigratedStorageValue } from "./storage";
 import {
   applyAppearance,
   cacheAppearance,
@@ -128,7 +129,8 @@ type CatalogContextMenuHandler = (
 type PanelId = "libraries" | "genres" | "artists" | "albums" | "tracks";
 type PanelVisibility = Record<PanelId, boolean>;
 
-const panelVisibilityStorageKey = "mml-panel-visibility-v1";
+const panelVisibilityStorageKey = "harbor-player-panel-visibility-v1";
+const legacyPanelVisibilityStorageKey = "mml-panel-visibility-v1";
 const virtualPanelTopInset = 14;
 const defaultPanelVisibility: PanelVisibility = {
   libraries: true,
@@ -183,7 +185,10 @@ const panelDefinitions = [
 function readPanelVisibility(): PanelVisibility {
   try {
     const value = JSON.parse(
-      localStorage.getItem(panelVisibilityStorageKey) || "null",
+      readMigratedStorageValue(
+        panelVisibilityStorageKey,
+        legacyPanelVisibilityStorageKey,
+      ) || "null",
     );
     if (!value || typeof value !== "object") return defaultPanelVisibility;
     return Object.fromEntries(
@@ -226,7 +231,8 @@ type FullscreenWindowState = {
 };
 type FullscreenResizeEdge = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
 
-const fullscreenWindowStorageKey = "mml-fullscreen-window-v1";
+const fullscreenWindowStorageKey = "harbor-player-fullscreen-window-v1";
+const legacyFullscreenWindowStorageKey = "mml-fullscreen-window-v1";
 const fullscreenWindowMinWidth = 640;
 const fullscreenWindowMinHeight = 520;
 
@@ -260,7 +266,10 @@ function fitFullscreenWindowBounds(
 function readFullscreenWindowState(): FullscreenWindowState | null {
   try {
     const value = JSON.parse(
-      localStorage.getItem(fullscreenWindowStorageKey) || "null",
+      readMigratedStorageValue(
+        fullscreenWindowStorageKey,
+        legacyFullscreenWindowStorageKey,
+      ) || "null",
     );
     const isBounds = (bounds: unknown): bounds is FullscreenWindowBounds =>
       !!bounds &&
@@ -852,7 +861,10 @@ export function App() {
   const [panelWeights, setPanelWeights] = useState<number[]>(() => {
     try {
       const weights = JSON.parse(
-        localStorage.getItem("mml-panel-weights-v1") || "[1.05,0.9,1,1.45,1.6]",
+        readMigratedStorageValue(
+          "harbor-player-panel-weights-v1",
+          "mml-panel-weights-v1",
+        ) || "[1.05,0.9,1,1.45,1.6]",
       );
       return Array.isArray(weights) &&
         weights.length === 5 &&
@@ -868,7 +880,10 @@ export function App() {
   const [rowWeights, setRowWeights] = useState<number[]>(() => {
     try {
       const weights = JSON.parse(
-        localStorage.getItem("mml-panel-row-weights-v1") || "[1,1]",
+        readMigratedStorageValue(
+          "harbor-player-panel-row-weights-v1",
+          "mml-panel-row-weights-v1",
+        ) || "[1,1]",
       );
       return Array.isArray(weights) &&
         weights.length === 2 &&
@@ -1825,7 +1840,7 @@ export function App() {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
       setPanelWeights((current) => {
-        localStorage.setItem("mml-panel-weights-v1", JSON.stringify(current));
+        localStorage.setItem("harbor-player-panel-weights-v1", JSON.stringify(current));
         return current;
       });
     };
@@ -1859,7 +1874,7 @@ export function App() {
       window.removeEventListener("pointerup", stop);
       setRowWeights((current) => {
         localStorage.setItem(
-          "mml-panel-row-weights-v1",
+          "harbor-player-panel-row-weights-v1",
           JSON.stringify(current),
         );
         return current;

@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-set "MYMUSICLIB_NO_OPEN=1"
+set "HARBOR_PLAYER_NO_OPEN=1"
 where node >nul 2>nul
 if errorlevel 1 (
   echo Node.js 24 LTS is required. Install it from https://nodejs.org/
@@ -16,7 +16,7 @@ if not exist "node_modules\.bin\vite.cmd" (
     exit /b 1
   )
 )
-echo Starting MyMusicLib...
+echo Starting Harbor Player...
 call node scripts\open-running.mjs
 if not errorlevel 1 exit /b 0
 echo Browser: http://127.0.0.1:5173

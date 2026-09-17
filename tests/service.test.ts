@@ -45,7 +45,7 @@ afterEach(async () => {
     throw new Error("Unsafe test cleanup");
   await rm(root, { recursive: true, force: true });
   if (external) {
-    if (!external.startsWith(path.join(os.tmpdir(), "mymusiclib-test-")))
+    if (!external.startsWith(path.join(os.tmpdir(), "harbor-player-test-")))
       throw new Error("Unsafe external test cleanup");
     await rm(external, { recursive: true, force: true });
     external = undefined;
@@ -840,7 +840,7 @@ describe("catalog and safe filesystem operations", () => {
   it("moves across volumes with original structure, ID and byte identity", async () => {
     const lib = await library("Downloads");
     const track = tracks()[0];
-    external = await mkdtemp(path.join(os.tmpdir(), "mymusiclib-test-"));
+    external = await mkdtemp(path.join(os.tmpdir(), "harbor-player-test-"));
     const dest = (await service.addLibrary("Collection", external)).library;
     await service.idle();
     const before = await readFile(path.join(lib.path, track.relativePath));
@@ -1017,7 +1017,7 @@ describe("catalog and safe filesystem operations", () => {
 
     expect(calls).toHaveLength(1);
     expect(calls[0].title).toBe("Injected writer title");
-    expect(path.basename(calls[0].file)).toMatch(/^\.mymusiclib-/);
+    expect(path.basename(calls[0].file)).toMatch(/^\.harbor-player-/);
     expect(service.catalog.track(track.id)?.title).toBe(
       "Injected writer title",
     );

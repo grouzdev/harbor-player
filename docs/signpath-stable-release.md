@@ -1,10 +1,10 @@
 # Signed stable через SignPath Foundation
 
-MyMusicLib использует бесплатную OSS-подпись SignPath Foundation. Репозиторий должен оставаться публичным и распространяться под GPL-3.0-only. Издатель Windows будет `SignPath Foundation`.
+Harbor Player использует бесплатную OSS-подпись SignPath Foundation. Репозиторий должен оставаться публичным и распространяться под GPL-3.0-only. Издатель Windows будет `SignPath Foundation`.
 
 ## Однократная настройка
 
-1. Подать `grouzdev/my-music-lib` в SignPath Foundation и дождаться одобрения.
+1. Подать `grouzdev/harbor-player` в SignPath Foundation и дождаться одобрения.
 2. В SignPath создать release signing policy с GitHub origin verification: только этот репозиторий, stable-теги и GitHub-hosted runners.
 3. Создать две artifact configurations:
    - `unpacked`: ZIP содержимого `release/win-unpacked`; подписывает исполняемые файлы приложения, необходимые для Windows.

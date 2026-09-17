@@ -28,14 +28,14 @@ if (verifyArtifacts) {
   const artifacts =
     channel === "beta"
       ? [
-          `MyMusicLib-${version}-x64-unsigned-Setup.exe`,
-          `MyMusicLib-${version}-x64-unsigned-Setup.exe.blockmap`,
-          `MyMusicLib-${version}-x64-unsigned-portable.exe`,
+          `Harbor Player-${version}-x64-unsigned-Setup.exe`,
+          `Harbor Player-${version}-x64-unsigned-Setup.exe.blockmap`,
+          `Harbor Player-${version}-x64-unsigned-portable.exe`,
           "beta.yml",
         ]
       : [
-          `MyMusicLib-${version}-x64-Setup.exe`,
-          `MyMusicLib-${version}-x64-portable.exe`,
+          `Harbor Player-${version}-x64-Setup.exe`,
+          `Harbor Player-${version}-x64-portable.exe`,
           "latest.yml",
         ];
   await Promise.all(

@@ -51,7 +51,7 @@ export function acquireInstanceLock(dataDir: string): () => void {
         throw e;
       }
       throw new Error(
-        "MyMusicLib уже запущен с этим каталогом данных. Откройте существующее окно браузера.",
+        "Harbor Player уже запущен с этим каталогом данных. Откройте существующее окно браузера.",
       );
     }
   }

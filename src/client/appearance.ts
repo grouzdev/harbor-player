@@ -1,5 +1,7 @@
 export type AppearanceTheme = "dark" | "light";
 
+import { readMigratedStorageValue } from "./storage";
+
 export type AppearanceSettings = {
   theme: AppearanceTheme;
   accent: string;
@@ -12,7 +14,8 @@ export const defaultAppearance: AppearanceSettings = {
   backgroundRevision: 0,
 };
 
-const storageKey = "mml-appearance-v1";
+const storageKey = "harbor-player-appearance-v1";
+const legacyStorageKey = "mml-appearance-v1";
 const accentPattern = /^#[0-9a-f]{6}$/i;
 
 export function normalizeAppearance(value: unknown): AppearanceSettings {
@@ -36,7 +39,9 @@ export function normalizeAppearance(value: unknown): AppearanceSettings {
 export function readCachedAppearance(): AppearanceSettings {
   try {
     return normalizeAppearance(
-      JSON.parse(localStorage.getItem(storageKey) || "null"),
+      JSON.parse(
+        readMigratedStorageValue(storageKey, legacyStorageKey) || "null",
+      ),
     );
   } catch {
     return defaultAppearance;

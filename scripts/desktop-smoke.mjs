@@ -7,17 +7,17 @@ import { FuseState, FuseV1Options, getCurrentFuseWire } from "@electron/fuses";
 const packageInfo = JSON.parse(
   await readFile(path.resolve("package.json"), "utf8"),
 );
-const expectedPortable = process.env.MYMUSICLIB_SMOKE_EXPECT_PORTABLE === "1";
+const expectedPortable = process.env.HARBOR_PLAYER_SMOKE_EXPECT_PORTABLE === "1";
 const executable = path.resolve(
-  process.env.MYMUSICLIB_DESKTOP_EXECUTABLE ||
+  process.env.HARBOR_PLAYER_DESKTOP_EXECUTABLE ||
     (expectedPortable
       ? path.join(
           "release",
-          `MyMusicLib-${packageInfo.version}-x64-unsigned-portable.exe`,
+          `Harbor Player-${packageInfo.version}-x64-unsigned-portable.exe`,
         )
-      : path.join("release", "win-unpacked", "MyMusicLib.exe")),
+      : path.join("release", "win-unpacked", "Harbor Player.exe")),
 );
-const root = await mkdtemp(path.join(os.tmpdir(), "mymusiclib-desktop-smoke-"));
+const root = await mkdtemp(path.join(os.tmpdir(), "harbor-player-desktop-smoke-"));
 const dataDir = path.join(root, "data");
 const libraryDir = path.join(root, "library");
 const fixture = path.join(libraryDir, "sample.mp3");
@@ -36,8 +36,8 @@ try {
     const child = spawn(executable, [`--smoke-test=${fixture}`], {
       env: {
         ...process.env,
-        MYMUSICLIB_DATA_DIR: dataDir,
-        MYMUSICLIB_SMOKE_REPORT: report,
+        HARBOR_PLAYER_DATA_DIR: dataDir,
+        HARBOR_PLAYER_SMOKE_REPORT: report,
         ELECTRON_ENABLE_LOGGING: "true",
       },
       stdio: ["ignore", "pipe", "pipe"],
@@ -72,7 +72,7 @@ try {
   if (exitCode !== 0 || result.ok !== true)
     throw new Error(
       result.error ||
-        `MyMusicLib exited with code ${exitCode} at ${result.phase || "unknown"}\n${output}`,
+        `Harbor Player exited with code ${exitCode} at ${result.phase || "unknown"}\n${output}`,
     );
   if (result.portable !== expectedPortable)
     throw new Error(
@@ -80,7 +80,7 @@ try {
     );
   console.log("Packaged desktop smoke passed");
 } finally {
-  if (!root.startsWith(path.join(os.tmpdir(), "mymusiclib-desktop-smoke-")))
+  if (!root.startsWith(path.join(os.tmpdir(), "harbor-player-desktop-smoke-")))
     throw new Error("Unsafe smoke cleanup path");
   await rm(root, { recursive: true, force: true });
 }

@@ -1,4 +1,4 @@
-# MyMusicLib
+# Harbor Player
 
 Локальный музыкальный каталог и плеер. Интерфейс работает в браузере; Node.js-сервис читает музыку из подключённых папок. Облачные сервисы для работы приложения не нужны.
 
@@ -21,29 +21,29 @@ npm start
 
 ## Лицензия
 
-Исходный код MyMusicLib распространяется по [GNU GPL v3.0 only](LICENSE). Лицензии сторонних компонентов перечислены в [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Исходный код Harbor Player распространяется по [GNU GPL v3.0 only](LICENSE). Лицензии сторонних компонентов перечислены в [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Desktop-сборка для Windows
 
 Доступны два самостоятельных x64-дистрибутива:
 
 ```powershell
-npm run desktop:installer # release\MyMusicLib-<version>-x64-unsigned-Setup.exe
-npm run desktop:portable  # release\MyMusicLib-<version>-x64-unsigned-portable.exe
+npm run desktop:installer # release\Harbor Player-<version>-x64-unsigned-Setup.exe
+npm run desktop:portable  # release\Harbor Player-<version>-x64-unsigned-portable.exe
 ```
 
-Installer устанавливает MyMusicLib только для текущего пользователя, не требует прав администратора и создаёт ярлыки на рабочем столе и в меню «Пуск». Portable EXE запускается без установки и не создаёт ярлыков. Для сборки обоих вариантов одной командой используйте `npm run desktop:dist`.
+Installer устанавливает Harbor Player только для текущего пользователя, не требует прав администратора и создаёт ярлыки на рабочем столе и в меню «Пуск». Portable EXE запускается без установки и не создаёт ярлыков. Для сборки обоих вариантов одной командой используйте `npm run desktop:dist`.
 
 Desktop-версия запускает тот же локальный API на `127.0.0.1:4317` во внутреннем utility process. Закрытие окна скрывает приложение в tray; для полной остановки выберите «Выход». В tray также можно открыть интерфейс в обычном браузере. Повторный запуск показывает существующее окно и не создаёт второй backend.
 
 Установленная beta-версия проверяет GitHub Releases, но не начинает загрузку и установку без явных кнопок пользователя. Portable обновляется вручную со страницы Releases. Пока приложение не подписано Windows-сертификатом, beta-файлы намеренно помечены `unsigned`: Windows может показать предупреждение SmartScreen.
 
-Каталог, recovery и база обеих версий остаются в `%LOCALAPPDATA%\MyMusicLib`; Chromium-профиль Electron находится в `%LOCALAPPDATA%\MyMusicLib\electron`. Portable EXE не переносит эти данные вместе с собой. Удаление установленной версии намеренно не удаляет пользовательские данные. Для unpacked-сборки также поддерживается `MYMUSICLIB_DATA_DIR`:
+Каталог, recovery и база обеих версий остаются в `%LOCALAPPDATA%\Harbor Player`; Chromium-профиль Electron находится в `%LOCALAPPDATA%\Harbor Player\electron`. При первом запуске Harbor Player переносит прежний каталог `%LOCALAPPDATA%\MyMusicLib`, если новый ещё не существует. Portable EXE не переносит эти данные вместе с собой. Удаление установленной версии намеренно не удаляет пользовательские данные. Для unpacked-сборки также поддерживается `HARBOR_PLAYER_DATA_DIR`:
 
 ```powershell
 npm run desktop:pack
 npm run test:desktop:smoke
-release\win-unpacked\MyMusicLib.exe
+release\win-unpacked\Harbor Player.exe
 ```
 
 ## Публикация unsigned beta
@@ -79,9 +79,9 @@ Stable workflow сначала подписывает EXE/DLL в Electron bundle
 
 ## Данные и сохранность файлов
 
-- Windows: `%LOCALAPPDATA%\MyMusicLib`; macOS: `~/Library/Application Support/MyMusicLib`; Linux: `$XDG_DATA_HOME/MyMusicLib` или `~/.local/share/MyMusicLib`.
+- Windows: `%LOCALAPPDATA%\Harbor Player`; macOS: `~/Library/Application Support/Harbor Player`; Linux: `$XDG_DATA_HOME/Harbor Player` или `~/.local/share/Harbor Player`.
 - `catalog.sqlite` — каталог, очередь и журнал; `covers` — кэш обложек; `recovery` — удалённые файлы и резервные копии перед записью тегов.
-- `MYMUSICLIB_DATA_DIR` задаёт другой каталог данных; `MYMUSICLIB_PORT` — порт собранного сервера; `MYMUSICLIB_NO_OPEN=1` отключает автоматическое открытие браузера.
+- `HARBOR_PLAYER_DATA_DIR` задаёт другой каталог данных; `HARBOR_PLAYER_PORT` — порт собранного сервера; `HARBOR_PLAYER_NO_OPEN=1` отключает автоматическое открытие браузера.
 - Область восстановления не очищается автоматически. Не удаляйте её, пока нужны резервные копии. Удаление из приложения переносит файл сюда, а не в системную корзину.
 - Перенос сохраняет относительный путь, сверяет SHA-256 копии и только затем удаляет исходник. Существующие файлы не перезаписываются.
 - Запись тегов выполняется на временной копии. Проверяются исходный файл, аудиоданные, неизменённые метаданные и результат записи. Исходная копия сохраняется для восстановления.

@@ -70,7 +70,7 @@ parentPort.on("message", (event) => {
 });
 
 try {
-  if (process.env.MYMUSICLIB_SMOKE === "1")
+  if (process.env.HARBOR_PLAYER_SMOKE === "1")
     await sharp({
       create: {
         width: 1,
@@ -81,11 +81,11 @@ try {
     })
       .png()
       .toBuffer();
-  const port = Number(process.env.MYMUSICLIB_PORT || 4317);
+  const port = Number(process.env.HARBOR_PLAYER_PORT || 4317);
   server = await startLocalServer({
     dataDir: dataDirectory(),
     port,
-    logger: process.env.MYMUSICLIB_SMOKE !== "1",
+    logger: process.env.HARBOR_PLAYER_SMOKE !== "1",
     openBrowser: false,
     tagWriter: electronTagWriter,
   });

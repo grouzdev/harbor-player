@@ -1,5 +1,5 @@
-appId: com.grouzdev.mymusiclib
-productName: MyMusicLib
+appId: app.harborplayer.desktop
+productName: Harbor Player
 electronDist: node_modules/electron/dist
 directories:
   output: release
@@ -34,7 +34,7 @@ generateUpdatesFilesForAllChannels: true
 publish:
   provider: github
   owner: grouzdev
-  repo: my-music-lib
+  repo: harbor-player
 afterPack: scripts/after-pack.cjs
 win:
   icon: assets/icon.ico
@@ -54,7 +54,7 @@ nsis:
   allowToChangeInstallationDirectory: false
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: MyMusicLib
+  shortcutName: Harbor Player
   deleteAppDataOnUninstall: false
   artifactName: "${productName}-${version}-${arch}-Setup.${ext}"
 portable:

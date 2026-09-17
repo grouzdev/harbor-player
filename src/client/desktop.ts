@@ -12,7 +12,7 @@ export interface DesktopBridge {
 
 declare global {
   interface Window {
-    myMusicLibDesktop?: DesktopBridge;
+    harborPlayerDesktop?: DesktopBridge;
   }
 }
 

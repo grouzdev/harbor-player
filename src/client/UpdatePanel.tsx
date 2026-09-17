@@ -3,7 +3,7 @@ import type { UpdateState } from "../shared/desktop-contract";
 import "./desktop";
 
 export function UpdatePanel() {
-  const bridge = window.myMusicLibDesktop;
+  const bridge = window.harborPlayerDesktop;
   const [state, setState] = useState<UpdateState | null>(null);
   const [dismissed, setDismissed] = useState(false);
 

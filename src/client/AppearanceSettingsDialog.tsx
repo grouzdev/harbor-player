@@ -45,7 +45,7 @@ export function AppearanceSettingsDialog({
   const [path, setPath] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const desktop = window.myMusicLibDesktop;
+  const desktop = window.harborPlayerDesktop;
   const save = async (next: AppearanceSettings) => {
     onChange(next);
     try {
@@ -126,7 +126,7 @@ export function AppearanceSettingsDialog({
         <div className="appearance-section">
           <h3>Фон</h3>
           <p className="hint">
-            Картинка копируется в данные MyMusicLib — исходный файл можно
+            Картинка копируется в данные Harbor Player — исходный файл можно
             удалить.
           </p>
           <div className="appearance-actions">

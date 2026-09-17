@@ -1,4 +1,4 @@
-# Этапы MyMusicLib
+# Этапы Harbor Player
 
 ## Реализованный MVP: M0–M4
 
