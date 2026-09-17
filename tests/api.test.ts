@@ -615,6 +615,53 @@ describe("Album catalog sorting", () => {
       expected.map((id) => `${id}-track`),
     );
   });
+
+  it("uses the artist-panel Unicode order for albums, tracks, and queues", () => {
+    const library = context.service.catalog.addLibrary("Library", root);
+    const albums = [
+      { id: "cocteau", artist: "Cocteau Twins" },
+      { id: "wooden", artist: "Деревянные киты" },
+    ];
+    for (const album of albums)
+      context.service.catalog.upsert({
+        id: `${album.id}-track`,
+        libraryId: library.id,
+        relativePath: `${album.id}.flac`,
+        title: "Track",
+        artists: [album.artist],
+        albumTitle: album.id,
+        albumArtists: [album.artist],
+        albumKey: album.id,
+        genres: [],
+        year: 2025,
+        trackNumber: 1,
+        discNumber: 1,
+        duration: 1,
+        format: "flac",
+        size: 1,
+        mtimeMs: 1,
+        coverId: null,
+        available: true,
+      });
+
+    const filter = {
+      libraryIds: [],
+      genres: [],
+      artists: [],
+      albumIds: [],
+      search: "",
+    };
+    const expected = ["wooden", "cocteau"];
+    expect(context.service.catalog.artists(filter).items.map((item) => item.name)).toEqual([
+      "Деревянные киты",
+      "Cocteau Twins",
+    ]);
+    expect(context.service.catalog.albums(filter).items.map((album) => album.id)).toEqual(expected);
+    expect(context.service.catalog.tracks(filter).items.map((track) => track.albumKey)).toEqual(expected);
+    expect(context.service.catalog.trackIds(filter)).toEqual(
+      expected.map((id) => `${id}-track`),
+    );
+  });
 });
 
 describe("Explorer endpoint", () => {

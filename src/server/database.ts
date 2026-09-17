@@ -643,9 +643,9 @@ export class Catalog {
   }
   private albumArtistOrder(trackAlias: string): string {
     return `coalesce((
-      SELECT group_concat(artist, char(31))
+      SELECT group_concat(sortKey, char(31))
       FROM (
-        SELECT DISTINCT a.artist
+        SELECT DISTINCT artist_sort_key(a.artist) sortKey, a.artist
         FROM track_album_artists a
         JOIN tracks albumTrack ON albumTrack.id=a.trackId
         JOIN libraries albumLibrary ON albumLibrary.id=albumTrack.libraryId
