@@ -398,7 +398,7 @@ export function Player({
           </button>
         </div>
         <div className="seek">
-          <span>{duration(player.position)}</span>
+          <span className="seek-time">{duration(player.position)}</span>
           <div className="range-shell seek-range" style={seekStyle}>
             <input
               aria-label="Позиция воспроизведения"
@@ -411,7 +411,7 @@ export function Player({
               onChange={(e) => player.seek(Number(e.target.value))}
             />
           </div>
-          <span>{duration(player.length)}</span>
+          <span className="seek-time">{duration(player.length)}</span>
         </div>
       </div>
       <div className="volume">
@@ -421,14 +421,17 @@ export function Player({
             : "Локальное воспроизведение"}
         </span>
         <button
-          className={`icon-button ${player.volume === 0 ? "active" : ""}`}
+          className={`icon-button player-volume-control ${player.volume === 0 ? "active" : ""}`}
           aria-label={player.volume ? "Выключить звук" : "Включить звук"}
           aria-pressed={player.volume === 0}
           onClick={() => player.setVolume(player.volume ? 0 : 0.7)}
         >
           {player.volume ? <Volume2 size={18} /> : <VolumeX size={18} />}
         </button>
-        <div className="range-shell volume-range" style={volumeStyle}>
+        <div
+          className="range-shell volume-range player-volume-control"
+          style={volumeStyle}
+        >
           <input
             aria-label="Громкость"
             type="range"
@@ -440,7 +443,7 @@ export function Player({
           />
         </div>
         <button
-          className={`icon-button ${player.repeat !== "off" ? "active" : ""}`}
+          className={`icon-button player-playback-mode ${player.repeat !== "off" ? "active" : ""}`}
           aria-label={`Повтор: ${player.repeat === "off" ? "выключен" : player.repeat === "all" ? "вся очередь" : "один трек"}`}
           aria-pressed={player.repeat !== "off"}
           onClick={() =>
@@ -460,7 +463,7 @@ export function Player({
           )}
         </button>
         <button
-          className={`icon-button ${player.shuffle ? "active" : ""}`}
+          className={`icon-button player-playback-mode ${player.shuffle ? "active" : ""}`}
           aria-label="Перемешать"
           aria-pressed={player.shuffle}
           onClick={() => player.setShuffle(!player.shuffle)}

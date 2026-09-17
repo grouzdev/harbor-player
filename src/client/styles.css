@@ -102,6 +102,7 @@ a {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  container-type: inline-size;
 }
 .topbar {
   height: 65px;
@@ -948,9 +949,10 @@ body.selection-dragging * {
   height: 72px;
   min-height: 72px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  container-type: inline-size;
+  grid-template-columns: minmax(180px, 1fr) minmax(0, 42vw) minmax(0, 1fr);
   align-items: center;
-  gap: 24px;
+  column-gap: clamp(12px, 1.5vw, 24px);
   padding: 0 26px;
   background: #151b20;
   border-top: 1px solid #ffffff0c;
@@ -1062,8 +1064,9 @@ body.selection-dragging * {
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  width: clamp(360px, 42vw, 680px);
-  gap: 18px;
+  width: 100%;
+  max-width: 680px;
+  gap: clamp(10px, 1.1vw, 18px);
   min-width: 0;
 }
 .transport-buttons {
@@ -1140,7 +1143,7 @@ body.selection-dragging * {
 }
 .seek-range {
   width: auto;
-  min-width: 120px;
+  min-width: 48px;
   flex: 1 1 240px;
 }
 .volume-range {
@@ -1834,8 +1837,8 @@ body {
 .player {
   height: 72px;
   min-height: 72px;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 24px;
+  grid-template-columns: minmax(180px, 1fr) minmax(0, 42vw) minmax(0, 1fr);
+  column-gap: clamp(12px, 1.5vw, 24px);
 }
 .now-cover {
   width: 52px;
@@ -1908,7 +1911,7 @@ body {
     width: 360px;
   }
   .player {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns: minmax(180px, 1fr) minmax(0, 42vw) minmax(0, 1fr);
   }
   .workspace {
     grid-template-columns:
@@ -1918,7 +1921,7 @@ body {
 }
 @media (max-width: 900px) {
   .player {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns: minmax(180px, 1fr) minmax(0, 42vw) minmax(0, 1fr);
   }
   .workspace {
     grid-template-columns: 170px 4px 150px 4px 460px 4px minmax(320px, 1fr);
@@ -1927,51 +1930,67 @@ body {
 
 @media (max-width: 999px) {
   .player {
-    height: 80px;
-    min-height: 80px;
-    grid-template-areas: "now transport volume" "now transport volume";
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    grid-template-rows: 38px 20px;
-    column-gap: 18px;
-    row-gap: 4px;
-    padding: 8px 18px;
-    align-items: stretch;
+    grid-template-columns: minmax(180px, 1fr) minmax(0, 42vw) minmax(0, 1fr);
+    padding: 0 18px;
   }
   .now-playing {
-    grid-area: now;
-  }
-  .volume {
-    grid-area: volume;
+    min-width: 0;
   }
   .transport {
-    grid-area: transport;
-    display: grid;
-    width: clamp(260px, 42vw, 420px);
-    grid-template-rows: 38px 20px;
-    gap: 4px;
-    align-items: center;
-  }
-  .transport-buttons {
-    justify-self: center;
-  }
-  .seek {
     width: 100%;
-  }
-  .seek-range {
-    max-width: none;
   }
 }
 
 @media (max-width: 720px) {
   .player {
-    padding: 8px 12px;
+    padding: 0 12px;
     column-gap: 12px;
-  }
-  .transport {
-    width: clamp(190px, 42vw, 420px);
   }
   .volume {
     gap: 4px;
+  }
+}
+
+@container (max-width: 1180px) {
+  .player-playback-mode {
+    display: none;
+  }
+}
+
+@container (max-width: 980px) {
+  .app-shell .player {
+    grid-template-columns: minmax(220px, 38%) minmax(0, 1fr);
+  }
+
+  .volume {
+    display: none;
+  }
+
+  .transport {
+    max-width: none;
+    justify-content: flex-start;
+  }
+
+  .player-volume-control {
+    display: none;
+  }
+
+  .seek-range {
+    max-width: none;
+  }
+}
+
+@container (max-width: 760px) {
+  .seek-time {
+    display: none;
+  }
+
+  .seek {
+    gap: 6px;
+  }
+
+  .seek-range {
+    max-width: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {

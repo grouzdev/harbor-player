@@ -622,23 +622,38 @@ test("a single visible panel fills the workspace width", async ({ page }) => {
   }
 });
 
-test("player keeps volume visible and reflows progress below controls", async ({
+test("player prioritizes the current track over progress in a narrow window", async ({
   page,
-}) => {
+}, info) => {
   await page.goto("/");
+  const browser = info.project.name;
+  const source = path.resolve(".test-data/browser", browser, "Downloads");
+  await page.locator(".add-library").click();
+  await page.getByLabel("Путь к папке", { exact: true }).fill(source);
+  await page.getByLabel("Название библиотеки").fill(`Player ${browser}`);
+  await page.getByRole("button", { name: "Подключить", exact: true }).click();
+  await expect(page.getByTestId("track-row")).toHaveCount(7);
+  await page.getByTestId("track-row").first().dblclick();
+  await expect
+    .poll(() =>
+      page
+        .locator("audio")
+        .evaluate((audio: HTMLAudioElement) => audio.readyState),
+    )
+    .toBeGreaterThanOrEqual(2);
 
-  const layouts: Array<{ width: number; seekRangeWidth: number }> = [];
-  for (const [width, expectTwoRows] of [
-    [1600, false],
-    [1000, false],
-    [999, true],
-    [720, true],
+  const layouts: Array<{
+    width: number;
+    seekRangeWidth: number;
+  }> = [];
+  for (const [width, expected] of [
+    [1400, { modes: true, volume: true, volumeColumn: true, times: true }],
+    [1100, { modes: false, volume: true, volumeColumn: true, times: true }],
+    [900, { modes: false, volume: false, volumeColumn: false, times: true }],
+    [700, { modes: false, volume: false, volumeColumn: false, times: false }],
   ] as const) {
     await page.setViewportSize({ width, height: 900 });
     const layout = await page.locator(".player").evaluate((player) => {
-      const buttons = player.querySelector<HTMLElement>(".transport-buttons")!;
-      const seek = player.querySelector<HTMLElement>(".seek")!;
-      const volume = player.querySelector<HTMLElement>(".volume")!;
       const shuffle = player.querySelector<HTMLElement>(
         '[aria-label="Перемешать"]',
       )!;
@@ -649,75 +664,78 @@ test("player keeps volume visible and reflows progress below controls", async ({
         '[aria-label="Выключить звук"], [aria-label="Включить звук"]',
       )!;
       const volumeRange = player.querySelector<HTMLElement>(".volume-range")!;
+      const volume = player.querySelector<HTMLElement>(".volume")!;
       const nowPlaying = player.querySelector<HTMLElement>(".now-playing")!;
-      const nowArtistLink = document.createElement("button");
-      nowArtistLink.className = "now-artist-link";
-      nowArtistLink.textContent = "Очень длинное имя исполнителя";
-      nowArtistLink.style.cssText = "position: fixed; visibility: hidden";
-      nowPlaying.append(nowArtistLink);
+      const nowCopy = player.querySelector<HTMLElement>(".now-copy")!;
+      const trackLink = player.querySelector<HTMLElement>(".now-track-link")!;
+      const artistLink = player.querySelector<HTMLElement>(".now-artist-link")!;
       const seekRange = player.querySelector<HTMLElement>(".seek-range")!;
+      const time = player.querySelector<HTMLElement>(".seek-time")!;
+      const transport = player.querySelector<HTMLElement>(".transport")!;
+      const displayed = (element: Element | null) =>
+        Boolean(element) && getComputedStyle(element).display !== "none";
       const playerRect = player.getBoundingClientRect();
-      const transportRect = player
-        .querySelector<HTMLElement>(".transport")!
-        .getBoundingClientRect();
-      const volumeRect = volume.getBoundingClientRect();
-      const nowPlayingRect = nowPlaying.getBoundingClientRect();
-      const buttonsRect = buttons.getBoundingClientRect();
-      const seekRect = seek.getBoundingClientRect();
-      const shuffleRect = shuffle.getBoundingClientRect();
-      const repeatRect = repeat.getBoundingClientRect();
-      const muteRect = mute.getBoundingClientRect();
-      const volumeRangeRect = volumeRange.getBoundingClientRect();
+      const transportRect = transport.getBoundingClientRect();
+      const seekRect = seekRange.parentElement!.getBoundingClientRect();
       return {
         playerHeight: player.getBoundingClientRect().height,
-        panelCenter: playerRect.left + playerRect.width / 2,
-        transportCenter: transportRect.left + transportRect.width / 2,
-        panelBottom: playerRect.bottom,
-        buttonsBottom: buttonsRect.bottom,
-        seekTop: seekRect.top,
         seekRangeWidth: seekRange.getBoundingClientRect().width,
-        volumeVisible: getComputedStyle(volume).display !== "none",
-        volumeRangeWidth: volumeRange.getBoundingClientRect().width,
-        volumeBottom: volumeRect.bottom,
-        nowPlayingBottom: nowPlayingRect.bottom,
-        shuffleRight: shuffleRect.right,
-        shuffleLeft: shuffleRect.left,
-        repeatRight: repeatRect.right,
-        repeatLeft: repeatRect.left,
-        muteLeft: muteRect.left,
-        muteRight: muteRect.right,
-        volumeRangeLeft: volumeRangeRect.left,
-        volumeRangeRight: volumeRangeRect.right,
-        artistLinkStyle: getComputedStyle(nowArtistLink).textOverflow,
+        modesVisible: displayed(shuffle) && displayed(repeat),
+        volumeVisible: displayed(mute) && displayed(volumeRange),
+        volumeColumnVisible: displayed(volume),
+        timesVisible: displayed(time),
+        nowPlayingWidth: nowPlaying.getBoundingClientRect().width,
+        nowCopyWidth: nowCopy.getBoundingClientRect().width,
+        transportRightGap: playerRect.right - transportRect.right,
+        seekRightGap: playerRect.right - seekRect.right,
+        trackVisible: displayed(trackLink),
+        artistVisible: displayed(artistLink),
       };
     });
 
-    expect(layout.volumeVisible, `${width}px volume`).toBe(true);
-    expect(layout.artistLinkStyle, `${width}px artist ellipsis`).toBe(
-      "ellipsis",
+    expect(layout.playerHeight, `${width}px player height`).toBe(72);
+    expect(layout.modesVisible, `${width}px repeat/shuffle`).toBe(
+      expected.modes,
     );
-    expect(layout.volumeRangeWidth, `${width}px volume range`).toBeGreaterThanOrEqual(
-      64,
+    expect(layout.volumeVisible, `${width}px volume`).toBe(expected.volume);
+    expect(layout.volumeColumnVisible, `${width}px volume column`).toBe(
+      expected.volumeColumn,
     );
-    expect(layout.transportCenter, `${width}px transport center`).toBeCloseTo(
-      layout.panelCenter,
-      1,
-    );
-    expect(layout.muteRight).toBeLessThanOrEqual(layout.volumeRangeLeft);
-    expect(layout.volumeRangeRight).toBeLessThanOrEqual(layout.repeatLeft);
-    expect(layout.repeatRight).toBeLessThanOrEqual(layout.shuffleLeft);
-    if (expectTwoRows) {
-      expect(layout.playerHeight).toBe(80);
-      expect(layout.seekTop).toBeGreaterThanOrEqual(layout.buttonsBottom);
-      expect(layout.volumeBottom).toBeLessThanOrEqual(layout.panelBottom);
-      expect(layout.nowPlayingBottom).toBeLessThanOrEqual(layout.panelBottom);
-    } else {
-      expect(layout.playerHeight).toBe(72);
-      expect(layout.seekTop).toBeLessThan(layout.buttonsBottom);
+    if (!expected.volumeColumn)
+      expect(layout.transportRightGap, `${width}px transport uses the right edge`).toBeLessThanOrEqual(
+        20,
+      );
+    if (!expected.volumeColumn) {
+      expect(layout.seekRightGap, `${width}px progress uses the transport edge`).toBeLessThanOrEqual(
+        20,
+      );
+      expect(layout.seekRangeWidth, `${width}px progress uses remaining width`).toBeGreaterThan(
+        120,
+      );
     }
-    layouts.push({ width, seekRangeWidth: layout.seekRangeWidth });
+    expect(layout.timesVisible, `${width}px times`).toBe(expected.times);
+    expect(
+      layout.nowPlayingWidth,
+      `${width}px current track block`,
+    ).toBeGreaterThan(0);
+    expect(
+      layout.nowCopyWidth,
+      `${width}px current track text`,
+    ).toBeGreaterThan(0);
+    expect(layout.trackVisible, `${width}px track title`).toBe(true);
+    expect(layout.artistVisible, `${width}px artist`).toBe(true);
+    layouts.push({
+      width,
+      seekRangeWidth: layout.seekRangeWidth,
+    });
   }
-  expect(layouts[0].seekRangeWidth).toBeGreaterThan(layouts[1].seekRangeWidth);
+  expect(layouts[0].seekRangeWidth, "1400px progress").toBeGreaterThan(
+    layouts[1].seekRangeWidth,
+  );
+  expect(
+    layouts[2].seekRangeWidth,
+    "900px progress reclaims the removed volume column",
+  ).toBeGreaterThan(layouts[1].seekRangeWidth);
 });
 
 test("local library: readable UI, playback, tags, move, delete and restore", async ({
