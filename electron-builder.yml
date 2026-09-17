@@ -9,12 +9,27 @@ files:
   - verification/tag-support.json
   - assets/icon.ico
   - THIRD_PARTY_NOTICES.md
+  # The packaged app only runs on Windows x64. Keep its prebuilt SQLite binding
+  # and omit source/build inputs plus bindings for other platforms.
+  - "!node_modules/better-sqlite3/build/**/*"
+  - "!node_modules/better-sqlite3/deps/**/*"
+  - "!node_modules/better-sqlite3/src/**/*"
+  - "!node_modules/better-sqlite3/binding.gyp"
+  - "!node_modules/better-sqlite3/prebuilds/darwin-arm64.node"
+  - "!node_modules/better-sqlite3/prebuilds/darwin-x64.node"
+  - "!node_modules/better-sqlite3/prebuilds/linux-arm64.node"
+  - "!node_modules/better-sqlite3/prebuilds/linux-x64.node"
+  - "!node_modules/better-sqlite3/prebuilds/linuxmusl-arm64.node"
+  - "!node_modules/better-sqlite3/prebuilds/linuxmusl-x64.node"
+  - "!node_modules/better-sqlite3/prebuilds/win32-arm64.node"
 asar: true
 asarUnpack:
   - node_modules/better-sqlite3/**/*
   - node_modules/sharp/**/*
   - node_modules/@img/**/*
 npmRebuild: true
+electronLanguages:
+  - en-US
 generateUpdatesFilesForAllChannels: true
 publish:
   provider: github
