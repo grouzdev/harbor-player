@@ -421,8 +421,9 @@ export function Player({
             : "Локальное воспроизведение"}
         </span>
         <button
-          className="icon-button"
+          className={`icon-button ${player.volume === 0 ? "active" : ""}`}
           aria-label={player.volume ? "Выключить звук" : "Включить звук"}
+          aria-pressed={player.volume === 0}
           onClick={() => player.setVolume(player.volume ? 0 : 0.7)}
         >
           {player.volume ? <Volume2 size={18} /> : <VolumeX size={18} />}
@@ -441,6 +442,7 @@ export function Player({
         <button
           className={`icon-button ${player.repeat !== "off" ? "active" : ""}`}
           aria-label={`Повтор: ${player.repeat === "off" ? "выключен" : player.repeat === "all" ? "вся очередь" : "один трек"}`}
+          aria-pressed={player.repeat !== "off"}
           onClick={() =>
             player.setRepeat(
               player.repeat === "off"
