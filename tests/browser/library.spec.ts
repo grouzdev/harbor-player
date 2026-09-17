@@ -1886,18 +1886,72 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     "true",
   );
 
-  await page.getByRole("button", { name: "Открыть быстрый поиск" }).click();
-  const quickSearch = page.getByRole("dialog", { name: "Быстрый поиск" });
-  await quickSearch.getByLabel("Быстрый поиск музыки").fill("Первый трек");
+  const coverSearch = page.locator(".cover-search");
+  const coverSearchInput = coverSearch.getByLabel("Поиск музыки");
+  await expect(coverSearchInput).toHaveAttribute(
+    "placeholder",
+    "Треки, артисты, альбомы",
+  );
+  const [topbarBox, coverSearchBox] = await Promise.all([
+    page.locator(".topbar").boundingBox(),
+    coverSearch.locator(".search").boundingBox(),
+  ]);
+  expect(topbarBox).not.toBeNull();
+  expect(coverSearchBox).not.toBeNull();
+  expect(
+    Math.abs(
+      coverSearchBox!.x +
+        coverSearchBox!.width / 2 -
+        (topbarBox!.x + topbarBox!.width / 2),
+    ),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(
+      coverSearchBox!.y + coverSearchBox!.height / 2 -
+        (topbarBox!.y + topbarBox!.height / 2),
+    ),
+  ).toBeLessThanOrEqual(1);
+  await expect(
+    page.getByRole("dialog", { name: "Результаты поиска" }),
+  ).toHaveCount(0);
+  await coverSearchInput.fill("проверка");
+  await coverSearch.getByRole("button", { name: "Очистить поиск" }).click();
+  await expect(coverSearchInput).toHaveValue("");
+  await expect(
+    page.getByRole("dialog", { name: "Результаты поиска" }),
+  ).toHaveCount(0);
+  await coverSearchInput.fill("Первый трек");
+  await expect(
+    coverSearch.getByRole("button", { name: "Очистить поиск" }),
+  ).toBeVisible();
+  const quickSearch = page.getByRole("dialog", { name: "Результаты поиска" });
+  const quickSearchBox = await quickSearch.boundingBox();
+  expect(quickSearchBox).not.toBeNull();
+  expect(quickSearchBox!.y).toBeGreaterThan(coverSearchBox!.y + coverSearchBox!.height);
+  expect(
+    Math.abs(
+      quickSearchBox!.x +
+        quickSearchBox!.width / 2 -
+        (topbarBox!.x + topbarBox!.width / 2),
+    ),
+  ).toBeLessThanOrEqual(1);
   await expect(
     quickSearch.getByRole("heading", { name: "Треки" }),
   ).toBeVisible();
+  const searchRows = quickSearch.locator(".quick-search-result");
+  const rowCount = await searchRows.count();
+  for (let index = 0; index < Math.min(rowCount, 3); index += 1) {
+    await searchRows.nth(index).hover();
+    await expect(coverMode).toBeVisible();
+    await expect(quickSearch).toBeVisible();
+  }
   await quickSearch
     .locator(".quick-search-result")
     .filter({ hasText: "Первый трек" })
     .first()
     .click();
   await expect(quickSearch).not.toBeVisible();
+  await expect(coverSearchInput).toHaveValue("");
 
   await coverMode
     .getByRole("button", { name: "Открыть обложку в оригинальном размере" })

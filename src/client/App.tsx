@@ -456,7 +456,7 @@ export function App() {
   const [fullscreenWindowBounds, setFullscreenWindowBounds] =
     useState<FullscreenWindowBounds | null>(null);
   const [coverMode, setCoverMode] = useState(false);
-  const [quickSearchOpen, setQuickSearchOpen] = useState(false);
+  const [coverSearch, setCoverSearch] = useState("");
   const [artistScrollTarget, setArtistScrollTarget] = useState<{
     artist: string;
     requestId: number;
@@ -859,7 +859,7 @@ export function App() {
   useEffect(() => {
     if (!player.queue?.track) {
       setCoverMode(false);
-      setQuickSearchOpen(false);
+      setCoverSearch("");
     }
   }, [player.queue?.track]);
   useEffect(() => {
@@ -1598,7 +1598,7 @@ export function App() {
     ) => {
       const navigationFilterKey = filterKey;
       setCoverMode(false);
-      setQuickSearchOpen(false);
+      setCoverSearch("");
       const artists =
         target === "album"
           ? albumArtists.length
@@ -2033,15 +2033,34 @@ export function App() {
           </div>
         )}
         {coverMode ? (
-          <button
-            type="button"
-            className="search cover-search-trigger"
-            aria-label="Открыть быстрый поиск"
-            onClick={() => setQuickSearchOpen(true)}
-          >
-            <Search size={18} />
-            <span>Жанры, исполнители, альбомы, треки</span>
-          </button>
+          <div className="cover-search">
+            <label className="search">
+              <Search size={18} />
+              <input
+                aria-label="Поиск музыки"
+                placeholder="Треки, артисты, альбомы"
+                value={coverSearch}
+                onChange={(event) => setCoverSearch(event.target.value)}
+              />
+              {coverSearch && (
+                <button
+                  className="icon-button"
+                  aria-label="Очистить поиск"
+                  onClick={() => setCoverSearch("")}
+                >
+                  <X size={15} />
+                </button>
+              )}
+            </label>
+            {coverSearch.trim() && (
+              <QuickSearchDialog
+                query={coverSearch}
+                onClose={() => setCoverSearch("")}
+                onPlayFilter={player.startFilter}
+                onPlayAlbum={(albumId) => player.startAlbum(albumId)}
+              />
+            )}
+          </div>
         ) : (
           <label className="search">
             <Search size={18} />
@@ -2124,7 +2143,7 @@ export function App() {
           disabled={!player.queue?.track}
           onClick={() => {
             if (!player.queue?.track) return;
-            setQuickSearchOpen(false);
+            setCoverSearch("");
             setCoverMode((current) => !current);
           }}
         >
@@ -2618,17 +2637,10 @@ export function App() {
         coverMode={coverMode}
         onToggleCoverMode={() => {
           if (!player.queue?.track) return;
-          setQuickSearchOpen(false);
+          setCoverSearch("");
           setCoverMode((current) => !current);
         }}
       />
-      {quickSearchOpen && coverMode && (
-        <QuickSearchDialog
-          onClose={() => setQuickSearchOpen(false)}
-          onPlayFilter={player.startFilter}
-          onPlayAlbum={(albumId) => player.startAlbum(albumId)}
-        />
-      )}
       <ContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
       <UpdatePanel />
       {toast && (

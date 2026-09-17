@@ -246,15 +246,16 @@ function ArtworkViewer({
 }
 
 export function QuickSearchDialog({
+  query,
   onClose,
   onPlayFilter,
   onPlayAlbum,
 }: {
+  query: string;
   onClose: () => void;
   onPlayFilter: (filter: CatalogFilter, startId?: string) => Promise<boolean>;
   onPlayAlbum: (albumId: string) => Promise<boolean>;
 }) {
-  const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   const [active, setActive] = useState(0);
   const [pending, setPending] = useState(false);
@@ -263,13 +264,6 @@ export function QuickSearchDialog({
     const timer = setTimeout(() => setDebounced(query.trim()), 160);
     return () => clearTimeout(timer);
   }, [query]);
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
   const results = useQuery({
     queryKey: ["quick-search", debounced],
     queryFn: () =>
@@ -299,7 +293,31 @@ export function QuickSearchDialog({
       })),
     ];
   }, [results.data]);
+  const isQueryPending = query.trim() !== debounced || results.isPending;
   useEffect(() => setActive(0), [items.length, debounced]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      } else if (
+        items.length &&
+        (event.key === "ArrowDown" || event.key === "ArrowUp")
+      ) {
+        event.preventDefault();
+        setActive((current) =>
+          event.key === "ArrowDown"
+            ? (current + 1) % items.length
+            : (current - 1 + items.length) % items.length,
+        );
+      } else if (items.length && event.key === "Enter") {
+        event.preventDefault();
+        void activate(items[active]);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [active, items, onClose]);
   useEffect(
     () => activeRef.current?.scrollIntoView({ block: "nearest" }),
     [active],
@@ -328,133 +346,88 @@ export function QuickSearchDialog({
     if (success) onClose();
   };
   return (
-    <div
-      className="quick-search-backdrop"
+    <section
+      className="quick-search-dialog"
       role="dialog"
-      aria-modal="true"
-      aria-label="Быстрый поиск"
+      aria-label="Результаты поиска"
     >
-      <section
-        className="quick-search-dialog"
-        onKeyDown={(event) => {
-          if (!items.length) return;
-          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-            event.preventDefault();
-            setActive((current) =>
-              event.key === "ArrowDown"
-                ? (current + 1) % items.length
-                : (current - 1 + items.length) % items.length,
-            );
-          } else if (event.key === "Enter") {
-            event.preventDefault();
-            void activate(items[active]);
-          }
-        }}
-      >
-        <div className="quick-search-input">
-          <Search size={21} />
-          <input
-            autoFocus
-            aria-label="Быстрый поиск музыки"
-            placeholder="Жанры, исполнители, альбомы, треки"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          <button
-            className="icon-button"
-            aria-label="Закрыть быстрый поиск"
-            onClick={onClose}
-          >
-            <X size={20} />
-          </button>
-        </div>
-        <div className="quick-search-results" aria-live="polite">
-          {!debounced ? (
-            <div className="quick-search-state">
-              <Search size={32} />
-              <span>Начните вводить название</span>
-            </div>
-          ) : results.isPending ? (
-            <div className="quick-search-state">Ищем в медиатеке…</div>
-          ) : results.isError ? (
-            <div className="quick-search-state">
-              <span>Не удалось выполнить поиск.</span>
-              <button
-                className="text-button"
-                onClick={() => void results.refetch()}
+      <div className="quick-search-results" aria-live="polite">
+        {isQueryPending ? (
+          <div className="quick-search-state">Ищем в медиатеке…</div>
+        ) : results.isError ? (
+          <div className="quick-search-state">
+            <span>Не удалось выполнить поиск.</span>
+            <button
+              className="text-button"
+              onClick={() => void results.refetch()}
+            >
+              Повторить
+            </button>
+          </div>
+        ) : !items.length ? (
+          <div className="quick-search-state">Ничего не найдено</div>
+        ) : (
+          items.map((item, index) => {
+            const previousKind = items[index - 1]?.kind;
+            const title =
+              item.kind === "track" || item.kind === "album"
+                ? item.value.title
+                : item.value.name;
+            const subtitle =
+              item.kind === "track"
+                ? `${item.value.artists.join(", ") || "Неизвестный исполнитель"} · ${item.value.albumTitle || "Без альбома"}`
+                : item.kind === "album"
+                  ? `${item.value.artists.join(", ") || "Неизвестный исполнитель"}${item.value.year ? ` · ${item.value.year}` : ""}`
+                  : item.kind === "artist"
+                    ? `${item.value.count} альб.`
+                    : `${item.value.count} тр.`;
+            return (
+              <div
+                className="quick-search-entry"
+                key={`${item.kind}-${item.kind === "track" || item.kind === "album" ? item.value.id : item.value.name}`}
               >
-                Повторить
-              </button>
-            </div>
-          ) : !items.length ? (
-            <div className="quick-search-state">Ничего не найдено</div>
-          ) : (
-            items.map((item, index) => {
-              const previousKind = items[index - 1]?.kind;
-              const title =
-                item.kind === "track" || item.kind === "album"
-                  ? item.value.title
-                  : item.value.name;
-              const subtitle =
-                item.kind === "track"
-                  ? `${item.value.artists.join(", ") || "Неизвестный исполнитель"} · ${item.value.albumTitle || "Без альбома"}`
-                  : item.kind === "album"
-                    ? `${item.value.artists.join(", ") || "Неизвестный исполнитель"}${item.value.year ? ` · ${item.value.year}` : ""}`
-                    : item.kind === "artist"
-                      ? `${item.value.count} альб.`
-                      : `${item.value.count} тр.`;
-              return (
-                <div
-                  className="quick-search-entry"
-                  key={`${item.kind}-${item.kind === "track" || item.kind === "album" ? item.value.id : item.value.name}`}
+                {item.kind !== previousKind && (
+                  <h2>{groupLabels[item.kind]}</h2>
+                )}
+                <button
+                  ref={index === active ? activeRef : undefined}
+                  className={`quick-search-result ${index === active ? "active" : ""}`}
+                  disabled={pending}
+                  onClick={() => void activate(item)}
                 >
-                  {item.kind !== previousKind && (
-                    <h2>{groupLabels[item.kind]}</h2>
-                  )}
-                  <button
-                    ref={index === active ? activeRef : undefined}
-                    className={`quick-search-result ${index === active ? "active" : ""}`}
-                    disabled={pending}
-                    onMouseEnter={() => setActive(index)}
-                    onClick={() => void activate(item)}
-                  >
-                    <span className="quick-search-icon">
-                      {item.kind === "track" || item.kind === "album" ? (
-                        item.value.coverId ? (
-                          <img
-                            src={`/api/covers/${item.value.coverId}`}
-                            alt=""
-                          />
-                        ) : (
-                          <Disc3 size={20} />
-                        )
-                      ) : item.kind === "artist" ? (
-                        <UserRound size={20} />
+                  <span className="quick-search-icon">
+                    {item.kind === "track" || item.kind === "album" ? (
+                      item.value.coverId ? (
+                        <img src={`/api/covers/${item.value.coverId}`} alt="" />
                       ) : (
-                        <ListMusic size={20} />
-                      )}
-                    </span>
-                    <span className="quick-search-copy">
-                      <strong>
-                        {title ||
-                          (item.kind === "artist"
-                            ? "Неизвестный исполнитель"
-                            : "Без названия")}
-                      </strong>
-                      <small>{subtitle}</small>
-                    </span>
-                    {item.kind === "track" && (
-                      <span className="quick-search-duration">
-                        {duration(item.value.duration)}
-                      </span>
+                        <Disc3 size={20} />
+                      )
+                    ) : item.kind === "artist" ? (
+                      <UserRound size={20} />
+                    ) : (
+                      <ListMusic size={20} />
                     )}
-                  </button>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </section>
-    </div>
+                  </span>
+                  <span className="quick-search-copy">
+                    <strong>
+                      {title ||
+                        (item.kind === "artist"
+                          ? "Неизвестный исполнитель"
+                          : "Без названия")}
+                    </strong>
+                    <small>{subtitle}</small>
+                  </span>
+                  {item.kind === "track" && (
+                    <span className="quick-search-duration">
+                      {duration(item.value.duration)}
+                    </span>
+                  )}
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </section>
   );
 }
