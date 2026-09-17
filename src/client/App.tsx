@@ -2871,6 +2871,7 @@ function ArtistList({
   } | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const groupByLetters = total > 10;
   const rows = useMemo(() => {
     const result: (
       | { type: "group"; key: string; label: string; compact: boolean }
@@ -2879,6 +2880,7 @@ function ArtistList({
     let hasGroup = false;
     for (const [index, item] of items.entries()) {
       if (
+        groupByLetters &&
         !isMissingArtistName(item.name) &&
         (index === 0 || startsNewArtistGroup(item.name, items[index - 1]?.name))
       ) {
@@ -2893,7 +2895,7 @@ function ArtistList({
       result.push({ type: "artist", item });
     }
     return result;
-  }, [items]);
+  }, [groupByLetters, items]);
   const selection = usePanelSelection({
     scrollRef: ref,
     selectedKeys: selected,
