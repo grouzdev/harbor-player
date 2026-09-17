@@ -6,6 +6,7 @@ export interface DesktopBridge {
   checkForUpdates(): Promise<void>;
   downloadUpdate(): Promise<void>;
   installUpdate(): Promise<void>;
+  chooseImageFile(): Promise<string | null>;
   subscribeUpdateState(listener: (state: UpdateState) => void): () => void;
 }
 

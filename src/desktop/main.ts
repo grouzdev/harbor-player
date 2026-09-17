@@ -506,6 +506,17 @@ async function bootstrap() {
       ipcMain.handle("desktop:check-for-updates", (event) => { requireDesktopSender(event); return checkForUpdates(true); });
       ipcMain.handle("desktop:download-update", (event) => { requireDesktopSender(event); return downloadUpdate(); });
       ipcMain.handle("desktop:install-update", (event) => { requireDesktopSender(event); return installUpdate(); });
+      ipcMain.handle("desktop:choose-image-file", async (event) => {
+        requireDesktopSender(event);
+        const result = await dialog.showOpenDialog(mainWindow!, {
+          title: "Выберите фоновое изображение",
+          properties: ["openFile"],
+          filters: [
+            { name: "Изображения", extensions: ["jpg", "jpeg", "png", "webp"] },
+          ],
+        });
+        return result.canceled ? null : result.filePaths[0] || null;
+      });
       configureUpdates();
       createWindow(url);
       createTray();

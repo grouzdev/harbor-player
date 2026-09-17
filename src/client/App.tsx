@@ -27,6 +27,7 @@ import {
   FolderOpen,
   FolderInput,
   History,
+  Settings,
   Maximize2,
   Minimize2,
   Music2,
@@ -75,6 +76,13 @@ import {
   setCsrf,
   reconnectSession,
 } from "./api";
+import {
+  applyAppearance,
+  cacheAppearance,
+  readCachedAppearance,
+  type AppearanceSettings,
+} from "./appearance";
+import { AppearanceSettingsDialog } from "./AppearanceSettingsDialog";
 import {
   ActionDialog,
   AddLibraryDialog,
@@ -416,6 +424,12 @@ export function App() {
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [panelVisibility, setPanelVisibility] =
     useState<PanelVisibility>(readPanelVisibility);
+  const [appearance, setAppearance] = useState<AppearanceSettings>(() => {
+    const cached = readCachedAppearance();
+    applyAppearance(cached);
+    return cached;
+  });
+  const appearanceTouchedRef = useRef(false);
   const [modal, setModal] = useState<
     | "add"
     | "move"
@@ -425,6 +439,7 @@ export function App() {
     | "rename-library"
     | "remove-library"
     | "artist-folders"
+    | "settings"
     | null
   >(null);
   const [libraryToRename, setLibraryToRename] = useState<Library | null>(null);
@@ -519,6 +534,25 @@ export function App() {
     observer.observe(shell);
     return () => observer.disconnect();
   }, []);
+  const updateAppearance = useCallback((next: AppearanceSettings) => {
+    appearanceTouchedRef.current = true;
+    cacheAppearance(next);
+    applyAppearance(next);
+    setAppearance(next);
+  }, []);
+  useEffect(() => {
+    if (!ready) return;
+    void api<AppearanceSettings>("/appearance")
+      .then((remote) => {
+        if (appearanceTouchedRef.current) return;
+        cacheAppearance(remote);
+        applyAppearance(remote);
+        setAppearance(remote);
+      })
+      .catch(() => {
+        // Cached appearance remains available when the local server is restarting.
+      });
+  }, [ready, updateAppearance]);
   useEffect(() => {
     const syncFullscreen = () => {
       const fullscreen =
@@ -1954,15 +1988,18 @@ export function App() {
         </button>
       </main>
     );
-  const fullscreenWindowStyle =
-    isFullscreen && fullscreenWindowMode === "custom" && fullscreenWindowBounds
-      ? ({
+  const fullscreenWindowStyle = {
+    ...(isFullscreen &&
+    fullscreenWindowMode === "custom" &&
+    fullscreenWindowBounds
+      ? {
           "--fullscreen-window-x": `${fullscreenWindowBounds.x}px`,
           "--fullscreen-window-y": `${fullscreenWindowBounds.y}px`,
           "--fullscreen-window-width": `${fullscreenWindowBounds.width}px`,
           "--fullscreen-window-height": `${fullscreenWindowBounds.height}px`,
-        } as CSSProperties)
-      : undefined;
+        }
+      : {}),
+  } as CSSProperties;
   const renderPanelResizer = (leftId: PanelId) => {
     const rightId = nextVisiblePanel(leftId);
     if (!rightId) return null;
@@ -2133,6 +2170,15 @@ export function App() {
             <History size={21} />
           </button>
         )}
+        <button
+          type="button"
+          className="icon-button settings-button"
+          aria-label="Открыть настройки"
+          title="Настройки"
+          onClick={() => setModal("settings")}
+        >
+          <Settings size={20} />
+        </button>
         <button
           type="button"
           className="icon-button cover-mode-toggle"
@@ -2755,6 +2801,13 @@ export function App() {
           onClose={() => setModal(null)}
           onPreview={showPreview}
           onOperationStarted={watchOperation}
+        />
+      )}
+      {modal === "settings" && (
+        <AppearanceSettingsDialog
+          settings={appearance}
+          onChange={updateAppearance}
+          onClose={() => setModal(null)}
         />
       )}
       {preview && (

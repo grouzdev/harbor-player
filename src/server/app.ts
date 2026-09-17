@@ -21,6 +21,13 @@ import { normalizeWebpCover } from "./cover-image.js";
 import { openInExplorer, type ExplorerLauncher } from "./explorer.js";
 import type { MusicBrainzOptions } from "./musicbrainz.js";
 import type { TagWriter } from "./isolated-tag-writer.js";
+import {
+  appearanceBackgroundPath,
+  clearAppearanceBackground,
+  importAppearanceBackground,
+  readAppearance,
+  writeAppearance,
+} from "./appearance.js";
 
 const pageSchema = z.object({
   offset: z.coerce.number().int().min(0).max(100000).default(0),
@@ -150,6 +157,60 @@ export async function createApp(options: {
   app.get("/api/libraries", async () => {
     await service.refreshAvailability();
     return service.catalog.libraries();
+  });
+  const appearanceSchema = z
+    .object({
+      theme: z.enum(["dark", "light"]),
+      accent: z.string().regex(/^#[0-9a-f]{6}$/i),
+      backgroundRevision: z.number().int().min(0),
+    })
+    .strict();
+  app.get("/api/appearance", async () => readAppearance(service.dataDir));
+  app.post("/api/appearance", async (request) => {
+    const settings = appearanceSchema.parse(request.body);
+    if (settings.backgroundRevision === 0)
+      return clearAppearanceBackground(service.dataDir).then((saved) =>
+        writeAppearance(service.dataDir, {
+          ...settings,
+          backgroundRevision: saved.backgroundRevision,
+        }),
+      );
+    const current = await readAppearance(service.dataDir);
+    return writeAppearance(service.dataDir, {
+      ...settings,
+      backgroundRevision: current.backgroundRevision,
+    });
+  });
+  app.post("/api/appearance/background", async (request) => {
+    const body = z
+      .object({
+        data: z.string().min(1).max(11_000_000).optional(),
+        path: z.string().trim().min(1).max(32000).optional(),
+        theme: z.enum(["dark", "light"]),
+        accent: z.string().regex(/^#[0-9a-f]{6}$/i),
+      })
+      .strict()
+      .refine((value) => Boolean(value.data) !== Boolean(value.path), {
+        message: "Укажите один источник изображения",
+      })
+      .parse(request.body);
+    const saved = await importAppearanceBackground(
+      service.dataDir,
+      body.data ? Buffer.from(body.data, "base64") : path.resolve(body.path!),
+    );
+    return writeAppearance(service.dataDir, {
+      ...saved,
+      theme: body.theme,
+      accent: body.accent.toLowerCase(),
+    });
+  });
+  app.get("/api/appearance/background", async (_request, reply) => {
+    const file = appearanceBackgroundPath(service.dataDir);
+    if (!existsSync(file)) return reply.code(404).send();
+    return reply
+      .header("Cache-Control", "private, max-age=86400")
+      .type("image/jpeg")
+      .send(createReadStream(file));
   });
   app.get("/api/libraries/:id/folders", async (request) => {
     const { id } = idParam.parse(request.params);

@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useId,
   useRef,
   type KeyboardEventHandler,
   type ReactNode,
@@ -23,6 +24,7 @@ export function Modal({
   onKeyDown?: KeyboardEventHandler<HTMLDialogElement>;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
   useEffect(() => {
     const dialog = ref.current!;
     dialog.showModal();
@@ -33,6 +35,7 @@ export function Modal({
     <dialog
       ref={ref}
       className={wide ? "modal wide" : "modal"}
+      aria-labelledby={titleId}
       tabIndex={-1}
       onKeyDown={onKeyDown}
       onCancel={(e) => {
@@ -43,7 +46,7 @@ export function Modal({
       <div className="modal-content">
         <header className="modal-header">
           <div>
-            <h2>{title}</h2>
+            <h2 id={titleId}>{title}</h2>
             {subtitle && <p>{subtitle}</p>}
           </div>
           <button

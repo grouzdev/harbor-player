@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld("myMusicLibDesktop", {
   checkForUpdates: () => ipcRenderer.invoke("desktop:check-for-updates"),
   downloadUpdate: () => ipcRenderer.invoke("desktop:download-update"),
   installUpdate: () => ipcRenderer.invoke("desktop:install-update"),
+  chooseImageFile: () =>
+    ipcRenderer.invoke("desktop:choose-image-file") as Promise<string | null>,
   subscribeUpdateState: (
     listener: (state: import("../shared/desktop-contract.js").UpdateState) => void,
   ) => {

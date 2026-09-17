@@ -1843,6 +1843,10 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   await expect(coverMode).toBeVisible();
   await expect(page.locator(".workspace")).toBeHidden();
   await expect(page.locator(".app-shell")).toHaveClass(/app-shell--cover-mode/);
+  await expect(page.locator(".app-shell")).toHaveCSS(
+    "background-color",
+    "rgba(0, 0, 0, 0)",
+  );
   await expect(page.locator(".panel-visibility-controls")).toHaveCount(0);
   await expect(page.locator(".topbar")).toBeVisible();
   await expect(page.locator(".player")).toBeVisible();
@@ -1853,7 +1857,7 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     page.getByRole("button", { name: "Журнал операций" }),
   ).toHaveCount(0);
   await expect(page.locator(".cover-mode-toggle")).toBeVisible();
-  await expect(coverMode).toHaveCSS("background-image", /bg_lounge/);
+  await expect(coverMode).toHaveCSS("background-image", /linear-gradient/);
   await expect(coverMode.getByRole("heading", { level: 1 })).toContainText(
     "Первый трек",
   );
