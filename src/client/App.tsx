@@ -2043,7 +2043,9 @@ export function App() {
       ref={appShellRef}
       className={`app-shell fullscreen-window--${fullscreenWindowMode}${
         coverMode ? " app-shell--cover-mode" : ""
-      }${isPortraitLayout ? " layout--portrait" : ""}`}
+      }${isPortraitLayout ? " layout--portrait" : ""}${
+        visiblePanelIds.length ? "" : " app-shell--empty-workspace"
+      }`}
       style={fullscreenWindowStyle}
     >
       {isFullscreen && (

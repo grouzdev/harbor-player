@@ -2598,6 +2598,13 @@ html:fullscreen .app-shell.app-shell--cover-mode {
   background: transparent;
 }
 
+.app-shell.app-shell--empty-workspace {
+  background:
+    linear-gradient(145deg, #121313a8, #090a0ab8),
+    transparent;
+  backdrop-filter: blur(14px);
+}
+
 html:fullscreen .app-shell.fullscreen-window--default {
   position: absolute;
   inset: var(--room-inset-y) var(--room-inset-x);
@@ -2758,6 +2765,10 @@ select {
 
 .workspace {
   background: #101111e8;
+}
+
+.workspace.workspace-empty {
+  background: transparent;
 }
 
 .libraries-panel,
