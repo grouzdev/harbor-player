@@ -445,7 +445,7 @@ describe("HTTP boundary", () => {
 });
 
 describe("Album catalog sorting", () => {
-  it("groups albums by artist, then puts undated albums before newest years", () => {
+  it("groups albums by artists, then puts undated albums before newest years", () => {
     const library = context.service.catalog.addLibrary("Library", root);
     const albums = [
       { id: "beta-new", title: "Zebra", year: 2025, artists: ["Beta"] },
@@ -568,6 +568,53 @@ describe("Album catalog sorting", () => {
       "old-2",
     ]);
   });
+
+  it("keeps album, track, and queue order aligned by album artists", () => {
+    const library = context.service.catalog.addLibrary("Library", root);
+    const albums = [
+      { id: "beta", year: 2025, artists: ["Beta"] },
+      { id: "alpha-new", year: 2025, artists: ["Alpha"] },
+      { id: "alpha-unknown", year: null, artists: ["Alpha"] },
+      { id: "collaboration", year: 2024, artists: ["Alpha", "Guest"] },
+    ];
+    for (const album of albums)
+      context.service.catalog.upsert({
+        id: `${album.id}-track`,
+        libraryId: library.id,
+        relativePath: `${album.id}.flac`,
+        title: "Track",
+        artists: album.artists,
+        albumTitle: album.id,
+        albumArtists: album.artists,
+        albumKey: album.id,
+        genres: [],
+        year: album.year,
+        trackNumber: 1,
+        discNumber: 1,
+        duration: 1,
+        format: "flac",
+        size: 1,
+        mtimeMs: 1,
+        coverId: null,
+        available: true,
+      });
+
+    const filter = {
+      libraryIds: [],
+      genres: [],
+      artists: [],
+      albumIds: [],
+      search: "",
+    };
+    const expected = ["alpha-unknown", "alpha-new", "collaboration", "beta"];
+    expect(context.service.catalog.albums(filter).items.map((album) => album.id)).toEqual(expected);
+    expect(
+      context.service.catalog.tracks(filter).items.map((track) => track.albumKey),
+    ).toEqual(expected);
+    expect(context.service.catalog.trackIds(filter)).toEqual(
+      expected.map((id) => `${id}-track`),
+    );
+  });
 });
 
 describe("Explorer endpoint", () => {
@@ -586,6 +633,7 @@ describe("Explorer endpoint", () => {
     relativePath: string,
     id: string,
     albumKey = "album",
+    year: number | null = null,
   ) {
     const folder = path.join(root, "Music");
     const file = path.join(folder, relativePath);
@@ -604,7 +652,7 @@ describe("Explorer endpoint", () => {
       albumArtists: [],
       albumKey,
       genres: [],
-      year: null,
+      year,
       trackNumber: null,
       discNumber: null,
       duration: 0,
@@ -731,6 +779,33 @@ describe("Explorer endpoint", () => {
     expect(fromFilter.statusCode).toBe(200);
     expect(fromFilter.json()).toMatchObject({ position: 0, total: 2 });
     expect(fromFilter.json().track.id).toBe("first");
+  });
+  it("starts a filtered queue with the first track shown in the tracks panel", async () => {
+    await addTrack("Old/track.flac", "old", "old-album", 2020);
+    await addTrack("New/track.flac", "new", "new-album", 2025);
+    const filter = {
+      libraryIds: [],
+      folders: [],
+      genres: [],
+      artists: [],
+      albumIds: [],
+      search: "",
+      bookmarksOnly: false,
+    };
+    const firstInPanel = context.service.catalog.tracks(filter).items[0]?.id;
+    const started = await context.app.inject({
+      method: "POST",
+      url: "/api/queue",
+      headers: await sessionHeaders(),
+      payload: { filter },
+    });
+
+    expect(firstInPanel).toBe("new");
+    expect(started.statusCode).toBe(200);
+    expect(started.json()).toMatchObject({
+      position: 0,
+      track: { id: "new" },
+    });
   });
   it("builds Windows Explorer arguments for folders and selected files", () => {
     expect(explorerArgs({ directory: "C:\\Music\\Album" })).toEqual([

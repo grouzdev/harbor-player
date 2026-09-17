@@ -61,6 +61,7 @@ import {
   type Track,
 } from "../shared/contracts";
 import {
+  albumArtistGroupKey,
   artistGroupKey,
   isMissingArtistName,
   startsNewArtistGroup,
@@ -2370,13 +2371,22 @@ export function App() {
                     selectionKey={g.name}
                     value={label}
                     suffix={count(g.count)}
-                    onSelect={(event) =>
+                    onSelect={(event) => {
+                      if (
+                        !event.ctrlKey &&
+                        !event.metaKey &&
+                        !event.shiftKey &&
+                        filter.genres.includes(g.name)
+                      ) {
+                        void player.startFilter(filter);
+                        return;
+                      }
                       genreSelection.selectFromClick(
                         event,
                         g.name,
                         genres.data?.map((item) => item.name) || [],
-                      )
-                    }
+                      );
+                    }}
                   />
                 );
               })}
@@ -2414,6 +2424,9 @@ export function App() {
                   void artists.fetchNextPage();
               }}
               onContextMenu={showCatalogMenu}
+              onPlayArtist={(artist) =>
+                void player.startFilter({ ...filter, artists: [artist] })
+              }
               bookmarkKeys={bookmarkKeys}
               bookmarksUnavailable={bookmarksUnavailable}
               pendingBookmarkKeys={pendingBookmarkKeys}
@@ -2778,6 +2791,7 @@ function ArtistList({
   onSelectionChange,
   onMore,
   onContextMenu,
+  onPlayArtist,
   bookmarkKeys,
   bookmarksUnavailable,
   pendingBookmarkKeys,
@@ -2792,6 +2806,7 @@ function ArtistList({
   onSelectionChange: (names: string[]) => void;
   onMore: () => void;
   onContextMenu: CatalogContextMenuHandler;
+  onPlayArtist: (artist: string) => void;
   bookmarkKeys: Set<string>;
   bookmarksUnavailable: boolean;
   pendingBookmarkKeys: Set<string>;
@@ -2914,13 +2929,22 @@ function ArtistList({
               selectionKey={item.name}
               value={label}
               suffix={count(item.count)}
-              onSelect={(event) =>
+              onSelect={(event) => {
+                if (
+                  !event.ctrlKey &&
+                  !event.metaKey &&
+                  !event.shiftKey &&
+                  selected.includes(item.name)
+                ) {
+                  onPlayArtist(item.name);
+                  return;
+                }
                 selection.selectFromClick(
                   event,
                   item.name,
                   items.map((entry) => entry.name),
-                )
-              }
+                );
+              }}
               onContextMenu={(event) => {
                 const selectedIds = resolveContextSelection(
                   selected,
@@ -3049,12 +3073,7 @@ function AlbumGrid({
         });
     };
     for (const album of albums) {
-      const key = album.artists.length
-        ? [...album.artists]
-            .map((artist) => artist.toLocaleLowerCase())
-            .sort()
-            .join("\u001f")
-        : "\u001f";
+      const key = albumArtistGroupKey(album.artists);
       if (group.length && key !== groupKey) {
         appendGroup();
         group = [];

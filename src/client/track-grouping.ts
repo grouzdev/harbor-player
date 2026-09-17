@@ -1,4 +1,5 @@
 import type { Track } from "../shared/contracts";
+import { compareArtistNames } from "../shared/artist-grouping";
 
 export type TrackListRow =
   | { type: "album"; track: Track; artists: string[]; genres: string[] }
@@ -54,7 +55,7 @@ export function buildTrackListRows(tracks: Track[]): TrackListRow[] {
           item.albumArtists.length ? item.albumArtists : item.artists,
         ),
       ),
-    ].sort((a, b) => a.localeCompare(b, "ru", { sensitivity: "base" }));
+    ].sort(compareArtistNames);
     result.push({
       type: "album",
       track,

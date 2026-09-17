@@ -1,7 +1,28 @@
-const collator = new Intl.Collator("und", {
-  sensitivity: "base",
-  numeric: true,
-});
+/**
+ * Canonical key shared by the client and SQLite catalog queries.
+ * Missing names stay first, non-letter names form the existing `#` section,
+ * and letter names compare case- and accent-insensitively.
+ */
+export function artistSortKey(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "0";
+  const normalized = trimmed
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLocaleLowerCase();
+  if (!/^\p{L}/u.test(normalized)) return `1${normalized}`;
+  const first = Array.from(normalized)[0];
+  const script = /\p{Script=Cyrillic}/u.test(first)
+    ? "2"
+    : /\p{Script=Latin}/u.test(first)
+      ? "3"
+      : "4";
+  return `${script}${normalized}`;
+}
+
+export function albumArtistGroupKey(artists: readonly string[]): string {
+  return [...artists].map(artistSortKey).sort().join("\u001f");
+}
 
 /**
  * Returns the normalized first letter of an artist name, or null when its
@@ -20,22 +41,9 @@ export function isMissingArtistName(name: string): boolean {
 }
 
 export function compareArtistNames(a: string, b: string): number {
-  const aMissing = isMissingArtistName(a);
-  const bMissing = isMissingArtistName(b);
-  if (aMissing && !bMissing) return -1;
-  if (!aMissing && bMissing) return 1;
-
-  const aGroup = artistGroupKey(a);
-  const bGroup = artistGroupKey(b);
-  if (aGroup === null && bGroup !== null) return -1;
-  if (aGroup !== null && bGroup === null) return 1;
-  if (aGroup !== null && bGroup !== null) {
-    const groupOrder = collator.compare(aGroup, bGroup);
-    if (groupOrder) return groupOrder;
-  }
-
-  const nameOrder = collator.compare(a, b);
-  return nameOrder || a.localeCompare(b);
+  const left = artistSortKey(a);
+  const right = artistSortKey(b);
+  return left < right ? -1 : left > right ? 1 : a.localeCompare(b);
 }
 
 export function startsNewArtistGroup(

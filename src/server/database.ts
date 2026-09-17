@@ -19,7 +19,10 @@ import type {
   Selection,
   Track,
 } from "../shared/contracts.js";
-import { compareArtistNames } from "../shared/artist-grouping.js";
+import {
+  artistSortKey,
+  compareArtistNames,
+} from "../shared/artist-grouping.js";
 
 type Row = Record<string, any>;
 const checkedFolderPath = (relativePath: string) => {
@@ -52,6 +55,11 @@ export class Catalog {
   constructor(readonly dataDir: string) {
     mkdirSync(dataDir, { recursive: true });
     this.db = new Database(path.join(dataDir, "catalog.sqlite"));
+    this.db.function(
+      "artist_sort_key",
+      { deterministic: true },
+      (artist: string) => artistSortKey(artist),
+    );
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.db.pragma("busy_timeout = 5000");
@@ -433,7 +441,7 @@ export class Catalog {
     ).n;
     const rows = this.db
       .prepare(
-        `SELECT t.* FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql} ORDER BY t.year IS NOT NULL, t.year DESC, t.albumTitle COLLATE NOCASE, t.albumKey, coalesce(t.discNumber,0), coalesce(t.trackNumber,0), t.relativePath LIMIT ? OFFSET ?`,
+          `SELECT t.* FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql} ORDER BY ${this.albumArtistOrder("t")}, t.year IS NOT NULL, t.year DESC, t.albumTitle COLLATE NOCASE, t.albumKey, coalesce(t.discNumber,0), coalesce(t.trackNumber,0), t.relativePath LIMIT ? OFFSET ?`,
       )
       .all(...args, limit, offset) as Row[];
     const formats = new Map<string, string[]>();
@@ -495,7 +503,7 @@ export class Catalog {
     return (
       this.db
         .prepare(
-          `SELECT t.id FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql} ORDER BY t.albumTitle COLLATE NOCASE, t.albumKey, coalesce(t.discNumber,0), coalesce(t.trackNumber,0), t.relativePath LIMIT 100000`,
+          `SELECT t.id FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql} ORDER BY ${this.albumArtistOrder("t")}, t.year IS NOT NULL, t.year DESC, t.albumTitle COLLATE NOCASE, t.albumKey, coalesce(t.discNumber,0), coalesce(t.trackNumber,0), t.relativePath LIMIT 100000`,
         )
         .all(...args) as { id: string }[]
     ).map((r) => r.id);
@@ -626,16 +634,30 @@ export class Catalog {
         `SELECT DISTINCT t.albumKey id, a.artist
          FROM track_album_artists a JOIN tracks t ON t.id=a.trackId
          WHERE t.available=1 AND t.albumKey IN (${placeholders})
-         ORDER BY t.albumKey, a.artist COLLATE NOCASE`,
+         ORDER BY t.albumKey, artist_sort_key(a.artist), a.artist`,
       )
       .all(...ids) as { id: string; artist: string }[];
     for (const { id, artist } of values)
       artists.set(id, [...(artists.get(id) || []), artist]);
     return artists;
   }
+  private albumArtistOrder(trackAlias: string): string {
+    return `coalesce((
+      SELECT group_concat(artist, char(31))
+      FROM (
+        SELECT DISTINCT a.artist
+        FROM track_album_artists a
+        JOIN tracks albumTrack ON albumTrack.id=a.trackId
+        JOIN libraries albumLibrary ON albumLibrary.id=albumTrack.libraryId
+        WHERE albumTrack.albumKey=${trackAlias}.albumKey
+          AND albumTrack.available=1
+          AND albumLibrary.available=1
+        ORDER BY artist_sort_key(a.artist), a.artist
+      )
+    ), '')`;
+  }
   albums(filter: CatalogFilter, offset = 0, limit = 120): Page<Album> {
     const { sql, args } = this.where({ ...filter, albumIds: [] });
-    const artistOrder = `coalesce((SELECT group_concat(artist, char(31)) FROM (SELECT DISTINCT a.artist FROM track_album_artists a JOIN tracks artistTrack ON artistTrack.id=a.trackId WHERE artistTrack.available=1 AND artistTrack.albumKey=t.albumKey ORDER BY a.artist COLLATE NOCASE)), '')`;
     const total = (
       this.db
         .prepare(
@@ -645,12 +667,32 @@ export class Catalog {
     ).n;
     const rows = this.db
       .prepare(
-        `SELECT t.albumKey id, t.albumTitle title, t.albumArtists artists, t.year, max(t.coverId) coverId, count(*) trackCount FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql} GROUP BY t.albumKey ORDER BY ${artistOrder} COLLATE NOCASE, t.year IS NOT NULL, t.year DESC, t.albumTitle COLLATE NOCASE, t.albumKey LIMIT ? OFFSET ?`,
+        `WITH ranked AS (
+           SELECT t.albumKey id, t.albumTitle title, t.albumArtists artists, t.year,
+                  ${this.albumArtistOrder("t")} artistGroupKey,
+                  max(t.coverId) OVER (PARTITION BY t.albumKey) coverId,
+                  count(*) OVER (PARTITION BY t.albumKey) trackCount,
+                  row_number() OVER (
+                    PARTITION BY t.albumKey
+                    ORDER BY t.year IS NOT NULL, t.year DESC,
+                             t.albumTitle COLLATE NOCASE, t.albumKey,
+                             coalesce(t.discNumber,0), coalesce(t.trackNumber,0),
+                             t.relativePath
+                  ) albumRank
+           FROM tracks t JOIN libraries l ON l.id=t.libraryId
+           WHERE ${sql}
+         )
+         SELECT id, title, artists, year, coverId, trackCount
+         FROM ranked
+         WHERE albumRank=1
+         ORDER BY artistGroupKey, year IS NOT NULL, year DESC,
+                  title COLLATE NOCASE, id
+         LIMIT ? OFFSET ?`,
       )
       .all(...args, limit, offset) as Row[];
     const items: Array<Row & { artists: string[] }> = rows.map((row) => ({
       ...row,
-      artists: JSON.parse(row.artists) as string[],
+      artists: (JSON.parse(row.artists) as string[]).sort(compareArtistNames),
     }));
     const ids = items
       .filter((album) => !album.artists.length)
