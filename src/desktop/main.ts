@@ -15,7 +15,7 @@ import { mkdirSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { autoUpdater } from "electron-updater";
+import electronUpdater from "electron-updater";
 import type {
   BackendToMainMessage,
   MainToBackendMessage,
@@ -23,6 +23,8 @@ import type {
   TagWriterToMainMessage,
   UpdateState,
 } from "../shared/desktop-contract.js";
+
+const { autoUpdater } = electronUpdater;
 
 const appId = "com.grouzdev.mymusiclib";
 const smokeFixture = process.argv
