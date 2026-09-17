@@ -19,6 +19,10 @@ npm start
 
 Она открывается на **http://127.0.0.1:4317**. После сборки можно запускать `npm run serve`.
 
+## Лицензия
+
+Исходный код MyMusicLib распространяется по [GNU GPL v3.0 only](LICENSE). Лицензии сторонних компонентов перечислены в [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## Desktop-сборка для Windows
 
 Доступны два самостоятельных x64-дистрибутива:
@@ -54,6 +58,12 @@ git push origin main --tags
 ```
 
 Не перемещайте и не публикуйте повторно существующий beta-тег. Реальную проверку обновления проводят двумя последовательными тегами: установить beta N, выпустить beta N+1, вручную скачать и подтвердить установку из приложения, затем проверить версию и сохранность библиотеки, каталога, закладок, журнала и recovery.
+
+## Публикация signed stable
+
+Stable-тег имеет вид `vX.Y.Z` и запускает отдельный защищённый GitHub environment `stable`. Он доступен только после одобрения проекта SignPath Foundation и настройки переменных/секретов из [инструкции signing](docs/signpath-stable-release.md). Для владельца проекта есть [пошаговая инструкция](docs/what-to-do-next.md). В stable assets нет суффикса `unsigned`; Windows показывает издателя `SignPath Foundation`.
+
+Stable workflow сначала подписывает EXE/DLL в Electron bundle, затем NSIS installer и portable EXE. `latest.yml` создаётся после финальной подписи, поэтому updater получает хэш уже подписанного установщика. Если signing environment не настроен, workflow останавливается до публикации; используйте unsigned beta.
 
 ## Использование
 

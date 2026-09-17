@@ -1,4 +1,4 @@
-name: Publish unsigned beta
+name: Publish Windows releases
 
 on:
   push:
@@ -13,7 +13,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
+  publish-beta:
+    if: contains(github.ref_name, '-beta.')
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
@@ -25,7 +26,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: node scripts/verify-release.mjs
+      - run: node scripts/verify-release.mjs --channel=beta
       - run: npm run fixtures
       - run: npm run verify:tags
       - run: npm test
@@ -33,7 +34,7 @@ jobs:
       - run: npm run test:desktop:smoke
       - run: npm run desktop:dist
       - run: npm run test:desktop:smoke:portable
-      - run: node scripts/verify-release.mjs --artifacts
+      - run: node scripts/verify-release.mjs --channel=beta --artifacts
       - name: Create GitHub prerelease
         env:
           GH_TOKEN: ${{ github.token }}
@@ -41,3 +42,133 @@ jobs:
         run: |
           $version = node -p "require('./package.json').version"
           gh release create "$env:GITHUB_REF_NAME" "release/MyMusicLib-$version-x64-unsigned-Setup.exe" "release/MyMusicLib-$version-x64-unsigned-Setup.exe.blockmap" "release/MyMusicLib-$version-x64-unsigned-portable.exe" "release/beta.yml" --prerelease --title "MyMusicLib $env:GITHUB_REF_NAME (unsigned beta)" --notes "Unsigned beta release. Windows SmartScreen may show a warning. This release updates the beta channel only."
+
+  publish-stable:
+    if: "!contains(github.ref_name, '-beta.')"
+    runs-on: windows-latest
+    environment: stable
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Validate stable signing configuration
+        shell: pwsh
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_GITHUB_EXTENDED_VERIFICATION_TOKEN: ${{ secrets.SIGNPATH_GITHUB_EXTENDED_VERIFICATION_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_RELEASE_POLICY_SLUG: ${{ vars.SIGNPATH_RELEASE_POLICY_SLUG }}
+          SIGNPATH_UNPACKED_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_UNPACKED_CONFIGURATION_SLUG }}
+          SIGNPATH_DISTRIBUTABLE_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_DISTRIBUTABLE_CONFIGURATION_SLUG }}
+        run: |
+          $required = @('SIGNPATH_API_TOKEN', 'SIGNPATH_GITHUB_EXTENDED_VERIFICATION_TOKEN', 'SIGNPATH_ORGANIZATION_ID', 'SIGNPATH_PROJECT_SLUG', 'SIGNPATH_RELEASE_POLICY_SLUG', 'SIGNPATH_UNPACKED_CONFIGURATION_SLUG', 'SIGNPATH_DISTRIBUTABLE_CONFIGURATION_SLUG')
+          $missing = $required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) }
+          if ($missing) { throw "Stable signing is not configured: $($missing -join ', ')" }
+      - run: node scripts/verify-release.mjs --channel=stable
+      - run: npm run fixtures
+      - run: npm run verify:tags
+      - run: npm test
+      - run: npm run desktop:prepare
+      - run: npm run build
+      - name: Build unpacked stable application
+        run: npx electron-builder --win --x64 --dir
+      - name: Archive unpacked application for SignPath
+        shell: pwsh
+        run: Compress-Archive -Path release\win-unpacked\* -DestinationPath release\mymusiclib-unpacked.zip -Force
+      - name: Upload unpacked application
+        id: upload-unpacked
+        uses: actions/upload-artifact@v4
+        with:
+          name: mymusiclib-unpacked
+          if-no-files-found: error
+          path: release/mymusiclib-unpacked.zip
+      - name: Sign unpacked application with SignPath
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_RELEASE_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_UNPACKED_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload-unpacked.outputs.artifact-id }}
+          github-extended-verification-token: ${{ secrets.SIGNPATH_GITHUB_EXTENDED_VERIFICATION_TOKEN }}
+          wait-for-completion: true
+          output-artifact-directory: release/signed-unpacked-artifact
+      - name: Extract signed application
+        shell: pwsh
+        run: |
+          $archive = Get-ChildItem release\signed-unpacked-artifact -Recurse -Filter *.zip | Select-Object -First 1
+          if (-not $archive) { throw 'SignPath did not return a signed unpacked ZIP' }
+          Expand-Archive -LiteralPath $archive.FullName -DestinationPath release\win-unpacked-signed -Force
+      - name: Build distributables from signed application
+        run: npx electron-builder --prepackaged release\win-unpacked-signed --win nsis portable --x64
+      - name: Archive distributables for SignPath
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release\signpath-distributables | Out-Null
+          Copy-Item release\MyMusicLib-*-x64-Setup.exe release\signpath-distributables\
+          Copy-Item release\MyMusicLib-*-x64-portable.exe release\signpath-distributables\
+          Compress-Archive -Path release\signpath-distributables\* -DestinationPath release\mymusiclib-distributables.zip -Force
+      - name: Upload distributables
+        id: upload-distributables
+        uses: actions/upload-artifact@v4
+        with:
+          name: mymusiclib-distributables
+          if-no-files-found: error
+          path: release/mymusiclib-distributables.zip
+      - name: Sign distributables with SignPath
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_RELEASE_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_DISTRIBUTABLE_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload-distributables.outputs.artifact-id }}
+          github-extended-verification-token: ${{ secrets.SIGNPATH_GITHUB_EXTENDED_VERIFICATION_TOKEN }}
+          wait-for-completion: true
+          output-artifact-directory: release/signed-distributables-artifact
+      - name: Restore signed distributables and update metadata
+        shell: pwsh
+        run: |
+          $archive = Get-ChildItem release\signed-distributables-artifact -Recurse -Filter *.zip | Select-Object -First 1
+          if (-not $archive) { throw 'SignPath did not return a signed distributables ZIP' }
+          Expand-Archive -LiteralPath $archive.FullName -DestinationPath release\signed-distributables -Force
+          Copy-Item release\signed-distributables\MyMusicLib-*-x64-Setup.exe release\ -Force
+          Copy-Item release\signed-distributables\MyMusicLib-*-x64-portable.exe release\ -Force
+          node scripts/generate-stable-update-metadata.mjs
+      - name: Verify Authenticode signatures
+        shell: pwsh
+        run: |
+          $files = @((Get-ChildItem release\MyMusicLib-*-x64-Setup.exe), (Get-ChildItem release\MyMusicLib-*-x64-portable.exe), (Get-ChildItem release\win-unpacked-signed\MyMusicLib.exe))
+          foreach ($file in $files) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
+            if ($signature.Status -ne 'Valid') { throw "$($file.Name) is not validly signed: $($signature.Status)" }
+            if ($signature.SignerCertificate.Subject -notmatch 'CN=SignPath Foundation') { throw "$($file.Name) has unexpected publisher: $($signature.SignerCertificate.Subject)" }
+          }
+      - name: Smoke-test signed unpacked application
+        shell: pwsh
+        run: |
+          $env:MYMUSICLIB_DESKTOP_EXECUTABLE = (Resolve-Path release\win-unpacked-signed\MyMusicLib.exe)
+          node scripts/desktop-smoke.mjs
+      - name: Smoke-test signed portable
+        shell: pwsh
+        run: |
+          $env:MYMUSICLIB_SMOKE_EXPECT_PORTABLE = '1'
+          $env:MYMUSICLIB_DESKTOP_EXECUTABLE = (Get-ChildItem release\MyMusicLib-*-x64-portable.exe).FullName
+          node scripts/desktop-smoke.mjs
+      - run: node scripts/verify-release.mjs --channel=stable --artifacts
+      - name: Create GitHub stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          gh release create "$env:GITHUB_REF_NAME" "release/MyMusicLib-$version-x64-Setup.exe" "release/MyMusicLib-$version-x64-portable.exe" "release/latest.yml" --title "MyMusicLib $env:GITHUB_REF_NAME" --notes "Signed stable release. Publisher: SignPath Foundation."

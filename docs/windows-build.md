@@ -124,7 +124,7 @@ Electron 44 использует Node.js 24, то есть соответств�
 2. **Дистрибутивы.** Добавить per-user NSIS installer и portable EXE, ярлыки, корректный uninstall без удаления пользовательских данных и ручную проверку на чистой Windows VM.
 3. **Обновления — реализован.** Preload API и `UpdateState`, beta/latest channels, ручное скачивание, portable fallback на Releases и подготовка backend к подтверждённому restart/install. Ожидающие сканирования отменяются, активные файловые операции завершаются безопасно.
 4. **Release pipeline.** Добавить Windows GitHub Actions, публикацию unsigned beta, update metadata и реальный тест `beta N → beta N+1`.
-5. **Stable.** Подключить выбранного signing provider, Authenticode с timestamp, защищённое environment и проверку подписи перед публичным stable.
+5. **Stable — подготовлен к подключению SignPath Foundation.** Проект открывается под GPL-3.0-only; отдельный workflow для тега `vX.Y.Z` подписывает Electron bundle и внешние EXE через SignPath, создаёт `latest.yml` после подписи и проверяет Authenticode. До одобрения SignPath и настройки защищённого environment stable намеренно не публикуется; unsigned beta продолжает работать.
 
 ## Проверки и критерии готовности
 
