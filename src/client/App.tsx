@@ -2157,7 +2157,6 @@ export function App() {
                 fill={filter.bookmarksOnly ? "currentColor" : "none"}
               />
             )}
-            <span>Закладки</span>
           </button>
         )}
         {!coverMode && (

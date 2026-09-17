@@ -2059,10 +2059,6 @@ body {
 }
 .bookmarks-button {
   margin-left: auto;
-  gap: 7px;
-  padding-left: 9px;
-  padding-right: 10px;
-  font-size: var(--type-caption);
 }
 .bookmarks-button + .history-button {
   margin-left: 0;

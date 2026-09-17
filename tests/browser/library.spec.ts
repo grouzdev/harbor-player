@@ -1183,6 +1183,11 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   const bookmarkToggle = page.getByRole("button", {
     name: "Показать музыку из закладок",
   });
+  await expect(bookmarkToggle.locator("span")).toHaveCount(0);
+  await expect(bookmarkToggle).toHaveAttribute(
+    "aria-label",
+    "Показать музыку из закладок",
+  );
   await bookmarkToggle.click();
   const activeBookmarkToggle = page.getByRole("button", {
     name: "Отключить фильтр закладок",
