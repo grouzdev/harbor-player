@@ -1,9 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -44,6 +39,7 @@ import {
 } from "./api";
 import { AutocompleteInput } from "./AutocompleteInput";
 import { Modal } from "./Modal";
+import { activateDialogPrimaryOnEnter } from "./dialog-keyboard";
 
 function genreSegment(value: string, caret: number) {
   const start = value.lastIndexOf(";", caret - 1) + 1;
@@ -60,33 +56,6 @@ function applyGenreOption(option: string, value: string, caret: number) {
     value: next,
     caret: start + leadingWhitespace.length + option.length,
   };
-}
-
-function activatePrimaryOnEnter(
-  event: ReactKeyboardEvent<HTMLDialogElement>,
-  button: HTMLButtonElement | null,
-) {
-  if (
-    event.key !== "Enter" ||
-    event.defaultPrevented ||
-    event.nativeEvent.isComposing ||
-    event.altKey ||
-    event.ctrlKey ||
-    event.metaKey ||
-    event.shiftKey
-  )
-    return;
-
-  const target = event.target;
-  if (
-    target instanceof HTMLElement &&
-    (target.tagName === "BUTTON" || target.tagName === "TEXTAREA")
-  )
-    return;
-
-  if (!button || button.disabled) return;
-  event.preventDefault();
-  button.click();
 }
 
 function MusicBrainzThumbnail({ url }: { url: string }) {
@@ -278,7 +247,7 @@ export function ActionDialog({
       }
       onClose={onClose}
       onKeyDown={(event) =>
-        activatePrimaryOnEnter(event, primaryButtonRef.current)
+        activateDialogPrimaryOnEnter(event, primaryButtonRef.current)
       }
     >
       {summary.error && <p className="error-text">{summary.error.message}</p>}
@@ -841,7 +810,7 @@ export function PreviewDialog({
       subtitle={`${count(valid.length)} файлов готовы${conflicts ? ` · ${count(conflicts)} будут пропущены` : ""}`}
       onClose={busy ? () => {} : onClose}
       onKeyDown={(event) =>
-        activatePrimaryOnEnter(event, primaryButtonRef.current)
+        activateDialogPrimaryOnEnter(event, primaryButtonRef.current)
       }
     >
       <div ref={ref} className="preview-list">

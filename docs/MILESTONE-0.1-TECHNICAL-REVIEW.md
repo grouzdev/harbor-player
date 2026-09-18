@@ -15,7 +15,7 @@
 
 P1 закрыт 18 сентября 2026 года. В первом самостоятельном этапе были разделены error semantics, устранён N+1 при выдаче треков и сделан явным лимит очереди в 100 000 треков. Во втором — измерены тяжёлые facets, устранён найденный bottleneck `facetRelevance`, добавлена безопасная очистка SQLite-истории и CI quality gate. Проверки закрытия P1: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test` (112), `npm run build`, `npm run verify:tags` (7 форматов), Playwright smoke 4/4 и полный Playwright 18/18 в Chrome и 18/18 в Edge — пройдены.
 
-Первый клиентский срез P2.1–P2.2 выполнен 18 сентября 2026 года без изменения поведения: из `App` вынесены hooks геометрии shell и целевой прокрутки каталога, bookmark control — в самостоятельный компонент, а library dialogs — в feature-модуль с сохранёнными экспортами. Appearance CSS вынесен в отдельный подключаемый stylesheet. Проверки среза: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test` (112), `npm run build`, полный Playwright 18/18 в Chrome и 18/18 в Edge. Полное разделение panel views, остальных dialogs и CSS по feature-файлам остаётся следующей частью P2.1–P2.2; P2.3–P2.4 по server orchestration и внутренним типам ещё не начаты.
+P2.1–P2.2 закрыты 18 сентября 2026 года без изменения поведения: из `App` вынесены hooks геометрии shell и целевой прокрутки каталога, bookmark control, virtual catalog views и library/genre panels; library, cover-confirmation и tag/operation dialogs получили feature-границы с compatibility exports. `styles.css` стал manifest-entrypoint, а сохранённый cascade перенесён в `styles/base.css`; appearance остаётся отдельным stylesheet. Проверки срезов: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, focused Playwright в Chrome и Edge. Следующий этап — P2.3–P2.4: server orchestration и внутренние типы.
 
 Второй срез P2.1 выполнен 18 сентября 2026 года: виртуализированные views артистов, альбомов и треков перенесены в `CatalogVirtualViews`; `App` сохранил ownership данных, фильтров, selection, pagination, player actions, context menus и drag-and-drop через явные props. Проверки: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test` (112), `npm run build`, полный Playwright 18/18 в Chrome и 18/18 в Edge. Library и genre panels остаются последней частью panel-slice.
 
@@ -138,7 +138,7 @@ API-тест подтверждает форматы нескольких аль
 
 ## Приоритет 2: плановый рефакторинг без изменения поведения
 
-### 11. [~] Начать разделение клиентского `App`
+### 11. [x] Начать разделение клиентского `App` — реализовано
 
 `src/client/App.tsx` содержит 3743 строки и одновременно управляет:
 
@@ -161,9 +161,9 @@ API-тест подтверждает форматы нескольких аль
 
 Не следует начинать с глобального state manager: TanStack Query уже корректно владеет серверным состоянием, а основная проблема — смешение feature-логики в одном файле.
 
-**Первые два среза реализованы.** `useAppShellLayout` владеет наблюдением за размером shell, `useCatalogScrollTargets` — состоянием и запросами прокрутки каталога, а `BookmarkToggle` вынесен из корневого компонента. В `CatalogVirtualViews` перенесены virtualized Artist/Album/Track views с сохранением props и DOM. `App` по-прежнему владеет верхнеуровневым состоянием и передаёт существующие контракты без изменений. Следующий срез должен вынести library/genre panels и связанные feature actions.
+**Реализовано.** `useAppShellLayout` владеет наблюдением за размером shell, `useCatalogScrollTargets` — состоянием и запросами прокрутки каталога, а `BookmarkToggle` вынесен из корневого компонента. В `CatalogVirtualViews` перенесены virtualized Artist/Album/Track views, а в `LibraryGenrePanels` — library/genre panels с сохранением props, DOM и selection semantics. `App` по-прежнему владеет верхнеуровневым состоянием и передаёт существующие контракты без изменений. Дальнейшее выделение hooks/actions — плановый рефакторинг, а не условие перехода к P2.3.
 
-### 12. [~] Начать разделение dialogs и CSS по feature-границам
+### 12. [x] Начать разделение dialogs и CSS по feature-границам — реализовано
 
 `Dialogs.tsx` содержит 1387 строк, `styles.css` — 3323. Это не дефект само по себе, но оба файла меняются почти при любой новой функции.
 
@@ -179,7 +179,7 @@ API-тест подтверждает форматы нескольких аль
 
 Необязательно переходить на CSS Modules. Достаточно feature-файлов с сохранением существующих классов и порядка подключения, чтобы не изменить cascade одним большим коммитом.
 
-**Первый срез реализован.** `AddLibraryDialog`, `RenameLibraryDialog` и `RemoveLibraryDialog` перенесены в `LibraryDialogs` и по-прежнему реэкспортируются из `Dialogs`; appearance-правила выделены в отдельный stylesheet, подключённый из корневого CSS. Следующий срез: file-operation, tag/MusicBrainz и history dialogs, затем catalog/player/cover CSS при сохранении порядка cascade.
+**Реализовано.** `AddLibraryDialog`, `RenameLibraryDialog` и `RemoveLibraryDialog` находятся в `LibraryDialogs`, подтверждение обложки — в `CoverDropConfirmDialog`, а tag/MusicBrainz и operation dialogs — в `TagOperationDialog`; `Dialogs` сохраняет compatibility re-exports. Общий Enter-flow вынесен в `dialog-keyboard`. `styles.css` стал manifest-entrypoint, подключающим fonts, appearance и сохранённый в `styles/base.css` source-order cascade; относительный путь к lounge-фону проверен production build. Дальнейшая детализация CSS по слоям — плановый рефакторинг без изменения поведения.
 
 ### 13. Декомпозировать server orchestration
 
@@ -230,7 +230,7 @@ Production build создаёт один JS bundle около 494 КБ (147 КБ
 2. Получить зелёные unit/integration, Chrome, Edge и обновлённый 100k benchmark.
 3. Обновить README/ROADMAP и зафиксировать milestone 0.1.
 4. P1.8–P1.10 закрыты: facet-запросы измерены и оптимизированы, SQLite обслуживается безопасно, CI стал quality gate.
-5. Продолжить P2.1–P2.2: вынести panel views, оставшиеся dialogs и CSS по одной feature за коммит, сохраняя внешний API и существующие тесты; затем перейти к P2.3–P2.4 для server orchestration и внутренних типов.
+5. P2.1–P2.2 закрыты: client panels, dialogs и CSS entrypoint разделены без изменения внешних контрактов. Следующий этап — P2.3–P2.4: server orchestration и внутренние типы.
 6. Решения о materialized folder relation, watcher и code splitting принимать только после повторных измерений.
 
 ## Критерий завершения milestone 0.1
