@@ -17,6 +17,8 @@ P1 закрыт 18 сентября 2026 года. В первом самост�
 
 Первый клиентский срез P2.1–P2.2 выполнен 18 сентября 2026 года без изменения поведения: из `App` вынесены hooks геометрии shell и целевой прокрутки каталога, bookmark control — в самостоятельный компонент, а library dialogs — в feature-модуль с сохранёнными экспортами. Appearance CSS вынесен в отдельный подключаемый stylesheet. Проверки среза: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test` (112), `npm run build`, полный Playwright 18/18 в Chrome и 18/18 в Edge. Полное разделение panel views, остальных dialogs и CSS по feature-файлам остаётся следующей частью P2.1–P2.2; P2.3–P2.4 по server orchestration и внутренним типам ещё не начаты.
 
+Второй срез P2.1 выполнен 18 сентября 2026 года: виртуализированные views артистов, альбомов и треков перенесены в `CatalogVirtualViews`; `App` сохранил ownership данных, фильтров, selection, pagination, player actions, context menus и drag-and-drop через явные props. Проверки: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test` (112), `npm run build`, полный Playwright 18/18 в Chrome и 18/18 в Edge. Library и genre panels остаются последней частью panel-slice.
+
 ## Краткий вывод
 
 Harbor Player уже выглядит как законченный первый milestone, а не как прототип. Основной пользовательский поток — подключение локальной коллекции, фильтрация, воспроизведение, перенос и удаление с восстановлением, пакетная запись тегов, обложки, MusicBrainz и Windows desktop shell — опирается на осмысленные проверки сохранности и достаточно широкую тестовую базу.
@@ -159,7 +161,7 @@ API-тест подтверждает форматы нескольких аль
 
 Не следует начинать с глобального state manager: TanStack Query уже корректно владеет серверным состоянием, а основная проблема — смешение feature-логики в одном файле.
 
-**Первый срез реализован.** `useAppShellLayout` владеет наблюдением за размером shell, `useCatalogScrollTargets` — состоянием и запросами прокрутки каталога, а `BookmarkToggle` вынесен из корневого компонента. `App` по-прежнему владеет верхнеуровневым состоянием и передаёт существующие контракты без изменений. Следующий срез должен вынести panel views и связанные feature actions.
+**Первые два среза реализованы.** `useAppShellLayout` владеет наблюдением за размером shell, `useCatalogScrollTargets` — состоянием и запросами прокрутки каталога, а `BookmarkToggle` вынесен из корневого компонента. В `CatalogVirtualViews` перенесены virtualized Artist/Album/Track views с сохранением props и DOM. `App` по-прежнему владеет верхнеуровневым состоянием и передаёт существующие контракты без изменений. Следующий срез должен вынести library/genre panels и связанные feature actions.
 
 ### 12. [~] Начать разделение dialogs и CSS по feature-границам
 
