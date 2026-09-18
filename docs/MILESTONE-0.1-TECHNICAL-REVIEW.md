@@ -19,6 +19,8 @@ P2.1–P2.2 закрыты 18 сентября 2026 года без измене
 
 Первый срез P2.3–P2.4 выполнен 18 сентября 2026 года без изменения HTTP URL, UI и последовательности безопасных файловых операций. `Catalog.db` стал private: `MusicService`, HTTP app и MusicBrainz используют узкие repository-методы для scan state, очереди, доступности библиотек и HTTP-cache. Миграции схемы v1–v6 вынесены в именованный `catalog-migrations` runner. Worker protocol теперь различает `read` и `hash` на уровне request/response-типов, а SSE события имеют discriminated union. Jobs и operations из SQLite проверяются Zod при чтении; повреждённые записи не исполняются. Проверки: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test` (114), `npm run build`, `npm run verify:tags` (7 форматов), Playwright smoke 4/4 в Chrome и Edge. Полная нарезка scan/operations/recovery orchestration остаётся следующим малым P2-срезом.
 
+Второй срез P2.3 выполнен 18 сентября 2026 года: `LibraryScanner` получил проверку доступности библиотек и полный scan-flow — incremental/force metadata read, worker fallback, исключение symbolic links, ограниченный параллелизм, ошибки обхода и финализацию scan state. `MusicService` сохранил последовательную job queue, cancellation при shutdown и текущий HTTP/SSE контракт, передавая scanner только callback публикации прогресса. Проверки: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test` (114), `npm run build`, `npm run verify:tags` (7 форматов), Playwright smoke 4/4 в Chrome и Edge. Следующий безопасный срез — preview/execute/recovery файловых операций.
+
 Второй срез P2.1 выполнен 18 сентября 2026 года: виртуализированные views артистов, альбомов и треков перенесены в `CatalogVirtualViews`; `App` сохранил ownership данных, фильтров, selection, pagination, player actions, context menus и drag-and-drop через явные props. Проверки: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test` (112), `npm run build`, полный Playwright 18/18 в Chrome и 18/18 в Edge. Library и genre panels остаются последней частью panel-slice.
 
 ## Краткий вывод
@@ -199,7 +201,9 @@ API-тест подтверждает форматы нескольких аль
 
 Миграции лучше вынести из конструктора `Catalog` в последовательные именованные шаги с отдельными тестами upgrade from N to N+1. Перед первой потенциально разрушительной миграцией добавить backup каталога и `integrity_check`.
 
-**Реализовано в первом срезе.** Прямой доступ к `Catalog.db` закрыт за небольшими методами repository: availability, состояние scan, доступные треки библиотеки, queue persistence, album count и MusicBrainz cache. HTTP app, `MusicService` и `MusicBrainzService` больше не содержат SQL. Существующие миграции v1–v6 перенесены из конструктора в `catalog-migrations` как последовательные транзакционные шаги; характеристический upgrade v5 сохранён. Scan completion и обновление `lastScan` объединены в repository-транзакцию, не меняя условия пометки unavailable. Полный вынос scan/operation/recovery orchestration намеренно оставлен следующему срезу.
+**Реализовано в первом срезе.** Прямой доступ к `Catalog.db` закрыт за небольшими методами repository: availability, состояние scan, доступные треки библиотеки, queue persistence, album count и MusicBrainz cache. HTTP app, `MusicService` и `MusicBrainzService` больше не содержат SQL. Существующие миграции v1–v6 перенесены из конструктора в `catalog-migrations` как последовательные транзакционные шаги; характеристический upgrade v5 сохранён. Scan completion и обновление `lastScan` объединены в repository-транзакцию, не меняя условия пометки unavailable.
+
+**Реализовано во втором срезе.** `LibraryScanner` владеет availability и обходом файлов библиотеки, включая incremental и force scan, fallback worker metadata read, безопасное исключение symbolic links, два параллельных файла, ограничение ошибок и различие полного/неполного traversal. `MusicService` сохраняет ownership единственной job queue, progress publication и controlled shutdown. Preview/execute/retry/recovery файловых операций намеренно остаются следующим срезом.
 
 ### 14. [x] Первый срез усиления внутренних границ — реализовано
 
@@ -236,7 +240,7 @@ Production build создаёт один JS bundle около 494 КБ (147 КБ
 2. Получить зелёные unit/integration, Chrome, Edge и обновлённый 100k benchmark.
 3. Обновить README/ROADMAP и зафиксировать milestone 0.1.
 4. P1.8–P1.10 закрыты: facet-запросы измерены и оптимизированы, SQLite обслуживается безопасно, CI стал quality gate.
-5. P2.1–P2.2 и первый срез P2.3–P2.4 закрыты: client panels, dialogs, CSS entrypoint, repository-границы, migrations runner и worker/SSE contracts разделены без изменения внешних контрактов. Следующий этап — продолжить декомпозицию scan/operations/recovery и общие route/client response contracts.
+5. P2.1–P2.2, первый срез P2.3–P2.4 и второй scanner-срез P2.3 закрыты: client panels, dialogs, CSS entrypoint, repository-границы, migrations runner, worker/SSE contracts и library scanning разделены без изменения внешних контрактов. Следующий этап — декомпозиция preview/execute/recovery и общие route/client response contracts.
 6. Решения о materialized folder relation, watcher и code splitting принимать только после повторных измерений.
 
 ## Критерий завершения milestone 0.1
