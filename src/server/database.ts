@@ -23,6 +23,7 @@ import {
   artistSortKey,
   compareArtistNames,
 } from "../shared/artist-grouping.js";
+import { conflict, notFound } from "./http-error.js";
 
 type Row = Record<string, any>;
 const checkedFolderPath = (relativePath: string) => {
@@ -161,7 +162,7 @@ export class Catalog {
   }
   library(id: string): Library {
     const l = this.libraries().find((l) => l.id === id);
-    if (!l) throw new Error("Библиотека не найдена");
+    if (!l) throw notFound("Библиотека не найдена");
     return l;
   }
   folders(libraryId: string, parent: string | null): LibraryFolder[] {
@@ -441,23 +442,23 @@ export class Catalog {
     ).n;
     const rows = this.db
       .prepare(
-          `SELECT t.* FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql} ORDER BY ${this.albumArtistOrder("t")}, t.year IS NOT NULL, t.year DESC, t.albumTitle COLLATE NOCASE, t.albumKey, coalesce(t.discNumber,0), coalesce(t.trackNumber,0), t.relativePath LIMIT ? OFFSET ?`,
+        `SELECT t.* FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql} ORDER BY ${this.albumArtistOrder("t")}, t.year IS NOT NULL, t.year DESC, t.albumTitle COLLATE NOCASE, t.albumKey, coalesce(t.discNumber,0), coalesce(t.trackNumber,0), t.relativePath LIMIT ? OFFSET ?`,
       )
       .all(...args, limit, offset) as Row[];
-    const formats = new Map<string, string[]>();
-    for (const row of rows)
-      if (!formats.has(row.albumKey))
-        formats.set(
-          row.albumKey,
-          (
-            this.db
-              .prepare(
-                "SELECT DISTINCT format FROM tracks WHERE albumKey=? AND available=1 ORDER BY format",
-              )
-              .all(row.albumKey) as { format: string }[]
-          ).map((r) => r.format),
-        );
     const albumIds = [...new Set(rows.map((row) => row.albumKey))];
+    const formats = new Map<string, string[]>();
+    if (albumIds.length) {
+      const placeholders = albumIds.map(() => "?").join(",");
+      const formatRows = this.db
+        .prepare(
+          `SELECT DISTINCT albumKey id, format FROM tracks
+           WHERE available=1 AND albumKey IN (${placeholders})
+           ORDER BY format`,
+        )
+        .all(...albumIds) as { id: string; format: string }[];
+      for (const { id, format } of formatRows)
+        formats.set(id, [...(formats.get(id) || []), format]);
+    }
     const albumGenres = new Map<string, string[]>();
     if (albumIds.length) {
       const placeholders = albumIds.map(() => "?").join(",");
@@ -490,7 +491,7 @@ export class Catalog {
       return [...new Set(selection.trackIds)].map((id) => {
         const t = this.track(id);
         if (!t || !t.available)
-          throw new Error("Трек больше недоступен. Обновите выбор.");
+          throw conflict("Трек больше недоступен. Обновите выбор.");
         return t;
       });
     const excluded = new Set(selection.excludeTrackIds || []);
@@ -498,15 +499,30 @@ export class Catalog {
       (t) => !excluded.has(t.id),
     );
   }
-  trackIds(filter: CatalogFilter): string[] {
+  trackIdResult(filter: CatalogFilter): {
+    trackIds: string[];
+    total: number;
+    truncated: boolean;
+  } {
     const { sql, args } = this.where(filter);
-    return (
+    const total = (
+      this.db
+        .prepare(
+          `SELECT count(*) n FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql}`,
+        )
+        .get(...args) as Row
+    ).n;
+    const trackIds = (
       this.db
         .prepare(
           `SELECT t.id FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql} ORDER BY ${this.albumArtistOrder("t")}, t.year IS NOT NULL, t.year DESC, t.albumTitle COLLATE NOCASE, t.albumKey, coalesce(t.discNumber,0), coalesce(t.trackNumber,0), t.relativePath LIMIT 100000`,
         )
         .all(...args) as { id: string }[]
     ).map((r) => r.id);
+    return { trackIds, total, truncated: total > trackIds.length };
+  }
+  trackIds(filter: CatalogFilter): string[] {
+    return this.trackIdResult(filter).trackIds;
   }
   validAlbumIds(filter: CatalogFilter): string[] {
     if (!filter.albumIds.length) return [];

@@ -18,6 +18,7 @@ import type { BookmarkKind } from "../shared/contracts.js";
 import { MusicService } from "./service.js";
 import { errorMessage } from "./config.js";
 import { normalizeWebpCover } from "./cover-image.js";
+import { badRequest, conflict, HttpError, notFound } from "./http-error.js";
 import { openInExplorer, type ExplorerLauncher } from "./explorer.js";
 import type { MusicBrainzOptions } from "./musicbrainz.js";
 import type { TagWriter } from "./isolated-tag-writer.js";
@@ -122,7 +123,9 @@ export async function createApp(options: {
     );
     if (request.url.startsWith("/api/")) {
       if (service.isStopping)
-        return reply.code(503).send({ error: "Сервис подготавливается к обновлению" });
+        return reply
+          .code(503)
+          .send({ error: "Сервис подготавливается к обновлению" });
       reply.header("Cache-Control", "no-store");
       if (
         request.url.split("?")[0] !== "/api/session" &&
@@ -139,12 +142,28 @@ export async function createApp(options: {
     }
   });
   app.setErrorHandler((error, _request, reply) => {
-    reply.code(error instanceof z.ZodError ? 400 : 400).send({
-      error:
-        error instanceof z.ZodError
-          ? error.issues.map((i) => i.message).join("; ")
-          : errorMessage(error),
-    });
+    if (error instanceof z.ZodError)
+      return reply.code(400).send({
+        error: error.issues.map((i) => i.message).join("; "),
+      });
+    if (error instanceof HttpError)
+      return reply.code(error.statusCode).send({ error: error.message });
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "statusCode" in error &&
+      "message" in error &&
+      typeof error.statusCode === "number" &&
+      error.statusCode >= 400 &&
+      error.statusCode < 500
+    )
+      return reply.code(error.statusCode).send({
+        error: String(error.message),
+      });
+    app.log.error(error);
+    return reply
+      .code(500)
+      .send({ error: "Внутренняя ошибка локального сервера" });
   });
   app.get("/api/session", async (_request, reply) => {
     reply.setCookie("harbor_player_session", session, {
@@ -272,7 +291,7 @@ export async function createApp(options: {
   });
   app.post("/api/track-ids", async (request) => {
     const filter = filterSchema.parse(request.body);
-    return { trackIds: service.catalog.trackIds(filter) };
+    return service.catalog.trackIdResult(filter);
   });
   app.get("/api/albums", async (request) => {
     const q = pageSchema.parse(request.query);
@@ -337,22 +356,22 @@ export async function createApp(options: {
       (body.kind === "library" && !body.libraryId) ||
       ((body.kind === "album" || body.kind === "track") && !body.id)
     )
-      throw new Error("Некорректная цель Проводника");
+      throw badRequest("Некорректная цель Проводника");
     if (
       body.relativePath &&
       (path.isAbsolute(body.relativePath) ||
         path.normalize(body.relativePath) !== body.relativePath ||
         body.relativePath.split(path.sep).includes(".."))
     )
-      throw new Error("Некорректный путь папки");
+      throw badRequest("Некорректный путь папки");
     if (body.kind === "library" || body.kind === "folder") {
       const library = service.catalog.library(body.libraryId!);
-      if (!library.available) throw new Error("Библиотека недоступна");
+      if (!library.available) throw conflict("Библиотека недоступна");
       if (
         body.kind === "folder" &&
         !service.catalog.hasFolder(library.id, body.relativePath!)
       )
-        throw new Error("Папка не найдена");
+        throw notFound("Папка не найдена");
       const directory =
         body.kind === "folder"
           ? path.join(library.path, body.relativePath!)
@@ -366,11 +385,11 @@ export async function createApp(options: {
         ? service.catalog.track(body.id!)
         : service.catalog.firstAlbumTrack(body.id!);
     if (!track || !track.available)
-      throw new Error(
+      throw notFound(
         body.kind === "track" ? "Трек не найден" : "Альбом не найден",
       );
     const library = service.catalog.library(track.libraryId);
-    if (!library.available) throw new Error("Библиотека недоступна");
+    if (!library.available) throw conflict("Библиотека недоступна");
     const file = path.join(library.path, track.relativePath);
     await service.safePath(file);
     await openExplorer(
@@ -660,13 +679,17 @@ export async function createApp(options: {
         z.object({ albumId: z.string(), startId: z.string().optional() }),
       ])
       .parse(request.body);
-    const ids =
+    const result =
       "albumId" in body
-        ? service.catalog.trackIds({ ...emptyFilter, albumIds: [body.albumId] })
-        : service.catalog.trackIds(body.filter);
+        ? service.catalog.trackIdResult({
+            ...emptyFilter,
+            albumIds: [body.albumId],
+          })
+        : service.catalog.trackIdResult(body.filter);
+    const { trackIds: ids } = result;
     const position = body.startId ? ids.indexOf(body.startId) : 0;
     if (position < 0 || !ids.length)
-      throw new Error(
+      throw conflict(
         "albumId" in body
           ? "В альбоме нет доступных треков"
           : "Трек больше не входит в результат",
@@ -684,6 +707,8 @@ export async function createApp(options: {
       id,
       position,
       total: ids.length,
+      sourceTotal: result.total,
+      truncated: result.truncated,
       track: service.catalog.track(ids[position]),
     };
   });

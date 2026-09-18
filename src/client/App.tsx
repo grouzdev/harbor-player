@@ -2647,10 +2647,11 @@ export function App() {
                 onSelectAlbum={async (albumId) => {
                   try {
                     const albumFilter = { ...filter, albumIds: [albumId] };
-                    const { trackIds } = await api<{ trackIds: string[] }>(
-                      "/track-ids",
-                      albumFilter,
-                    );
+                    const { trackIds, total, truncated } = await api<{
+                      trackIds: string[];
+                      total: number;
+                      truncated: boolean;
+                    }>("/track-ids", albumFilter);
                     if (!trackIds.length) return;
                     if (trackIds.every((id) => selected.has(id))) {
                       void player.startAlbum(albumId);
@@ -2658,6 +2659,10 @@ export function App() {
                     }
                     setSelected(new Set(trackIds));
                     setSelectedAlbumId(albumId);
+                    if (truncated)
+                      notify(
+                        `Выбраны первые ${trackIds.length.toLocaleString("ru-RU")} из ${total.toLocaleString("ru-RU")} треков альбома`,
+                      );
                   } catch (error) {
                     notify(
                       error instanceof Error

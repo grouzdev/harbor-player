@@ -1,4 +1,4 @@
-import { beforeEach, afterEach, describe, it, expect } from "vitest";
+import { beforeEach, afterEach, describe, it, expect, vi } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createApp, rangeFor } from "../dist/server/app.js";
@@ -77,6 +77,49 @@ describe("HTTP boundary", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json().error).toContain("абсолютный");
   });
+  it("distinguishes missing, conflicting, and internal API failures", async () => {
+    const session = await context.app.inject({
+      url: "/api/session",
+      headers: { host: "127.0.0.1:4317" },
+    });
+    const headers = {
+      host: "127.0.0.1:4317",
+      cookie: String(session.headers["set-cookie"]).split(";")[0],
+      "x-csrf-token": session.json().csrf,
+    };
+    const missing = await context.app.inject({
+      method: "POST",
+      url: "/api/libraries/missing/remove",
+      headers,
+      payload: {},
+    });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json().error).toContain("не найдена");
+    const conflict = await context.app.inject({
+      method: "POST",
+      url: "/api/queue",
+      headers,
+      payload: { filter: {}, startId: "missing" },
+    });
+    expect(conflict.statusCode).toBe(409);
+    vi.spyOn(context.service.catalog, "libraries").mockImplementation(() => {
+      throw new Error("disk secret");
+    });
+    const internal = await context.app.inject({
+      url: "/api/libraries",
+      headers: { host: "127.0.0.1:4317", cookie: headers.cookie },
+    });
+    expect(internal.statusCode).toBe(500);
+    expect(internal.json()).toEqual({
+      error: "Внутренняя ошибка локального сервера",
+    });
+    context.service.beginShutdown();
+    const stopping = await context.app.inject({
+      url: "/api/libraries",
+      headers: { host: "127.0.0.1:4317", cookie: headers.cookie },
+    });
+    expect(stopping.statusCode).toBe(503);
+  });
   it("returns IDs only for tracks in the requested filter", async () => {
     const library = context.service.catalog.addLibrary("Library", root);
     const addTrack = (id: string, albumKey: string, genres: string[]) =>
@@ -119,7 +162,11 @@ describe("HTTP boundary", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ trackIds: ["included"] });
+    expect(response.json()).toEqual({
+      trackIds: ["included"],
+      total: 1,
+      truncated: false,
+    });
     expect(
       context.service.catalog
         .tracks({
@@ -134,6 +181,58 @@ describe("HTTP boundary", () => {
         .items.find((track) => track.albumKey === "selected-album")
         ?.albumGenres,
     ).toEqual(["Pop", "Rock"]);
+  });
+  it("loads album formats in one batch for a tracks page", () => {
+    const library = context.service.catalog.addLibrary("Library", root);
+    for (const [id, albumKey, format] of [
+      ["first", "first-album", "flac"],
+      ["second", "second-album", "mp3"],
+    ] as const)
+      context.service.catalog.upsert({
+        id,
+        libraryId: library.id,
+        relativePath: `${id}.${format}`,
+        title: id,
+        artists: ["Artist"],
+        albumTitle: albumKey,
+        albumArtists: ["Artist"],
+        albumKey,
+        genres: [],
+        year: null,
+        trackNumber: 1,
+        discNumber: 1,
+        duration: 1,
+        format,
+        size: 1,
+        mtimeMs: 1,
+        coverId: null,
+        available: true,
+      });
+    const prepare = context.service.catalog.db.prepare.bind(
+      context.service.catalog.db,
+    );
+    let batchFormatQueries = 0;
+    vi.spyOn(context.service.catalog.db, "prepare").mockImplementation(((
+      sql: string,
+    ) => {
+      if (sql.includes("SELECT DISTINCT albumKey id, format FROM tracks"))
+        batchFormatQueries++;
+      return prepare(sql);
+    }) as typeof context.service.catalog.db.prepare);
+    const result = context.service.catalog.tracks({
+      libraryIds: [],
+      folders: [],
+      genres: [],
+      artists: [],
+      albumIds: [],
+      search: "",
+      bookmarksOnly: false,
+    });
+    expect(result.items.map((track) => track.albumFormats)).toEqual([
+      ["flac"],
+      ["mp3"],
+    ]);
+    expect(batchFormatQueries).toBe(1);
   });
   it("removes a library only with CSRF and reports an unknown library", async () => {
     const library = context.service.catalog.addLibrary("Library", root);
@@ -159,7 +258,7 @@ describe("HTTP boundary", () => {
       url: "/api/libraries/missing/remove",
       headers: { ...headers, "x-csrf-token": session.json().csrf },
     });
-    expect(missing.statusCode).toBe(400);
+    expect(missing.statusCode).toBe(404);
     expect(missing.json().error).toContain("не найдена");
 
     const removed = await context.app.inject({
@@ -207,7 +306,7 @@ describe("HTTP boundary", () => {
       headers: { ...headers, "x-csrf-token": session.json().csrf },
       payload: { name: "Renamed" },
     });
-    expect(missing.statusCode).toBe(400);
+    expect(missing.statusCode).toBe(404);
     expect(missing.json().error).toContain("не найдена");
 
     const renamed = await context.app.inject({
@@ -723,12 +822,12 @@ describe("Explorer endpoint", () => {
         })
       ).statusCode,
     ).toBe(403);
-    for (const payload of [
-      { kind: "wrong", id: "x" },
-      { kind: "track", id: "missing" },
-      { kind: "library" },
-      { kind: "folder", libraryId: "missing", relativePath: ".." },
-    ])
+    for (const [payload, status] of [
+      [{ kind: "wrong", id: "x" }, 400],
+      [{ kind: "track", id: "missing" }, 404],
+      [{ kind: "library" }, 400],
+      [{ kind: "folder", libraryId: "missing", relativePath: ".." }, 400],
+    ] as const)
       expect(
         (
           await context.app.inject({
@@ -738,7 +837,7 @@ describe("Explorer endpoint", () => {
             payload,
           })
         ).statusCode,
-      ).toBe(400);
+      ).toBe(status);
   });
   it("selects a track file and opens album, library and nested folders", async () => {
     const calls: ExplorerTarget[] = [];
@@ -852,6 +951,26 @@ describe("Explorer endpoint", () => {
     expect(started.json()).toMatchObject({
       position: 0,
       track: { id: "new" },
+    });
+  });
+  it("reports a queue truncated to the first 100,000 tracks", async () => {
+    await addTrack("Album/first.flac", "first");
+    vi.spyOn(context.service.catalog, "trackIdResult").mockReturnValue({
+      trackIds: ["first"],
+      total: 100001,
+      truncated: true,
+    });
+    const response = await context.app.inject({
+      method: "POST",
+      url: "/api/queue",
+      headers: await sessionHeaders(),
+      payload: { albumId: "album" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      total: 1,
+      sourceTotal: 100001,
+      truncated: true,
     });
   });
   it("builds Windows Explorer arguments for folders and selected files", () => {

@@ -23,6 +23,7 @@ import { acquireInstanceLock } from "./instance-lock.js";
 import { forkedTagWriter, type TagWriter } from "./isolated-tag-writer.js";
 import { writeId3InPlace } from "./in-place-id3.js";
 import { audioExtensions, errorMessage, inside } from "./config.js";
+import { badRequest, conflict, unavailable } from "./http-error.js";
 import { readTrack } from "./metadata.js";
 import { MusicBrainzService, type MusicBrainzOptions } from "./musicbrainz.js";
 import type {
@@ -151,7 +152,7 @@ export class MusicService extends EventEmitter {
   }
   async addLibrary(name: string, folder: string) {
     if (!path.isAbsolute(folder))
-      throw new Error("Укажите абсолютный путь к папке");
+      throw badRequest("Укажите абсолютный путь к папке");
     const resolved = await realpath(folder);
     if (!(await stat(resolved)).isDirectory()) throw new Error("Укажите папку");
     await access(resolved, constants.R_OK);
@@ -161,7 +162,7 @@ export class MusicService extends EventEmitter {
       );
     for (const l of this.catalog.libraries())
       if (inside(l.path, resolved) || inside(resolved, l.path))
-        throw new Error("Эта папка или её родитель уже подключены");
+        throw conflict("Эта папка или её родитель уже подключены");
     const library = this.catalog.addLibrary(
       name.trim() || path.basename(resolved),
       resolved,
@@ -191,7 +192,7 @@ export class MusicService extends EventEmitter {
     action: (job: Job) => Promise<void>,
     operationId?: string,
   ): Job {
-    if (this.stopping) throw new Error("Сервис останавливается");
+    if (this.stopping) throw unavailable("Сервис останавливается");
     const job: Job = {
       id: randomUUID(),
       kind,

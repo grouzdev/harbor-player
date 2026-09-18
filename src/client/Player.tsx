@@ -20,6 +20,8 @@ interface Queue {
   id: string;
   position: number;
   total: number;
+  sourceTotal?: number;
+  truncated?: boolean;
   track: Track | null;
 }
 export function usePlayer(notify: (message: string) => void) {
@@ -92,6 +94,10 @@ export function usePlayer(notify: (message: string) => void) {
       shouldPlay.current = true;
       seekAfterLoad.current = 0;
       setQueue(q);
+      if (q.truncated && q.sourceTotal)
+        notify(
+          `В очередь добавлены первые ${q.total.toLocaleString("ru-RU")} из ${q.sourceTotal.toLocaleString("ru-RU")} треков`,
+        );
       return true;
     } catch (e) {
       notify((e as Error).message);
