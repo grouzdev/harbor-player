@@ -107,17 +107,15 @@ import { Player, usePlayer } from "./Player";
 import { CoverMode, QuickSearchDialog } from "./CoverMode";
 import { ContextMenu, type ContextMenuState } from "./ContextMenu";
 import { UpdatePanel } from "./UpdatePanel";
+import { BookmarkToggle, type BookmarkChange } from "./BookmarkToggle";
+import { useAppShellLayout } from "./useAppShellLayout";
+import { useCatalogScrollTargets } from "./useCatalogScrollTargets";
 
 type DroppedCover = {
   album: Album;
   name: string;
   cover: { data: string; mime: "image/jpeg" | "image/png" };
 };
-type BookmarkChange = (
-  kind: BookmarkKind,
-  id: string,
-  bookmarked: boolean,
-) => void;
 type CatalogContextMenuHandler = (
   event: React.MouseEvent,
   kind: BookmarkKind,
@@ -292,12 +290,6 @@ function readFullscreenWindowState(): FullscreenWindowState | null {
   }
 }
 
-const bookmarkEntityLabels: Record<BookmarkKind, string> = {
-  artist: "исполнителя",
-  album: "альбом",
-  track: "трек",
-};
-
 function trackCountLabel(trackCount: number) {
   const remainder = Math.abs(trackCount) % 100;
   const lastDigit = remainder % 10;
@@ -379,55 +371,6 @@ function updateBookmarkList(
     : items.filter((item) => item.kind !== kind || item.id !== id);
 }
 
-function BookmarkToggle({
-  kind,
-  id,
-  label,
-  bookmarked,
-  unavailable,
-  pending,
-  onChange,
-  className = "",
-}: {
-  kind: BookmarkKind;
-  id: string;
-  label: string;
-  bookmarked: boolean;
-  unavailable: boolean;
-  pending: boolean;
-  onChange: BookmarkChange;
-  className?: string;
-}) {
-  const entity = bookmarkEntityLabels[kind];
-  const action = bookmarked
-    ? `Удалить ${entity} «${label}» из закладок`
-    : `Добавить ${entity} «${label}» в закладки`;
-  return (
-    <button
-      type="button"
-      className={`bookmark-toggle ${bookmarked ? "bookmarked" : ""} ${className}`}
-      data-selection-ignore
-      aria-label={action}
-      aria-pressed={bookmarked}
-      aria-busy={pending || undefined}
-      title={action}
-      disabled={unavailable || pending}
-      onClick={(event) => {
-        event.stopPropagation();
-        onChange(kind, id, !bookmarked);
-      }}
-      onKeyDown={(event) => event.stopPropagation()}
-      onDoubleClick={(event) => event.stopPropagation()}
-    >
-      {pending ? (
-        <RefreshCw size={15} className="spinning" />
-      ) : (
-        <BookmarkIcon size={16} fill={bookmarked ? "currentColor" : "none"} />
-      )}
-    </button>
-  );
-}
-
 export function App() {
   const queryClient = useQueryClient();
   const [ready, setReady] = useState(false);
@@ -488,76 +431,23 @@ export function App() {
   const [isFullscreen, setIsFullscreen] = useState(
     () => document.fullscreenElement === document.documentElement,
   );
-  const appShellRef = useRef<HTMLDivElement>(null);
-  const [isPortraitLayout, setIsPortraitLayout] = useState(false);
-  const [appShellWidth, setAppShellWidth] = useState(0);
+  const { appShellRef, appShellWidth, isPortraitLayout } = useAppShellLayout();
   const [fullscreenWindowMode, setFullscreenWindowMode] =
     useState<FullscreenWindowMode>("default");
   const [fullscreenWindowBounds, setFullscreenWindowBounds] =
     useState<FullscreenWindowBounds | null>(null);
   const [coverMode, setCoverMode] = useState(false);
   const [coverSearch, setCoverSearch] = useState("");
-  const [artistScrollTarget, setArtistScrollTarget] = useState<{
-    artist: string;
-    requestId: number;
-    filterKey: string;
-  } | null>(null);
-  const [albumScrollTarget, setAlbumScrollTarget] = useState<{
-    album: string;
-    requestId: number;
-    filterKey: string;
-  } | null>(null);
-  const [trackScrollTarget, setTrackScrollTarget] = useState<{
-    track: string;
-    requestId: number;
-    filterKey: string;
-  } | null>(null);
   const filterKey = JSON.stringify(filter);
-  const filterKeyRef = useRef(filterKey);
-  filterKeyRef.current = filterKey;
-  const requestArtistScroll = useCallback(
-    (artist: string, targetFilterKey = filterKey) => {
-      setArtistScrollTarget((current) => ({
-        artist,
-        requestId: (current?.requestId || 0) + 1,
-        filterKey: targetFilterKey,
-      }));
-    },
-    [filterKey],
-  );
-  const requestAlbumScroll = useCallback(
-    (album: string, targetFilterKey = filterKey) => {
-      setAlbumScrollTarget((current) => ({
-        album,
-        requestId: (current?.requestId || 0) + 1,
-        filterKey: targetFilterKey,
-      }));
-    },
-    [filterKey],
-  );
-  const requestTrackScroll = useCallback(
-    (track: string, targetFilterKey = filterKey) => {
-      setTrackScrollTarget((current) => ({
-        track,
-        requestId: (current?.requestId || 0) + 1,
-        filterKey: targetFilterKey,
-      }));
-    },
-    [filterKey],
-  );
-  useEffect(() => {
-    const shell = appShellRef.current;
-    if (!shell) return;
-    const updateLayout = ({ width, height }: DOMRectReadOnly) => {
-      setAppShellWidth(width);
-      setIsPortraitLayout(height > width);
-    };
-    const observer = new ResizeObserver(([entry]) =>
-      updateLayout(entry.contentRect),
-    );
-    observer.observe(shell);
-    return () => observer.disconnect();
-  }, []);
+  const {
+    filterKeyRef,
+    artistScrollTarget,
+    albumScrollTarget,
+    trackScrollTarget,
+    requestArtistScroll,
+    requestAlbumScroll,
+    requestTrackScroll,
+  } = useCatalogScrollTargets(filterKey);
   const updateAppearance = useCallback((next: AppearanceSettings) => {
     appearanceTouchedRef.current = true;
     cacheAppearance(next);

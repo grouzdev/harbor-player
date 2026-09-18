@@ -1,4 +1,5 @@
 @import "./fonts.css";
+@import "./styles/appearance.css";
 
 :root {
   font-family: "Fira Sans Condensed", "Arial Narrow", "Segoe UI", sans-serif;
@@ -3155,115 +3156,6 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     border-radius: 0;
     box-shadow: none;
   }
-}
-
-.appearance-settings {
-  display: grid;
-  gap: 24px;
-}
-
-.appearance-section {
-  display: grid;
-  gap: 11px;
-}
-
-.appearance-section h3 {
-  font-size: var(--type-body);
-  font-weight: 500;
-}
-
-.appearance-section .hint {
-  margin: -3px 0 0;
-}
-
-.appearance-choice-row,
-.accent-picker,
-.appearance-actions,
-.appearance-path {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.appearance-theme-card {
-  display: grid;
-  grid-template-columns: 46px auto;
-  align-items: center;
-  gap: 10px;
-  min-width: 138px;
-  padding: 8px;
-  border: 1px solid #ffffff18;
-  border-radius: 9px;
-  text-align: left;
-}
-
-.appearance-theme-card.selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
-}
-
-.theme-preview {
-  display: block;
-  height: 29px;
-  border: 1px solid #ffffff26;
-  border-radius: 5px;
-}
-
-.theme-preview--dark {
-  background: linear-gradient(135deg, #111, #34362f);
-}
-.theme-preview--light {
-  background: linear-gradient(135deg, #f5f5f1, #cfd6cd);
-}
-
-.accent-swatch,
-.accent-custom {
-  width: 29px;
-  height: 29px;
-  border: 2px solid transparent;
-  border-radius: 50%;
-  box-shadow: 0 0 0 1px #ffffff28;
-}
-
-.accent-swatch.selected,
-.accent-custom:focus-within {
-  border-color: #fff;
-  box-shadow: 0 0 0 2px var(--accent);
-}
-
-.accent-custom {
-  display: grid;
-  place-items: center;
-  position: relative;
-  overflow: hidden;
-  color: #fff;
-  background: conic-gradient(#f66, #fd6, #6d6, #6df, #66f, #d6f, #f66);
-}
-
-.accent-custom input {
-  position: absolute;
-  opacity: 0;
-  inset: 0;
-  width: 100%;
-  cursor: pointer;
-}
-
-.appearance-path input {
-  flex: 1 1 230px;
-}
-.appearance-upcoming {
-  color: var(--muted);
-  font-size: var(--type-caption);
-}
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  clip-path: inset(50%);
 }
 
 html[data-theme="light"] {

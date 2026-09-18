@@ -13,7 +13,9 @@
 
 Проверки закрытия: `npm run typecheck`, `npm run build`, `npm test` (108), `npm run verify:tags` (7 форматов), полный Playwright — 18/18 в Chrome и 18/18 в Edge. Новый 100k baseline: tracks 2493 ms, albums 2782 ms, genres 121 ms, queue snapshot 2450 ms, folders 118/82 ms, folder tracks 55 ms.
 
-P1 закрыт 18 сентября 2026 года. В первом самостоятельном этапе были разделены error semantics, устранён N+1 при выдаче треков и сделан явным лимит очереди в 100 000 треков. Во втором — измерены тяжёлые facets, устранён найденный bottleneck `facetRelevance`, добавлена безопасная очистка SQLite-истории и CI quality gate. Проверки закрытия P1: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test` (112), `npm run build`, `npm run verify:tags` (7 форматов), Playwright smoke 4/4 и полный Playwright 18/18 в Chrome и 18/18 в Edge — пройдены. P2–P3 остаются backlog следующего этапа.
+P1 закрыт 18 сентября 2026 года. В первом самостоятельном этапе были разделены error semantics, устранён N+1 при выдаче треков и сделан явным лимит очереди в 100 000 треков. Во втором — измерены тяжёлые facets, устранён найденный bottleneck `facetRelevance`, добавлена безопасная очистка SQLite-истории и CI quality gate. Проверки закрытия P1: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test` (112), `npm run build`, `npm run verify:tags` (7 форматов), Playwright smoke 4/4 и полный Playwright 18/18 в Chrome и 18/18 в Edge — пройдены.
+
+Первый клиентский срез P2.1–P2.2 выполнен 18 сентября 2026 года без изменения поведения: из `App` вынесены hooks геометрии shell и целевой прокрутки каталога, bookmark control — в самостоятельный компонент, а library dialogs — в feature-модуль с сохранёнными экспортами. Appearance CSS вынесен в отдельный подключаемый stylesheet. Проверки среза: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test` (112), `npm run build`, полный Playwright 18/18 в Chrome и 18/18 в Edge. Полное разделение panel views, остальных dialogs и CSS по feature-файлам остаётся следующей частью P2.1–P2.2; P2.3–P2.4 по server orchestration и внутренним типам ещё не начаты.
 
 ## Краткий вывод
 
@@ -134,7 +136,7 @@ API-тест подтверждает форматы нескольких аль
 
 ## Приоритет 2: плановый рефакторинг без изменения поведения
 
-### 11. Разделить клиентский `App`
+### 11. [~] Начать разделение клиентского `App`
 
 `src/client/App.tsx` содержит 3743 строки и одновременно управляет:
 
@@ -157,7 +159,9 @@ API-тест подтверждает форматы нескольких аль
 
 Не следует начинать с глобального state manager: TanStack Query уже корректно владеет серверным состоянием, а основная проблема — смешение feature-логики в одном файле.
 
-### 12. Разделить dialogs и CSS по feature-границам
+**Первый срез реализован.** `useAppShellLayout` владеет наблюдением за размером shell, `useCatalogScrollTargets` — состоянием и запросами прокрутки каталога, а `BookmarkToggle` вынесен из корневого компонента. `App` по-прежнему владеет верхнеуровневым состоянием и передаёт существующие контракты без изменений. Следующий срез должен вынести panel views и связанные feature actions.
+
+### 12. [~] Начать разделение dialogs и CSS по feature-границам
 
 `Dialogs.tsx` содержит 1387 строк, `styles.css` — 3323. Это не дефект само по себе, но оба файла меняются почти при любой новой функции.
 
@@ -172,6 +176,8 @@ API-тест подтверждает форматы нескольких аль
 - общие tokens и primitives.
 
 Необязательно переходить на CSS Modules. Достаточно feature-файлов с сохранением существующих классов и порядка подключения, чтобы не изменить cascade одним большим коммитом.
+
+**Первый срез реализован.** `AddLibraryDialog`, `RenameLibraryDialog` и `RemoveLibraryDialog` перенесены в `LibraryDialogs` и по-прежнему реэкспортируются из `Dialogs`; appearance-правила выделены в отдельный stylesheet, подключённый из корневого CSS. Следующий срез: file-operation, tag/MusicBrainz и history dialogs, затем catalog/player/cover CSS при сохранении порядка cascade.
 
 ### 13. Декомпозировать server orchestration
 
@@ -222,7 +228,7 @@ Production build создаёт один JS bundle около 494 КБ (147 КБ
 2. Получить зелёные unit/integration, Chrome, Edge и обновлённый 100k benchmark.
 3. Обновить README/ROADMAP и зафиксировать milestone 0.1.
 4. P1.8–P1.10 закрыты: facet-запросы измерены и оптимизированы, SQLite обслуживается безопасно, CI стал quality gate.
-5. Следующим этапом декомпозировать App и server по одной feature за коммит, сохраняя внешний API и существующие тесты.
+5. Продолжить P2.1–P2.2: вынести panel views, оставшиеся dialogs и CSS по одной feature за коммит, сохраняя внешний API и существующие тесты; затем перейти к P2.3–P2.4 для server orchestration и внутренних типов.
 6. Решения о materialized folder relation, watcher и code splitting принимать только после повторных измерений.
 
 ## Критерий завершения milestone 0.1
