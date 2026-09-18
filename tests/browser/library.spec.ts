@@ -1012,6 +1012,9 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   const artistRow = page
     .locator(".artists-panel .list-tile")
     .filter({ hasText: "Исполнитель альбома" });
+  const secondArtistRow = page.locator(
+    '.artists-panel .list-tile[data-selection-key="Исполнитель"]',
+  );
   await expect(
     page.getByRole("heading", { name: "Исполнители" }),
   ).toBeVisible();
@@ -1203,6 +1206,14 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(artistRow).toHaveClass(/selected/);
   await expect(firstAlbum).toHaveClass(/selected/);
 
+  await genreRow.dispatchEvent("contextmenu", { clientX: 300, clientY: 300 });
+  await expect(
+    page.getByRole("menuitem", { name: "Редактировать теги" }),
+  ).toBeVisible();
+  await page.getByRole("menuitem", { name: "Редактировать теги" }).click();
+  await expect(page.getByRole("dialog")).toContainText("Выбрано треков: 6");
+  await page.getByRole("button", { name: "Отмена" }).click();
+
   await artistButton.click();
   await expect(artistRow).toHaveClass(/selected/);
   await expect(
@@ -1220,6 +1231,21 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   ).toHaveCount(0);
   await expect(artistRow).not.toHaveClass(/selected/);
   await expect(firstAlbum).toHaveClass(/selected/);
+
+  await artistButton.click();
+  await secondArtistRow
+    .locator(".list-tile-main")
+    .click({ modifiers: ["Control"] });
+  await expect(page.locator(".artists-panel .list-tile.selected")).toHaveCount(
+    2,
+  );
+  await artistRow.dispatchEvent("contextmenu", { clientX: 300, clientY: 300 });
+  await expect(
+    page.getByRole("menuitem", { name: "Редактировать теги (2)" }),
+  ).toBeVisible();
+  await page.getByRole("menuitem", { name: "Редактировать теги (2)" }).click();
+  await expect(page.getByRole("dialog")).toContainText("Выбрано треков: 6");
+  await page.getByRole("button", { name: "Отмена" }).click();
 
   const secondAlbum = page.getByTitle("Тестовый альбом · Исполнитель", {
     exact: true,

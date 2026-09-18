@@ -1032,7 +1032,9 @@ export function App() {
       const selection: Selection =
         kind === "album"
           ? { filter: { ...emptyFilter, albumIds: ids } }
-          : { trackIds: ids };
+          : kind === "artist"
+            ? { filter: { ...filter, artists: ids } }
+            : { trackIds: ids };
       setContextMenu({
         x: event.clientX,
         y: event.clientY,
@@ -1061,6 +1063,14 @@ export function App() {
           },
           ...(kind === "artist"
             ? [
+                {
+                  label: `Редактировать теги${suffix}`,
+                  icon: <Tag size={16} />,
+                  onSelect: () => {
+                    setModalSelection(selection);
+                    setModal("tags");
+                  },
+                },
                 {
                   label: `Перенести треки${suffix}`,
                   icon: <FolderInput size={16} />,
@@ -1157,9 +1167,34 @@ export function App() {
       bookmarks.isPending,
       bookmarksUnavailable,
       changeBookmarks,
+      filter,
       notify,
       pendingBookmarkKeys,
     ],
+  );
+  const showGenreMenu = useCallback(
+    (event: React.MouseEvent, genre: string) => {
+      event.preventDefault();
+      const genres = resolveContextSelection(filter.genres, genre);
+      if (!filter.genres.includes(genre))
+        setFilter((current) => ({ ...current, genres }));
+      const suffix = genres.length > 1 ? ` (${genres.length})` : "";
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        items: [
+          {
+            label: `Редактировать теги${suffix}`,
+            icon: <Tag size={16} />,
+            onSelect: () => {
+              setModalSelection({ filter: { ...filter, genres } });
+              setModal("tags");
+            },
+          },
+        ],
+      });
+    },
+    [filter],
   );
   const showLibraryMenu = useCallback(
     (event: React.MouseEvent, library: Library) => {
@@ -2290,6 +2325,7 @@ export function App() {
                   genres.data?.map((item) => item.name) || [],
                 );
               }}
+              onContextMenu={showGenreMenu}
             />
           )}
           {panelVisibility.genres && renderPanelResizer("genres")}

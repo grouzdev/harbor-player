@@ -165,6 +165,7 @@ type GenrePanelProps = {
   marquee: ReactNode;
   onReset: () => void;
   onSelect: (event: React.MouseEvent, genre: string) => void;
+  onContextMenu: (event: React.MouseEvent, genre: string) => void;
 };
 
 export function GenrePanel({
@@ -179,6 +180,7 @@ export function GenrePanel({
   marquee,
   onReset,
   onSelect,
+  onContextMenu,
 }: GenrePanelProps) {
   return (
     <section className="panel genres-panel" data-panel-id="genres">
@@ -217,6 +219,7 @@ export function GenrePanel({
               value={label}
               suffix={count(genre.count)}
               onSelect={(event) => onSelect(event, genre.name)}
+              onContextMenu={(event) => onContextMenu(event, genre.name)}
             />
           );
         })}
