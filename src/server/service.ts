@@ -26,6 +26,7 @@ import { audioExtensions, errorMessage, inside } from "./config.js";
 import { badRequest, conflict, unavailable } from "./http-error.js";
 import { readTrack } from "./metadata.js";
 import { MusicBrainzService, type MusicBrainzOptions } from "./musicbrainz.js";
+import type { ServiceEvent } from "./service-events.js";
 import type {
   Capabilities,
   Job,
@@ -145,9 +146,7 @@ export class MusicService extends EventEmitter {
       } catch {
         /* offline */
       }
-      this.catalog.db
-        .prepare("UPDATE libraries SET available=? WHERE id=?")
-        .run(Number(available), library.id);
+      this.catalog.setLibraryAvailability(library.id, available);
     }
   }
   async addLibrary(name: string, folder: string) {
@@ -184,7 +183,16 @@ export class MusicService extends EventEmitter {
   }
   private publish(job: Job) {
     this.catalog.saveJob(job);
-    this.emit("change", { type: "job", job });
+    this.publishEvent({ type: "job", job });
+  }
+  publishEvent(event: ServiceEvent): void {
+    this.emit("change", event);
+  }
+  onChange(listener: (event: ServiceEvent) => void): void {
+    this.on("change", listener);
+  }
+  offChange(listener: (event: ServiceEvent) => void): void {
+    this.off("change", listener);
   }
   private enqueue(
     kind: Job["kind"],
@@ -219,7 +227,7 @@ export class MusicService extends EventEmitter {
         job.errors.push(errorMessage(e));
       }
       this.publish(job);
-      this.emit("change", { type: "catalog" });
+      this.publishEvent({ type: "catalog" });
     });
     return job;
   }
@@ -245,18 +253,7 @@ export class MusicService extends EventEmitter {
         const processFile = async (file: string) => {
           job.total++;
           const relative = path.relative(library.path, file);
-          const old = this.catalog.db
-            .prepare(
-              "SELECT id,size,mtimeMs,missingTagFields FROM tracks WHERE libraryId=? AND relativePath=?",
-            )
-            .get(libraryId, relative) as
-            | {
-                id: string;
-                size: number;
-                mtimeMs: number;
-                missingTagFields: string | null;
-              }
-            | undefined;
+          const old = this.catalog.scannedTrack(libraryId, relative);
           try {
             const info = await stat(file);
             if (
@@ -266,9 +263,7 @@ export class MusicService extends EventEmitter {
               old.mtimeMs === info.mtimeMs &&
               old.missingTagFields !== null
             )
-              this.catalog.db
-                .prepare("UPDATE tracks SET scanId=?,available=1 WHERE id=?")
-                .run(scanId, old.id);
+              this.catalog.markTrackScanned(old.id, scanId);
             else {
               const args = {
                 file,
@@ -279,7 +274,7 @@ export class MusicService extends EventEmitter {
               };
               let track: Track;
               try {
-                track = await this.workers.run<Track>("read", args);
+                track = await this.workers.run("read", args);
                 if (!track || !Array.isArray(track.artists))
                   throw new Error("Рабочий процесс вернул неполные метаданные");
               } catch {
@@ -296,10 +291,7 @@ export class MusicService extends EventEmitter {
               this.catalog.upsert(track, scanId);
             }
           } catch (e) {
-            if (old)
-              this.catalog.db
-                .prepare("UPDATE tracks SET scanId=? WHERE id=?")
-                .run(scanId, old.id);
+            if (old) this.catalog.markTrackScanned(old.id, scanId);
             if (job.errors.length < 100)
               job.errors.push(`${relative}: ${errorMessage(e)}`);
           }
@@ -336,15 +328,10 @@ export class MusicService extends EventEmitter {
           for (let i = 0; i < files.length; i += 2)
             await Promise.all(files.slice(i, i + 2).map(processFile));
         }
+        const completedAt = new Date().toISOString();
         if (traversalComplete)
-          this.catalog.db
-            .prepare(
-              "UPDATE tracks SET available=0 WHERE libraryId=? AND (scanId IS NULL OR scanId<>?)",
-            )
-            .run(libraryId, scanId);
-        this.catalog.db
-          .prepare("UPDATE libraries SET lastScan=? WHERE id=?")
-          .run(new Date().toISOString(), libraryId);
+          this.catalog.finishScan(libraryId, scanId, completedAt);
+        else this.catalog.markLibraryScanned(libraryId, completedAt);
       },
     );
   }
@@ -382,13 +369,13 @@ export class MusicService extends EventEmitter {
   ) {
     for (let attempt = 0; attempt < 3; attempt++) {
       const before = await stat(file);
-      const hash = await this.workers.run<string>("hash", { file });
+      const hash = await this.workers.run("hash", { file });
       const after = await stat(file);
       if (before.size === after.size && before.mtimeMs === after.mtimeMs)
         return { size: after.size, mtimeMs: after.mtimeMs, hash };
       // A timestamp-only touch is not a content conflict. Confirm the bytes once more.
       if (purpose === "source" && before.size === after.size) {
-        const confirmed = await this.workers.run<string>("hash", { file });
+        const confirmed = await this.workers.run("hash", { file });
         const settled = await stat(file);
         if (settled.size === after.size && confirmed === hash)
           return {
@@ -669,11 +656,7 @@ export class MusicService extends EventEmitter {
             ) === folder,
         );
         const library = this.catalog.library(selectedHere[0].libraryId);
-        const allHere = this.catalog.db
-          .prepare(
-            "SELECT id,relativePath FROM tracks WHERE libraryId=? AND available=1",
-          )
-          .all(library.id) as { id: string; relativePath: string }[];
+        const allHere = this.catalog.availableLibraryTracks(library.id);
         if (
           allHere.some(
             (t) =>
@@ -889,7 +872,7 @@ export class MusicService extends EventEmitter {
           this.catalog.saveOperation(op);
         } finally {
           this.active.delete(id);
-          this.emit("change", { type: "operation-finished", operationId: id });
+          this.publishEvent({ type: "operation-finished", operationId: id });
         }
       },
       id,
@@ -1120,10 +1103,7 @@ export class MusicService extends EventEmitter {
     if (!item.trackId) return;
     const old = this.catalog.track(item.trackId);
     if (!old) throw new Error("Запись трека не найдена");
-    if (op.kind === "trash")
-      this.catalog.db
-        .prepare("UPDATE tracks SET available=0 WHERE id=?")
-        .run(old.id);
+    if (op.kind === "trash") this.catalog.markTrackUnavailable(old.id);
     else {
       const lib = this.catalog.library(
         op.kind === "move" ? op.targetLibraryId! : old.libraryId,

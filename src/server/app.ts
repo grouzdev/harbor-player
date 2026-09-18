@@ -21,6 +21,7 @@ import { normalizeWebpCover } from "./cover-image.js";
 import { badRequest, conflict, HttpError, notFound } from "./http-error.js";
 import { openInExplorer, type ExplorerLauncher } from "./explorer.js";
 import type { MusicBrainzOptions } from "./musicbrainz.js";
+import type { ServiceEvent } from "./service-events.js";
 import type { TagWriter } from "./isolated-tag-writer.js";
 import {
   appearanceBackgroundPath,
@@ -468,7 +469,7 @@ export async function createApp(options: {
   });
   service.closeStreams = async (ids) => {
     for (const id of ids) blocked.add(id);
-    service.emit("change", { type: "operation-start", trackIds: ids });
+    service.publishEvent({ type: "operation-start", trackIds: ids });
     await Promise.all(
       ids.flatMap((id) =>
         [...(streams.get(id) || [])].map(
@@ -481,7 +482,7 @@ export async function createApp(options: {
       ),
     );
   };
-  service.on("change", (event) => {
+  service.onChange((event) => {
     if (event.type === "operation-finished") blocked.clear();
   });
   app.get("/api/events", (request, reply) => {
@@ -494,18 +495,18 @@ export async function createApp(options: {
     });
     eventConnections.add(reply.raw);
     reply.raw.write(": connected\n\n");
-    const send = (event: unknown) => {
+    const send = (event: ServiceEvent) => {
       if (!reply.raw.destroyed)
         reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
     };
-    service.on("change", send);
+    service.onChange(send);
     const heartbeat = setInterval(
       () => reply.raw.write(": heartbeat\n\n"),
       15000,
     );
     reply.raw.on("close", () => {
       clearInterval(heartbeat);
-      service.off("change", send);
+      service.offChange(send);
       eventConnections.delete(reply.raw);
     });
   });
@@ -698,14 +699,7 @@ export async function createApp(options: {
           : "Трек больше не входит в результат",
       );
     const id = randomUUID();
-    service.catalog.db
-      .prepare("INSERT INTO queues VALUES (?,?,?)")
-      .run(id, new Date().toISOString(), JSON.stringify(ids));
-    service.catalog.db
-      .prepare(
-        "DELETE FROM queues WHERE id NOT IN (SELECT id FROM queues ORDER BY createdAt DESC LIMIT 20)",
-      )
-      .run();
+    service.catalog.saveQueue(id, new Date().toISOString(), ids);
     return {
       id,
       position,
@@ -720,11 +714,8 @@ export async function createApp(options: {
     const position = z
       .object({ position: z.coerce.number().int().min(0).max(100000) })
       .parse(request.query).position;
-    const row = service.catalog.db
-      .prepare("SELECT trackIds FROM queues WHERE id=?")
-      .get(id) as { trackIds: string } | undefined;
-    if (!row) throw new Error("Очередь больше недоступна");
-    const ids: string[] = JSON.parse(row.trackIds);
+    const ids = service.catalog.queueTrackIds(id);
+    if (!ids) throw new Error("Очередь больше недоступна");
     return {
       id,
       position,

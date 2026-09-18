@@ -1,10 +1,14 @@
 import { Worker } from "node:worker_threads";
+import type {
+  WorkerRequest,
+  WorkerResponse,
+  WorkerTask,
+  WorkerTaskMap,
+} from "./worker-protocol.js";
 
 interface Request {
-  id: number;
-  task: string;
-  args: unknown;
-  resolve: (value: any) => void;
+  request: WorkerRequest;
+  resolve: (value: string | import("../shared/contracts.js").Track) => void;
   reject: (error: Error) => void;
 }
 export class Workers {
@@ -19,9 +23,9 @@ export class Workers {
     const slot: { worker: Worker; current?: Request } = {
       worker: new Worker(new URL("./worker.js", import.meta.url)),
     };
-    slot.worker.on("message", ({ result, error }) => {
-      if (error) slot.current?.reject(new Error(error));
-      else slot.current?.resolve(result);
+    slot.worker.on("message", (response: WorkerResponse) => {
+      if ("error" in response) slot.current?.reject(new Error(response.error));
+      else slot.current?.resolve(response.result);
       slot.current = undefined;
       this.pump();
     });
@@ -39,10 +43,18 @@ export class Workers {
     });
     this.slots.push(slot);
   }
-  run<T>(task: string, args: unknown): Promise<T> {
+  run<Task extends WorkerTask>(
+    task: Task,
+    args: WorkerTaskMap[Task]["args"],
+  ): Promise<WorkerTaskMap[Task]["result"]> {
     return new Promise((resolve, reject) => {
       if (this.closed) return reject(new Error("Сервис остановлен"));
-      this.queue.push({ id: ++this.id, task, args, resolve, reject });
+      const request = { id: ++this.id, task, args } as WorkerRequest;
+      this.queue.push({
+        request,
+        resolve: (value) => resolve(value as WorkerTaskMap[Task]["result"]),
+        reject,
+      });
       this.pump();
     });
   }
@@ -50,11 +62,7 @@ export class Workers {
     for (const slot of this.slots)
       if (!slot.current && this.queue.length) {
         slot.current = this.queue.shift()!;
-        slot.worker.postMessage({
-          id: slot.current.id,
-          task: slot.current.task,
-          args: slot.current.args,
-        });
+        slot.worker.postMessage(slot.current.request);
       }
   }
   async close() {

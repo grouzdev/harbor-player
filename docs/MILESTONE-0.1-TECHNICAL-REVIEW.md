@@ -17,6 +17,8 @@ P1 закрыт 18 сентября 2026 года. В первом самост�
 
 P2.1–P2.2 закрыты 18 сентября 2026 года без изменения поведения: из `App` вынесены hooks геометрии shell и целевой прокрутки каталога, bookmark control, virtual catalog views и library/genre panels; library, cover-confirmation и tag/operation dialogs получили feature-границы с compatibility exports. `styles.css` стал manifest-entrypoint, а сохранённый cascade перенесён в `styles/base.css`; appearance остаётся отдельным stylesheet. Проверки срезов: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, focused Playwright в Chrome и Edge. Следующий этап — P2.3–P2.4: server orchestration и внутренние типы.
 
+Первый срез P2.3–P2.4 выполнен 18 сентября 2026 года без изменения HTTP URL, UI и последовательности безопасных файловых операций. `Catalog.db` стал private: `MusicService`, HTTP app и MusicBrainz используют узкие repository-методы для scan state, очереди, доступности библиотек и HTTP-cache. Миграции схемы v1–v6 вынесены в именованный `catalog-migrations` runner. Worker protocol теперь различает `read` и `hash` на уровне request/response-типов, а SSE события имеют discriminated union. Jobs и operations из SQLite проверяются Zod при чтении; повреждённые записи не исполняются. Проверки: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test` (114), `npm run build`, `npm run verify:tags` (7 форматов), Playwright smoke 4/4 в Chrome и Edge. Полная нарезка scan/operations/recovery orchestration остаётся следующим малым P2-срезом.
+
 Второй срез P2.1 выполнен 18 сентября 2026 года: виртуализированные views артистов, альбомов и треков перенесены в `CatalogVirtualViews`; `App` сохранил ownership данных, фильтров, selection, pagination, player actions, context menus и drag-and-drop через явные props. Проверки: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test` (112), `npm run build`, полный Playwright 18/18 в Chrome и 18/18 в Edge. Library и genre panels остаются последней частью panel-slice.
 
 ## Краткий вывод
@@ -181,7 +183,7 @@ API-тест подтверждает форматы нескольких аль
 
 **Реализовано.** `AddLibraryDialog`, `RenameLibraryDialog` и `RemoveLibraryDialog` находятся в `LibraryDialogs`, подтверждение обложки — в `CoverDropConfirmDialog`, а tag/MusicBrainz и operation dialogs — в `TagOperationDialog`; `Dialogs` сохраняет compatibility re-exports. Общий Enter-flow вынесен в `dialog-keyboard`. `styles.css` стал manifest-entrypoint, подключающим fonts, appearance и сохранённый в `styles/base.css` source-order cascade; относительный путь к lounge-фону проверен production build. Дальнейшая детализация CSS по слоям — плановый рефакторинг без изменения поведения.
 
-### 13. Декомпозировать server orchestration
+### 13. [x] Первый срез декомпозиции server orchestration — реализовано
 
 `MusicService` (1186 строк), `Catalog` (903) и HTTP app (723) сейчас являются тремя широкими точками связности. При этом код уже имеет естественные границы:
 
@@ -197,7 +199,9 @@ API-тест подтверждает форматы нескольких аль
 
 Миграции лучше вынести из конструктора `Catalog` в последовательные именованные шаги с отдельными тестами upgrade from N to N+1. Перед первой потенциально разрушительной миграцией добавить backup каталога и `integrity_check`.
 
-### 14. Усилить типизацию внутренних границ
+**Реализовано в первом срезе.** Прямой доступ к `Catalog.db` закрыт за небольшими методами repository: availability, состояние scan, доступные треки библиотеки, queue persistence, album count и MusicBrainz cache. HTTP app, `MusicService` и `MusicBrainzService` больше не содержат SQL. Существующие миграции v1–v6 перенесены из конструктора в `catalog-migrations` как последовательные транзакционные шаги; характеристический upgrade v5 сохранён. Scan completion и обновление `lastScan` объединены в repository-транзакцию, не меняя условия пометки unavailable. Полный вынос scan/operation/recovery orchestration намеренно оставлен следующему срезу.
+
+### 14. [x] Первый срез усиления внутренних границ — реализовано
 
 Zod хорошо защищает входящий API, но ответы, JSON из SQLite, SSE events, сообщения workers и MusicBrainz payload местами приводятся через `any` или ручной cast. Полезный порядок:
 
@@ -207,6 +211,8 @@ Zod хорошо защищает входящий API, но ответы, JSON 
 4. Свести route schemas и клиентские response types к общим контрактам без генерации сложного SDK.
 
 Это особенно важно перед будущими миграциями и сетевым режимом, но не требует менять HTTP URLs в milestone 0.1.
+
+**Реализовано в первом срезе.** `read` и `hash` worker tasks имеют явные аргументы и результаты вместо `string`/`unknown`/`any`; отдельный тест подтверждает hash round-trip через worker. События catalog, job, operation-start и operation-finished описаны discriminated union и передаются в SSE через typed API сервиса. Persisted `jobs` и `operations` валидируются Zod при чтении; malformed JSON и некорректная структура исключаются из списков, а точечное чтение операции завершается безопасной ошибкой без исполнения. В следующем срезе остаются общие route/client response contracts и более широкая типизация MusicBrainz payload.
 
 ## Приоритет 3: оптимизации после измерений
 
@@ -230,7 +236,7 @@ Production build создаёт один JS bundle около 494 КБ (147 КБ
 2. Получить зелёные unit/integration, Chrome, Edge и обновлённый 100k benchmark.
 3. Обновить README/ROADMAP и зафиксировать milestone 0.1.
 4. P1.8–P1.10 закрыты: facet-запросы измерены и оптимизированы, SQLite обслуживается безопасно, CI стал quality gate.
-5. P2.1–P2.2 закрыты: client panels, dialogs и CSS entrypoint разделены без изменения внешних контрактов. Следующий этап — P2.3–P2.4: server orchestration и внутренние типы.
+5. P2.1–P2.2 и первый срез P2.3–P2.4 закрыты: client panels, dialogs, CSS entrypoint, repository-границы, migrations runner и worker/SSE contracts разделены без изменения внешних контрактов. Следующий этап — продолжить декомпозицию scan/operations/recovery и общие route/client response contracts.
 6. Решения о materialized folder relation, watcher и code splitting принимать только после повторных измерений.
 
 ## Критерий завершения milestone 0.1

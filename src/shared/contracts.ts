@@ -142,45 +142,61 @@ export const selectionSchema = z.union([
 ]);
 export type Selection = z.infer<typeof selectionSchema>;
 export type OperationKind = "move" | "trash" | "tags" | "restore";
-export interface OperationItem {
-  id: string;
-  trackId: string | null;
-  source: string;
-  destination: string;
-  size: number;
-  mtimeMs: number;
-  hash: string;
-  title: string;
-  error?: string;
-  phase: "preview" | "prepared" | "copied" | "done" | "error" | "interrupted";
-  companion?: boolean;
-  directory?: boolean;
-  result?: string;
-  before?: Partial<TagPatch>;
-  patch?: PerTrackTagPatch;
-}
-export interface OperationPreview {
-  id: string;
-  kind: OperationKind;
-  createdAt: string;
-  status: "preview" | "running" | "done" | "interrupted";
-  items: OperationItem[];
-  patch?: TagPatch;
-  coverTrackIds?: string[];
-  targetLibraryId?: string;
-  restoreOf?: string;
-}
-export interface Job {
-  id: string;
-  kind: "scan" | "operation" | "library";
-  label: string;
-  status: "queued" | "running" | "done" | "error";
-  completed: number;
-  total: number;
-  errors: string[];
-  createdAt: string;
-  operationId?: string;
-}
+export const operationItemSchema = z
+  .object({
+    id: z.string(),
+    trackId: z.string().nullable(),
+    source: z.string(),
+    destination: z.string(),
+    size: z.number(),
+    mtimeMs: z.number(),
+    hash: z.string(),
+    title: z.string(),
+    error: z.string().optional(),
+    phase: z.enum([
+      "preview",
+      "prepared",
+      "copied",
+      "done",
+      "error",
+      "interrupted",
+    ]),
+    companion: z.boolean().optional(),
+    directory: z.boolean().optional(),
+    result: z.string().optional(),
+    before: z.record(z.string(), z.unknown()).optional(),
+    patch: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough();
+export type OperationItem = z.infer<typeof operationItemSchema>;
+export const operationPreviewSchema = z
+  .object({
+    id: z.string(),
+    kind: z.enum(["move", "trash", "tags", "restore"]),
+    createdAt: z.string(),
+    status: z.enum(["preview", "running", "done", "interrupted"]),
+    items: z.array(operationItemSchema),
+    patch: tagPatchSchema.optional(),
+    coverTrackIds: z.array(z.string()).optional(),
+    targetLibraryId: z.string().optional(),
+    restoreOf: z.string().optional(),
+  })
+  .strict();
+export type OperationPreview = z.infer<typeof operationPreviewSchema>;
+export const jobSchema = z
+  .object({
+    id: z.string(),
+    kind: z.enum(["scan", "operation", "library"]),
+    label: z.string(),
+    status: z.enum(["queued", "running", "done", "error"]),
+    completed: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+    errors: z.array(z.string()),
+    createdAt: z.string(),
+    operationId: z.string().optional(),
+  })
+  .strict();
+export type Job = z.infer<typeof jobSchema>;
 export type OperationRetryResult =
   | { action: "resume"; job: Job }
   | { action: "preview"; preview: OperationPreview };

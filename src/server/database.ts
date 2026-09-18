@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { jobSchema, operationPreviewSchema } from "../shared/contracts.js";
 import type {
   Album,
   ArtistFolder,
@@ -24,6 +25,7 @@ import {
   compareArtistNames,
 } from "../shared/artist-grouping.js";
 import { conflict, notFound } from "./http-error.js";
+import { runCatalogMigrations } from "./catalog-migrations.js";
 
 type Row = Record<string, any>;
 const checkedFolderPath = (relativePath: string) => {
@@ -50,9 +52,16 @@ const fromRow = (r: Row): Track =>
     musicBrainzReleaseGroupId: r.musicBrainzReleaseGroupId || null,
     available: Boolean(r.available),
   }) as Track;
+const parseStoredJson = (payload: string): unknown => {
+  try {
+    return JSON.parse(payload);
+  } catch {
+    return undefined;
+  }
+};
 
 export class Catalog {
-  readonly db: Database.Database;
+  private readonly db: Database.Database;
   constructor(readonly dataDir: string) {
     mkdirSync(dataDir, { recursive: true });
     this.db = new Database(path.join(dataDir, "catalog.sqlite"));
@@ -72,92 +81,7 @@ export class Catalog {
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.db.pragma("busy_timeout = 5000");
-    const version = this.db.pragma("user_version", { simple: true }) as number;
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS libraries (id TEXT PRIMARY KEY, name TEXT NOT NULL, path TEXT NOT NULL UNIQUE, available INTEGER NOT NULL DEFAULT 1, lastScan TEXT);
-      CREATE TABLE IF NOT EXISTS tracks (
-        id TEXT PRIMARY KEY, libraryId TEXT NOT NULL REFERENCES libraries(id), relativePath TEXT NOT NULL,
-        title TEXT NOT NULL, artists TEXT NOT NULL, albumTitle TEXT NOT NULL, albumArtists TEXT NOT NULL,
-        albumKey TEXT NOT NULL, genres TEXT NOT NULL, year INTEGER, trackNumber INTEGER, discNumber INTEGER,
-        duration REAL NOT NULL, format TEXT NOT NULL, size INTEGER NOT NULL, mtimeMs REAL NOT NULL,
-        coverId TEXT, available INTEGER NOT NULL DEFAULT 1, scanId TEXT, UNIQUE(libraryId, relativePath)
-      );
-      CREATE INDEX IF NOT EXISTS tracks_album ON tracks(albumKey);
-      CREATE INDEX IF NOT EXISTS tracks_order ON tracks(albumTitle COLLATE NOCASE, albumKey, discNumber, trackNumber, relativePath);
-      CREATE TABLE IF NOT EXISTS track_genres (trackId TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE, genre TEXT NOT NULL, PRIMARY KEY(trackId, genre));
-      CREATE INDEX IF NOT EXISTS genres_value ON track_genres(genre, trackId);
-      CREATE TABLE IF NOT EXISTS track_artists (trackId TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE, artist TEXT NOT NULL, PRIMARY KEY(trackId,artist));
-      CREATE INDEX IF NOT EXISTS artists_value ON track_artists(artist,trackId);
-      CREATE TABLE IF NOT EXISTS track_album_artists (trackId TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE, artist TEXT NOT NULL, PRIMARY KEY(trackId,artist));
-      CREATE INDEX IF NOT EXISTS album_artists_value ON track_album_artists(artist,trackId);
-      CREATE TABLE IF NOT EXISTS operations (id TEXT PRIMARY KEY, createdAt TEXT NOT NULL, payload TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS queues (id TEXT PRIMARY KEY, createdAt TEXT NOT NULL, trackIds TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS bookmarks (
-        kind TEXT NOT NULL CHECK(kind IN ('artist','album','track')),
-        id TEXT NOT NULL,
-        PRIMARY KEY(kind,id)
-      );
-    `);
-    if (version < 2)
-      this.db.transaction(() => {
-        this.db.exec(
-          "INSERT OR IGNORE INTO track_artists(trackId,artist) SELECT t.id,j.value FROM tracks t,json_each(t.artists) j",
-        );
-        this.db.pragma("user_version = 2");
-      })();
-    if (version < 3)
-      this.db.transaction(() => {
-        const columns = new Set(
-          (this.db.pragma("table_info(tracks)") as { name: string }[]).map(
-            (column) => column.name,
-          ),
-        );
-        if (!columns.has("missingTagFields"))
-          this.db.exec("ALTER TABLE tracks ADD COLUMN missingTagFields TEXT");
-        if (!columns.has("musicBrainzRecordingId"))
-          this.db.exec(
-            "ALTER TABLE tracks ADD COLUMN musicBrainzRecordingId TEXT",
-          );
-        if (!columns.has("musicBrainzReleaseId"))
-          this.db.exec(
-            "ALTER TABLE tracks ADD COLUMN musicBrainzReleaseId TEXT",
-          );
-        if (!columns.has("musicBrainzReleaseGroupId"))
-          this.db.exec(
-            "ALTER TABLE tracks ADD COLUMN musicBrainzReleaseGroupId TEXT",
-          );
-        this.db.exec(`
-          CREATE TABLE IF NOT EXISTS http_cache (
-            key TEXT PRIMARY KEY,
-            status INTEGER NOT NULL,
-            payload TEXT NOT NULL,
-            expiresAt INTEGER NOT NULL
-          )
-        `);
-        this.db.pragma("user_version = 3");
-      })();
-    if (version < 4)
-      this.db.transaction(() => {
-        this.db.exec(
-          "INSERT OR IGNORE INTO track_album_artists(trackId,artist) SELECT t.id,j.value FROM tracks t,json_each(t.albumArtists) j",
-        );
-        this.db.pragma("user_version = 4");
-      })();
-    if (version < 5) this.db.pragma("user_version = 5");
-    if (version < 6)
-      this.db.transaction(() => {
-        this.db.exec(`
-          DELETE FROM track_album_artists;
-          INSERT OR IGNORE INTO track_album_artists(trackId,artist)
-          SELECT t.id,j.value
-          FROM tracks t,
-               json_each(
-                 CASE WHEN t.albumArtists='[]' THEN t.artists ELSE t.albumArtists END
-               ) j
-        `);
-        this.db.pragma("user_version = 6");
-      })();
+    runCatalogMigrations(this.db);
     this.clearExpiredHttpCache();
   }
   libraries(): Library[] {
@@ -272,6 +196,122 @@ export class Catalog {
     this.library(id);
     this.db.prepare("UPDATE libraries SET name=? WHERE id=?").run(name, id);
     return this.library(id);
+  }
+  setLibraryAvailability(id: string, available: boolean): void {
+    this.db
+      .prepare("UPDATE libraries SET available=? WHERE id=?")
+      .run(Number(available), id);
+  }
+  scannedTrack(
+    libraryId: string,
+    relativePath: string,
+  ):
+    | {
+        id: string;
+        size: number;
+        mtimeMs: number;
+        missingTagFields: string | null;
+      }
+    | undefined {
+    return this.db
+      .prepare(
+        "SELECT id,size,mtimeMs,missingTagFields FROM tracks WHERE libraryId=? AND relativePath=?",
+      )
+      .get(libraryId, relativePath) as
+      | {
+          id: string;
+          size: number;
+          mtimeMs: number;
+          missingTagFields: string | null;
+        }
+      | undefined;
+  }
+  markTrackScanned(id: string, scanId: string, available?: boolean): void {
+    if (available === undefined) {
+      this.db.prepare("UPDATE tracks SET scanId=? WHERE id=?").run(scanId, id);
+      return;
+    }
+    this.db
+      .prepare("UPDATE tracks SET scanId=?,available=? WHERE id=?")
+      .run(scanId, Number(available), id);
+  }
+  finishScan(libraryId: string, scanId: string, completedAt: string): void {
+    this.db.transaction(() => {
+      this.db
+        .prepare(
+          "UPDATE tracks SET available=0 WHERE libraryId=? AND (scanId IS NULL OR scanId<>?)",
+        )
+        .run(libraryId, scanId);
+      this.db
+        .prepare("UPDATE libraries SET lastScan=? WHERE id=?")
+        .run(completedAt, libraryId);
+    })();
+  }
+  markLibraryScanned(libraryId: string, completedAt: string): void {
+    this.db
+      .prepare("UPDATE libraries SET lastScan=? WHERE id=?")
+      .run(completedAt, libraryId);
+  }
+  availableLibraryTracks(
+    libraryId: string,
+  ): { id: string; relativePath: string }[] {
+    return this.db
+      .prepare(
+        "SELECT id,relativePath FROM tracks WHERE libraryId=? AND available=1",
+      )
+      .all(libraryId) as { id: string; relativePath: string }[];
+  }
+  markTrackUnavailable(id: string): void {
+    this.db.prepare("UPDATE tracks SET available=0 WHERE id=?").run(id);
+  }
+  albumAvailableTrackCount(albumKey: string): number {
+    return (
+      this.db
+        .prepare(
+          "SELECT count(*) n FROM tracks WHERE albumKey=? AND available=1",
+        )
+        .get(albumKey) as { n: number }
+    ).n;
+  }
+  saveQueue(id: string, createdAt: string, trackIds: string[]): void {
+    this.db.transaction(() => {
+      this.db
+        .prepare("INSERT INTO queues VALUES (?,?,?)")
+        .run(id, createdAt, JSON.stringify(trackIds));
+      this.db
+        .prepare(
+          "DELETE FROM queues WHERE id NOT IN (SELECT id FROM queues ORDER BY createdAt DESC LIMIT 20)",
+        )
+        .run();
+    })();
+  }
+  queueTrackIds(id: string): string[] | undefined {
+    const row = this.db
+      .prepare("SELECT trackIds FROM queues WHERE id=?")
+      .get(id) as { trackIds: string } | undefined;
+    return row ? JSON.parse(row.trackIds) : undefined;
+  }
+  cachedHttpResponse(key: string): { status: number; payload: unknown } | null {
+    const row = this.db
+      .prepare(
+        "SELECT status,payload FROM http_cache WHERE key=? AND expiresAt>?",
+      )
+      .get(key, Date.now()) as { status: number; payload: string } | undefined;
+    return row
+      ? { status: row.status, payload: JSON.parse(row.payload) }
+      : null;
+  }
+  saveHttpResponse(
+    key: string,
+    status: number,
+    payload: unknown,
+    ttl: number,
+  ): void {
+    this.db
+      .prepare(
+        "INSERT INTO http_cache(key,status,payload,expiresAt) VALUES (?,?,?,?) ON CONFLICT(key) DO UPDATE SET status=excluded.status,payload=excluded.payload,expiresAt=excluded.expiresAt",
+      )
+      .run(key, status, JSON.stringify(payload), Date.now() + ttl);
   }
   removeLibrary(id: string): Library {
     const library = this.library(id);
@@ -890,7 +930,14 @@ export class Catalog {
       .prepare("SELECT payload FROM operations WHERE id=?")
       .get(id) as Row | undefined;
     if (!row) throw new Error("Операция не найдена");
-    return JSON.parse(row.payload);
+    const parsed = operationPreviewSchema.safeParse(
+      parseStoredJson(row.payload),
+    );
+    if (!parsed.success)
+      throw new Error(
+        "Сохранённая операция повреждена и не может быть выполнена",
+      );
+    return parsed.data;
   }
   history(): OperationPreview[] {
     return (
@@ -899,7 +946,10 @@ export class Catalog {
           "SELECT payload FROM operations ORDER BY createdAt DESC LIMIT 100",
         )
         .all() as Row[]
-    ).map((r) => JSON.parse(r.payload));
+    )
+      .map((r) => operationPreviewSchema.safeParse(parseStoredJson(r.payload)))
+      .filter((result) => result.success)
+      .map((result) => result.data);
   }
   clearHistory(): { operations: number; jobs: number; cache: number } {
     const removable = this.history().filter(
@@ -914,7 +964,9 @@ export class Catalog {
     const placeholders = ids.map(() => "?").join(",");
     const jobs = this.db.prepare("SELECT payload FROM jobs").all() as Row[];
     const removableJobs = jobs
-      .map((row) => JSON.parse(row.payload) as Job)
+      .map((row) => jobSchema.safeParse(parseStoredJson(row.payload)))
+      .filter((result) => result.success)
+      .map((result) => result.data)
       .filter(
         (job) =>
           job.operationId &&
@@ -955,7 +1007,10 @@ export class Catalog {
       this.db
         .prepare("SELECT payload FROM jobs ORDER BY rowid DESC LIMIT 30")
         .all() as Row[]
-    ).map((r) => JSON.parse(r.payload));
+    )
+      .map((r) => jobSchema.safeParse(parseStoredJson(r.payload)))
+      .filter((result) => result.success)
+      .map((result) => result.data);
   }
   close(): void {
     this.db.close();

@@ -150,10 +150,8 @@ export class MusicBrainzService {
           "MusicBrainz доступен для одного трека или одного полного альбома.",
       };
     const albumKey = tracks[0].albumKey;
-    const total = this.catalog.db
-      .prepare("SELECT count(*) n FROM tracks WHERE albumKey=? AND available=1")
-      .get(albumKey) as { n: number };
-    if (total.n !== tracks.length)
+    const total = this.catalog.albumAvailableTrackCount(albumKey);
+    if (total !== tracks.length)
       return {
         supported: false,
         mode: null,
@@ -495,9 +493,15 @@ export class MusicBrainzService {
     if (cached?.status === 404) return null;
     if (
       cached?.status === 200 &&
-      existsSync(path.join(this.dataDir, "covers", cached.payload.id))
+      existsSync(
+        path.join(
+          this.dataDir,
+          "covers",
+          (cached.payload as { id: string }).id,
+        ),
+      )
     )
-      return cached.payload;
+      return cached.payload as { id: string };
     const image = await this.bytes(url, false);
     if (!image) {
       this.saveCache(key, 404, {}, DAY);
@@ -516,23 +520,15 @@ export class MusicBrainzService {
     return { id };
   }
 
-  private cache(key: string): { status: number; payload: any } | null {
-    const row = this.catalog.db
-      .prepare(
-        "SELECT status,payload FROM http_cache WHERE key=? AND expiresAt>?",
-      )
-      .get(key, Date.now()) as { status: number; payload: string } | undefined;
-    return row
-      ? { status: row.status, payload: JSON.parse(row.payload) }
+  private cache(key: string): { status: number; payload: Json } | null {
+    const cached = this.catalog.cachedHttpResponse(key);
+    return cached
+      ? { status: cached.status, payload: cached.payload as Json }
       : null;
   }
 
-  private saveCache(key: string, status: number, payload: any, ttl: number) {
-    this.catalog.db
-      .prepare(
-        "INSERT INTO http_cache(key,status,payload,expiresAt) VALUES (?,?,?,?) ON CONFLICT(key) DO UPDATE SET status=excluded.status,payload=excluded.payload,expiresAt=excluded.expiresAt",
-      )
-      .run(key, status, JSON.stringify(payload), Date.now() + ttl);
+  private saveCache(key: string, status: number, payload: Json, ttl: number) {
+    this.catalog.saveHttpResponse(key, status, payload, ttl);
   }
 
   private async json(
