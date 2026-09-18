@@ -27,6 +27,10 @@ import { badRequest, conflict, unavailable } from "./http-error.js";
 import { LibraryScanner } from "./library-scanner.js";
 import { readTrack } from "./metadata.js";
 import { MusicBrainzService, type MusicBrainzOptions } from "./musicbrainz.js";
+import {
+  OperationOrchestrator,
+  type OperationBackend,
+} from "./operation-orchestrator.js";
 import type { ServiceEvent } from "./service-events.js";
 import type {
   Capabilities,
@@ -34,6 +38,7 @@ import type {
   OperationItem,
   OperationKind,
   OperationPreview,
+  OperationRetryResult,
   Selection,
   FolderMoveRoot,
   TagPatch,
@@ -70,6 +75,7 @@ export class MusicService extends EventEmitter {
   readonly workers: Workers;
   readonly scanner: LibraryScanner;
   readonly musicBrainz: MusicBrainzService;
+  readonly operations: OperationOrchestrator;
   private readonly unlock: () => void;
   private pending = Promise.resolve();
   private cancelledJobs = new Set<string>();
@@ -94,6 +100,13 @@ export class MusicService extends EventEmitter {
         dataDir,
         musicBrainzOptions,
       );
+      this.operations = new OperationOrchestrator({
+        preview: (...args) => this.previewInternal(...args),
+        previewRestore: (id) => this.previewRestoreInternal(id),
+        previewRetry: (id) => this.previewRetryInternal(id),
+        execute: (id) => this.executeInternal(id),
+        operation: (id) => this.catalog.operation(id),
+      } satisfies OperationBackend);
     } catch (e) {
       this.unlock();
       throw e;
@@ -300,6 +313,11 @@ export class MusicService extends EventEmitter {
     throw new Error("Файл изменился при проверке");
   }
   async preview(
+    ...args: Parameters<OperationBackend["preview"]>
+  ): Promise<OperationPreview> {
+    return this.operations.preview(...args);
+  }
+  private async previewInternal(
     kind: Exclude<OperationKind, "restore">,
     selection: Selection,
     targetLibraryId?: string,
@@ -620,6 +638,9 @@ export class MusicService extends EventEmitter {
     return op;
   }
   async previewRestore(id: string): Promise<OperationPreview> {
+    return this.operations.previewRestore(id);
+  }
+  private async previewRestoreInternal(id: string): Promise<OperationPreview> {
     const original = this.catalog.operation(id);
     if (!["trash", "tags"].includes(original.kind))
       throw new Error("Восстановление доступно для удаления и тегов");
@@ -663,6 +684,9 @@ export class MusicService extends EventEmitter {
     return op;
   }
   async previewRetry(id: string): Promise<OperationPreview> {
+    return this.operations.previewRetry(id);
+  }
+  private async previewRetryInternal(id: string): Promise<OperationPreview> {
     const original = this.catalog.operation(id);
     if (original.kind !== "tags" || original.status === "running")
       throw new Error(
@@ -686,7 +710,7 @@ export class MusicService extends EventEmitter {
         )
         .map((item) => [item.trackId!, item.patch!]),
     );
-    return this.preview(
+    return this.previewInternal(
       "tags",
       { trackIds },
       undefined,
@@ -696,21 +720,13 @@ export class MusicService extends EventEmitter {
       original.coverTrackIds?.filter((trackId) => trackIds.includes(trackId)),
     );
   }
-  async retry(id: string) {
-    const original = this.catalog.operation(id);
-    if (original.kind === "tags" && original.status !== "running") {
-      // `copied` means the atomic replacement already happened. Resume only the
-      // catalog reconciliation; creating another preview would write tags twice.
-      if (original.items.some((item) => item.phase === "copied"))
-        return { action: "resume" as const, job: this.execute(id) };
-      return {
-        action: "preview" as const,
-        preview: await this.previewRetry(id),
-      };
-    }
-    return { action: "resume" as const, job: this.execute(id) };
+  async retry(id: string): Promise<OperationRetryResult> {
+    return this.operations.retry(id);
   }
   execute(id: string): Job {
+    return this.operations.execute(id);
+  }
+  private executeInternal(id: string): Job {
     const op = this.catalog.operation(id);
     if (this.active.has(id) || op.status === "running")
       throw new Error("Операция уже запущена");

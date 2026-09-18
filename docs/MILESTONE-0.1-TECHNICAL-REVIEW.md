@@ -6,7 +6,7 @@
 
 **Milestone 0.1 технически закрыт 18 сентября 2026 года.** P0 устранил двойное закрытие по `Escape`, изолировал stateful Playwright-сценарии, восстановил валидный benchmark и синхронизировал release-документацию. P1 сделал явными HTTP error semantics и лимит очереди, устранил N+1 при выдаче треков, оптимизировал тяжёлые facets, добавил безопасное обслуживание SQLite и CI quality gate.
 
-P2 выполняется небольшими срезами без изменения внешнего поведения. Закрыты P2.1–P2.2 (client panels, dialogs и CSS boundaries), первый срез P2.3–P2.4 (repository, migrations, worker/SSE/persisted-data contracts) и второй scanner-срез P2.3. Следующие работы — выделение orchestration файловых операций и общие route/client response contracts; они не являются условием закрытия 0.1.
+P2 выполняется небольшими срезами без изменения внешнего поведения. Закрыты P2.1–P2.2 (client panels, dialogs и CSS boundaries), repository/migrations, worker/SSE/persisted-data и scanner-срезы P2.3, а также выделена граница orchestration файловых операций. Следующая работа — общие route/client response contracts; она не является условием закрытия 0.1.
 
 ## Краткий вывод
 
@@ -75,12 +75,13 @@ Harbor Player — законченный первый milestone, а не про�
 - `Catalog.db` скрыт за узкими repository-методами; миграции v1–v6 вынесены в именованный транзакционный runner.
 - Worker protocol различает `read` и `hash`, SSE описаны discriminated union, а persisted jobs/operations валидируются Zod при чтении.
 - `LibraryScanner` владеет availability и scan-flow: incremental/force read, worker fallback, исключение symbolic links, ограниченный параллелизм, ошибки обхода и финализацию scan state.
+- `OperationOrchestrator` стал узкой границей lifecycle файловых операций. `MusicService` сохраняет последовательную очередь, shutdown/cancellation и события, а его совместимые `preview`/`execute`/`retry`/`previewRestore` делегируют orchestration без изменения HTTP API или persisted payload.
 
 ## Приоритет 3: работа после milestone
 
-### Декомпозиция операций и response contracts
+### Общие response contracts
 
-Следующий безопасный P2-срез — выделить preview/execute/retry/recovery файловых операций из `MusicService`, сохраняя последовательную job queue, cancellation при shutdown и все гарантии staging/fingerprint/backup/flush. После него — свести route schemas и клиентские response types к общим контрактам без изменения HTTP URL и без генерации сложного SDK.
+Следующий безопасный P2-срез — свести route schemas и клиентские response types к общим контрактам без изменения HTTP URL и без генерации сложного SDK. Отдельно расширить типизацию MusicBrainz payload, сохранив текущие error semantics.
 
 ### Сканирование
 
@@ -97,8 +98,7 @@ Watcher может быть лишь подсказкой к scan, а не ис�
 ## Рекомендуемый порядок следующего этапа
 
 1. Повторить полный Playwright в чистом окружении и сохранить итоговый Chrome/Edge результат для следующей release-проверки.
-2. Выделить preview/execute/retry/recovery orchestration с характеристическими тестами сохранности файлов.
-3. Ввести общие route/client response contracts и расширить типизацию MusicBrainz payload.
-4. После измерений спланировать настройки интервала автосканирования, cold-start/code splitting и локальное наблюдение.
+2. Ввести общие route/client response contracts и расширить типизацию MusicBrainz payload.
+3. После измерений спланировать настройки интервала автосканирования, cold-start/code splitting и локальное наблюдение.
 
 Milestone 0.1 не требует нового функционала для признания закрытым. Следующий этап должен развивать измеримость и сопровождаемость, сохраняя уже подтверждённую безопасность файловых операций.
