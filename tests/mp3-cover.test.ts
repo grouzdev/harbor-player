@@ -77,6 +77,23 @@ function id3v1Genre(genre: number) {
   return tag;
 }
 
+function apeTag(items: Record<string, string>) {
+  const body = Buffer.concat(
+    Object.entries(items).map(([key, value]) => {
+      const text = Buffer.from(value, "utf8");
+      const header = Buffer.alloc(8);
+      header.writeUInt32LE(text.length, 0);
+      return Buffer.concat([header, Buffer.from(`${key}\0`, "utf8"), text]);
+    }),
+  );
+  const footer = Buffer.alloc(32);
+  footer.write("APETAGEX", 0, "ascii");
+  footer.writeUInt32LE(2000, 8);
+  footer.writeUInt32LE(body.length + footer.length, 12);
+  footer.writeUInt32LE(Object.keys(items).length, 16);
+  return Buffer.concat([body, footer]);
+}
+
 function apic(type: number, data: Buffer) {
   return frame(
     "APIC",
@@ -197,6 +214,50 @@ describe("MP3 cover writer", () => {
       metadata.native["ID3v2.4"]?.find((tag) => tag.id === "TMCL")?.value,
     ).toEqual({ performer: ["Kevin Parker"] });
     expect((await readFile(file)).indexOf(tmcl)).toBeGreaterThanOrEqual(0);
+    expect(await audioDigest(file)).toBe(beforeAudio);
+  });
+
+  it("synchronizes an existing APEv2 Genre that overrides the ID3 genre", async () => {
+    root = await mkdtemp(
+      path.join(os.tmpdir(), "harbor-player-mp3-ape-genre-"),
+    );
+    const sample = await readFile(path.join(fixtures, "sample.mp3"));
+    const sampleTagSize = size(sample.subarray(6, 10));
+    const audio = sample.subarray(10 + sampleTagSize);
+    const file = path.join(root, "ape-genre.mp3");
+    await writeFile(
+      file,
+      Buffer.concat([
+        id3v2(3, frame("TIT2", Buffer.from([0, ...Buffer.from("Track")]))),
+        audio,
+        apeTag({ Artist: "Kept artist", Genre: " " }),
+        id3v1Genre(255),
+      ]),
+    );
+    const beforeAudio = await audioDigest(file);
+
+    await writeTags(file, { genres: ["Trip-Hop"] });
+
+    const metadata = await parseFile(file, { duration: false });
+    expect(metadata.common.genre).toEqual(["Trip-Hop"]);
+    expect(
+      metadata.native.APEv2?.find((tag) => tag.id === "Genre")?.value,
+    ).toBe("Trip-Hop");
+    expect(
+      metadata.native.APEv2?.find((tag) => tag.id === "Artist")?.value,
+    ).toBe("Kept artist");
+    expect(
+      metadata.native["ID3v2.3"]?.find((tag) => tag.id === "TCON")?.value,
+    ).toBe("Trip-Hop");
+    expect(await audioDigest(file)).toBe(beforeAudio);
+
+    await writeTags(file, { genres: [] });
+
+    const cleared = await parseFile(file, { duration: false });
+    expect(cleared.common.genre).toBeUndefined();
+    expect(
+      cleared.native.APEv2?.find((tag) => tag.id === "Genre"),
+    ).toBeUndefined();
     expect(await audioDigest(file)).toBe(beforeAudio);
   });
 

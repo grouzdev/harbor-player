@@ -277,6 +277,77 @@ function writeId3v1(data: Buffer, patch: TagPatch) {
   return Buffer.concat([data.subarray(0, -128), tag]);
 }
 
+/** Updates an existing APEv2 Genre item without rewriting unrelated APE metadata. */
+function writeApeGenres(data: Buffer, patch: TagPatch) {
+  if (patch.genres === undefined) return data;
+  const id3v1 =
+    data.length >= 128 && data.subarray(-128, -125).toString("ascii") === "TAG"
+      ? data.subarray(-128)
+      : undefined;
+  const content = id3v1 ? data.subarray(0, -128) : data;
+  if (
+    content.length < 32 ||
+    content.subarray(-32, -24).toString() !== "APETAGEX"
+  )
+    return data;
+  const footer = Buffer.from(content.subarray(-32));
+  const size = footer.readUInt32LE(12);
+  const count = footer.readUInt32LE(16);
+  if (size < 32 || count > 10_000 || size > content.length)
+    throw new Error("Повреждён APEv2-тег");
+  const start = content.length - size;
+  const bodyEnd = content.length - 32;
+  const hasHeader =
+    start >= 32 &&
+    content.subarray(start - 32, start - 24).toString() === "APETAGEX";
+  const items: Buffer[] = [];
+  let cursor = start;
+  let foundGenre = false;
+  for (let index = 0; index < count; index++) {
+    if (cursor + 8 > bodyEnd) throw new Error("Повреждён APEv2-тег");
+    const valueSize = content.readUInt32LE(cursor);
+    const keyEnd = content.indexOf(0, cursor + 8);
+    if (keyEnd < cursor + 8 || keyEnd >= bodyEnd)
+      throw new Error("Повреждён APEv2-тег");
+    const end = keyEnd + 1 + valueSize;
+    if (end > bodyEnd) throw new Error("Повреждён APEv2-тег");
+    const key = content.subarray(cursor + 8, keyEnd).toString("utf8");
+    if (key.toLowerCase() === "genre") foundGenre = true;
+    else items.push(content.subarray(cursor, end));
+    cursor = end;
+  }
+  if (cursor !== bodyEnd) throw new Error("Повреждён APEv2-тег");
+  // APE metadata is preserved unless it already contains the competing Genre
+  // representation that music-metadata can prefer over ID3.
+  if (!foundGenre) return data;
+  if (patch.genres.length) {
+    const value = Buffer.from(patch.genres.join("\0"), "utf8");
+    const item = Buffer.alloc(8);
+    item.writeUInt32LE(value.length, 0);
+    items.push(Buffer.concat([item, Buffer.from("Genre\0"), value]));
+  }
+  const body = Buffer.concat(items);
+  const nextSize = body.length + 32;
+  footer.writeUInt32LE(nextSize, 12);
+  footer.writeUInt32LE(items.length, 16);
+  const tag = Buffer.concat([body, footer]);
+  if (!hasHeader)
+    return Buffer.concat([
+      content.subarray(0, start),
+      tag,
+      ...(id3v1 ? [id3v1] : []),
+    ]);
+  const header = Buffer.from(content.subarray(start - 32, start));
+  header.writeUInt32LE(nextSize, 12);
+  header.writeUInt32LE(items.length, 16);
+  return Buffer.concat([
+    content.subarray(0, start - 32),
+    header,
+    tag,
+    ...(id3v1 ? [id3v1] : []),
+  ]);
+}
+
 const ids = (version: Version): Record<string, string> => ({
   title: "TIT2",
   artists: "TPE1",
@@ -350,7 +421,10 @@ export async function writeMp3TagsLosslessly(
       padding,
     );
   }
-  const tail = writeId3v1(data.subarray(blocks.at(-1)!.tag.end), patch);
+  const tail = writeId3v1(
+    writeApeGenres(data.subarray(blocks.at(-1)!.tag.end), patch),
+    patch,
+  );
   await writeFile(file, Buffer.concat([...output, tail]));
   return true;
 }
