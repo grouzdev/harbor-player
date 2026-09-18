@@ -192,10 +192,15 @@ function ArtworkViewer({
   const imageRef = useRef<HTMLImageElement>(null);
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      // This listener runs before the cover-mode handler. Without the modal
+      // boundary, the same key also closed the whole cover mode.
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
     };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    window.addEventListener("keydown", closeOnEscape, true);
+    return () => window.removeEventListener("keydown", closeOnEscape, true);
   }, [onClose]);
   useEffect(() => {
     const measure = () => {
@@ -215,10 +220,6 @@ function ArtworkViewer({
       role="dialog"
       aria-modal="true"
       aria-label="Просмотр обложки"
-      onKeyDown={(event) => {
-        event.stopPropagation();
-        if (event.key === "Escape") onClose();
-      }}
     >
       <div
         className="artwork-viewer-scroll"

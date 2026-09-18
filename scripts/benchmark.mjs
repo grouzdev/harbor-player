@@ -1,9 +1,14 @@
+// @ts-check
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "@playwright/test";
 import { createApp } from "../dist/server/app.js";
 import { emptyFilter } from "../dist/shared/contracts.js";
 const root = path.resolve(".test-data/benchmark");
+const writeBaseline = process.argv.slice(2).includes("--write-baseline");
+const outputPath = writeBaseline
+  ? path.resolve("verification/catalog-benchmark.json")
+  : path.join(root, "catalog-benchmark.json");
 if (!root.startsWith(path.resolve(".test-data") + path.sep))
   throw new Error("Unsafe test path");
 await rm(root, { recursive: true, force: true });
@@ -23,6 +28,9 @@ try {
   );
   const genre = service.catalog.db.prepare(
     "INSERT INTO track_genres VALUES (?,?)",
+  );
+  const albumArtist = service.catalog.db.prepare(
+    "INSERT INTO track_album_artists VALUES (?,?)",
   );
   const seedStart = performance.now();
   service.catalog.db.transaction(() => {
@@ -55,12 +63,14 @@ try {
         1,
       );
       genre.run(id, "Ambient");
+      albumArtist.run(id, "Исполнитель");
       service.catalog.db
         .prepare("INSERT INTO track_artists VALUES (?,?)")
         .run(id, "Исполнитель");
     }
   })();
   const seedMs = Math.round(performance.now() - seedStart);
+  /** @template T @param {() => T} fn */
   const timed = (fn) => {
     const start = performance.now();
     const result = fn();
@@ -77,9 +87,27 @@ try {
   const folderTracks = timed(() =>
     service.catalog.tracks({
       ...emptyFilter,
-      folder: { libraryId: lib.id, relativePath: "Artist 000" },
+      folders: [{ libraryId: lib.id, relativePath: "Artist 000" }],
     }),
   );
+  const expected = {
+    tracks: 100000,
+    albums: 10000,
+    selectedTracks: 1000,
+  };
+  if (
+    tracks.result.total !== expected.tracks ||
+    albums.result.total !== expected.albums ||
+    folderTracks.result.total !== expected.selectedTracks
+  )
+    throw new Error(
+      `Benchmark fixture mismatch: ${JSON.stringify({
+        expected,
+        tracks: tracks.result.total,
+        albums: albums.result.total,
+        selectedTracks: folderTracks.result.total,
+      })}`,
+    );
   await app.listen({ port: 4328, host: "127.0.0.1" });
   browser = await chromium.launch({ channel: "chrome" });
   const page = await browser.newPage({
@@ -106,6 +134,7 @@ try {
     syntheticCatalog: true,
     tracks: tracks.result.total,
     albums: albums.result.total,
+    expected,
     seedMs,
     queryMs: {
       tracks: tracks.ms,
@@ -126,10 +155,8 @@ try {
     renderedTracksAfterScroll: afterScroll,
     note: "Synthetic database benchmark; not a measurement of scanning 100000 real files.",
   };
-  await writeFile(
-    "verification/catalog-benchmark.json",
-    JSON.stringify(report, null, 2) + "\n",
-  );
+  await mkdir(path.dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, JSON.stringify(report, null, 2) + "\n");
   console.log(JSON.stringify(report, null, 2));
 } finally {
   if (browser) await browser.close();

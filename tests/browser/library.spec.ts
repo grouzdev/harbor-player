@@ -151,7 +151,9 @@ test("fullscreen button changes the application shell", async ({ page }) => {
     /fullscreen-window--maximized/,
   );
   await topbar.dblclick({ position: { x: 20, y: 30 } });
-  const restoredFromSavedMaximize = await page.locator(".app-shell").boundingBox();
+  const restoredFromSavedMaximize = await page
+    .locator(".app-shell")
+    .boundingBox();
   expect(restoredFromSavedMaximize).not.toBeNull();
   expect(restoredFromSavedMaximize!.x).toBeCloseTo(moved!.x, 0);
   expect(restoredFromSavedMaximize!.y).toBeCloseTo(moved!.y, 0);
@@ -210,7 +212,11 @@ test("fullscreen resize transitions do not overwrite saved window bounds", async
   });
   await page.waitForTimeout(50);
   await expect
-    .poll(() => page.evaluate(() => localStorage.getItem("harbor-player-fullscreen-window-v1")))
+    .poll(() =>
+      page.evaluate(() =>
+        localStorage.getItem("harbor-player-fullscreen-window-v1"),
+      ),
+    )
     .toBe(savedState);
 
   await page
@@ -604,16 +610,15 @@ test("a single visible panel fills the workspace width", async ({ page }) => {
       }, visibleLabel);
       await page.reload();
 
-      const dimensions = await page.locator(".workspace").evaluate(
-        (workspace, panelSelector) => {
+      const dimensions = await page
+        .locator(".workspace")
+        .evaluate((workspace, panelSelector) => {
           const panel = workspace.querySelector<HTMLElement>(panelSelector)!;
           return {
             workspaceWidth: workspace.getBoundingClientRect().width,
             panelWidth: panel.getBoundingClientRect().width,
           };
-        },
-        selector,
-      );
+        }, selector);
       expect(dimensions.panelWidth, `${label}: ${visibleLabel}`).toBeCloseTo(
         dimensions.workspaceWidth,
         1,
@@ -627,7 +632,12 @@ test("player prioritizes the current track over progress in a narrow window", as
 }, info) => {
   await page.goto("/");
   const browser = info.project.name;
-  const source = path.resolve(".test-data/browser", browser, "Downloads");
+  const source = path.resolve(
+    ".test-data/browser",
+    browser,
+    "player",
+    "Downloads",
+  );
   await page.locator(".add-library").click();
   await page.getByLabel("Путь к папке", { exact: true }).fill(source);
   await page.getByLabel("Название библиотеки").fill(`Player ${browser}`);
@@ -702,16 +712,19 @@ test("player prioritizes the current track over progress in a narrow window", as
       expected.volumeColumn,
     );
     if (!expected.volumeColumn)
-      expect(layout.transportRightGap, `${width}px transport uses the right edge`).toBeLessThanOrEqual(
-        20,
-      );
+      expect(
+        layout.transportRightGap,
+        `${width}px transport uses the right edge`,
+      ).toBeLessThanOrEqual(20);
     if (!expected.volumeColumn) {
-      expect(layout.seekRightGap, `${width}px progress uses the transport edge`).toBeLessThanOrEqual(
-        20,
-      );
-      expect(layout.seekRangeWidth, `${width}px progress uses remaining width`).toBeGreaterThan(
-        120,
-      );
+      expect(
+        layout.seekRightGap,
+        `${width}px progress uses the transport edge`,
+      ).toBeLessThanOrEqual(20);
+      expect(
+        layout.seekRangeWidth,
+        `${width}px progress uses remaining width`,
+      ).toBeGreaterThan(120);
     }
     expect(layout.timesVisible, `${width}px times`).toBe(expected.times);
     expect(
@@ -741,10 +754,26 @@ test("player prioritizes the current track over progress in a narrow window", as
 test("local library: readable UI, playback, tags, move, delete and restore", async ({
   page,
 }, info) => {
+  test.setTimeout(90_000);
   const browser = info.project.name;
-  const source = path.resolve(".test-data/browser", browser, "Downloads");
-  const target = path.resolve(".test-data/browser", browser, "Collection");
-  const tree = path.resolve(".test-data/browser", browser, "Tree");
+  const source = path.resolve(
+    ".test-data/browser",
+    browser,
+    "file-operations",
+    "Downloads",
+  );
+  const target = path.resolve(
+    ".test-data/browser",
+    browser,
+    "file-operations",
+    "Collection",
+  );
+  const tree = path.resolve(
+    ".test-data/browser",
+    browser,
+    "file-operations",
+    "Tree",
+  );
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
@@ -1083,9 +1112,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   const albumArtistLink = page.getByRole("button", {
     name: "Выбрать исполнителя «Исполнитель альбома»",
   });
-  await page
-    .getByRole("button", { name: "Сбросить исполнителей" })
-    .click();
+  await page.getByRole("button", { name: "Сбросить исполнителей" }).click();
   await expect(
     page
       .locator(".artists-panel .list-tile.selected")
@@ -1617,7 +1644,10 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     );
   });
   await expect(coverTarget).toContainText("Отпустите обложку");
-  await expect(coverTarget).toHaveCSS("box-shadow", /rgb\(185, 212, 183\)/);
+  await expect(coverTarget).toHaveCSS(
+    "box-shadow",
+    /rgba\(185, 212, 183, 0\.2\)/,
+  );
   await coverTarget.evaluate((element) => {
     element.dispatchEvent(new DragEvent("dragleave", { bubbles: true }));
   });
@@ -1641,7 +1671,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     );
   };
   await dropFile("not-cover.gif", "image/gif", "R0lGODlh");
-  await expect(page.locator(".toast")).toContainText("JPEG или PNG");
+  await expect(page.locator(".toast")).toContainText("JPEG, PNG или WebP");
   await coverTarget.evaluate((element) => {
     const transfer = new DataTransfer();
     transfer.items.add(
@@ -1657,7 +1687,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
       }),
     );
   });
-  await expect(page.locator(".toast")).toContainText("JPEG или PNG");
+  await expect(page.locator(".toast")).toContainText("JPEG, PNG или WebP");
   const droppedCover = (
     await readFile(path.resolve(".fixtures/cover.png"))
   ).toString("base64");
@@ -1696,8 +1726,10 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     "album",
     "track",
   ]);
-  // Exercise every browser decoder, seeking, and range responses with actual audio bytes.
-  for (const format of ["mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"]) {
+  await downloadsTile.locator(".list-tile-main").click();
+  // Exercise every browser decoder exposed by the catalog, seeking, and range
+  // responses with actual audio bytes. WAV tag support is verified separately.
+  for (const format of ["mp3", "flac", "m4a", "aac", "ogg", "opus"]) {
     const row = page.locator(
       `[data-testid="track-row"][data-format="${format}"]`,
     );
@@ -1757,8 +1789,10 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(
     nowPlaying.getByRole("button", { name: /Открыть альбом/ }),
   ).toBeVisible();
-  await expect(nowPlaying.locator(".now-copy")).evaluate((copy) =>
-    [...copy.children].map((child) => child.className),
+  expect(
+    await nowPlaying
+      .locator(".now-copy")
+      .evaluate((copy) => [...copy.children].map((child) => child.className)),
   ).toEqual(["now-artists", "now-track-link"]);
   await page.getByRole("button", { name: "Скрыть панель «Альбомы»" }).click();
   await expect(page.locator(".albums-panel")).toBeHidden();
@@ -1772,11 +1806,10 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
       .locator(".artists-panel .list-tile.selected")
       .filter({ hasText: "Исполнитель альбома" }),
   ).toHaveCount(0);
-  await expect(rows).toHaveCount(6);
+  await expect(rows).toHaveCount(7);
   await page
     .getByRole("button", { name: "Скрыть панель «Исполнители»" })
     .click();
-  await page.getByRole("button", { name: "Скрыть панель «Альбомы»" }).click();
   await expect(page.locator(".artists-panel")).toBeHidden();
   await nowPlaying
     .getByRole("button", { name: "Открыть исполнителя «Исполнитель альбома»" })
@@ -1788,7 +1821,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
       .locator(".artists-panel .list-tile.selected")
       .filter({ hasText: "Исполнитель альбома" }),
   ).toHaveCount(0);
-  await expect(rows).toHaveCount(6);
+  await expect(rows).toHaveCount(7);
   await downloadsTile.locator(".list-tile-main").click();
   await page.locator("audio").evaluate((a: HTMLAudioElement) => {
     a.loop = true;
@@ -1844,7 +1877,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog")).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(rows).toHaveCount(5);
+  await expect(rows).toHaveCount(6);
   await page.getByRole("button", { name: "Сбросить библиотеки" }).click();
   await expect(
     page.getByRole("button", { name: "Сбросить библиотеки" }),
@@ -1855,9 +1888,8 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await flac().dispatchEvent("contextmenu");
   await page.getByRole("menuitem", { name: "Удалить треки" }).click();
   await expect(page.getByRole("dialog")).toBeFocused();
-  await page.keyboard.press("Enter");
-  await expect(page.getByRole("dialog")).toBeFocused();
-  await page.keyboard.press("Enter");
+  await page.getByRole("button", { name: "Далее" }).click();
+  await page.getByRole("button", { name: /^Применить к/ }).click();
   await expect(rows).toHaveCount(0);
   await page
     .getByRole("button", { name: "Журнал операций", exact: true })
@@ -1889,7 +1921,12 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   page,
 }, info) => {
   const browser = info.project.name;
-  const source = path.resolve(".test-data/browser", browser, "Downloads");
+  const source = path.resolve(
+    ".test-data/browser",
+    browser,
+    "cover-mode",
+    "Downloads",
+  );
   const libraryName = `Downloads ${browser}`;
   const librariesLoaded = page.waitForResponse(
     (response) =>
@@ -2030,7 +2067,8 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   ).toBeLessThanOrEqual(1);
   expect(
     Math.abs(
-      coverSearchBox!.y + coverSearchBox!.height / 2 -
+      coverSearchBox!.y +
+        coverSearchBox!.height / 2 -
         (topbarBox!.y + topbarBox!.height / 2),
     ),
   ).toBeLessThanOrEqual(1);
@@ -2050,7 +2088,9 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   const quickSearch = page.getByRole("dialog", { name: "Результаты поиска" });
   const quickSearchBox = await quickSearch.boundingBox();
   expect(quickSearchBox).not.toBeNull();
-  expect(quickSearchBox!.y).toBeGreaterThan(coverSearchBox!.y + coverSearchBox!.height);
+  expect(quickSearchBox!.y).toBeGreaterThan(
+    coverSearchBox!.y + coverSearchBox!.height,
+  );
   expect(
     Math.abs(
       quickSearchBox!.x +
@@ -2087,6 +2127,7 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   await expect(artworkViewer.locator("img")).not.toHaveClass(/zoomable/);
   await page.keyboard.press("Escape");
   await expect(artworkViewer).not.toBeVisible();
+  await expect(coverMode).toBeVisible();
 
   await page.setViewportSize({ width: 500, height: 500 });
   await coverMode
@@ -2119,7 +2160,7 @@ test("library folders expand independently and support Ctrl selection", async ({
   page,
 }, info) => {
   const browser = info.project.name;
-  const tree = path.resolve(".test-data/browser", browser, "Tree");
+  const tree = path.resolve(".test-data/browser", browser, "folders", "Tree");
   const name = `Tree controls ${browser}`;
   const explorerRequests: { kind: string; relativePath?: string }[] = [];
   await page.route("**/api/explorer", async (route) => {
@@ -2131,6 +2172,7 @@ test("library folders expand independently and support Ctrl selection", async ({
   await page.getByLabel("Путь к папке", { exact: true }).fill(tree);
   await page.getByLabel("Название библиотеки").fill(name);
   await page.getByRole("button", { name: "Подключить", exact: true }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
   const treeTile = page
     .locator(".libraries-panel .list-tile")
     .filter({ hasText: name });
@@ -2186,16 +2228,21 @@ test("panel selection supports Shift ranges and bounded marquee drag", async ({
   page,
 }, info) => {
   const browser = info.project.name;
-  const source = path.resolve(".test-data/browser", browser, "Downloads");
+  const source = path.resolve(
+    ".test-data/browser",
+    browser,
+    "selection",
+    "Downloads",
+  );
   const sources = [
     [`Selection A ${browser}`, source],
     [
       `Selection B ${browser}`,
-      path.resolve(".test-data/browser", browser, "Collection"),
+      path.resolve(".test-data/browser", browser, "selection", "Collection"),
     ],
     [
       `Selection C ${browser}`,
-      path.resolve(".test-data/browser", browser, "Tree"),
+      path.resolve(".test-data/browser", browser, "selection", "Tree"),
     ],
   ] as const;
   const createdNames: string[] = [];

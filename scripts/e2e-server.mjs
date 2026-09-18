@@ -76,35 +76,43 @@ if (!root.startsWith(path.resolve(".test-data") + path.sep))
 await rm(root, { recursive: true, force: true });
 await mkdir(root, { recursive: true });
 for (const browser of ["chrome", "edge"]) {
-  const source = path.join(root, browser, "Downloads");
-  const target = path.join(root, browser, "Collection");
-  const tree = path.join(root, browser, "Tree");
-  await mkdir(path.join(source, "Album"), { recursive: true });
-  await mkdir(target, { recursive: true });
-  await mkdir(path.join(tree, "Rock", "Album"), { recursive: true });
-  await mkdir(path.join(tree, "Rock", "Live"), { recursive: true });
-  await mkdir(path.join(tree, "Jazz", "Album"), { recursive: true });
-  for (const format of ["mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"])
+  for (const scenario of [
+    "player",
+    "file-operations",
+    "cover-mode",
+    "folders",
+    "selection",
+  ]) {
+    const source = path.join(root, browser, scenario, "Downloads");
+    const target = path.join(root, browser, scenario, "Collection");
+    const tree = path.join(root, browser, scenario, "Tree");
+    await mkdir(path.join(source, "Album"), { recursive: true });
+    await mkdir(target, { recursive: true });
+    await mkdir(path.join(tree, "Rock", "Album"), { recursive: true });
+    await mkdir(path.join(tree, "Rock", "Live"), { recursive: true });
+    await mkdir(path.join(tree, "Jazz", "Album"), { recursive: true });
+    for (const format of ["mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"])
+      await copyFile(
+        path.resolve(".fixtures", `sample.${format}`),
+        path.join(source, "Album", `sample.${format}`),
+      );
     await copyFile(
-      path.resolve(".fixtures", `sample.${format}`),
-      path.join(source, "Album", `sample.${format}`),
+      path.resolve(".fixtures/cover.png"),
+      path.join(source, "Album", "cover.png"),
     );
-  await copyFile(
-    path.resolve(".fixtures/cover.png"),
-    path.join(source, "Album", "cover.png"),
-  );
-  await copyFile(
-    path.resolve(".fixtures/sample.flac"),
-    path.join(tree, "Rock", "Album", "album.flac"),
-  );
-  await copyFile(
-    path.resolve(".fixtures/sample.flac"),
-    path.join(tree, "Rock", "Live", "live.flac"),
-  );
-  await copyFile(
-    path.resolve(".fixtures/sample.flac"),
-    path.join(tree, "Jazz", "Album", "jazz.flac"),
-  );
+    await copyFile(
+      path.resolve(".fixtures/sample.flac"),
+      path.join(tree, "Rock", "Album", "album.flac"),
+    );
+    await copyFile(
+      path.resolve(".fixtures/sample.flac"),
+      path.join(tree, "Rock", "Live", "live.flac"),
+    );
+    await copyFile(
+      path.resolve(".fixtures/sample.flac"),
+      path.join(tree, "Jazz", "Album", "jazz.flac"),
+    );
+  }
 }
 const { app } = await createApp({
   dataDir: path.join(root, "data"),

@@ -16,7 +16,7 @@
 
 **M6 — домашняя сеть.** Отдельная настройка сетевого доступа, авторизация, роли «слушать» и «изменять», адаптация интерфейса для небольших экранов. При необходимости отдельная интеграция Jellyfin. Открывать текущий локальный API в сеть без этих изменений нельзя.
 
-**M7 — Windows standalone (первый этап реализован).** Работает Electron shell для Windows x64: backend и tag-writer вынесены в utility processes, повторный запуск показывает существующее окно, закрытие сворачивает приложение в tray, а самостоятельная unpacked-сборка проходит packaged smoke. Проверка на чистой VM без инструментов разработки входит в этап дистрибутивов. Следующие шаги — NSIS/portable, интерфейс обновлений, release pipeline и подписанный stable. Подробности и поэтапный roadmap: `docs/windows-build.md`.
+**M7 — Windows standalone (реализован с проверяемыми границами).** Работают Electron shell для Windows x64, NSIS installer и portable EXE; backend и tag-writer вынесены в utility processes, повторный запуск показывает существующее окно, закрытие сворачивает приложение в tray, а unpacked/portable smoke выполняется в release workflow. Реализованы beta updater и release pipeline; stable workflow требует signing secrets до сборки. Проверка на чистой VM без инструментов разработки и первый фактически подписанный stable-дистрибутив остаются отдельными непроверенными шагами. Подробности: `docs/windows-build.md`.
 
 ## Известные границы
 

@@ -1,27 +1,32 @@
 {
-  "date": "2026-09-13T15:55:35.598Z",
+  "date": "2026-09-18T10:28:03.188Z",
   "platform": "win32",
   "node": "v24.20.0",
   "syntheticCatalog": true,
   "tracks": 100000,
   "albums": 10000,
-  "seedMs": 4685,
+  "expected": {
+    "tracks": 100000,
+    "albums": 10000,
+    "selectedTracks": 1000
+  },
+  "seedMs": 4546,
   "queryMs": {
-    "tracks": 31,
-    "albums": 84,
-    "genres": 83,
-    "queueSnapshot": 144,
-    "rootFolders": 126,
-    "nestedFolders": 88,
-    "folderTracks": 28
+    "tracks": 2493,
+    "albums": 2782,
+    "genres": 121,
+    "queueSnapshot": 2450,
+    "rootFolders": 118,
+    "nestedFolders": 82,
+    "folderTracks": 55
   },
   "folderCounts": {
     "root": 100,
     "nested": 100,
     "selectedTracks": 1000
   },
-  "renderedTracks": 20,
-  "renderedAlbums": 12,
-  "renderedTracksAfterScroll": 29,
+  "renderedTracks": 26,
+  "renderedAlbums": 14,
+  "renderedTracksAfterScroll": 35,
   "note": "Synthetic database benchmark; not a measurement of scanning 100000 real files."
 }
