@@ -2,6 +2,7 @@ import { beforeEach, afterEach, describe, it, expect, vi } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createApp, rangeFor } from "../dist/server/app.js";
+import { apiResponseContract } from "../src/shared/api-contracts.js";
 import {
   explorerArgs,
   explorerCommand,
@@ -22,6 +23,16 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 describe("HTTP boundary", () => {
+  it("validates successful JSON responses through their shared contract", async () => {
+    const response = await context.app.inject({
+      url: "/api/session",
+      headers: { host: "127.0.0.1:4317" },
+    });
+    const contract = apiResponseContract("GET", "/api/session");
+    expect(response.statusCode).toBe(200);
+    expect(contract?.safeParse(response.json()).success).toBe(true);
+  });
+
   it("rejects DNS rebinding, foreign origins and unauthenticated clients", async () => {
     expect(
       (

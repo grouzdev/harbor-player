@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { z } from "zod";
 import type {
   MetadataProposal,
   MetadataProposalItem,
@@ -12,10 +13,24 @@ import type {
   TagField,
   Track,
 } from "../shared/contracts.js";
+import {
+  coverArchiveSchema,
+  musicBrainzSearchSchema,
+  releaseGroupSchema,
+  releaseSchema,
+  type MusicBrainzRelease,
+} from "./musicbrainz-contracts.js";
 import type { Catalog } from "./database.js";
 
-type Json = Record<string, any>;
 type Fetch = typeof fetch;
+type RemoteTrack = {
+  discNumber: number;
+  trackNumber: number;
+  title: string;
+  artists: string[];
+  duration: number;
+  recordingId: string | undefined;
+};
 
 export interface MusicBrainzOptions {
   fetch?: Fetch;
@@ -41,10 +56,14 @@ export function escapeLucene(value: string): string {
   return value.replace(/([+\-!(){}[^\]^"~*?:\\/]|&&|\|\|)/g, "\\$1");
 }
 
-const credit = (entity: Json | undefined): string[] =>
+const credit = (
+  entity:
+    | { "artist-credit"?: { name?: string; artist?: { name?: string } }[] }
+    | undefined,
+): string[] =>
   unique(
     (entity?.["artist-credit"] || []).map(
-      (entry: Json) => entry.name || entry.artist?.name,
+      (entry) => entry.name || entry.artist?.name,
     ),
   );
 
@@ -69,22 +88,22 @@ const missingFields = (track: Track): TagField[] =>
   ];
 
 function releaseCandidate(
-  release: Json,
+  release: MusicBrainzRelease,
   score = 100,
   recordingId?: string,
 ): MusicBrainzCandidate {
-  const media = Array.isArray(release.media) ? release.media : [];
-  const formats = unique(media.map((medium: Json) => medium.format));
+  const media = release.media || [];
+  const formats = unique(media.map((medium) => medium.format));
   const trackCount =
     Number(release["track-count"]) ||
     media.reduce(
-      (sum: number, medium: Json) =>
+      (sum: number, medium) =>
         sum + Number(medium["track-count"] || medium.tracks?.length || 0),
       0,
     );
   return {
-    id: `${release.id}:${recordingId || "release"}`,
-    releaseId: release.id,
+    id: `${release.id || ""}:${recordingId || "release"}`,
+    releaseId: release.id || "",
     recordingId,
     title: release.title || "Без названия",
     artists: credit(release),
@@ -95,7 +114,7 @@ function releaseCandidate(
     discCount: media.length,
     trackCount,
     score: Number(score) || 0,
-    thumbnailUrl: `/api/metadata/musicbrainz/thumbnail/${release.id}`,
+    thumbnailUrl: `/api/metadata/musicbrainz/thumbnail/${release.id || ""}`,
   };
 }
 
@@ -107,7 +126,7 @@ export class MusicBrainzService {
   private readonly timeoutMs: number;
   private queue = Promise.resolve();
   private lastRequestAt = 0;
-  private readonly pending = new Map<string, Promise<any>>();
+  private readonly pending = new Map<string, Promise<unknown>>();
 
   constructor(
     private readonly catalog: Catalog,
@@ -217,10 +236,15 @@ export class MusicBrainzService {
     url.searchParams.set("query", clauses.join(" AND "));
     url.searchParams.set("limit", "10");
     url.searchParams.set("fmt", "json");
-    const data = await this.json(url.toString(), DAY, true);
+    const data = await this.json(
+      url.toString(),
+      DAY,
+      true,
+      musicBrainzSearchSchema,
+    );
     let candidates: MusicBrainzCandidate[] = [];
     if (context.mode === "album")
-      candidates = (data?.releases || []).map((release: Json) =>
+      candidates = (data?.releases || []).map((release) =>
         releaseCandidate(release, release.score),
       );
     else {
@@ -272,19 +296,20 @@ export class MusicBrainzService {
     const release = await this.release(releaseId);
     if (!release) throw new Error("Релиз MusicBrainz больше не найден");
     const group = release["release-group"];
-    const groupId = uuid.test(group?.id || "") ? group.id : undefined;
+    const groupId = group?.id && uuid.test(group.id) ? group.id : undefined;
     const groupDetail = groupId
       ? await this.json(
           `${this.apiBase}/release-group/${groupId}?inc=genres&fmt=json`,
           7 * DAY,
           true,
+          releaseGroupSchema,
         )
       : null;
     const genres = unique(
       [...(release.genres || []), ...(groupDetail?.genres || [])]
-        .filter((genre: Json) => Number(genre.count || 0) > 0)
-        .sort((a: Json, b: Json) => Number(b.count || 0) - Number(a.count || 0))
-        .map((genre: Json) => genre.name),
+        .filter((genre) => Number(genre.count || 0) > 0)
+        .sort((a, b) => Number(b.count || 0) - Number(a.count || 0))
+        .map((genre) => genre.name),
     );
     const releaseArtists = credit(release);
     const yearText =
@@ -292,11 +317,11 @@ export class MusicBrainzService {
       group?.["first-release-date"] ||
       groupDetail?.["first-release-date"];
     const year = /^\d{4}/.test(yearText || "")
-      ? Number(yearText.slice(0, 4))
+      ? Number((yearText || "").slice(0, 4))
       : null;
-    const remote = (release.media || []).flatMap(
-      (medium: Json, mediumIndex: number) =>
-        (medium.tracks || []).map((track: Json, trackIndex: number) => ({
+    const remote: RemoteTrack[] = (release.media || []).flatMap(
+      (medium, mediumIndex: number) =>
+        (medium.tracks || []).map((track, trackIndex: number) => ({
           discNumber: Number(medium.position || mediumIndex + 1),
           trackNumber: Number(track.position || trackIndex + 1),
           title: track.title || track.recording?.title || "",
@@ -316,14 +341,13 @@ export class MusicBrainzService {
     >();
     const claim = (
       track: Track,
-      predicate: (remote: Json) => boolean,
+      predicate: (remote: RemoteTrack) => boolean,
       match: MetadataProposalItem["match"],
     ) => {
       const choices = remote
-        .map((candidate: Json, index: number) => ({ candidate, index }))
+        .map((candidate, index: number) => ({ candidate, index }))
         .filter(
-          ({ candidate, index }: Json) =>
-            !used.has(index) && predicate(candidate),
+          ({ candidate, index }) => !used.has(index) && predicate(candidate),
         );
       if (choices.length === 1) {
         used.add(choices[0].index);
@@ -359,8 +383,8 @@ export class MusicBrainzService {
     if (remote.length === local.length) {
       const remainingLocal = local.filter((track) => !matched.has(track.id));
       const remainingRemote = remote
-        .map((candidate: Json, index: number) => ({ candidate, index }))
-        .filter(({ index }: Json) => !used.has(index));
+        .map((candidate, index: number) => ({ candidate, index }))
+        .filter(({ index }) => !used.has(index));
       remainingLocal.forEach((track, index) => {
         const choice = remainingRemote[index];
         if (choice) {
@@ -433,11 +457,12 @@ export class MusicBrainzService {
     };
   }
 
-  private async release(id: string): Promise<Json | null> {
+  private async release(id: string): Promise<MusicBrainzRelease | null> {
     return this.json(
       `${this.apiBase}/release/${id}?inc=recordings+artist-credits+release-groups+genres&fmt=json`,
       7 * DAY,
       true,
+      releaseSchema,
     );
   }
 
@@ -449,10 +474,11 @@ export class MusicBrainzService {
       `${this.coverBase}/release/${releaseId}`,
       7 * DAY,
       false,
+      coverArchiveSchema,
       DAY,
     );
     const exactFront = exact?.images?.find(
-      (image: Json) => image.front && image.approved,
+      (image) => image.front && image.approved,
     );
     let source: "release" | "release-group" = "release";
     let url = exactFront
@@ -463,10 +489,11 @@ export class MusicBrainzService {
         `${this.coverBase}/release-group/${groupId}`,
         7 * DAY,
         false,
+        coverArchiveSchema,
         DAY,
       );
       const groupFront = grouped?.images?.find(
-        (image: Json) => image.front && image.approved,
+        (image) => image.front && image.approved,
       );
       if (groupFront) {
         source = "release-group";
@@ -520,27 +547,34 @@ export class MusicBrainzService {
     return { id };
   }
 
-  private cache(key: string): { status: number; payload: Json } | null {
+  private cache(key: string): { status: number; payload: unknown } | null {
     const cached = this.catalog.cachedHttpResponse(key);
-    return cached
-      ? { status: cached.status, payload: cached.payload as Json }
-      : null;
+    return cached ? { status: cached.status, payload: cached.payload } : null;
   }
 
-  private saveCache(key: string, status: number, payload: Json, ttl: number) {
+  private saveCache(
+    key: string,
+    status: number,
+    payload: unknown,
+    ttl: number,
+  ) {
     this.catalog.saveHttpResponse(key, status, payload, ttl);
   }
 
-  private async json(
+  private async json<T extends z.ZodType>(
     url: string,
     ttl: number,
     throttled: boolean,
+    schema: T,
     negativeTtl = 0,
-  ): Promise<Json | null> {
+  ): Promise<z.infer<T> | null> {
     const cached = this.cache(url);
-    if (cached) return cached.status === 200 ? cached.payload : null;
+    if (cached)
+      return cached.status === 200
+        ? (schema.parse(cached.payload) as z.infer<T>)
+        : null;
     const existing = this.pending.get(url);
-    if (existing) return existing;
+    if (existing) return existing as Promise<z.infer<T> | null>;
     const request = (async () => {
       const response = await this.request(url, throttled);
       if (response.status === 404) {
@@ -549,7 +583,7 @@ export class MusicBrainzService {
       }
       if (!response.ok)
         throw new Error(`MusicBrainz вернул ошибку ${response.status}`);
-      const payload = (await response.json()) as Json;
+      const payload = schema.parse(await response.json());
       this.saveCache(url, 200, payload, ttl);
       return payload;
     })().finally(() => this.pending.delete(url));

@@ -92,6 +92,22 @@ describe("MusicBrainz client", () => {
     ).toContain("HarborPlayer/0.1.0");
   });
 
+  it("rejects an invalid successful MusicBrainz payload", async () => {
+    const track = addTrack({ id: "invalid-payload" });
+    const service = new MusicBrainzService(catalog, root, {
+      fetch: vi.fn(async () =>
+        json({ recordings: "not-an-array" }),
+      ) as unknown as typeof fetch,
+      minIntervalMs: 0,
+    });
+    await expect(
+      service.search(
+        { trackIds: [track.id] },
+        { title: "Track", artist: "Artist" },
+      ),
+    ).rejects.toThrow();
+  });
+
   it("retries a throttled MusicBrainz response", async () => {
     const track = addTrack({ id: "retry" });
     let attempt = 0;

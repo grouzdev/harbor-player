@@ -6,7 +6,7 @@
 
 **Milestone 0.1 технически закрыт 18 сентября 2026 года.** P0 устранил двойное закрытие по `Escape`, изолировал stateful Playwright-сценарии, восстановил валидный benchmark и синхронизировал release-документацию. P1 сделал явными HTTP error semantics и лимит очереди, устранил N+1 при выдаче треков, оптимизировал тяжёлые facets, добавил безопасное обслуживание SQLite и CI quality gate.
 
-P2 выполняется небольшими срезами без изменения внешнего поведения. Закрыты P2.1–P2.2 (client panels, dialogs и CSS boundaries), repository/migrations, worker/SSE/persisted-data и scanner-срезы P2.3, а также выделена граница orchestration файловых операций. Следующая работа — общие route/client response contracts; она не является условием закрытия 0.1.
+P2 выполняется небольшими срезами без изменения внешнего поведения. Закрыты P2.1–P2.2 (client panels, dialogs и CSS boundaries), repository/migrations, worker/SSE/persisted-data и scanner-срезы P2.3, граница orchestration файловых операций, а также P2.4 — общие route/client response contracts и узкие MusicBrainz DTO. Следующая работа — измерения и настройки сканирования; она не является условием закрытия 0.1.
 
 ## Краткий вывод
 
@@ -21,8 +21,8 @@ Harbor Player — законченный первый milestone, а не про�
 | `npm run format:check` | Пройдено                                                                                                                  |
 | `npm run lint`         | Пройдено                                                                                                                  |
 | `npm run typecheck`    | Пройдено                                                                                                                  |
-| `npm test`             | 18 файлов, 114 тестов — пройдено                                                                                          |
-| `npm run test:e2e`     | Не включён в результат среза: локальный запуск был прерван оболочкой после 15 Chrome-сценариев и не дал итогового статуса |
+| `npm test`             | 18 файлов, 116 тестов — пройдено                                                                                          |
+| `npm run test:e2e`     | После P2.4 полный чистый прогон следует повторить и зафиксировать одним итоговым статусом Chrome/Edge                     |
 
 Полный Playwright ранее был закрыт отдельными прогонами 18/18 в Chrome и 18/18 в Edge. Для следующей release-проверки его следует запускать заново в чистом окружении и фиксировать только итоговый результат. Текущий CI остаётся явным gate: PR выполняет smoke в Chrome/Edge, а push в `main` — полный Playwright.
 
@@ -76,12 +76,9 @@ Harbor Player — законченный первый milestone, а не про�
 - Worker protocol различает `read` и `hash`, SSE описаны discriminated union, а persisted jobs/operations валидируются Zod при чтении.
 - `LibraryScanner` владеет availability и scan-flow: incremental/force read, worker fallback, исключение symbolic links, ограниченный параллелизм, ошибки обхода и финализацию scan state.
 - `OperationOrchestrator` стал узкой границей lifecycle файловых операций. `MusicService` сохраняет последовательную очередь, shutdown/cancellation и события, а его совместимые `preview`/`execute`/`retry`/`previewRestore` делегируют orchestration без изменения HTTP API или persisted payload.
+- Общие Zod contracts проверяют успешные JSON route responses на серверной границе и используются клиентом при чтении ответа; URL, методы и публичный `{ error }` не изменены. MusicBrainz валидирует только используемые поля search/release/release-group/cover payload и cached JSON, не используя `any`.
 
 ## Приоритет 3: работа после milestone
-
-### Общие response contracts
-
-Следующий безопасный P2-срез — свести route schemas и клиентские response types к общим контрактам без изменения HTTP URL и без генерации сложного SDK. Отдельно расширить типизацию MusicBrainz payload, сохранив текущие error semantics.
 
 ### Сканирование
 
@@ -98,7 +95,7 @@ Watcher может быть лишь подсказкой к scan, а не ис�
 ## Рекомендуемый порядок следующего этапа
 
 1. Повторить полный Playwright в чистом окружении и сохранить итоговый Chrome/Edge результат для следующей release-проверки.
-2. Ввести общие route/client response contracts и расширить типизацию MusicBrainz payload.
-3. После измерений спланировать настройки интервала автосканирования, cold-start/code splitting и локальное наблюдение.
+2. Выполнить измерения на больших и недоступных библиотеках, затем спланировать persisted-настройку интервала автосканирования с безопасным default в пять минут.
+3. Измерить cold start перед code splitting; после этого спланировать lazy loading больших dialogs, settings и MusicBrainz workflow, а также локальный ротационный журнал.
 
 Milestone 0.1 не требует нового функционала для признания закрытым. Следующий этап должен развивать измеримость и сопровождаемость, сохраняя уже подтверждённую безопасность файловых операций.

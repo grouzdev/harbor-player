@@ -1,4 +1,5 @@
 import type { CatalogFilter } from "../shared/contracts";
+import { apiResponseContract } from "../shared/api-contracts";
 
 let csrf = "";
 export function setCsrf(token: string) {
@@ -41,7 +42,9 @@ export async function api<T>(
     const data = await response.json().catch(() => ({}));
     throw new Error(data.error || `Ошибка запроса (${response.status})`);
   }
-  return response.json();
+  const data: unknown = await response.json();
+  const contract = apiResponseContract(method, `/api${url.split("?")[0]}`);
+  return contract ? (contract.parse(data) as T) : (data as T);
 }
 export type CoverFilePatch = {
   data: string;

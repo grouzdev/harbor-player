@@ -14,6 +14,7 @@ import {
   selectionSchema,
   tagPatchSchema,
 } from "../shared/contracts.js";
+import { apiResponseContract } from "../shared/api-contracts.js";
 import type { BookmarkKind } from "../shared/contracts.js";
 import { MusicService } from "./service.js";
 import { errorMessage } from "./config.js";
@@ -165,6 +166,20 @@ export async function createApp(options: {
     return reply
       .code(500)
       .send({ error: "Внутренняя ошибка локального сервера" });
+  });
+  app.addHook("onSend", async (request, reply, payload) => {
+    if (
+      reply.statusCode < 200 ||
+      reply.statusCode >= 300 ||
+      typeof payload !== "string"
+    )
+      return payload;
+    const contract = apiResponseContract(
+      request.method,
+      request.url.split("?")[0],
+    );
+    if (!contract) return payload;
+    return JSON.stringify(contract.parse(JSON.parse(payload)));
   });
   app.get("/api/session", async (_request, reply) => {
     reply.setCookie("harbor_player_session", session, {
