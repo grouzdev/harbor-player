@@ -30,6 +30,7 @@ jobs:
       - run: npm run fixtures
       - run: npm run verify:tags
       - run: npm test
+      - run: npm run test:e2e
       - run: npm run desktop:pack
       - run: npm run test:desktop:smoke
       - run: npm run desktop:dist
@@ -75,6 +76,7 @@ jobs:
       - run: npm run fixtures
       - run: npm run verify:tags
       - run: npm test
+      - run: npm run test:e2e
       - run: npm run desktop:prepare
       - run: npm run build
       - name: Build unpacked stable application

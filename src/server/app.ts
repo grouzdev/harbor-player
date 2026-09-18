@@ -593,6 +593,9 @@ export async function createApp(options: {
           .map((i) => `${i.title}: ${i.error}`),
       })),
   );
+  app.delete("/api/operations/history", async () =>
+    service.catalog.clearHistory(),
+  );
   app.get("/api/operations/:id", async (request) =>
     service.catalog.operation(idParam.parse(request.params).id),
   );

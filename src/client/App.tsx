@@ -816,11 +816,7 @@ export function App() {
     };
     window.addEventListener("resize", constrainToRoom);
     return () => window.removeEventListener("resize", constrainToRoom);
-  }, [
-    fullscreenWindowMode,
-    getFullscreenRoom,
-    isFullscreen,
-  ]);
+  }, [fullscreenWindowMode, getFullscreenRoom, isFullscreen]);
   const setPanelVisible = useCallback((id: PanelId, visible: boolean) => {
     setPanelVisibility((current) => {
       if (current[id] === visible) return current;
@@ -1840,7 +1836,10 @@ export function App() {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
       setPanelWeights((current) => {
-        localStorage.setItem("harbor-player-panel-weights-v1", JSON.stringify(current));
+        localStorage.setItem(
+          "harbor-player-panel-weights-v1",
+          JSON.stringify(current),
+        );
         return current;
       });
     };
@@ -2953,11 +2952,7 @@ function ArtistList({
     count: rows.length + (items.length < total ? 1 : 0),
     getScrollElement: () => ref.current,
     estimateSize: (index) =>
-      rows[index]?.type === "group"
-        ? rows[index].compact
-          ? 36
-          : 56
-        : 36,
+      rows[index]?.type === "group" ? (rows[index].compact ? 36 : 56) : 36,
     paddingStart: virtualPanelTopInset,
     scrollPaddingStart: virtualPanelTopInset,
     overscan: 6,

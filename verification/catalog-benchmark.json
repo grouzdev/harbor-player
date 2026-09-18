@@ -1,5 +1,5 @@
 {
-  "date": "2026-09-18T10:28:03.188Z",
+  "date": "2026-09-18T14:47:01.686Z",
   "platform": "win32",
   "node": "v24.20.0",
   "syntheticCatalog": true,
@@ -10,15 +10,51 @@
     "albums": 10000,
     "selectedTracks": 1000
   },
-  "seedMs": 4546,
+  "seedMs": 5952,
   "queryMs": {
-    "tracks": 2493,
-    "albums": 2782,
-    "genres": 121,
-    "queueSnapshot": 2450,
-    "rootFolders": 118,
-    "nestedFolders": 82,
-    "folderTracks": 55
+    "tracks": 2892,
+    "albums": 3183,
+    "genres": 148,
+    "queueSnapshot": 2993,
+    "rootFolders": 111,
+    "nestedFolders": 97,
+    "folderTracks": 61
+  },
+  "facetBenchmark": {
+    "medianBudgetMs": 500,
+    "artists": {
+      "medianMs": 100,
+      "samplesMs": [
+        94,
+        97,
+        100,
+        100,
+        106
+      ],
+      "total": 1000
+    },
+    "facetRelevance": {
+      "medianMs": 24,
+      "samplesMs": [
+        29,
+        25,
+        23,
+        24,
+        23
+      ],
+      "folders": 510
+    },
+    "filterValidity": {
+      "medianMs": 253,
+      "samplesMs": [
+        250,
+        253,
+        272,
+        259,
+        251
+      ],
+      "artists": 2
+    }
   },
   "folderCounts": {
     "root": 100,
@@ -26,7 +62,7 @@
     "selectedTracks": 1000
   },
   "renderedTracks": 26,
-  "renderedAlbums": 14,
-  "renderedTracksAfterScroll": 35,
-  "note": "Synthetic database benchmark; not a measurement of scanning 100000 real files."
+  "renderedAlbums": 12,
+  "renderedTracksAfterScroll": 27,
+  "note": "Synthetic database benchmark; not a measurement of scanning 100000 real files. Facet medians use five warm runs."
 }

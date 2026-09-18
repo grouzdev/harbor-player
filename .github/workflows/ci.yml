@@ -21,7 +21,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run fixtures
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
       - run: npm run verify:tags
       - run: npm test
+      - run: npm run test:e2e:smoke
+      - if: github.event_name == 'push'
+        run: npm run test:e2e
       - run: npm run desktop:pack
       - run: npm run test:desktop:smoke

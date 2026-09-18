@@ -17,10 +17,14 @@ contextBridge.exposeInMainWorld("harborPlayerDesktop", {
   chooseImageFile: () =>
     ipcRenderer.invoke("desktop:choose-image-file") as Promise<string | null>,
   subscribeUpdateState: (
-    listener: (state: import("../shared/desktop-contract.js").UpdateState) => void,
+    listener: (
+      state: import("../shared/desktop-contract.js").UpdateState,
+    ) => void,
   ) => {
-    const receive = (_event: unknown, state: import("../shared/desktop-contract.js").UpdateState) =>
-      listener(state);
+    const receive = (
+      _event: unknown,
+      state: import("../shared/desktop-contract.js").UpdateState,
+    ) => listener(state);
     ipcRenderer.on("desktop:update-state", receive);
     return () => ipcRenderer.removeListener("desktop:update-state", receive);
   },

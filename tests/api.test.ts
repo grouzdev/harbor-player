@@ -706,9 +706,13 @@ describe("Album catalog sorting", () => {
       search: "",
     };
     const expected = ["alpha-unknown", "alpha-new", "collaboration", "beta"];
-    expect(context.service.catalog.albums(filter).items.map((album) => album.id)).toEqual(expected);
     expect(
-      context.service.catalog.tracks(filter).items.map((track) => track.albumKey),
+      context.service.catalog.albums(filter).items.map((album) => album.id),
+    ).toEqual(expected);
+    expect(
+      context.service.catalog
+        .tracks(filter)
+        .items.map((track) => track.albumKey),
     ).toEqual(expected);
     expect(context.service.catalog.trackIds(filter)).toEqual(
       expected.map((id) => `${id}-track`),
@@ -751,12 +755,17 @@ describe("Album catalog sorting", () => {
       search: "",
     };
     const expected = ["wooden", "cocteau"];
-    expect(context.service.catalog.artists(filter).items.map((item) => item.name)).toEqual([
-      "Деревянные киты",
-      "Cocteau Twins",
-    ]);
-    expect(context.service.catalog.albums(filter).items.map((album) => album.id)).toEqual(expected);
-    expect(context.service.catalog.tracks(filter).items.map((track) => track.albumKey)).toEqual(expected);
+    expect(
+      context.service.catalog.artists(filter).items.map((item) => item.name),
+    ).toEqual(["Деревянные киты", "Cocteau Twins"]);
+    expect(
+      context.service.catalog.albums(filter).items.map((album) => album.id),
+    ).toEqual(expected);
+    expect(
+      context.service.catalog
+        .tracks(filter)
+        .items.map((track) => track.albumKey),
+    ).toEqual(expected);
     expect(context.service.catalog.trackIds(filter)).toEqual(
       expected.map((id) => `${id}-track`),
     );
@@ -972,6 +981,83 @@ describe("Explorer endpoint", () => {
       sourceTotal: 100001,
       truncated: true,
     });
+  });
+  it("clears only completed history entries that have no recovery path", async () => {
+    const saved = (
+      id: string,
+      kind: "move" | "trash",
+      status: "done" | "interrupted",
+    ) => ({
+      id,
+      kind,
+      createdAt: "2026-09-18T00:00:00.000Z",
+      status,
+      items: [
+        {
+          id: `${id}-item`,
+          trackId: "track",
+          source: "C:\\Music\\source.flac",
+          destination: "C:\\Music\\destination.flac",
+          size: 1,
+          mtimeMs: 0,
+          hash: "hash",
+          title: id,
+          phase:
+            status === "done" ? ("done" as const) : ("interrupted" as const),
+        },
+      ],
+    });
+    context.service.catalog.saveOperation(saved("move-done", "move", "done"));
+    context.service.catalog.saveOperation(saved("trash-done", "trash", "done"));
+    context.service.catalog.saveOperation(
+      saved("move-interrupted", "move", "interrupted"),
+    );
+    context.service.catalog.saveJob({
+      id: "move-job",
+      kind: "operation",
+      label: "Перенос",
+      status: "done",
+      completed: 1,
+      total: 1,
+      errors: [],
+      createdAt: "2026-09-18T00:00:00.000Z",
+      operationId: "move-done",
+    });
+    context.service.catalog.saveJob({
+      id: "trash-job",
+      kind: "operation",
+      label: "Удаление",
+      status: "done",
+      completed: 1,
+      total: 1,
+      errors: [],
+      createdAt: "2026-09-18T00:00:00.000Z",
+      operationId: "trash-done",
+    });
+    context.service.catalog.db
+      .prepare("INSERT INTO http_cache VALUES (?,?,?,?)")
+      .run("expired", 200, "{}", 0);
+
+    const response = await context.app.inject({
+      method: "DELETE",
+      url: "/api/operations/history",
+      headers: await sessionHeaders(),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ operations: 1, jobs: 1, cache: 1 });
+    expect(
+      context.service.catalog.history().map((operation) => operation.id),
+    ).toEqual(expect.arrayContaining(["trash-done", "move-interrupted"]));
+    expect(
+      context.service.catalog.history().map((operation) => operation.id),
+    ).not.toContain("move-done");
+    expect(context.service.catalog.jobs().map((job) => job.id)).toContain(
+      "trash-job",
+    );
+    expect(context.service.catalog.jobs().map((job) => job.id)).not.toContain(
+      "move-job",
+    );
   });
   it("builds Windows Explorer arguments for folders and selected files", () => {
     expect(explorerArgs({ directory: "C:\\Music\\Album" })).toEqual([

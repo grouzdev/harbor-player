@@ -61,6 +61,14 @@ export class Catalog {
       { deterministic: true },
       (artist: string) => artistSortKey(artist),
     );
+    this.db.function(
+      "folder_parent",
+      { deterministic: true },
+      (relativePath: string) => {
+        const parent = path.dirname(relativePath);
+        return parent === "." || parent === path.sep ? null : parent;
+      },
+    );
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.db.pragma("busy_timeout = 5000");
@@ -150,6 +158,7 @@ export class Catalog {
         `);
         this.db.pragma("user_version = 6");
       })();
+    this.clearExpiredHttpCache();
   }
   libraries(): Library[] {
     return (
@@ -559,7 +568,7 @@ export class Catalog {
     const artists = filter.artists.filter((artist) => artist !== "");
     if (artists.length) {
       relations.push(
-        `EXISTS (SELECT 1 FROM track_album_artists a WHERE a.trackId=t.id AND a.artist IN (${artists.map(() => "?").join(",")}))`,
+        `t.id IN (SELECT trackId FROM track_album_artists WHERE artist IN (${artists.map(() => "?").join(",")}))`,
       );
       args.push(...artists);
     }
@@ -576,7 +585,7 @@ export class Catalog {
       const parts: string[] = [];
       if (genres.length) {
         parts.push(
-          `EXISTS (SELECT 1 FROM track_genres g WHERE g.trackId=t.id AND g.genre IN (${genres.map(() => "?").join(",")}))`,
+          `t.id IN (SELECT trackId FROM track_genres WHERE genre IN (${genres.map(() => "?").join(",")}))`,
         );
         args.push(...genres);
       }
@@ -586,20 +595,6 @@ export class Catalog {
     if (!relations.length) return { libraryIds: [], genres: [], folders: [] };
     clauses.push(`(${relations.join(" OR ")})`);
     const sql = clauses.join(" AND ");
-    const folderKeys = new Set<string>();
-    for (const row of this.db
-      .prepare(
-        `SELECT t.libraryId, t.relativePath FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql}`,
-      )
-      .all(...args) as { libraryId: string; relativePath: string }[]) {
-      let relativePath = path.dirname(row.relativePath);
-      while (relativePath !== "." && relativePath !== path.sep) {
-        folderKeys.add(`${row.libraryId}\u0000${relativePath}`);
-        const parent = path.dirname(relativePath);
-        if (parent === relativePath) break;
-        relativePath = parent;
-      }
-    }
     return {
       libraryIds: (
         this.db
@@ -615,16 +610,23 @@ export class Catalog {
           )
           .all(...args) as { name: string }[]
       ).map((row) => row.name),
-      folders: [...folderKeys]
-        .map((key) => {
-          const [libraryId, relativePath] = key.split("\u0000");
-          return { libraryId, relativePath };
-        })
-        .sort(
-          (left, right) =>
-            left.libraryId.localeCompare(right.libraryId) ||
-            left.relativePath.localeCompare(right.relativePath),
-        ),
+      folders: this.db
+        .prepare(
+          `WITH RECURSIVE folders(libraryId, relativePath) AS (
+             SELECT t.libraryId, folder_parent(t.relativePath)
+             FROM tracks t JOIN libraries l ON l.id=t.libraryId
+             WHERE ${sql}
+             UNION
+             SELECT libraryId, folder_parent(relativePath)
+             FROM folders
+             WHERE relativePath IS NOT NULL
+           )
+           SELECT libraryId, relativePath
+           FROM folders
+           WHERE relativePath IS NOT NULL
+           ORDER BY libraryId, relativePath`,
+        )
+        .all(...args) as { libraryId: string; relativePath: string }[],
     };
   }
   genres(filter: CatalogFilter): { name: string; count: number }[] {
@@ -898,6 +900,48 @@ export class Catalog {
         )
         .all() as Row[]
     ).map((r) => JSON.parse(r.payload));
+  }
+  clearHistory(): { operations: number; jobs: number; cache: number } {
+    const removable = this.history().filter(
+      (operation) =>
+        operation.status === "done" &&
+        ["move", "restore"].includes(operation.kind) &&
+        !operation.items.some((item) => item.error),
+    );
+    if (!removable.length)
+      return { operations: 0, jobs: 0, cache: this.clearExpiredHttpCache() };
+    const ids = removable.map((operation) => operation.id);
+    const placeholders = ids.map(() => "?").join(",");
+    const jobs = this.db.prepare("SELECT payload FROM jobs").all() as Row[];
+    const removableJobs = jobs
+      .map((row) => JSON.parse(row.payload) as Job)
+      .filter(
+        (job) =>
+          job.operationId &&
+          ids.includes(job.operationId) &&
+          (job.status === "done" || job.status === "error"),
+      )
+      .map((job) => job.id);
+    this.db.transaction(() => {
+      this.db
+        .prepare(`DELETE FROM operations WHERE id IN (${placeholders})`)
+        .run(...ids);
+      if (removableJobs.length) {
+        const jobPlaceholders = removableJobs.map(() => "?").join(",");
+        this.db
+          .prepare(`DELETE FROM jobs WHERE id IN (${jobPlaceholders})`)
+          .run(...removableJobs);
+      }
+    })();
+    return {
+      operations: ids.length,
+      jobs: removableJobs.length,
+      cache: this.clearExpiredHttpCache(),
+    };
+  }
+  clearExpiredHttpCache(now = Date.now()): number {
+    return this.db.prepare("DELETE FROM http_cache WHERE expiresAt<=?").run(now)
+      .changes;
   }
   saveJob(job: Job): void {
     this.db

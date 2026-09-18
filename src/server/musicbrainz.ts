@@ -38,7 +38,7 @@ const unique = (values: (string | null | undefined)[]) => [
 ];
 
 export function escapeLucene(value: string): string {
-  return value.replace(/([+\-!(){}\[\]^"~*?:\\/]|&&|\|\|)/g, "\\$1");
+  return value.replace(/([+\-!(){}[^\]^"~*?:\\/]|&&|\|\|)/g, "\\$1");
 }
 
 const credit = (entity: Json | undefined): string[] =>

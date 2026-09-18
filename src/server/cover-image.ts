@@ -16,7 +16,9 @@ function isWebp(data: Buffer) {
 }
 
 /** Decodes a user-supplied WebP and returns the only cover formats we persist. */
-export async function normalizeWebpCover(data: Buffer): Promise<NormalizedCover> {
+export async function normalizeWebpCover(
+  data: Buffer,
+): Promise<NormalizedCover> {
   if (data.length > MAX_COVER_BYTES)
     throw new Error("Выберите обложку размером до 10 МБ");
   if (!isWebp(data)) throw new Error("Выберите корректный файл WebP");

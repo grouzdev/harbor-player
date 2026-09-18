@@ -9,7 +9,9 @@ const textInputTypes = new Set([
   "url",
 ]);
 
-function isTextEntry(element: Element): element is HTMLInputElement | HTMLTextAreaElement {
+function isTextEntry(
+  element: Element,
+): element is HTMLInputElement | HTMLTextAreaElement {
   if (element instanceof HTMLTextAreaElement) return !element.disabled;
   return (
     element instanceof HTMLInputElement &&

@@ -125,11 +125,7 @@ export function AutocompleteInput({
             setActiveIndex((index) =>
               index < 0 ? suggestions.length - 1 : Math.max(index - 1, 0),
             );
-          } else if (
-            event.key === "Enter" &&
-            open &&
-            suggestions.length
-          ) {
+          } else if (event.key === "Enter" && open && suggestions.length) {
             event.preventDefault();
             selectOption(suggestions[Math.max(activeIndex, 0)]);
           } else if (event.key === "Escape" && open) {

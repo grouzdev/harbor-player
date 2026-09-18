@@ -18,12 +18,16 @@ export function reconnectSession(): Promise<void> {
       });
   return reconnect;
 }
-export async function api<T>(url: string, body?: unknown): Promise<T> {
+export async function api<T>(
+  url: string,
+  body?: unknown,
+  method: "GET" | "POST" | "DELETE" = body === undefined ? "GET" : "POST",
+): Promise<T> {
   const request = () =>
     fetch(`/api${url}`, {
-      method: body === undefined ? "GET" : "POST",
+      method,
       headers:
-        body === undefined
+        method === "GET"
           ? {}
           : { "Content-Type": "application/json", "X-CSRF-Token": csrf },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -51,9 +55,11 @@ export async function prepareCoverFile(file: File): Promise<CoverFilePatch> {
   if (!supported) throw new Error("Выберите JPEG, PNG или WebP до 10 МБ");
   const data = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Не удалось прочитать файл обложки"));
+    reader.onerror = () =>
+      reject(new Error("Не удалось прочитать файл обложки"));
     reader.onload = () => {
-      const value = typeof reader.result === "string" ? reader.result.split(",")[1] : "";
+      const value =
+        typeof reader.result === "string" ? reader.result.split(",")[1] : "";
       if (value) resolve(value);
       else reject(new Error("Не удалось прочитать файл обложки"));
     };

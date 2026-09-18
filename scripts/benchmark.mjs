@@ -41,17 +41,19 @@ try {
       const artistFolder = `Artist ${Math.floor(Number(album) / 100)
         .toString()
         .padStart(3, "0")}`;
+      const artist = `Исполнитель ${String(Math.floor(i / 10) % 1000).padStart(4, "0")}`;
+      const genreName = `Жанр ${String(i % 20).padStart(2, "0")}`;
       const id = `track-${i}`;
       insert.run(
         id,
         lib.id,
         path.join(artistFolder, `Album ${album}`, `${i}.flac`),
         `Трек ${i}`,
-        '["Исполнитель"]',
+        JSON.stringify([artist]),
         `Альбом ${album}`,
-        '["Исполнитель"]',
+        JSON.stringify([artist]),
         album.padStart(64, "0"),
-        '["Ambient"]',
+        JSON.stringify([genreName]),
         2024,
         (i % 10) + 1,
         1,
@@ -62,11 +64,11 @@ try {
         null,
         1,
       );
-      genre.run(id, "Ambient");
-      albumArtist.run(id, "Исполнитель");
+      genre.run(id, genreName);
+      albumArtist.run(id, artist);
       service.catalog.db
         .prepare("INSERT INTO track_artists VALUES (?,?)")
-        .run(id, "Исполнитель");
+        .run(id, artist);
     }
   })();
   const seedMs = Math.round(performance.now() - seedStart);
@@ -75,6 +77,22 @@ try {
     const start = performance.now();
     const result = fn();
     return { ms: Math.round(performance.now() - start), result };
+  };
+  /** @param {number[]} values */
+  const median = (values) => {
+    const sorted = [...values].sort((left, right) => left - right);
+    return Math.round(sorted[Math.floor(sorted.length / 2)]);
+  };
+  /** @template T @param {() => T} fn */
+  const timedMedian = (fn) => {
+    /** @type {T | undefined} */
+    let result;
+    const samples = Array.from({ length: 5 }, () => {
+      const measurement = timed(fn);
+      result = measurement.result;
+      return measurement.ms;
+    });
+    return { ms: median(samples), samples, result };
   };
   const tracks = timed(() => service.catalog.tracks(emptyFilter));
   const albums = timed(() => service.catalog.albums(emptyFilter));
@@ -88,6 +106,23 @@ try {
     service.catalog.tracks({
       ...emptyFilter,
       folders: [{ libraryId: lib.id, relativePath: "Artist 000" }],
+    }),
+  );
+  const facetArtists = Array.from(
+    { length: 50 },
+    (_, index) => `Исполнитель ${String(index * 2).padStart(4, "0")}`,
+  );
+  const facetArtistsResult = timedMedian(() =>
+    service.catalog.artists(emptyFilter),
+  );
+  const facetRelevance = timedMedian(() =>
+    service.catalog.facetRelevance({ ...emptyFilter, artists: facetArtists }),
+  );
+  const filterValidity = timedMedian(() =>
+    service.catalog.filterValidity({
+      ...emptyFilter,
+      genres: ["Жанр 00", "Жанр 01"],
+      artists: facetArtists.slice(0, 2),
     }),
   );
   const expected = {
@@ -108,6 +143,12 @@ try {
         selectedTracks: folderTracks.result.total,
       })}`,
     );
+  if (
+    facetArtistsResult.result?.total !== 1000 ||
+    facetRelevance.result?.folders.length !== 510 ||
+    filterValidity.result?.artists.length !== 2
+  )
+    throw new Error("Facet benchmark fixture mismatch");
   await app.listen({ port: 4328, host: "127.0.0.1" });
   browser = await chromium.launch({ channel: "chrome" });
   const page = await browser.newPage({
@@ -145,6 +186,24 @@ try {
       nestedFolders: nestedFolders.ms,
       folderTracks: folderTracks.ms,
     },
+    facetBenchmark: {
+      medianBudgetMs: 500,
+      artists: {
+        medianMs: facetArtistsResult.ms,
+        samplesMs: facetArtistsResult.samples,
+        total: facetArtistsResult.result?.total,
+      },
+      facetRelevance: {
+        medianMs: facetRelevance.ms,
+        samplesMs: facetRelevance.samples,
+        folders: facetRelevance.result?.folders.length,
+      },
+      filterValidity: {
+        medianMs: filterValidity.ms,
+        samplesMs: filterValidity.samples,
+        artists: filterValidity.result?.artists.length,
+      },
+    },
     folderCounts: {
       root: rootFolders.result.length,
       nested: nestedFolders.result.length,
@@ -153,7 +212,7 @@ try {
     renderedTracks,
     renderedAlbums,
     renderedTracksAfterScroll: afterScroll,
-    note: "Synthetic database benchmark; not a measurement of scanning 100000 real files.",
+    note: "Synthetic database benchmark; not a measurement of scanning 100000 real files. Facet medians use five warm runs.",
   };
   await mkdir(path.dirname(outputPath), { recursive: true });
   await writeFile(outputPath, JSON.stringify(report, null, 2) + "\n");

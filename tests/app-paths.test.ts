@@ -12,7 +12,8 @@ let root: string | undefined;
 const originalDataDirectory = process.env.HARBOR_PLAYER_DATA_DIR;
 
 afterEach(async () => {
-  if (originalDataDirectory === undefined) delete process.env.HARBOR_PLAYER_DATA_DIR;
+  if (originalDataDirectory === undefined)
+    delete process.env.HARBOR_PLAYER_DATA_DIR;
   else process.env.HARBOR_PLAYER_DATA_DIR = originalDataDirectory;
   if (root) await rm(root, { recursive: true, force: true });
   root = undefined;
@@ -29,7 +30,9 @@ describe("Harbor Player data directory", () => {
     migrateLegacyDataDirectory(target, legacy);
 
     expect(existsSync(legacy)).toBe(false);
-    await expect(readFile(path.join(target, "catalog.db"), "utf8")).resolves.toBe("catalog");
+    await expect(
+      readFile(path.join(target, "catalog.db"), "utf8"),
+    ).resolves.toBe("catalog");
   });
 
   it("leaves legacy data in place when Harbor Player already has data", async () => {

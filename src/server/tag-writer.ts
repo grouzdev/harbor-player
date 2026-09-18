@@ -44,11 +44,7 @@ function normalizeLyrics(value: unknown) {
   });
 }
 
-function nativeTagEqual(
-  id: string,
-  before: unknown,
-  after: unknown,
-): boolean {
+function nativeTagEqual(id: string, before: unknown, after: unknown): boolean {
   if (id !== "USLT") return isDeepStrictEqual(after, before);
   const normalize = (value: unknown) => {
     if (!value || typeof value !== "object") return value;

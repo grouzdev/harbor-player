@@ -82,7 +82,9 @@ describe("local server lifecycle", () => {
     const scan = server.service.scan(library.id);
     server.service.beginShutdown();
     await server.service.idle();
-    expect(server.service.catalog.jobs().find((job) => job.id === scan.id)).toMatchObject({
+    expect(
+      server.service.catalog.jobs().find((job) => job.id === scan.id),
+    ).toMatchObject({
       status: "error",
       errors: ["Сканирование отменено при подготовке к обновлению"],
     });

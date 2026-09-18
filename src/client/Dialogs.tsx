@@ -1248,6 +1248,42 @@ export function HistoryDialog({
       subtitle="История изменений и восстановление файлов"
       onClose={onClose}
     >
+      {history.data?.some(
+        (operation) =>
+          operation.status === "done" &&
+          ["move", "restore"].includes(operation.kind) &&
+          operation.errors.length === 0,
+      ) && (
+        <div className="history-clear">
+          <span className="muted">
+            Восстановимые, прерванные и выполняющиеся операции сохранятся.
+          </span>
+          <button
+            className="button secondary small"
+            disabled={!!busy}
+            onClick={async () => {
+              if (
+                !window.confirm(
+                  "Очистить завершённые операции без возможности восстановления?",
+                )
+              )
+                return;
+              setBusy("clear-history");
+              try {
+                await api("/operations/history", undefined, "DELETE");
+                setDetails(null);
+                await history.refetch();
+              } catch (e) {
+                setError((e as Error).message);
+              } finally {
+                setBusy("");
+              }
+            }}
+          >
+            Очистить завершённые
+          </button>
+        </div>
+      )}
       <div className="history-list">
         {!history.data?.length && (
           <div className="empty-small">

@@ -55,7 +55,9 @@ let resolveBackendStop: (() => void) | undefined;
 let applicationExit: Promise<void> | undefined;
 let isQuitting = false;
 const tagProcesses = new Set<UtilityProcess>();
-let updateState: UpdateState = isPortable ? { status: "unsupported" } : { status: "idle" };
+let updateState: UpdateState = isPortable
+  ? { status: "unsupported" }
+  : { status: "idle" };
 let updateTimer: NodeJS.Timeout | undefined;
 
 function publishUpdateState(state: UpdateState) {
@@ -69,7 +71,9 @@ function updateError(error: unknown) {
 
 async function checkForUpdates(manual = false) {
   if (isPortable) {
-    void shell.openExternal("https://github.com/grouzdev/harbor-player/releases");
+    void shell.openExternal(
+      "https://github.com/grouzdev/harbor-player/releases",
+    );
     publishUpdateState({ status: "unsupported" });
     return;
   }
@@ -95,7 +99,10 @@ async function downloadUpdate() {
 
 async function installUpdate() {
   if (updateState.status !== "downloaded") return;
-  publishUpdateState({ status: "preparingInstall", version: updateState.version });
+  publishUpdateState({
+    status: "preparingInstall",
+    version: updateState.version,
+  });
   try {
     await quitApplication();
     autoUpdater.quitAndInstall(false, true);
@@ -109,16 +116,29 @@ function configureUpdates() {
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.channel = app.getVersion().includes("-beta.") ? "beta" : "latest";
-  autoUpdater.on("checking-for-update", () => publishUpdateState({ status: "checking" }));
+  autoUpdater.on("checking-for-update", () =>
+    publishUpdateState({ status: "checking" }),
+  );
   autoUpdater.on("update-available", (info) => {
     publishUpdateState({ status: "available", version: info.version });
-    void new Notification({ title: appName, body: `Доступна версия ${info.version}` }).show();
+    void new Notification({
+      title: appName,
+      body: `Доступна версия ${info.version}`,
+    }).show();
   });
-  autoUpdater.on("update-not-available", () => publishUpdateState({ status: "upToDate" }));
+  autoUpdater.on("update-not-available", () =>
+    publishUpdateState({ status: "upToDate" }),
+  );
   autoUpdater.on("download-progress", (progress) => {
-    const version = updateState.status === "available" || updateState.status === "downloading"
-      ? updateState.version : "";
-    publishUpdateState({ status: "downloading", version, percent: Math.round(progress.percent) });
+    const version =
+      updateState.status === "available" || updateState.status === "downloading"
+        ? updateState.version
+        : "";
+    publishUpdateState({
+      status: "downloading",
+      version,
+      percent: Math.round(progress.percent),
+    });
   });
   autoUpdater.on("update-downloaded", (info) =>
     publishUpdateState({ status: "downloaded", version: info.version }),
@@ -271,7 +291,8 @@ async function quitApplication(exitCode = 0) {
       tagProcesses.clear();
       tray?.destroy();
       tray = null;
-      if (exitCode !== 0 || updateState.status !== "preparingInstall") app.exit(exitCode);
+      if (exitCode !== 0 || updateState.status !== "preparingInstall")
+        app.exit(exitCode);
     })();
   await applicationExit;
 }
@@ -335,7 +356,10 @@ function createTray() {
         },
       },
       { type: "separator" },
-      { label: "Проверить обновления", click: () => void checkForUpdates(true) },
+      {
+        label: "Проверить обновления",
+        click: () => void checkForUpdates(true),
+      },
       { type: "separator" },
       { label: "Выход", click: () => void quitApplication() },
     ]),
@@ -491,16 +515,29 @@ async function bootstrap() {
         return { version: app.getVersion(), portable: isPortable };
       });
       const requireDesktopSender = (event: Electron.IpcMainInvokeEvent) => {
-        if (!mainWindow || event.sender !== mainWindow.webContents || !isAllowedLocalUrl(event.senderFrame?.url || ""))
+        if (
+          !mainWindow ||
+          event.sender !== mainWindow.webContents ||
+          !isAllowedLocalUrl(event.senderFrame?.url || "")
+        )
           throw new Error("Недопустимый IPC sender");
       };
       ipcMain.handle("desktop:get-update-state", (event) => {
         requireDesktopSender(event);
         return updateState;
       });
-      ipcMain.handle("desktop:check-for-updates", (event) => { requireDesktopSender(event); return checkForUpdates(true); });
-      ipcMain.handle("desktop:download-update", (event) => { requireDesktopSender(event); return downloadUpdate(); });
-      ipcMain.handle("desktop:install-update", (event) => { requireDesktopSender(event); return installUpdate(); });
+      ipcMain.handle("desktop:check-for-updates", (event) => {
+        requireDesktopSender(event);
+        return checkForUpdates(true);
+      });
+      ipcMain.handle("desktop:download-update", (event) => {
+        requireDesktopSender(event);
+        return downloadUpdate();
+      });
+      ipcMain.handle("desktop:install-update", (event) => {
+        requireDesktopSender(event);
+        return installUpdate();
+      });
       ipcMain.handle("desktop:choose-image-file", async (event) => {
         requireDesktopSender(event);
         const result = await dialog.showOpenDialog(mainWindow!, {

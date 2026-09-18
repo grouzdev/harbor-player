@@ -1190,7 +1190,9 @@ body.selection-dragging * {
   font-size: var(--type-caption);
   line-height: 1.45;
 }
-.update-panel button { white-space: nowrap; }
+.update-panel button {
+  white-space: nowrap;
+}
 .context-menu {
   position: fixed;
   z-index: 30;
@@ -1639,6 +1641,16 @@ body.selection-dragging * {
 .history-list {
   max-height: 420px;
   overflow: auto;
+}
+.history-clear {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.history-clear .muted {
+  font-size: var(--type-caption);
 }
 .history-item {
   border: 1px solid #ffffff0b;
@@ -2540,7 +2552,7 @@ body {
   --accent: #b8bd82;
   --teal: #a8ad91;
   /* Panel-header fade: #RRGGBBAA, where AA controls opacity. */
-  --panel-heading-fade: #202221FF;
+  --panel-heading-fade: #202221ff;
   --fine-noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.72' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E");
   --line: var(--metal-line);
   --muted: #8b9790;
@@ -2618,9 +2630,7 @@ html:fullscreen .app-shell.app-shell--cover-mode {
 }
 
 .app-shell.app-shell--empty-workspace {
-  background:
-    linear-gradient(145deg, #121313a8, #090a0ab8),
-    transparent;
+  background: linear-gradient(145deg, #121313a8, #090a0ab8), transparent;
   backdrop-filter: blur(14px);
 }
 
@@ -2835,7 +2845,11 @@ select {
   height: 10px;
   content: "";
   pointer-events: none;
-  background: linear-gradient(to bottom, var(--panel-heading-fade), transparent);
+  background: linear-gradient(
+    to bottom,
+    var(--panel-heading-fade),
+    transparent
+  );
 }
 
 .library-list,

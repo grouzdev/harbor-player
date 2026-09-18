@@ -642,6 +642,9 @@ test("player prioritizes the current track over progress in a narrow window", as
   await page.getByLabel("Путь к папке", { exact: true }).fill(source);
   await page.getByLabel("Название библиотеки").fill(`Player ${browser}`);
   await page.getByRole("button", { name: "Подключить", exact: true }).click();
+  await page
+    .getByRole("button", { name: new RegExp(`^Player ${browser} 7$`) })
+    .click();
   await expect(page.getByTestId("track-row")).toHaveCount(7);
   await page.getByTestId("track-row").first().dblclick();
   await expect

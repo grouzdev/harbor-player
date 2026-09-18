@@ -7,7 +7,8 @@ import { FuseState, FuseV1Options, getCurrentFuseWire } from "@electron/fuses";
 const packageInfo = JSON.parse(
   await readFile(path.resolve("package.json"), "utf8"),
 );
-const expectedPortable = process.env.HARBOR_PLAYER_SMOKE_EXPECT_PORTABLE === "1";
+const expectedPortable =
+  process.env.HARBOR_PLAYER_SMOKE_EXPECT_PORTABLE === "1";
 const executable = path.resolve(
   process.env.HARBOR_PLAYER_DESKTOP_EXECUTABLE ||
     (expectedPortable
@@ -17,7 +18,9 @@ const executable = path.resolve(
         )
       : path.join("release", "win-unpacked", "Harbor Player.exe")),
 );
-const root = await mkdtemp(path.join(os.tmpdir(), "harbor-player-desktop-smoke-"));
+const root = await mkdtemp(
+  path.join(os.tmpdir(), "harbor-player-desktop-smoke-"),
+);
 const dataDir = path.join(root, "data");
 const libraryDir = path.join(root, "library");
 const fixture = path.join(libraryDir, "sample.mp3");

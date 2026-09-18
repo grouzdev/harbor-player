@@ -13,7 +13,10 @@ function platformDataBase(): string {
       : process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share");
 }
 
-export function migrateLegacyDataDirectory(target: string, legacy: string): void {
+export function migrateLegacyDataDirectory(
+  target: string,
+  legacy: string,
+): void {
   if (existsSync(target) || !existsSync(legacy)) return;
   try {
     renameSync(legacy, target);

@@ -67,7 +67,9 @@ function readWithTagLib(file: string): ParsedAudioMetadata {
           ? [
               {
                 type:
-                  picture.type === PictureType.FrontCover ? "Cover (front)" : "",
+                  picture.type === PictureType.FrontCover
+                    ? "Cover (front)"
+                    : "",
                 format: picture.mimeType,
                 data: Buffer.from(picture.data.toByteArray()),
               },
@@ -121,7 +123,11 @@ export async function readTrack(
   knownDuration?: number,
 ): Promise<Track> {
   const info = await stat(file);
-  const metadata = await parseTrackMetadata(file, parse, knownDuration === undefined);
+  const metadata = await parseTrackMetadata(
+    file,
+    parse,
+    knownDuration === undefined,
+  );
   if (
     !metadata.format.sampleRate ||
     !metadata.format.numberOfChannels ||
@@ -148,7 +154,8 @@ export async function readTrack(
       /* An external cover is optional. */
     }
   }
-  cover ||= c.picture?.find((p) => /front/i.test(p.type || "")) || c.picture?.[0];
+  cover ||=
+    c.picture?.find((p) => /front/i.test(p.type || "")) || c.picture?.[0];
   if (
     cover &&
     cover.data.length <= 10 * 1024 * 1024 &&

@@ -13,7 +13,9 @@ describe("normalizeWebpCover", () => {
     const result = await normalizeWebpCover(source);
 
     expect(result.mime).toBe("image/jpeg");
-    expect((await sharp(Buffer.from(result.data, "base64")).metadata()).format).toBe("jpeg");
+    expect(
+      (await sharp(Buffer.from(result.data, "base64")).metadata()).format,
+    ).toBe("jpeg");
   });
 
   it("stores a transparent WebP as PNG", async () => {
@@ -26,12 +28,14 @@ describe("normalizeWebpCover", () => {
     const result = await normalizeWebpCover(source);
 
     expect(result.mime).toBe("image/png");
-    expect((await sharp(Buffer.from(result.data, "base64")).metadata()).format).toBe("png");
+    expect(
+      (await sharp(Buffer.from(result.data, "base64")).metadata()).format,
+    ).toBe("png");
   });
 
   it("rejects a malformed WebP", async () => {
-    await expect(normalizeWebpCover(Buffer.from("RIFFxxxxWEBP"))).rejects.toThrow(
-      "webp",
-    );
+    await expect(
+      normalizeWebpCover(Buffer.from("RIFFxxxxWEBP")),
+    ).rejects.toThrow("webp");
   });
 });
