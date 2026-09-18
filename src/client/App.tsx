@@ -87,13 +87,13 @@ import { AppearanceSettingsDialog } from "./AppearanceSettingsDialog";
 import {
   ActionDialog,
   AddLibraryDialog,
-  CoverDropConfirmDialog,
   HistoryDialog,
   PreviewDialog,
   RenameLibraryDialog,
   RemoveLibraryDialog,
   ArtistFolderDialog,
 } from "./Dialogs";
+import { CoverDropConfirmDialog } from "./CoverDropConfirmDialog";
 import { ListTile } from "./ListTile";
 import { buildTrackListRows } from "./track-grouping";
 import { resolveContextSelection, usePanelSelection } from "./panel-selection";

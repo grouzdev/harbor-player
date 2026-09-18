@@ -49,6 +49,7 @@ export {
   RemoveLibraryDialog,
   RenameLibraryDialog,
 } from "./LibraryDialogs";
+export { CoverDropConfirmDialog } from "./CoverDropConfirmDialog";
 
 function genreSegment(value: string, caret: number) {
   const start = value.lastIndexOf(";", caret - 1) + 1;
@@ -92,68 +93,6 @@ function activatePrimaryOnEnter(
   if (!button || button.disabled) return;
   event.preventDefault();
   button.click();
-}
-
-export function CoverDropConfirmDialog({
-  albumTitle,
-  coverName,
-  trackCount,
-  onClose,
-  onConfirm,
-}: {
-  albumTitle: string;
-  coverName: string;
-  trackCount: number;
-  onClose: () => void;
-  onConfirm: () => Promise<void>;
-}) {
-  const primaryButtonRef = useRef<HTMLButtonElement>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  return (
-    <Modal
-      title="Применить обложку?"
-      subtitle={albumTitle || "Без альбома"}
-      onClose={busy ? () => {} : onClose}
-      onKeyDown={(event) =>
-        activatePrimaryOnEnter(event, primaryButtonRef.current)
-      }
-    >
-      <p className="hint">
-        Применить обложку «{coverName}» ко всем {count(trackCount)} трекам
-        альбома?
-      </p>
-      {error && <p className="error-text">{error}</p>}
-      <footer className="modal-footer">
-        <button
-          type="button"
-          className="button secondary"
-          disabled={busy}
-          onClick={onClose}
-        >
-          Отмена
-        </button>
-        <button
-          type="button"
-          ref={primaryButtonRef}
-          className="button primary"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            setError("");
-            try {
-              await onConfirm();
-            } catch (cause) {
-              setError(cause instanceof Error ? cause.message : String(cause));
-              setBusy(false);
-            }
-          }}
-        >
-          {busy ? "Применяем…" : "Применить"}
-        </button>
-      </footer>
-    </Modal>
-  );
 }
 
 function MusicBrainzThumbnail({ url }: { url: string }) {
