@@ -108,6 +108,7 @@ import { CoverMode, QuickSearchDialog } from "./CoverMode";
 import { ContextMenu, type ContextMenuState } from "./ContextMenu";
 import { UpdatePanel } from "./UpdatePanel";
 import { BookmarkToggle, type BookmarkChange } from "./BookmarkToggle";
+import { GenrePanel, LibraryPanel } from "./LibraryGenrePanels";
 import {
   ArtistList,
   AlbumGrid,
@@ -2180,192 +2181,69 @@ export function App() {
         <div
           className={`workspace-row workspace-facets ${visibleFacetPanelIds.length ? "" : "workspace-row-hidden"}`}
         >
-          <aside
-            className={`panel libraries-panel ${panelVisibility.libraries ? "" : "panel-hidden"}`}
-            data-panel-id="libraries"
-          >
-            <div className="panel-heading">
-              <h2>Библиотеки</h2>
-              <PanelSelectionIndicator
-                total={libraries.data?.length || 0}
-                selected={filter.libraryIds.length}
-                active={
-                  filter.libraryIds.length > 0 || filter.folders.length > 0
-                }
-                resetLabel="Сбросить библиотеки"
-                onReset={() =>
-                  setFilter((f) => ({
-                    ...f,
-                    libraryIds: [],
-                    folders: [],
-                  }))
-                }
-              />
-            </div>
-            <div
-              className="library-list selection-surface"
-              ref={libraryListRef}
-              {...librarySelection.surfaceProps}
-            >
-              {libraries.data?.map((library) => (
-                <div key={library.id} className="library-container">
-                  <ListTile
-                    className={!library.available ? "offline" : ""}
-                    related={
-                      hasFacetRelevance &&
-                      !!facetRelevance.data?.libraryIds.includes(library.id)
-                    }
-                    playing={currentPlayerTrack?.libraryId === library.id}
-                    statusIcon={
-                      currentPlayerTrack?.libraryId === library.id ? (
-                        <Play size={13} fill="currentColor" />
-                      ) : undefined
-                    }
-                    selected={highlightedLocations.has(
-                      librarySelectionKey(library.id),
-                    )}
-                    current={filter.folders.some(
-                      (folder) => folder.libraryId === library.id,
-                    )}
-                    expanded={expandedLibraryIds.has(library.id)}
-                    title={library.path}
-                    value={library.name}
-                    selectionKey={librarySelectionKey(library.id)}
-                    startAction={
-                      <button
-                        type="button"
-                        className="tree-toggle"
-                        data-selection-ignore
-                        aria-label={`${expandedLibraryIds.has(library.id) ? "Свернуть" : "Развернуть"} библиотеку «${library.name}»`}
-                        aria-expanded={expandedLibraryIds.has(library.id)}
-                        onClick={() =>
-                          setExpandedLibraryIds((current) => {
-                            const next = new Set(current);
-                            if (next.has(library.id)) next.delete(library.id);
-                            else next.add(library.id);
-                            return next;
-                          })
-                        }
-                      >
-                        <ChevronRight
-                          size={14}
-                          className={`folder-chevron ${expandedLibraryIds.has(library.id) ? "expanded" : ""}`}
-                        />
-                      </button>
-                    }
-                    suffix={count(library.trackCount)}
-                    onSelect={(event) =>
-                      librarySelection.selectFromClick(
-                        event,
-                        librarySelectionKey(library.id),
-                      )
-                    }
-                    onContextMenu={(event) => showLibraryMenu(event, library)}
-                  />
-                  {expandedLibraryIds.has(library.id) &&
-                    renderFolderLevel(library.id)}
-                </div>
-              ))}
-              {librarySelection.marquee}
-            </div>
-            <button className="add-library" onClick={() => setModal("add")}>
-              <Plus size={16} />
-              Подключить папку
-            </button>
-            {activeJobs.length > 0 && (
-              <div className="sidebar-bottom">
-                {activeJobs.slice(0, 3).map((job) => (
-                  <div className="scan-status" key={job.id}>
-                    <RefreshCw size={14} className="spinning" />
-                    <div>
-                      <strong>{job.label}</strong>
-                      <small>
-                        {job.status === "queued"
-                          ? "В очереди"
-                          : `${count(job.completed)} из ${count(job.total)} обработано`}
-                      </small>
-                      {job.status === "running" && job.total > 0 && (
-                        <div
-                          className="scan-status-bar"
-                          aria-label={`Прогресс: ${job.completed} из ${job.total}`}
-                        >
-                          <i
-                            style={{
-                              width: `${Math.min(100, Math.round((job.completed / job.total) * 100))}%`,
-                            }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </aside>
+          {panelVisibility.libraries && (
+            <LibraryPanel
+              libraries={libraries.data || []}
+              filter={filter}
+              facetRelevance={facetRelevance.data}
+              hasFacetRelevance={hasFacetRelevance}
+              currentLibraryId={currentPlayerTrack?.libraryId}
+              highlightedLocations={highlightedLocations}
+              expandedLibraryIds={expandedLibraryIds}
+              activeJobs={activeJobs}
+              listRef={libraryListRef}
+              surfaceProps={librarySelection.surfaceProps}
+              marquee={librarySelection.marquee}
+              renderFolderLevel={renderFolderLevel}
+              onReset={() =>
+                setFilter((f) => ({ ...f, libraryIds: [], folders: [] }))
+              }
+              onToggleExpanded={(libraryId) =>
+                setExpandedLibraryIds((current) => {
+                  const next = new Set(current);
+                  if (next.has(libraryId)) next.delete(libraryId);
+                  else next.add(libraryId);
+                  return next;
+                })
+              }
+              onSelect={(event, key) =>
+                librarySelection.selectFromClick(event, key)
+              }
+              onContextMenu={showLibraryMenu}
+              onAdd={() => setModal("add")}
+            />
+          )}
           {panelVisibility.libraries && renderPanelResizer("libraries")}
-          <section
-            className={`panel genres-panel ${panelVisibility.genres ? "" : "panel-hidden"}`}
-            data-panel-id="genres"
-          >
-            <div className="panel-heading">
-              <h2>Жанры</h2>
-              <PanelSelectionIndicator
-                total={genres.data?.length || 0}
-                selected={filter.genres.length}
-                active={filter.genres.length > 0}
-                resetLabel="Сбросить жанры"
-                onReset={() => setFilter((f) => ({ ...f, genres: [] }))}
-              />
-            </div>
-            <div
-              className="genre-list selection-surface"
-              ref={genreListRef}
-              {...genreSelection.surfaceProps}
-            >
-              {genres.data?.map((g) => {
-                const label = g.name || "Без жанра";
-                const checked = highlightedGenres.has(g.name);
-                const playing = currentPlayerGenres.has(g.name);
-                return (
-                  <ListTile
-                    key={g.name}
-                    className="genre-row"
-                    related={
-                      hasFacetRelevance &&
-                      !!facetRelevance.data?.genres.includes(g.name)
-                    }
-                    playing={playing}
-                    statusIcon={
-                      playing ? (
-                        <Play size={13} fill="currentColor" />
-                      ) : undefined
-                    }
-                    selected={checked}
-                    selectionKey={g.name}
-                    value={label}
-                    suffix={count(g.count)}
-                    onSelect={(event) => {
-                      if (
-                        !event.ctrlKey &&
-                        !event.metaKey &&
-                        !event.shiftKey &&
-                        filter.genres.includes(g.name)
-                      ) {
-                        void player.startFilter(filter);
-                        return;
-                      }
-                      genreSelection.selectFromClick(
-                        event,
-                        g.name,
-                        genres.data?.map((item) => item.name) || [],
-                      );
-                    }}
-                  />
+          {panelVisibility.genres && (
+            <GenrePanel
+              genres={genres.data || []}
+              filter={filter}
+              facetRelevance={facetRelevance.data}
+              hasFacetRelevance={hasFacetRelevance}
+              currentPlayerGenres={currentPlayerGenres}
+              highlightedGenres={highlightedGenres}
+              listRef={genreListRef}
+              surfaceProps={genreSelection.surfaceProps}
+              marquee={genreSelection.marquee}
+              onReset={() => setFilter((f) => ({ ...f, genres: [] }))}
+              onSelect={(event, genre) => {
+                if (
+                  !event.ctrlKey &&
+                  !event.metaKey &&
+                  !event.shiftKey &&
+                  filter.genres.includes(genre)
+                ) {
+                  void player.startFilter(filter);
+                  return;
+                }
+                genreSelection.selectFromClick(
+                  event,
+                  genre,
+                  genres.data?.map((item) => item.name) || [],
                 );
-              })}
-              {genreSelection.marquee}
-            </div>
-          </section>
+              }}
+            />
+          )}
           {panelVisibility.genres && renderPanelResizer("genres")}
           <section
             className={`panel artists-panel ${panelVisibility.artists ? "" : "panel-hidden"}`}
