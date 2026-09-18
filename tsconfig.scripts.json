@@ -10,5 +10,9 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["scripts/benchmark.mjs", "scripts/scan-benchmark.mjs"]
+  "include": [
+    "scripts/benchmark.mjs",
+    "scripts/scan-benchmark.mjs",
+    "scripts/startup-benchmark.mjs"
+  ]
 }

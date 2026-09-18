@@ -31,6 +31,11 @@ const smokeFixture = process.argv
   .find((argument) => argument.startsWith("--smoke-test="))
   ?.slice("--smoke-test=".length);
 const smokeReport = process.env.HARBOR_PLAYER_SMOKE_REPORT;
+const startupBenchmarkReport =
+  process.env.HARBOR_PLAYER_STARTUP_BENCHMARK_REPORT ||
+  process.argv
+    .find((argument) => argument.startsWith("--startup-benchmark="))
+    ?.slice("--startup-benchmark=".length);
 const isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_DIR);
 if (smokeFixture) {
   process.env.HARBOR_PLAYER_PORT = "0";
@@ -59,6 +64,30 @@ let updateState: UpdateState = isPortable
   ? { status: "unsupported" }
   : { status: "idle" };
 let updateTimer: NodeJS.Timeout | undefined;
+const startupStartedAt = process.hrtime.bigint();
+let startupReadyToShowMs: number | undefined;
+let startupBenchmarkReported = false;
+
+function startupElapsedMs() {
+  return Number(process.hrtime.bigint() - startupStartedAt) / 1_000_000;
+}
+
+async function reportStartupBenchmark() {
+  if (!startupBenchmarkReport || startupBenchmarkReported) return;
+  startupBenchmarkReported = true;
+  if (startupReadyToShowMs === undefined)
+    await new Promise<void>((resolve) =>
+      mainWindow?.once("ready-to-show", () => resolve()),
+    );
+  await writeFile(
+    startupBenchmarkReport,
+    JSON.stringify({
+      mainEntryToReadyToShowMs: startupReadyToShowMs,
+      mainEntryToClientShellMs: startupElapsedMs(),
+    }),
+  );
+  await quitApplication();
+}
 
 function publishUpdateState(state: UpdateState) {
   updateState = state;
@@ -338,7 +367,10 @@ function createWindow(url: string) {
     event.preventDefault();
     mainWindow?.hide();
   });
-  mainWindow.once("ready-to-show", () => mainWindow?.show());
+  mainWindow.once("ready-to-show", () => {
+    startupReadyToShowMs = startupElapsedMs();
+    mainWindow?.show();
+  });
   void mainWindow.loadURL(url);
 }
 
@@ -549,9 +581,13 @@ async function bootstrap() {
         });
         return result.canceled ? null : result.filePaths[0] || null;
       });
-      configureUpdates();
+      ipcMain.handle("desktop:report-client-ready", async (event) => {
+        requireDesktopSender(event);
+        await reportStartupBenchmark();
+      });
+      if (!startupBenchmarkReport) configureUpdates();
       createWindow(url);
-      createTray();
+      if (!startupBenchmarkReport) createTray();
     }
   } catch (error) {
     await failApplication(errorText(error));

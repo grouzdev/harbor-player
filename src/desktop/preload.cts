@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld("harborPlayerDesktop", {
   installUpdate: () => ipcRenderer.invoke("desktop:install-update"),
   chooseImageFile: () =>
     ipcRenderer.invoke("desktop:choose-image-file") as Promise<string | null>,
+  reportClientReady: () => ipcRenderer.invoke("desktop:report-client-ready"),
   subscribeUpdateState: (
     listener: (
       state: import("../shared/desktop-contract.js").UpdateState,

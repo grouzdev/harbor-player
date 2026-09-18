@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -83,21 +85,17 @@ import {
   readCachedAppearance,
   type AppearanceSettings,
 } from "./appearance";
-import { AppearanceSettingsDialog } from "./AppearanceSettingsDialog";
 import {
   defaultScanSettings,
   type ScanSettings,
 } from "../shared/scan-settings";
 import {
-  ActionDialog,
   AddLibraryDialog,
-  HistoryDialog,
-  PreviewDialog,
   RenameLibraryDialog,
   RemoveLibraryDialog,
-  ArtistFolderDialog,
-} from "./Dialogs";
+} from "./LibraryDialogs";
 import { CoverDropConfirmDialog } from "./CoverDropConfirmDialog";
+import { Modal } from "./Modal";
 import { ListTile } from "./ListTile";
 import { buildTrackListRows } from "./track-grouping";
 import { resolveContextSelection, usePanelSelection } from "./panel-selection";
@@ -121,6 +119,42 @@ import {
 } from "./CatalogVirtualViews";
 import { useAppShellLayout } from "./useAppShellLayout";
 import { useCatalogScrollTargets } from "./useCatalogScrollTargets";
+
+const AppearanceSettingsDialog = lazy(() =>
+  import("./AppearanceSettingsDialog").then((module) => ({
+    default: module.AppearanceSettingsDialog,
+  })),
+);
+const ActionDialog = lazy(() =>
+  import("./TagOperationDialog").then((module) => ({
+    default: module.ActionDialog,
+  })),
+);
+const ArtistFolderDialog = lazy(() =>
+  import("./TagOperationDialog").then((module) => ({
+    default: module.ArtistFolderDialog,
+  })),
+);
+const HistoryDialog = lazy(() =>
+  import("./TagOperationDialog").then((module) => ({
+    default: module.HistoryDialog,
+  })),
+);
+const PreviewDialog = lazy(() =>
+  import("./TagOperationDialog").then((module) => ({
+    default: module.PreviewDialog,
+  })),
+);
+
+function LazyDialogFallback() {
+  return (
+    <Modal title="Загрузка…" onClose={() => {}}>
+      <p className="hint" role="status">
+        Открываем диалог…
+      </p>
+    </Modal>
+  );
+}
 
 type DroppedCover = {
   album: Album;
@@ -2591,63 +2625,73 @@ export function App() {
         />
       )}
       {modal && ["move", "trash", "tags"].includes(modal) && (
-        <ActionDialog
-          kind={modal as "move" | "trash" | "tags"}
-          selection={modalSelection || operationSelection}
-          libraries={libraries.data || []}
-          capabilities={capabilities}
-          folderRoots={folderMoveRoots || undefined}
-          onClose={() => {
-            setModal(null);
-            setModalSelection(null);
-            setFolderMoveRoots(null);
-          }}
-          onPreview={showPreview}
-        />
+        <Suspense fallback={<LazyDialogFallback />}>
+          <ActionDialog
+            kind={modal as "move" | "trash" | "tags"}
+            selection={modalSelection || operationSelection}
+            libraries={libraries.data || []}
+            capabilities={capabilities}
+            folderRoots={folderMoveRoots || undefined}
+            onClose={() => {
+              setModal(null);
+              setModalSelection(null);
+              setFolderMoveRoots(null);
+            }}
+            onPreview={showPreview}
+          />
+        </Suspense>
       )}
       {modal === "artist-folders" && (
-        <ArtistFolderDialog
-          artists={artistMoveNames}
-          libraries={libraries.data || []}
-          onClose={() => {
-            setModal(null);
-            setArtistMoveNames([]);
-          }}
-          onContinue={(roots) => {
-            setFolderMoveRoots(roots);
-            setModalSelection({ filter: { ...emptyFilter, folders: roots } });
-            setModal("move");
-          }}
-        />
+        <Suspense fallback={<LazyDialogFallback />}>
+          <ArtistFolderDialog
+            artists={artistMoveNames}
+            libraries={libraries.data || []}
+            onClose={() => {
+              setModal(null);
+              setArtistMoveNames([]);
+            }}
+            onContinue={(roots) => {
+              setFolderMoveRoots(roots);
+              setModalSelection({ filter: { ...emptyFilter, folders: roots } });
+              setModal("move");
+            }}
+          />
+        </Suspense>
       )}
       {modal === "history" && (
-        <HistoryDialog
-          onClose={() => setModal(null)}
-          onPreview={showPreview}
-          onOperationStarted={watchOperation}
-        />
+        <Suspense fallback={<LazyDialogFallback />}>
+          <HistoryDialog
+            onClose={() => setModal(null)}
+            onPreview={showPreview}
+            onOperationStarted={watchOperation}
+          />
+        </Suspense>
       )}
       {modal === "settings" && (
-        <AppearanceSettingsDialog
-          settings={appearance}
-          onChange={updateAppearance}
-          scanSettings={scanSettings}
-          onScanSettingsChange={setScanSettings}
-          onClose={() => setModal(null)}
-        />
+        <Suspense fallback={<LazyDialogFallback />}>
+          <AppearanceSettingsDialog
+            settings={appearance}
+            onChange={updateAppearance}
+            scanSettings={scanSettings}
+            onScanSettingsChange={setScanSettings}
+            onClose={() => setModal(null)}
+          />
+        </Suspense>
       )}
       {preview && (
-        <PreviewDialog
-          preview={preview}
-          onClose={() => setPreview(null)}
-          onExecute={async (id) => {
-            const job = await api<Job>(`/operations/${id}/execute`, {});
-            watchOperation(id, job);
-            setPreview(null);
-            setSelected(new Set());
-            setSelectedAlbumId(null);
-          }}
-        />
+        <Suspense fallback={<LazyDialogFallback />}>
+          <PreviewDialog
+            preview={preview}
+            onClose={() => setPreview(null)}
+            onExecute={async (id) => {
+              const job = await api<Job>(`/operations/${id}/execute`, {});
+              watchOperation(id, job);
+              setPreview(null);
+              setSelected(new Set());
+              setSelectedAlbumId(null);
+            }}
+          />
+        </Suspense>
       )}
       {droppedCover && (
         <CoverDropConfirmDialog

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./App";
 import "./styles.css";
+import "./desktop";
 import { installTextInputTabNavigation } from "./text-input-tab-navigation";
 
 const client = new QueryClient({
@@ -16,3 +17,7 @@ createRoot(document.getElementById("root")!).render(
     </QueryClientProvider>
   </React.StrictMode>,
 );
+
+requestAnimationFrame(() => {
+  void window.harborPlayerDesktop?.reportClientReady();
+});
