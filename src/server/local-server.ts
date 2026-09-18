@@ -10,7 +10,6 @@ export interface LocalServerOptions {
   dev?: boolean;
   logger?: boolean;
   openBrowser?: boolean;
-  scanIntervalMs?: number;
   tagWriter?: TagWriter;
   musicBrainz?: MusicBrainzOptions;
 }
@@ -40,7 +39,6 @@ export async function startLocalServer(
     tagWriter: options.tagWriter,
     musicBrainz: options.musicBrainz,
   });
-  let timer: NodeJS.Timeout | undefined;
   let stopping: Promise<void> | undefined;
   try {
     await context.app.listen({ port, host: "127.0.0.1" });
@@ -48,16 +46,7 @@ export async function startLocalServer(
     context.allowLocalPort(address.port);
     const url = `http://127.0.0.1:${address.port}`;
     if (options.openBrowser) await open(url);
-    for (const library of context.service.catalog.libraries())
-      context.service.scan(library.id);
-    timer = setInterval(
-      () => {
-        for (const library of context.service.catalog.libraries())
-          context.service.scan(library.id);
-      },
-      options.scanIntervalMs ?? 5 * 60 * 1000,
-    );
-    timer.unref();
+    await context.scanScheduler.start();
     return {
       url,
       service: context.service,
@@ -65,14 +54,14 @@ export async function startLocalServer(
         if (!stopping)
           stopping = (async () => {
             context.service.beginShutdown();
-            if (timer) clearInterval(timer);
+            context.scanScheduler.stop();
             await context.app.close();
           })();
         return stopping;
       },
     };
   } catch (error) {
-    if (timer) clearInterval(timer);
+    context.scanScheduler.stop();
     await context.app.close();
     throw error;
   }

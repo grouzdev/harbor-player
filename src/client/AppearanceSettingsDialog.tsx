@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { ImagePlus, MonitorCog, Trash2 } from "lucide-react";
 import type { AppearanceSettings } from "./appearance";
+import { autoScanIntervals, type ScanSettings } from "../shared/scan-settings";
 import { api } from "./api";
 import "./desktop";
 import { Modal } from "./Modal";
@@ -35,15 +36,20 @@ async function asBase64(file: File) {
 export function AppearanceSettingsDialog({
   settings,
   onChange,
+  scanSettings,
+  onScanSettingsChange,
   onClose,
 }: {
   settings: AppearanceSettings;
   onChange: (settings: AppearanceSettings) => void;
+  scanSettings: ScanSettings;
+  onScanSettingsChange: (settings: ScanSettings) => void;
   onClose: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [path, setPath] = useState("");
   const [busy, setBusy] = useState(false);
+  const [scanBusy, setScanBusy] = useState(false);
   const [error, setError] = useState("");
   const desktop = window.harborPlayerDesktop;
   const save = async (next: AppearanceSettings) => {
@@ -70,6 +76,19 @@ export function AppearanceSettingsDialog({
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setBusy(false);
+    }
+  };
+  const saveScanSettings = async (autoScanIntervalMinutes: number) => {
+    setScanBusy(true);
+    setError("");
+    try {
+      onScanSettingsChange(
+        await api<ScanSettings>("/scan-settings", { autoScanIntervalMinutes }),
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setScanBusy(false);
     }
   };
   return (
@@ -209,6 +228,31 @@ export function AppearanceSettingsDialog({
           <p className="appearance-upcoming">
             Галерея Unsplash появится здесь позже.
           </p>
+        </div>
+        <div className="appearance-section">
+          <h3>Сканирование</h3>
+          <p className="hint">
+            Автосканирование проверяет изменения в подключённых библиотеках.
+          </p>
+          <div
+            className="appearance-choice-row scan-intervals"
+            role="radiogroup"
+            aria-label="Автосканирование"
+          >
+            {autoScanIntervals.map((minutes) => (
+              <button
+                key={minutes}
+                type="button"
+                className={`button secondary ${scanSettings.autoScanIntervalMinutes === minutes ? "selected" : ""}`}
+                role="radio"
+                aria-checked={scanSettings.autoScanIntervalMinutes === minutes}
+                disabled={scanBusy}
+                onClick={() => void saveScanSettings(minutes)}
+              >
+                {minutes === 0 ? "Выключено" : `Каждые ${minutes} мин.`}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
     </Modal>

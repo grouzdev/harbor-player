@@ -24,6 +24,9 @@ import { openInExplorer, type ExplorerLauncher } from "./explorer.js";
 import type { MusicBrainzOptions } from "./musicbrainz.js";
 import type { ServiceEvent } from "./service-events.js";
 import type { TagWriter } from "./isolated-tag-writer.js";
+import { AutoScanScheduler } from "./auto-scan-scheduler.js";
+import { readScanSettings } from "./scan-settings.js";
+import { scanSettingsSchema } from "../shared/scan-settings.js";
 import {
   appearanceBackgroundPath,
   clearAppearanceBackground,
@@ -85,6 +88,7 @@ export async function createApp(options: {
     options.musicBrainz,
     options.tagWriter,
   );
+  const scanScheduler = new AutoScanScheduler(service);
   const openExplorer = options.openExplorer || openInExplorer;
   await service.initialize();
   const port = options.port ?? 4317;
@@ -201,6 +205,10 @@ export async function createApp(options: {
     })
     .strict();
   app.get("/api/appearance", async () => readAppearance(service.dataDir));
+  app.get("/api/scan-settings", async () => readScanSettings(service.dataDir));
+  app.post("/api/scan-settings", async (request) =>
+    scanScheduler.update(scanSettingsSchema.parse(request.body)),
+  );
   app.post("/api/appearance", async (request) => {
     const settings = appearanceSchema.parse(request.body);
     if (settings.backgroundRevision === 0)
@@ -749,9 +757,10 @@ export async function createApp(options: {
       for (const stream of list) stream.destroy();
   });
   app.addHook("onClose", async () => {
+    scanScheduler.stop();
     for (const list of streams.values())
       for (const stream of list) stream.destroy();
     await service.close();
   });
-  return { app, service, allowLocalPort };
+  return { app, service, scanScheduler, allowLocalPort };
 }

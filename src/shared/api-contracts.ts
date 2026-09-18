@@ -8,6 +8,7 @@ import {
   type Page,
   type Track,
 } from "./contracts.js";
+import { scanSettingsSchema } from "./scan-settings.js";
 
 const stringArray = z.array(z.string());
 
@@ -252,6 +253,7 @@ export function apiResponseContract(method: string, pathname: string) {
     pathname === "/api/appearance/background"
   )
     return appearanceSchema;
+  if (pathname === "/api/scan-settings") return scanSettingsSchema;
   if (pathname === "/api/tracks") return apiResponseSchemas.tracks;
   if (/^\/api\/tracks\/[^/]+$/.test(pathname)) return trackSchema;
   if (pathname === "/api/track-ids") return trackIdResultSchema;

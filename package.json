@@ -31,6 +31,7 @@
     "fixtures": "node scripts/generate-fixtures.mjs",
     "verify:tags": "npm run build:server && node scripts/verify-tags.mjs",
     "benchmark": "npm run build && node scripts/benchmark.mjs",
+    "benchmark:scan": "npm run build:server && node scripts/scan-benchmark.mjs",
     "benchmark:baseline": "npm run build && node scripts/benchmark.mjs --write-baseline",
     "format": "prettier --write src scripts tests *.ts package.json tsconfig*.json eslint.config.js",
     "format:check": "prettier --check src scripts tests *.ts package.json tsconfig*.json eslint.config.js",

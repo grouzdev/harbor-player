@@ -37,6 +37,10 @@
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
 }
+.scan-intervals .button.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
 .theme-preview {
   display: block;
   height: 29px;

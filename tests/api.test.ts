@@ -88,6 +88,39 @@ describe("HTTP boundary", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json().error).toContain("абсолютный");
   });
+  it("persists and validates the local auto-scan interval", async () => {
+    const session = await context.app.inject({
+      url: "/api/session",
+      headers: { host: "127.0.0.1:4317" },
+    });
+    const cookie = String(session.headers["set-cookie"]).split(";")[0];
+    const headers = {
+      host: "127.0.0.1:4317",
+      cookie,
+      "x-csrf-token": session.json().csrf,
+    };
+    await expect(
+      context.app.inject({
+        method: "POST",
+        url: "/api/scan-settings",
+        headers,
+        payload: { autoScanIntervalMinutes: 0 },
+      }),
+    ).resolves.toMatchObject({ statusCode: 200 });
+    const saved = await context.app.inject({
+      url: "/api/scan-settings",
+      headers: { host: "127.0.0.1:4317", cookie },
+    });
+    expect(saved.json()).toEqual({ autoScanIntervalMinutes: 0 });
+    await expect(
+      context.app.inject({
+        method: "POST",
+        url: "/api/scan-settings",
+        headers,
+        payload: { autoScanIntervalMinutes: 1 },
+      }),
+    ).resolves.toMatchObject({ statusCode: 400 });
+  });
   it("distinguishes missing, conflicting, and internal API failures", async () => {
     const session = await context.app.inject({
       url: "/api/session",

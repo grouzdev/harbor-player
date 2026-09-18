@@ -85,6 +85,10 @@ import {
 } from "./appearance";
 import { AppearanceSettingsDialog } from "./AppearanceSettingsDialog";
 import {
+  defaultScanSettings,
+  type ScanSettings,
+} from "../shared/scan-settings";
+import {
   ActionDialog,
   AddLibraryDialog,
   HistoryDialog,
@@ -397,6 +401,8 @@ export function App() {
     return cached;
   });
   const appearanceTouchedRef = useRef(false);
+  const [scanSettings, setScanSettings] =
+    useState<ScanSettings>(defaultScanSettings);
   const [modal, setModal] = useState<
     | "add"
     | "move"
@@ -477,6 +483,14 @@ export function App() {
         // Cached appearance remains available when the local server is restarting.
       });
   }, [ready, updateAppearance]);
+  useEffect(() => {
+    if (!ready) return;
+    void api<ScanSettings>("/scan-settings")
+      .then(setScanSettings)
+      .catch(() => {
+        // The server default remains active while it is restarting.
+      });
+  }, [ready]);
   useEffect(() => {
     const syncFullscreen = () => {
       const fullscreen =
@@ -2617,6 +2631,8 @@ export function App() {
         <AppearanceSettingsDialog
           settings={appearance}
           onChange={updateAppearance}
+          scanSettings={scanSettings}
+          onScanSettingsChange={setScanSettings}
           onClose={() => setModal(null)}
         />
       )}

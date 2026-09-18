@@ -13,6 +13,11 @@ test("applies and persists appearance settings", async ({ page }) => {
   await dialog.getByRole("button", { name: "Выбрать цвет #79b9d4" }).click();
   await expect(page.locator("html")).toHaveCSS("--accent", "#79b9d4");
 
+  await dialog.getByRole("radio", { name: "Выключено" }).click();
+  await expect(
+    dialog.getByRole("radio", { name: "Выключено" }),
+  ).toHaveAttribute("aria-checked", "true");
+
   await dialog
     .locator('input[type="file"]')
     .setInputFiles(path.resolve("assets/bg_lounge.jpg"));
@@ -23,4 +28,10 @@ test("applies and persists appearance settings", async ({ page }) => {
   await dialog.getByRole("button", { name: "Закрыть" }).click();
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await settings.click();
+  await expect(
+    page.getByRole("dialog", { name: /Настройки/ }).getByRole("radio", {
+      name: "Выключено",
+    }),
+  ).toHaveAttribute("aria-checked", "true");
 });
