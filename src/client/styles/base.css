@@ -2563,7 +2563,7 @@ body {
   padding: 0;
   overflow: hidden;
   background:
-    var(--appearance-background, url("../assets/bg_lounge.jpg")) center /
+    var(--appearance-background, url("../../../assets/bg_lounge.jpg")) center /
       cover fixed,
     var(--metal-0);
 }
@@ -2582,7 +2582,7 @@ body::before {
 html:fullscreen body {
   padding: 0;
   background:
-    var(--appearance-background, url("../assets/bg_lounge.jpg")) center /
+    var(--appearance-background, url("../../../assets/bg_lounge.jpg")) center /
       cover fixed,
     #0a0b0b;
 }
