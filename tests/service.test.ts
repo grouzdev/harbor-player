@@ -394,6 +394,108 @@ describe("catalog and safe filesystem operations", () => {
       tracks: [],
     });
   });
+  it("uses one search result set for libraries, facets, albums, tracks and folders", () => {
+    const catalog = service.catalog;
+    const matchingLibrary = catalog.addLibrary(
+      "Library Needle",
+      path.join(root, "Library Needle"),
+    );
+    const otherLibrary = catalog.addLibrary(
+      "Other library",
+      path.join(root, "Other library"),
+    );
+    const addTrack = (
+      id: string,
+      libraryId: string,
+      title: string,
+      albumTitle: string,
+      artist: string,
+      genre: string,
+      relativePath: string,
+    ) =>
+      catalog.upsert({
+        id,
+        libraryId,
+        relativePath,
+        title,
+        artists: [artist],
+        albumTitle,
+        albumArtists: [artist],
+        albumKey: `${libraryId}-${id}`,
+        genres: [genre],
+        year: 2026,
+        trackNumber: 1,
+        discNumber: 1,
+        duration: 60,
+        format: "flac",
+        size: 1,
+        mtimeMs: 1,
+        coverId: null,
+        available: true,
+      });
+    addTrack(
+      "matching",
+      matchingLibrary.id,
+      "Track Needle",
+      "Album Needle",
+      "Artist Needle",
+      "Genre Needle",
+      path.join("Needle", "Album", "matching.flac"),
+    );
+    addTrack(
+      "other",
+      otherLibrary.id,
+      "Other track",
+      "Other album",
+      "Other artist",
+      "Other genre",
+      path.join("Other", "Album", "other.flac"),
+    );
+
+    for (const search of [
+      "Library Needle",
+      "Genre Needle",
+      "Artist Needle",
+      "Album Needle",
+      "Track Needle",
+    ]) {
+      const filter = { ...emptyFilter, search };
+      expect(catalog.tracks(filter).items.map((track) => track.id)).toEqual([
+        "matching",
+      ]);
+      expect(catalog.albums(filter).total).toBe(1);
+      expect(catalog.artists(filter).items).toEqual([
+        { name: "Artist Needle", count: 1 },
+      ]);
+      expect(catalog.genres(filter)).toEqual([
+        { name: "Genre Needle", count: 1 },
+      ]);
+      expect(catalog.libraries(filter).map((library) => library.id)).toEqual([
+        matchingLibrary.id,
+      ]);
+    }
+    expect(
+      catalog.folders(matchingLibrary.id, null, {
+        ...emptyFilter,
+        search: "Track Needle",
+      }),
+    ).toEqual([expect.objectContaining({ name: "Needle", trackCount: 1 })]);
+    expect(
+      catalog.tracks({
+        ...emptyFilter,
+        libraryIds: [otherLibrary.id],
+        search: "Needle",
+      }).total,
+    ).toBe(0);
+    expect(
+      catalog.libraries({
+        ...emptyFilter,
+        libraryIds: [otherLibrary.id],
+        search: "Needle",
+      }),
+    ).toEqual([]);
+    expect(catalog.tracks({ ...emptyFilter, search: "%" }).total).toBe(0);
+  });
   it("finds libraries, folders and genres related to selected facets", () => {
     const catalog = service.catalog;
     const first = catalog.addLibrary("First", path.join(root, "First"));

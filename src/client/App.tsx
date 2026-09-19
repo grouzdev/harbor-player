@@ -1418,8 +1418,8 @@ export function App() {
     };
   }, [ready, queryClient, notify, refresh, scheduleRefresh]);
   const libraries = useQuery({
-    queryKey: ["libraries"],
-    queryFn: () => api<Library[]>("/libraries"),
+    queryKey: ["libraries", filter],
+    queryFn: () => api<Library[]>(catalogUrl("libraries", filter)),
     enabled: ready,
   });
   const folderKey = (libraryId: string, relativePath: string | null) =>
@@ -1453,12 +1453,13 @@ export function App() {
   }, [expandedFolderKeys, expandedLibraryIds, filter.folders]);
   const folderLevels = useQueries({
     queries: folderQueryTargets.map(({ libraryId, parent }) => ({
-      queryKey: ["library-folders", libraryId, parent],
+      queryKey: ["library-folders", libraryId, parent, filter],
       queryFn: () => {
-        const query = parent
-          ? `?${new URLSearchParams({ parent }).toString()}`
-          : "";
-        return api<LibraryFolder[]>(`/libraries/${libraryId}/folders${query}`);
+        const query = new URLSearchParams({ filter: JSON.stringify(filter) });
+        if (parent) query.set("parent", parent);
+        return api<LibraryFolder[]>(
+          `/libraries/${libraryId}/folders?${query.toString()}`,
+        );
       },
       enabled: ready,
     })),
@@ -1474,6 +1475,14 @@ export function App() {
     [folderLevels, folderQueryTargets],
   );
   const missingSelectedFolders = filter.folders.filter((folder) => {
+    if (
+      filter.search.trim() ||
+      filter.genres.length ||
+      filter.artists.length ||
+      filter.albumIds.length ||
+      filter.bookmarksOnly
+    )
+      return false;
     const query = folderQueryByParent.get(
       folderKey(folder.libraryId, folderParent(folder.relativePath)),
     );
@@ -1503,31 +1512,14 @@ export function App() {
     queryFn: () => api<Job[]>("/jobs"),
     enabled: ready,
   });
-  const genreFilter = useMemo(
-    () => ({
-      ...emptyFilter,
-      libraryIds: filter.libraryIds,
-      folders: filter.folders,
-      bookmarksOnly: filter.bookmarksOnly,
-    }),
-    [filter.libraryIds, filter.folders, filter.bookmarksOnly],
-  );
+  const genreFilter = filter;
   const genres = useQuery({
     queryKey: ["genres", genreFilter],
     queryFn: () =>
       api<{ name: string; count: number }[]>(catalogUrl("genres", genreFilter)),
     enabled: ready,
   });
-  const artistFilter = useMemo(
-    () => ({
-      ...emptyFilter,
-      libraryIds: filter.libraryIds,
-      folders: filter.folders,
-      genres: filter.genres,
-      bookmarksOnly: filter.bookmarksOnly,
-    }),
-    [filter.libraryIds, filter.folders, filter.genres, filter.bookmarksOnly],
-  );
+  const artistFilter = filter;
   const artists = useInfiniteQuery({
     queryKey: ["artists", artistFilter],
     initialPageParam: 0,
@@ -1575,7 +1567,10 @@ export function App() {
   }, [artistFilter, filter.artists, requestArtistScroll]);
   const valid = useQuery({
     queryKey: ["filter-validity", filter],
-    queryFn: () => api<FilterValidity>(catalogUrl("filter-validity", filter)),
+    queryFn: () =>
+      api<FilterValidity>(
+        catalogUrl("filter-validity", { ...filter, search: "" }),
+      ),
     enabled:
       ready &&
       (filter.genres.length > 0 ||
@@ -1620,17 +1615,7 @@ export function App() {
           };
     });
   }, [valid.data]);
-  const albumFilter = useMemo(
-    () => ({ ...filter, albumIds: [] }),
-    [
-      filter.libraryIds,
-      filter.folders,
-      filter.genres,
-      filter.artists,
-      filter.search,
-      filter.bookmarksOnly,
-    ],
-  );
+  const albumFilter = filter;
   const navigateFromPlayer = useCallback(
     async (
       target: "album" | "artist",

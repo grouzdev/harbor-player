@@ -193,9 +193,10 @@ export async function createApp(options: {
     });
     return { csrf, capabilities: service.capabilities };
   });
-  app.get("/api/libraries", async () => {
+  app.get("/api/libraries", async (request) => {
     await service.refreshAvailability();
-    return service.catalog.libraries();
+    const q = pageSchema.parse(request.query);
+    return service.catalog.libraries(filterSchema.parse(JSON.parse(q.filter)));
   });
   const appearanceSchema = z
     .object({
@@ -258,9 +259,16 @@ export async function createApp(options: {
   app.get("/api/libraries/:id/folders", async (request) => {
     const { id } = idParam.parse(request.params);
     const query = z
-      .object({ parent: z.string().max(32000).default("") })
+      .object({
+        parent: z.string().max(32000).default(""),
+        filter: z.string().max(100000).default("{}"),
+      })
       .parse(request.query);
-    return service.catalog.folders(id, query.parent || null);
+    return service.catalog.folders(
+      id,
+      query.parent || null,
+      filterSchema.parse(JSON.parse(query.filter)),
+    );
   });
   app.get("/api/bookmarks", async () => service.catalog.bookmarks());
   app.post("/api/bookmarks", async (request) => {

@@ -20,6 +20,7 @@ import type {
   Selection,
   Track,
 } from "../shared/contracts.js";
+import { emptyFilter } from "../shared/contracts.js";
 import {
   artistSortKey,
   compareArtistNames,
@@ -84,13 +85,35 @@ export class Catalog {
     runCatalogMigrations(this.db);
     this.clearExpiredHttpCache();
   }
-  libraries(): Library[] {
+  libraries(filter: CatalogFilter = emptyFilter): Library[] {
+    const { sql, args } = this.where(filter);
+    const search = filter.search.trim();
+    const hasManualFilters =
+      filter.libraryIds.length > 0 ||
+      filter.folders.length > 0 ||
+      filter.genres.length > 0 ||
+      filter.artists.length > 0 ||
+      filter.albumIds.length > 0 ||
+      filter.bookmarksOnly;
+    const libraryMatch =
+      search && !hasManualFilters
+        ? "(l.name LIKE ? ESCAPE '\\' OR l.path LIKE ? ESCAPE '\\')"
+        : "0";
+    const searchValue = search ? `%${search.replace(/[\\%_]/g, "\\$&")}%` : "";
     return (
       this.db
         .prepare(
-          `SELECT l.*, (SELECT count(*) FROM tracks t WHERE t.libraryId=l.id AND t.available=1) AS trackCount FROM libraries l ORDER BY name`,
+          `SELECT l.*,
+             (SELECT count(*) FROM tracks t WHERE t.libraryId=l.id AND ${sql}) AS trackCount
+           FROM libraries l
+           WHERE ${search || hasManualFilters ? `${libraryMatch} OR EXISTS (SELECT 1 FROM tracks t WHERE t.libraryId=l.id AND ${sql})` : "1"}
+           ORDER BY name`,
         )
-        .all() as Row[]
+        .all(
+          ...args,
+          ...(search && !hasManualFilters ? [searchValue, searchValue] : []),
+          ...args,
+        ) as Row[]
     ).map((r) => ({ ...r, available: Boolean(r.available) }) as Library);
   }
   library(id: string): Library {
@@ -98,15 +121,21 @@ export class Catalog {
     if (!l) throw notFound("Библиотека не найдена");
     return l;
   }
-  folders(libraryId: string, parent: string | null): LibraryFolder[] {
+  folders(
+    libraryId: string,
+    parent: string | null,
+    filter: CatalogFilter = emptyFilter,
+  ): LibraryFolder[] {
     this.library(libraryId);
     const parentPath = parent === null ? null : checkedFolderPath(parent);
     const prefix = parentPath ? `${parentPath}${path.sep}` : "";
+    const { sql, args } = this.where(filter);
     const rows = this.db
       .prepare(
-        "SELECT relativePath FROM tracks WHERE libraryId=? AND available=1 ORDER BY relativePath",
+        `SELECT t.relativePath FROM tracks t JOIN libraries l ON l.id=t.libraryId
+         WHERE t.libraryId=? AND ${sql} ORDER BY t.relativePath`,
       )
-      .all(libraryId) as { relativePath: string }[];
+      .all(libraryId, ...args) as { relativePath: string }[];
     const folders = new Map<string, LibraryFolder>();
     for (const row of rows) {
       if (prefix && !row.relativePath.startsWith(prefix)) continue;
@@ -459,10 +488,16 @@ export class Catalog {
     }
     if (filter.search.trim()) {
       clauses.push(
-        "(t.title LIKE ? ESCAPE '\\' OR t.albumTitle LIKE ? ESCAPE '\\' OR t.artists LIKE ? ESCAPE '\\')",
+        `(t.title LIKE ? ESCAPE '\\'
+          OR t.albumTitle LIKE ? ESCAPE '\\'
+          OR l.name LIKE ? ESCAPE '\\'
+          OR l.path LIKE ? ESCAPE '\\'
+          OR EXISTS (SELECT 1 FROM track_genres g WHERE g.trackId=t.id AND g.genre LIKE ? ESCAPE '\\')
+          OR EXISTS (SELECT 1 FROM track_artists a WHERE a.trackId=t.id AND a.artist LIKE ? ESCAPE '\\')
+          OR EXISTS (SELECT 1 FROM track_album_artists a WHERE a.trackId=t.id AND a.artist LIKE ? ESCAPE '\\'))`,
       );
       const search = `%${filter.search.trim().replace(/[\\%_]/g, "\\$&")}%`;
-      args.push(search, search, search);
+      args.push(search, search, search, search, search, search, search);
     }
     if (filter.bookmarksOnly) {
       clauses.push(`(
@@ -670,13 +705,7 @@ export class Catalog {
     };
   }
   genres(filter: CatalogFilter): { name: string; count: number }[] {
-    const { sql, args } = this.where({
-      ...filter,
-      genres: [],
-      artists: [],
-      albumIds: [],
-      search: "",
-    });
+    const { sql, args } = this.where(filter);
     return this.db
       .prepare(
         `SELECT coalesce(g.genre,'') name, count(DISTINCT a.artist) count FROM tracks t JOIN libraries l ON l.id=t.libraryId LEFT JOIN track_genres g ON g.trackId=t.id LEFT JOIN track_album_artists a ON a.trackId=t.id WHERE ${sql} GROUP BY coalesce(g.genre,'') ORDER BY name COLLATE NOCASE`,
@@ -715,7 +744,7 @@ export class Catalog {
     ), '')`;
   }
   albums(filter: CatalogFilter, offset = 0, limit = 120): Page<Album> {
-    const { sql, args } = this.where({ ...filter, albumIds: [] });
+    const { sql, args } = this.where(filter);
     const total = (
       this.db
         .prepare(
@@ -775,12 +804,7 @@ export class Catalog {
     offset = 0,
     limit = 200,
   ): Page<{ name: string; count: number }> {
-    const { sql, args } = this.where({
-      ...filter,
-      artists: [],
-      albumIds: [],
-      search: "",
-    });
+    const { sql, args } = this.where(filter);
     const group = `FROM tracks t JOIN libraries l ON l.id=t.libraryId LEFT JOIN track_album_artists a ON a.trackId=t.id WHERE ${sql} GROUP BY coalesce(a.artist,'')`;
     const allItems = this.db
       .prepare(
