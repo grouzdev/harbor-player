@@ -1130,6 +1130,24 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
       .locator(".artists-panel .list-tile.selected")
       .filter({ hasText: "Исполнитель альбома" }),
   ).toHaveCount(1);
+  let facetRelevanceRequests = 0;
+  page.on("request", (request) => {
+    if (request.url().includes("/api/facet-relevance"))
+      facetRelevanceRequests += 1;
+  });
+  await collectionTile.locator(".list-tile-main").click({ button: "right" });
+  const refreshedFacetRelevance = facetRelevanceRequests;
+  const refreshResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().includes("/api/libraries/") &&
+      response.url().endsWith("/scan"),
+  );
+  await libraryMenu.getByRole("menuitem", { name: "Обновить" }).click();
+  expect((await refreshResponse).ok()).toBe(true);
+  await expect
+    .poll(() => facetRelevanceRequests)
+    .toBeGreaterThan(refreshedFacetRelevance);
   await expect(firstAlbum.getByRole("checkbox")).toHaveCount(0);
   await expect(firstAlbum.locator(".album-cover")).toHaveCSS(
     "border-color",

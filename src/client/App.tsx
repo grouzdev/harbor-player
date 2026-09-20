@@ -924,6 +924,7 @@ export function App() {
           "jobs",
           "history",
           "filter-validity",
+          "facet-relevance",
           "selection-summary",
           "bookmarks",
         ].includes(String(q.queryKey[0])),
