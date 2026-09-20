@@ -67,7 +67,7 @@ input::placeholder {
 input[type="checkbox"] {
   accent-color: var(--accent);
   width: 14px;
-  height: 7px;
+  height: 14px;
   flex-shrink: 0;
   margin: 0;
   cursor: pointer;
