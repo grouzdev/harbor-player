@@ -6,6 +6,7 @@ import {
   escapeLucene,
   MusicBrainzService,
 } from "../dist/server/musicbrainz.js";
+import { coverArchiveSchema } from "../dist/server/musicbrainz-contracts.js";
 import type { Track } from "../src/shared/contracts.js";
 
 const releaseId = "11111111-1111-4111-8111-111111111111";
@@ -62,6 +63,13 @@ const json = (body: unknown, status = 200) =>
   });
 
 describe("MusicBrainz client", () => {
+  it("normalizes string and numeric Cover Art Archive ids", () => {
+    for (const id of ["26703575437", 26703575437])
+      expect(
+        coverArchiveSchema.parse({ images: [{ id }] }).images?.[0].id,
+      ).toBe("26703575437");
+  });
+
   it("escapes Lucene syntax", () => {
     expect(escapeLucene('AC/DC: "Live"')).toBe('AC\\/DC\\: \\"Live\\"');
   });
@@ -243,7 +251,7 @@ describe("MusicBrainz client", () => {
       if (url.includes(`/release-group/${groupId}?`))
         return json({ genres: [{ name: "Alternative Rock", count: 4 }] });
       if (url.endsWith(`/release/${releaseId}`))
-        return json({ images: [{ id: "123", front: true, approved: true }] });
+        return json({ images: [{ id: 123, front: true, approved: true }] });
       if (url.endsWith(`/release/${releaseId}/123-1200`))
         return new Response(Uint8Array.from([255, 216, 255, 0]));
       return json({}, 404);

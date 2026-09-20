@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+const coverArtIdSchema = z
+  .union([z.string(), z.number().int().nonnegative()])
+  .transform(String);
+
 const artistCreditSchema = z
   .object({
     name: z.string().optional(),
@@ -85,7 +89,7 @@ export const coverArchiveSchema = z
       .array(
         z
           .object({
-            id: z.string().optional(),
+            id: coverArtIdSchema.optional(),
             front: z.boolean().optional(),
             approved: z.boolean().optional(),
           })
