@@ -86,10 +86,24 @@ describe("facet filter validity", () => {
         albumIds: ["shared-rock", "first-jazz", "second-electronic"],
       }),
     ).toEqual({
-      genres: ["Rock"],
+      genres: ["Rock", "Electronic"],
       artists: ["Shared"],
       albumIds: ["shared-rock"],
     });
+
+    const incompatible = {
+      ...emptyFilter,
+      libraryIds: [first.id],
+      genres: ["Electronic", "Deleted genre"],
+      bookmarksOnly: true,
+    };
+    const valid = service.catalog.filterValidity(incompatible);
+    expect(valid.genres).toEqual(["Electronic"]);
+    expect(service.catalog.tracks({ ...incompatible, ...valid }).total).toBe(0);
+    expect(
+      service.catalog.filterValidity({ ...incompatible, bookmarksOnly: false })
+        .genres,
+    ).toEqual(["Electronic"]);
 
     expect(
       service.catalog.filterValidity({

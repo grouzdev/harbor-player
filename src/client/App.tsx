@@ -99,7 +99,7 @@ import { Modal } from "./Modal";
 import { ListTile } from "./ListTile";
 import { buildTrackListRows } from "./track-grouping";
 import { resolveContextSelection, usePanelSelection } from "./panel-selection";
-import { selectionScrollAnchor } from "./selection-scroll";
+import { useCatalogBrowsing } from "./useCatalogBrowsing";
 import {
   folderSelectionKey,
   librarySelectionKey,
@@ -417,16 +417,29 @@ export function App() {
     writableFormats: [],
     verificationDate: null,
   });
-  const [filter, setFilter] = useState<CatalogFilter>(emptyFilter);
-  const [expandedLibraryIds, setExpandedLibraryIds] = useState<Set<string>>(
-    new Set(),
-  );
-  const [expandedFolderKeys, setExpandedFolderKeys] = useState<Set<string>>(
-    new Set(),
-  );
-  const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
+  const {
+    filter,
+    setFilter,
+    replaceFilter,
+    search,
+    setSearch,
+    isSearching,
+    searchPending,
+    filterBySelection,
+    navigationEpoch,
+    selectedArtists,
+    setSelectedArtists,
+    selectedAlbums,
+    setSelectedAlbums,
+    selected,
+    setSelected,
+    selectedAlbumId,
+    setSelectedAlbumId,
+    expandedLibraryIds,
+    setExpandedLibraryIds,
+    expandedFolderKeys,
+    setExpandedFolderKeys,
+  } = useCatalogBrowsing();
   const [panelVisibility, setPanelVisibility] =
     useState<PanelVisibility>(readPanelVisibility);
   const [appearance, setAppearance] = useState<AppearanceSettings>(() => {
@@ -478,7 +491,7 @@ export function App() {
     useState<FullscreenWindowBounds | null>(null);
   const [coverMode, setCoverMode] = useState(false);
   const [coverSearch, setCoverSearch] = useState("");
-  const filterKey = JSON.stringify(filter);
+  const filterKey = `${navigationEpoch}:${JSON.stringify(filter)}`;
   const {
     filterKeyRef,
     artistScrollTarget,
@@ -781,15 +794,25 @@ export function App() {
       } else if (id === "genres") {
         setFilter((current) => ({ ...current, genres: [] }));
       } else if (id === "artists") {
+        setSelectedArtists([]);
         setFilter((current) => ({ ...current, artists: [] }));
       } else if (id === "albums") {
+        setSelectedAlbums([]);
         setFilter((current) => ({ ...current, albumIds: [] }));
       } else {
         setSelected(new Set());
         setSelectedAlbumId(null);
       }
     },
-    [panelVisibility, setPanelVisible],
+    [
+      panelVisibility,
+      setPanelVisible,
+      setFilter,
+      setSelectedArtists,
+      setSelectedAlbums,
+      setSelected,
+      setSelectedAlbumId,
+    ],
   );
   const workspaceRef = useRef<HTMLElement>(null);
   const [panelWeights, setPanelWeights] = useState<number[]>(() => {
@@ -860,10 +883,6 @@ export function App() {
       .catch((e) => setStartupError(e.message));
   }, []);
   useEffect(() => {
-    const timer = setTimeout(() => setFilter((f) => ({ ...f, search })), 200);
-    return () => clearTimeout(timer);
-  }, [search]);
-  useEffect(() => {
     if (!player.queue?.track) {
       setCoverMode(false);
       setCoverSearch("");
@@ -874,10 +893,6 @@ export function App() {
     const timer = setTimeout(() => setToast(""), 9000);
     return () => clearTimeout(timer);
   }, [toast]);
-  useEffect(() => {
-    setSelected(new Set());
-    setSelectedAlbumId(null);
-  }, [filter]);
   const refresh = useCallback(() => {
     void queryClient.invalidateQueries({
       predicate: (q) =>
@@ -1031,7 +1046,12 @@ export function App() {
       const suffix = ids.length > 1 ? ` (${ids.length})` : "";
       const selection: Selection =
         kind === "album"
-          ? { filter: { ...emptyFilter, albumIds: ids } }
+          ? {
+              filter: {
+                ...(isSearching ? filter : emptyFilter),
+                albumIds: ids,
+              },
+            }
           : kind === "artist"
             ? { filter: { ...filter, artists: ids } }
             : { trackIds: ids };
@@ -1039,6 +1059,14 @@ export function App() {
         x: event.clientX,
         y: event.clientY,
         items: [
+          ...(kind === "artist" || kind === "album"
+            ? [
+                {
+                  label: "Фильтровать по выбранному",
+                  onSelect: () => filterBySelection(kind, ids),
+                },
+              ]
+            : []),
           {
             label: bookmarkPending
               ? "Сохраняем закладку…"
@@ -1168,6 +1196,8 @@ export function App() {
       bookmarksUnavailable,
       changeBookmarks,
       filter,
+      filterBySelection,
+      isSearching,
       notify,
       pendingBookmarkKeys,
     ],
@@ -1194,7 +1224,7 @@ export function App() {
         ],
       });
     },
-    [filter],
+    [filter, setFilter],
   );
   const showLibraryMenu = useCallback(
     (event: React.MouseEvent, library: Library) => {
@@ -1417,10 +1447,12 @@ export function App() {
       pendingRefresh.current = undefined;
     };
   }, [ready, queryClient, notify, refresh, scheduleRefresh]);
+  // These panels offer choices; only global search narrows their contents.
+  const facetOptionsFilter = isSearching ? filter : emptyFilter;
   const libraries = useQuery({
-    queryKey: ["libraries", filter],
-    queryFn: () => api<Library[]>(catalogUrl("libraries", filter)),
-    enabled: ready,
+    queryKey: ["libraries", facetOptionsFilter],
+    queryFn: () => api<Library[]>(catalogUrl("libraries", facetOptionsFilter)),
+    enabled: ready && !searchPending,
   });
   const folderKey = (libraryId: string, relativePath: string | null) =>
     `${libraryId}\u0000${relativePath || ""}`;
@@ -1453,15 +1485,17 @@ export function App() {
   }, [expandedFolderKeys, expandedLibraryIds, filter.folders]);
   const folderLevels = useQueries({
     queries: folderQueryTargets.map(({ libraryId, parent }) => ({
-      queryKey: ["library-folders", libraryId, parent, filter],
+      queryKey: ["library-folders", libraryId, parent, facetOptionsFilter],
       queryFn: () => {
-        const query = new URLSearchParams({ filter: JSON.stringify(filter) });
+        const query = new URLSearchParams({
+          filter: JSON.stringify(facetOptionsFilter),
+        });
         if (parent) query.set("parent", parent);
         return api<LibraryFolder[]>(
           `/libraries/${libraryId}/folders?${query.toString()}`,
         );
       },
-      enabled: ready,
+      enabled: ready && !searchPending,
     })),
   });
   const folderQueryByParent = useMemo(
@@ -1506,18 +1540,18 @@ export function App() {
       ),
     }));
     notify("Выбранная папка больше не найдена; фильтр обновлён");
-  }, [missingSelectedFolders, notify]);
+  }, [missingSelectedFolders, notify, setFilter]);
   const jobs = useQuery({
     queryKey: ["jobs"],
     queryFn: () => api<Job[]>("/jobs"),
     enabled: ready,
   });
-  const genreFilter = filter;
+  const genreFilter = facetOptionsFilter;
   const genres = useQuery({
     queryKey: ["genres", genreFilter],
     queryFn: () =>
       api<{ name: string; count: number }[]>(catalogUrl("genres", genreFilter)),
-    enabled: ready,
+    enabled: ready && !searchPending,
   });
   const artistFilter = filter;
   const artists = useInfiniteQuery({
@@ -1531,7 +1565,7 @@ export function App() {
       last.offset + last.items.length < last.total
         ? last.offset + last.items.length
         : undefined,
-    enabled: ready,
+    enabled: ready && !searchPending,
   });
   const artistItems = useMemo(
     () => artists.data?.pages.flatMap((p) => p.items) || [],
@@ -1557,14 +1591,6 @@ export function App() {
       ),
     [currentPlayerTrack],
   );
-  const previousArtistFilterKey = useRef<string | null>(null);
-  useEffect(() => {
-    const key = JSON.stringify(artistFilter);
-    const previous = previousArtistFilterKey.current;
-    previousArtistFilterKey.current = key;
-    const artist = selectionScrollAnchor(previous, key, filter.artists);
-    if (artist) requestArtistScroll(artist);
-  }, [artistFilter, filter.artists, requestArtistScroll]);
   const valid = useQuery({
     queryKey: ["filter-validity", filter],
     queryFn: () =>
@@ -1573,6 +1599,7 @@ export function App() {
       ),
     enabled:
       ready &&
+      !isSearching &&
       (filter.genres.length > 0 ||
         filter.artists.length > 0 ||
         filter.albumIds.length > 0),
@@ -1601,7 +1628,7 @@ export function App() {
     relevanceFilter.artists.length > 0 ||
     relevanceFilter.albumIds.length > 0;
   useEffect(() => {
-    if (!valid.data) return;
+    if (isSearching || !valid.data) return;
     setFilter((current) => {
       return sameStringArray(current.genres, valid.data.genres) &&
         sameStringArray(current.artists, valid.data.artists) &&
@@ -1614,7 +1641,7 @@ export function App() {
             albumIds: valid.data.albumIds,
           };
     });
-  }, [valid.data]);
+  }, [valid.data, isSearching, setFilter]);
   const albumFilter = filter;
   const navigateFromPlayer = useCallback(
     async (
@@ -1668,7 +1695,6 @@ export function App() {
       }
       if (filterKeyRef.current !== navigationFilterKey) return;
       setPanelVisible(target === "album" ? "albums" : "artists", true);
-      setSearch("");
       setExpandedLibraryIds(new Set());
       setExpandedFolderKeys(new Set());
       const fallbackFilter = {
@@ -1676,8 +1702,11 @@ export function App() {
         artists,
         ...(target === "album" ? { albumIds: [value] } : {}),
       };
-      setFilter(fallbackFilter);
-      requestArtistScroll(artists[0], JSON.stringify(fallbackFilter));
+      replaceFilter(fallbackFilter);
+      requestArtistScroll(
+        artists[0],
+        `${navigationEpoch + 1}:${JSON.stringify(fallbackFilter)}`,
+      );
     },
     [
       albumFilter,
@@ -1688,15 +1717,114 @@ export function App() {
       requestTrackScroll,
       setPanelVisible,
       filterKey,
+      navigationEpoch,
+      replaceFilter,
+      filterKeyRef,
+      setExpandedFolderKeys,
+      setExpandedLibraryIds,
+    ],
+  );
+  const navigationRequest = useRef(0);
+  const navigateCatalog = useCallback(
+    async (
+      facet: Partial<CatalogFilter>,
+      target: "album" | "track" = "album",
+    ) => {
+      const key = filterKey;
+      const request = ++navigationRequest.current;
+      if (searchPending) return;
+      try {
+        const current = () =>
+          filterKeyRef.current === key && request === navigationRequest.current;
+        if (target === "track") {
+          const result = await api<Page<Track>>(
+            catalogUrl("tracks", { ...filter, ...facet }, 0, 1),
+          );
+          if (current() && result.items[0])
+            requestTrackScroll(result.items[0].id);
+        } else if (facet.artists && filter.artists.length) {
+          // A co-artist can be visible inside another artist's filter. Search only
+          // the visible albums so navigation cannot point outside the current set.
+          for (let offset = 0; current(); offset += 100) {
+            const result = await api<Page<Album>>(
+              catalogUrl("albums", filter, offset, 100),
+            );
+            if (!current()) return;
+            const album = result.items.find((item) =>
+              facet.artists!.some(
+                (name) =>
+                  item.artists.includes(name) ||
+                  (!name && !item.artists.length),
+              ),
+            );
+            if (album) {
+              requestAlbumScroll(album.id);
+              return;
+            }
+            if (
+              offset + result.items.length >= result.total ||
+              !result.items.length
+            )
+              return;
+          }
+        } else {
+          const result = await api<Page<Album>>(
+            catalogUrl("albums", { ...filter, ...facet }, 0, 1),
+          );
+          if (current() && result.items[0])
+            requestAlbumScroll(result.items[0].id);
+        }
+      } catch (error) {
+        if (
+          filterKeyRef.current === key &&
+          request === navigationRequest.current
+        )
+          notify(
+            error instanceof Error
+              ? error.message
+              : "Не удалось перейти к музыке",
+          );
+      }
+    },
+    [
+      filter,
+      filterKey,
+      filterKeyRef,
+      searchPending,
+      requestTrackScroll,
+      requestAlbumScroll,
+      notify,
     ],
   );
   const selectAlbumArtist = useCallback(
     (artist: string) => {
-      const nextFilter = { ...filter, artists: [artist] };
-      setFilter(nextFilter);
-      requestArtistScroll(artist, JSON.stringify(nextFilter));
+      setSelectedArtists([artist]);
+      requestArtistScroll(artist);
+      void navigateCatalog({ artists: [artist] });
     },
-    [filter, requestArtistScroll],
+    [setSelectedArtists, requestArtistScroll, navigateCatalog],
+  );
+  const selectCatalogAlbum = useCallback(
+    (albumId: string) => {
+      if (selectedAlbumId === albumId) {
+        void player.startAlbum(albumId);
+        return;
+      }
+      setSelectedAlbumId(albumId);
+      setSelected(new Set());
+      setSelectedAlbums([albumId]);
+      requestAlbumScroll(albumId);
+      void navigateCatalog({ albumIds: [albumId] }, "track");
+    },
+    [
+      selectedAlbumId,
+      player,
+      setSelectedAlbumId,
+      setSelected,
+      setSelectedAlbums,
+      requestAlbumScroll,
+      navigateCatalog,
+    ],
   );
   const albums = useInfiniteQuery({
     queryKey: ["albums", albumFilter],
@@ -1707,7 +1835,7 @@ export function App() {
       last.offset + last.items.length < last.total
         ? last.offset + last.items.length
         : undefined,
-    enabled: ready,
+    enabled: ready && !searchPending,
   });
   const tracks = useInfiniteQuery({
     queryKey: ["tracks", filter],
@@ -1718,20 +1846,12 @@ export function App() {
       last.offset + last.items.length < last.total
         ? last.offset + last.items.length
         : undefined,
-    enabled: ready,
+    enabled: ready && !searchPending,
   });
   const albumItems = useMemo(
     () => albums.data?.pages.flatMap((p) => p.items) || [],
     [albums.data],
   );
-  const previousAlbumFilterKey = useRef<string | null>(null);
-  useEffect(() => {
-    const key = JSON.stringify(albumFilter);
-    const previous = previousAlbumFilterKey.current;
-    previousAlbumFilterKey.current = key;
-    const album = selectionScrollAnchor(previous, key, filter.albumIds);
-    if (album) requestAlbumScroll(album);
-  }, [albumFilter, filter.albumIds, requestAlbumScroll]);
   const trackItems = useMemo(
     () => tracks.data?.pages.flatMap((p) => p.items) || [],
     [tracks.data],
@@ -1851,10 +1971,19 @@ export function App() {
     ],
     [filter.libraryIds, filter.folders],
   );
-  const applyLocationSelection = useCallback((keys: string[]) => {
-    const locations = locationsFromSelectionKeys(keys);
-    setFilter((current) => ({ ...current, ...locations }));
-  }, []);
+  const applyLocationSelection = useCallback(
+    (keys: string[]) => {
+      const locations = locationsFromSelectionKeys(keys);
+      setFilter((current) => ({ ...current, ...locations }));
+    },
+    [setFilter],
+  );
+  const selectLocation = (event: React.MouseEvent, key: string) => {
+    if (isSearching) {
+      if (!event.ctrlKey && !event.metaKey && !event.shiftKey)
+        void navigateCatalog(locationsFromSelectionKeys([key]));
+    } else librarySelection.selectFromClick(event, key);
+  };
   const librarySelection = usePanelSelection({
     scrollRef: libraryListRef,
     selectedKeys: locationSelectionKeys,
@@ -1961,9 +2090,7 @@ export function App() {
             }
             suffix={count(folder.trackCount)}
             style={{ "--folder-depth": depth + 1 } as CSSProperties}
-            onSelect={(event) =>
-              librarySelection.selectFromClick(event, selectionKey)
-            }
+            onSelect={(event) => selectLocation(event, selectionKey)}
             onContextMenu={(event) => showFolderMenu(event, libraryId, folder)}
           />
           {expanded &&
@@ -2134,7 +2261,11 @@ export function App() {
                   ? "Отключить фильтр закладок"
                   : "Показать музыку из закладок"
             }
-            disabled={bookmarks.isFetching || pendingBookmarkKeys.size > 0}
+            disabled={
+              isSearching ||
+              bookmarks.isFetching ||
+              pendingBookmarkKeys.size > 0
+            }
             onClick={() => {
               if (bookmarks.isError) {
                 void bookmarks.refetch();
@@ -2274,9 +2405,7 @@ export function App() {
                   return next;
                 })
               }
-              onSelect={(event, key) =>
-                librarySelection.selectFromClick(event, key)
-              }
+              onSelect={(event, key) => selectLocation(event, key)}
               onContextMenu={showLibraryMenu}
               onAdd={() => setModal("add")}
             />
@@ -2295,13 +2424,9 @@ export function App() {
               marquee={genreSelection.marquee}
               onReset={() => setFilter((f) => ({ ...f, genres: [] }))}
               onSelect={(event, genre) => {
-                if (
-                  !event.ctrlKey &&
-                  !event.metaKey &&
-                  !event.shiftKey &&
-                  filter.genres.includes(genre)
-                ) {
-                  void player.startFilter(filter);
+                if (isSearching) {
+                  if (!event.ctrlKey && !event.metaKey && !event.shiftKey)
+                    void navigateCatalog({ genres: [genre] });
                   return;
                 }
                 genreSelection.selectFromClick(
@@ -2331,16 +2456,18 @@ export function App() {
             <ArtistList
               items={artistItems}
               total={artists.data?.pages[0]?.total || 0}
-              selected={filter.artists}
-              loading={artists.isFetching}
-              onSelectionChange={(artists) =>
-                setFilter((f) => ({
-                  ...f,
-                  artists,
-                }))
+              selected={selectedArtists}
+              loading={artists.isFetching || searchPending}
+              onSelectionChange={setSelectedArtists}
+              onNavigate={(artist) =>
+                void navigateCatalog({ artists: [artist] })
               }
               onMore={() => {
-                if (artists.hasNextPage && !artists.isFetchingNextPage)
+                if (
+                  !searchPending &&
+                  artists.hasNextPage &&
+                  !artists.isFetchingNextPage
+                )
                   void artists.fetchNextPage();
               }}
               onContextMenu={showCatalogMenu}
@@ -2387,19 +2514,21 @@ export function App() {
             <AlbumGrid
               albums={albumItems}
               total={albumTotal}
-              selected={filter.albumIds}
+              selected={selectedAlbums}
               currentAlbumId={currentPlayerTrack?.albumKey ?? null}
-              onSelectionChange={(albumIds) =>
-                setFilter((f) => ({
-                  ...f,
-                  albumIds,
-                }))
+              onSelectionChange={setSelectedAlbums}
+              onNavigate={(albumId) =>
+                void navigateCatalog({ albumIds: [albumId] }, "track")
               }
               onMore={() => {
-                if (albums.hasNextPage && !albums.isFetchingNextPage)
+                if (
+                  !searchPending &&
+                  albums.hasNextPage &&
+                  !albums.isFetchingNextPage
+                )
                   void albums.fetchNextPage();
               }}
-              loading={albums.isFetching}
+              loading={albums.isFetching || searchPending}
               onContextMenu={showCatalogMenu}
               onPlay={(id) => void player.startAlbum(id)}
               onSelectArtist={selectAlbumArtist}
@@ -2438,7 +2567,15 @@ export function App() {
                 {queryError.message}
               </p>
             )}
-            {!libraries.data?.length && ready ? (
+            {!libraries.data?.length &&
+            libraries.isSuccess &&
+            !isSearching &&
+            !filter.bookmarksOnly &&
+            !filter.libraryIds.length &&
+            !filter.folders.length &&
+            !filter.genres.length &&
+            !filter.artists.length &&
+            !filter.albumIds.length ? (
               <div className="welcome">
                 <div className="welcome-art">
                   <div className="record">
@@ -2476,42 +2613,20 @@ export function App() {
                 total={total}
                 selected={selected}
                 currentId={player.queue?.track?.id}
-                loading={tracks.isFetching}
+                loading={tracks.isFetching || searchPending}
                 onPlay={(track) => void player.start(track, filter)}
                 selectedAlbumId={selectedAlbumId}
-                onSelectAlbum={async (albumId) => {
-                  try {
-                    const albumFilter = { ...filter, albumIds: [albumId] };
-                    const { trackIds, total, truncated } = await api<{
-                      trackIds: string[];
-                      total: number;
-                      truncated: boolean;
-                    }>("/track-ids", albumFilter);
-                    if (!trackIds.length) return;
-                    if (trackIds.every((id) => selected.has(id))) {
-                      void player.startAlbum(albumId);
-                      return;
-                    }
-                    setSelected(new Set(trackIds));
-                    setSelectedAlbumId(albumId);
-                    if (truncated)
-                      notify(
-                        `Выбраны первые ${trackIds.length.toLocaleString("ru-RU")} из ${total.toLocaleString("ru-RU")} треков альбома`,
-                      );
-                  } catch (error) {
-                    notify(
-                      error instanceof Error
-                        ? error.message
-                        : "Не удалось выбрать треки альбома",
-                    );
-                  }
-                }}
+                onSelectAlbum={selectCatalogAlbum}
                 onSelectionChange={(ids) => {
                   setSelectedAlbumId(null);
                   setSelected(new Set(ids));
                 }}
                 onMore={() => {
-                  if (tracks.hasNextPage && !tracks.isFetchingNextPage)
+                  if (
+                    !searchPending &&
+                    tracks.hasNextPage &&
+                    !tracks.isFetchingNextPage
+                  )
                     void tracks.fetchNextPage();
                 }}
                 onContextMenu={showCatalogMenu}

@@ -67,6 +67,7 @@ export function ArtistList({
   selected,
   loading,
   onSelectionChange,
+  onNavigate,
   onMore,
   onContextMenu,
   onPlayArtist,
@@ -82,6 +83,7 @@ export function ArtistList({
   selected: string[];
   loading: boolean;
   onSelectionChange: (names: string[]) => void;
+  onNavigate: (id: string) => void;
   onMore: () => void;
   onContextMenu: CatalogContextMenuHandler;
   onPlayArtist: (artist: string) => void;
@@ -231,6 +233,8 @@ export function ArtistList({
                   item.name,
                   items.map((entry) => entry.name),
                 );
+                if (!event.ctrlKey && !event.metaKey && !event.shiftKey)
+                  onNavigate(item.name);
               }}
               onContextMenu={(event) => {
                 const selectedIds = resolveContextSelection(
@@ -274,6 +278,7 @@ export function AlbumGrid({
   selected,
   currentAlbumId,
   onSelectionChange,
+  onNavigate,
   onMore,
   loading,
   onContextMenu,
@@ -291,6 +296,7 @@ export function AlbumGrid({
   selected: string[];
   currentAlbumId: string | null;
   onSelectionChange: (ids: string[]) => void;
+  onNavigate: (id: string) => void;
   onMore: () => void;
   loading: boolean;
   onContextMenu: CatalogContextMenuHandler;
@@ -421,7 +427,7 @@ export function AlbumGrid({
       {!albums.length ? (
         <div className="empty-small">
           <Disc3 size={30} />
-          <p>{loading ? "Загружаем альбомы…" : "Альбомов пока нет"}</p>
+          <p>{loading ? "Загружаем альбомы…" : "Альбомы не найдены"}</p>
         </div>
       ) : (
         <div style={{ height: virtual.getTotalSize(), position: "relative" }}>
@@ -532,6 +538,12 @@ export function AlbumGrid({
                             album.id,
                             albums.map((item) => item.id),
                           );
+                          if (
+                            !event.ctrlKey &&
+                            !event.metaKey &&
+                            !event.shiftKey
+                          )
+                            onNavigate(album.id);
                         }}
                       >
                         <div
@@ -639,7 +651,7 @@ export function TrackList({
   currentId?: string;
   loading: boolean;
   onPlay: (track: Track) => void;
-  onSelectAlbum: (albumId: string) => Promise<void>;
+  onSelectAlbum: (albumId: string) => void;
   onSelectionChange: (ids: string[]) => void;
   onMore: () => void;
   onContextMenu: CatalogContextMenuHandler;
@@ -733,7 +745,7 @@ export function TrackList({
                   ? hasOtherFilters
                     ? "Текущие фильтры скрывают сохранённую музыку."
                     : "Сохранённая музыка сейчас недоступна в каталоге."
-                  : "Выберите другие фильтры или обновите библиотеку."}
+                  : "Измените поисковый запрос или фильтры."}
           </p>
           {!loading && bookmarksOnly && (
             <button
