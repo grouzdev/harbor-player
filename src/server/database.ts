@@ -620,9 +620,10 @@ export class Catalog {
     ).map((r) => r.id);
   }
   filterValidity(filter: CatalogFilter): FilterValidity {
-    // A genre remains a selectable option even when other filters yield no tracks.
     const genreNames = new Set(
-      this.genres(emptyFilter).map((genre) => genre.name),
+      this.genres({ ...filter, genres: [], artists: [], albumIds: [] }).map(
+        (genre) => genre.name,
+      ),
     );
     const genres = filter.genres.filter((genre) => genreNames.has(genre));
     const artistNames = new Set(

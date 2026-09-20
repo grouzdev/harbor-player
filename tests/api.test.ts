@@ -504,7 +504,7 @@ describe("HTTP boundary", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      genres: ["Rock", "Electronic"],
+      genres: ["Rock"],
       artists: ["Shared"],
       albumIds: ["first-rock"],
     });

@@ -21,7 +21,7 @@ afterEach(async () => {
 });
 
 describe("facet filter validity", () => {
-  it("preserves compatible selections and removes only incompatible descendants", () => {
+  it("preserves compatible selections and removes incompatible descendants", () => {
     const first = service.catalog.addLibrary("First", root);
     const second = service.catalog.addLibrary("Second", `${root}-second`);
     const addTrack = (
@@ -86,7 +86,7 @@ describe("facet filter validity", () => {
         albumIds: ["shared-rock", "first-jazz", "second-electronic"],
       }),
     ).toEqual({
-      genres: ["Rock", "Electronic"],
+      genres: ["Rock"],
       artists: ["Shared"],
       albumIds: ["shared-rock"],
     });
@@ -98,12 +98,12 @@ describe("facet filter validity", () => {
       bookmarksOnly: true,
     };
     const valid = service.catalog.filterValidity(incompatible);
-    expect(valid.genres).toEqual(["Electronic"]);
+    expect(valid.genres).toEqual([]);
     expect(service.catalog.tracks({ ...incompatible, ...valid }).total).toBe(0);
     expect(
       service.catalog.filterValidity({ ...incompatible, bookmarksOnly: false })
         .genres,
-    ).toEqual(["Electronic"]);
+    ).toEqual([]);
 
     expect(
       service.catalog.filterValidity({

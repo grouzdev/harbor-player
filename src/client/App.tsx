@@ -99,7 +99,10 @@ import { Modal } from "./Modal";
 import { ListTile } from "./ListTile";
 import { buildTrackListRows } from "./track-grouping";
 import { resolveContextSelection, usePanelSelection } from "./panel-selection";
-import { useCatalogBrowsing } from "./useCatalogBrowsing";
+import {
+  filterForCatalogPanel,
+  useCatalogBrowsing,
+} from "./useCatalogBrowsing";
 import {
   folderSelectionKey,
   librarySelectionKey,
@@ -442,6 +445,20 @@ export function App() {
   } = useCatalogBrowsing();
   const [panelVisibility, setPanelVisibility] =
     useState<PanelVisibility>(readPanelVisibility);
+  const applyArtistSelection = useCallback(
+    (artists: string[]) => {
+      setSelectedArtists(artists);
+      setFilter((current) => ({ ...current, artists }));
+    },
+    [setFilter, setSelectedArtists],
+  );
+  const applyAlbumSelection = useCallback(
+    (albumIds: string[]) => {
+      setSelectedAlbums(albumIds);
+      setFilter((current) => ({ ...current, albumIds }));
+    },
+    [setFilter, setSelectedAlbums],
+  );
   const [appearance, setAppearance] = useState<AppearanceSettings>(() => {
     const cached = readCachedAppearance();
     applyAppearance(cached);
@@ -1447,11 +1464,13 @@ export function App() {
       pendingRefresh.current = undefined;
     };
   }, [ready, queryClient, notify, refresh, scheduleRefresh]);
-  // These panels offer choices; only global search narrows their contents.
-  const facetOptionsFilter = isSearching ? filter : emptyFilter;
+  const libraryFilter = filterForCatalogPanel(filter, "libraries");
+  const genreFilter = filterForCatalogPanel(filter, "genres");
+  const artistFilter = filterForCatalogPanel(filter, "artists");
+  const albumFilter = filterForCatalogPanel(filter, "albums");
   const libraries = useQuery({
-    queryKey: ["libraries", facetOptionsFilter],
-    queryFn: () => api<Library[]>(catalogUrl("libraries", facetOptionsFilter)),
+    queryKey: ["libraries", libraryFilter],
+    queryFn: () => api<Library[]>(catalogUrl("libraries", libraryFilter)),
     enabled: ready && !searchPending,
   });
   const folderKey = (libraryId: string, relativePath: string | null) =>
@@ -1485,10 +1504,10 @@ export function App() {
   }, [expandedFolderKeys, expandedLibraryIds, filter.folders]);
   const folderLevels = useQueries({
     queries: folderQueryTargets.map(({ libraryId, parent }) => ({
-      queryKey: ["library-folders", libraryId, parent, facetOptionsFilter],
+      queryKey: ["library-folders", libraryId, parent, libraryFilter],
       queryFn: () => {
         const query = new URLSearchParams({
-          filter: JSON.stringify(facetOptionsFilter),
+          filter: JSON.stringify(libraryFilter),
         });
         if (parent) query.set("parent", parent);
         return api<LibraryFolder[]>(
@@ -1546,14 +1565,12 @@ export function App() {
     queryFn: () => api<Job[]>("/jobs"),
     enabled: ready,
   });
-  const genreFilter = facetOptionsFilter;
   const genres = useQuery({
     queryKey: ["genres", genreFilter],
     queryFn: () =>
       api<{ name: string; count: number }[]>(catalogUrl("genres", genreFilter)),
     enabled: ready && !searchPending,
   });
-  const artistFilter = filter;
   const artists = useInfiniteQuery({
     queryKey: ["artists", artistFilter],
     initialPageParam: 0,
@@ -1641,8 +1658,15 @@ export function App() {
             albumIds: valid.data.albumIds,
           };
     });
-  }, [valid.data, isSearching, setFilter]);
-  const albumFilter = filter;
+    setSelectedArtists(valid.data.artists);
+    setSelectedAlbums(valid.data.albumIds);
+  }, [
+    valid.data,
+    isSearching,
+    setFilter,
+    setSelectedArtists,
+    setSelectedAlbums,
+  ]);
   const navigateFromPlayer = useCallback(
     async (
       target: "album" | "artist",
@@ -1798,11 +1822,11 @@ export function App() {
   );
   const selectAlbumArtist = useCallback(
     (artist: string) => {
-      setSelectedArtists([artist]);
+      applyArtistSelection([artist]);
       requestArtistScroll(artist);
       void navigateCatalog({ artists: [artist] });
     },
-    [setSelectedArtists, requestArtistScroll, navigateCatalog],
+    [applyArtistSelection, requestArtistScroll, navigateCatalog],
   );
   const selectCatalogAlbum = useCallback(
     (albumId: string) => {
@@ -1812,7 +1836,7 @@ export function App() {
       }
       setSelectedAlbumId(albumId);
       setSelected(new Set());
-      setSelectedAlbums([albumId]);
+      applyAlbumSelection([albumId]);
       requestAlbumScroll(albumId);
       void navigateCatalog({ albumIds: [albumId] }, "track");
     },
@@ -1821,7 +1845,7 @@ export function App() {
       player,
       setSelectedAlbumId,
       setSelected,
-      setSelectedAlbums,
+      applyAlbumSelection,
       requestAlbumScroll,
       navigateCatalog,
     ],
@@ -2458,7 +2482,7 @@ export function App() {
               total={artists.data?.pages[0]?.total || 0}
               selected={selectedArtists}
               loading={artists.isFetching || searchPending}
-              onSelectionChange={setSelectedArtists}
+              onSelectionChange={applyArtistSelection}
               onNavigate={(artist) =>
                 void navigateCatalog({ artists: [artist] })
               }
@@ -2516,7 +2540,7 @@ export function App() {
               total={albumTotal}
               selected={selectedAlbums}
               currentAlbumId={currentPlayerTrack?.albumKey ?? null}
-              onSelectionChange={setSelectedAlbums}
+              onSelectionChange={applyAlbumSelection}
               onNavigate={(albumId) =>
                 void navigateCatalog({ albumIds: [albumId] }, "track")
               }

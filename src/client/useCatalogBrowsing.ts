@@ -23,6 +23,22 @@ const panelSurface = (id: string) =>
     `[data-panel-id="${id}"] .selection-surface`,
   );
 
+export type CatalogPanelId =
+  "libraries" | "genres" | "artists" | "albums" | "tracks";
+
+export function filterForCatalogPanel(
+  filter: CatalogFilter,
+  panel: CatalogPanelId,
+): CatalogFilter {
+  if (filter.search.trim()) return filter;
+  if (panel === "libraries") return emptyFilter;
+  if (panel === "genres")
+    return { ...filter, genres: [], artists: [], albumIds: [] };
+  if (panel === "artists") return { ...filter, artists: [], albumIds: [] };
+  if (panel === "albums") return { ...filter, albumIds: [] };
+  return filter;
+}
+
 export function effectiveCatalogFilter(
   saved: CatalogFilter,
   search: string,
@@ -225,6 +241,8 @@ export function useCatalogBrowsing() {
         ...(isSearching ? emptyFilter : current),
         [kind === "artist" ? "artists" : "albumIds"]: ids,
       }));
+      if (kind === "artist") setSelectedArtists(ids);
+      else setSelectedAlbums(ids);
       if (isSearching) {
         setExpandedLibraryIds(new Set());
         setExpandedFolderKeys(new Set());
