@@ -1522,18 +1522,12 @@ body.selection-dragging * {
   margin-top: 14px;
 }
 .musicbrainz-field {
-  justify-content: space-between;
-  gap: 10px;
   font-size: var(--type-caption);
 }
 .musicbrainz-field label {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-.replace-existing {
-  color: #7f9299;
-  font-size: var(--type-caption);
 }
 .musicbrainz-warnings {
   margin-top: 12px;

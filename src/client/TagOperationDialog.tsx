@@ -124,7 +124,6 @@ export function ActionDialog({
   const [proposalFields, setProposalFields] = useState<Set<TagField>>(
     new Set(),
   );
-  const [replaceFields, setReplaceFields] = useState<Set<TagField>>(new Set());
   const primaryButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (summary.data) {
@@ -176,8 +175,7 @@ export function ActionDialog({
           const proposed: Record<string, unknown> = {};
           for (const field of proposalFields) {
             if (field === "cover" || touched.has(field)) continue;
-            if (item.missingFields.includes(field) || replaceFields.has(field))
-              proposed[field] = item.patch[field as keyof PerTrackTagPatch];
+            proposed[field] = item.patch[field as keyof PerTrackTagPatch];
           }
           if (Object.keys(proposed).length)
             itemPatches[item.trackId] = proposed as PerTrackTagPatch;
@@ -190,9 +188,7 @@ export function ActionDialog({
         ? musicBrainzProposal.items
             .filter(
               (item) =>
-                item.patch &&
-                (item.missingFields.includes("cover") ||
-                  replaceFields.has("cover")),
+                item.patch,
             )
             .map((item) => item.trackId)
         : undefined;
@@ -225,8 +221,7 @@ export function ActionDialog({
             (field) =>
               (field === "cover"
                 ? !!musicBrainzProposal.cover && !!item.patch
-                : !!item.patch?.[field as keyof PerTrackTagPatch]) &&
-              (item.missingFields.includes(field) || replaceFields.has(field)),
+                : !!item.patch?.[field as keyof PerTrackTagPatch]),
           ).length,
         0,
       )
@@ -300,7 +295,6 @@ export function ActionDialog({
                       setMusicBrainzCandidates(null);
                       setMusicBrainzProposal(null);
                       setProposalFields(new Set());
-                      setReplaceFields(new Set());
                       try {
                         const result = await api<{
                           candidates: MusicBrainzCandidate[];
@@ -363,7 +357,6 @@ export function ActionDialog({
                                   defaults.add(field);
                             }
                             setProposalFields(defaults);
-                            setReplaceFields(new Set());
                             setMusicBrainzProposal(proposal);
                           } catch (e) {
                             setMusicBrainzError((e as Error).message);
@@ -460,23 +453,6 @@ export function ActionDialog({
                                 }
                               />
                               {fieldLabels[field]}
-                            </label>
-                            <label className="replace-existing">
-                              <input
-                                type="checkbox"
-                                disabled={!selected}
-                                checked={replaceFields.has(field)}
-                                onChange={(event) =>
-                                  setReplaceFields((fields) => {
-                                    const next = new Set(fields);
-                                    event.target.checked
-                                      ? next.add(field)
-                                      : next.delete(field);
-                                    return next;
-                                  })
-                                }
-                              />
-                              заменить заполненные
                             </label>
                           </div>
                         );

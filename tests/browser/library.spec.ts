@@ -1665,14 +1665,13 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     `Сопоставлено: ${albumTrackCount} из ${albumTrackCount}`,
   );
   await expect(
-    page.getByRole("dialog").getByLabel("заменить заполненные").first(),
-  ).toBeVisible();
+    page.getByRole("dialog").getByLabel("заменить заполненные"),
+  ).toHaveCount(0);
   const coverField = page
     .getByRole("dialog")
     .locator(".musicbrainz-field")
     .filter({ hasText: "Обложка" });
   await coverField.getByRole("checkbox").first().check();
-  await coverField.getByRole("checkbox").nth(1).check();
   await page.getByRole("button", { name: "Далее" }).click();
   await page.getByRole("button", { name: /^Применить к/ }).click();
   await expect
