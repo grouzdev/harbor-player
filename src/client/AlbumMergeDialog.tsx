@@ -72,7 +72,9 @@ export function AlbumMergeDialog({
     () =>
       context.data
         ? [
-            ...new Set(context.data.sources.flatMap((source) => source.formats)),
+            ...new Set(
+              context.data.sources.flatMap((source) => source.formats),
+            ),
           ].filter((format) => !capabilities.writableFormats.includes(format))
         : [],
     [capabilities.writableFormats, context.data],
@@ -147,7 +149,8 @@ export function AlbumMergeDialog({
   const releaseIds = [
     ...new Set(sources.flatMap((source) => source.musicBrainzReleaseIds)),
   ];
-  const coverConflict = new Set(sources.map((source) => source.coverId)).size > 1;
+  const coverConflict =
+    new Set(sources.map((source) => source.coverId)).size > 1;
   return (
     <Modal
       wide
@@ -169,7 +172,10 @@ export function AlbumMergeDialog({
       )}
       {context.data && (
         <div className="album-merge-layout">
-          <section className="album-merge-sources" aria-label="Исходные альбомы">
+          <section
+            className="album-merge-sources"
+            aria-label="Исходные альбомы"
+          >
             <h3>Исходные альбомы</h3>
             {sources.map((source, index) => (
               <article className="album-merge-source" key={source.albumId}>
@@ -182,7 +188,9 @@ export function AlbumMergeDialog({
                 </div>
                 <div>
                   <strong>{sourceLabel(source, index)}</strong>
-                  <span>{artistsText(source) || "Без исполнителя альбома"}</span>
+                  <span>
+                    {artistsText(source) || "Без исполнителя альбома"}
+                  </span>
                   <small>
                     {source.year ?? "Без года"} · {count(source.trackCount)} тр.
                   </small>

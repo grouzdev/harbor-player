@@ -2292,6 +2292,193 @@ body {
     color 0.15s,
     background 0.15s;
 }
+
+.rating-control {
+  display: inline-flex;
+  position: relative;
+  min-width: 0;
+}
+.rating-stars {
+  display: inline-flex;
+  gap: 0;
+}
+.rating-stars button {
+  border: 0;
+  background: none;
+  color: color-mix(in srgb, currentColor 24%, transparent);
+  padding: 1px 2px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.rating-stars button.filled {
+  color: var(--accent);
+}
+.rating-stars button:focus-visible,
+.compact-rating:focus-visible,
+.viewed-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.compact-rating {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  min-width: 28px;
+  height: 26px;
+  padding: 0 5px;
+  cursor: pointer;
+}
+.compact-rating.rated {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.rating-popover,
+.filter-popover {
+  position: absolute;
+  z-index: 80;
+  right: 0;
+  top: calc(100% + 5px);
+  padding: 10px;
+  border: 1px solid #ffffff18;
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 12px 30px #0005;
+  white-space: nowrap;
+}
+.rating-popover .rating-clear {
+  display: block;
+  width: 100%;
+  margin-top: 7px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 5px;
+  cursor: pointer;
+}
+.viewed-toggle {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  background: var(--panel);
+  color: var(--muted);
+  opacity: 0;
+  cursor: pointer;
+}
+.viewed-toggle.viewed {
+  opacity: 1;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+}
+.album-card:hover .viewed-toggle,
+.album-card:focus-within .viewed-toggle,
+.track-album-header:hover .viewed-toggle,
+.track-album-header:focus-within .viewed-toggle {
+  opacity: 1;
+}
+.album-viewed-toggle {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+}
+.album-card > .rating-control {
+  margin: 3px 5px 0;
+}
+.track-row-actions,
+.track-album-state {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.track-row-actions {
+  display: contents;
+}
+.track-row-actions .rating-control {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  right: 65px;
+  transform: translateY(-50%);
+}
+.track-row:focus-within,
+.track-row:has(.rating-popover) {
+  z-index: 20;
+}
+.track-album-state {
+  margin-left: auto;
+}
+.rating-filter {
+  position: relative;
+  margin-left: auto;
+}
+.filter-button.active {
+  color: var(--accent);
+}
+.filter-popover {
+  min-width: 210px;
+  display: grid;
+  gap: 10px;
+  color: var(--text);
+  font-size: 12px;
+}
+.filter-popover label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.filter-boundaries {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.filter-boundaries label {
+  display: grid;
+  gap: 4px;
+  justify-content: stretch;
+}
+.filter-popover select {
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid #ffffff18;
+  border-radius: 6px;
+  padding: 5px;
+}
+.cover-mode-album-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cover-mode-album-state .viewed-toggle {
+  opacity: 1;
+}
+.cover-track-row {
+  display: flex;
+  align-items: center;
+}
+.cover-track-play {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  text-align: left;
+}
+.batch-rating {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 0;
+}
+.batch-rating-star {
+  color: var(--accent);
+  font-size: 26px;
+}
 .bookmark-toggle:hover:not(:disabled),
 .bookmark-toggle:focus-visible {
   color: #e6eee9;

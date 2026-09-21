@@ -10,6 +10,7 @@ import type {
   BookmarkKind,
   CatalogBookmark,
   CatalogFilter,
+  CatalogUserStatePatch,
   FacetRelevance,
   FilterValidity,
   Job,
@@ -55,6 +56,9 @@ const fromRow = (r: Row): Track =>
     musicBrainzReleaseId: r.musicBrainzReleaseId || null,
     musicBrainzReleaseGroupId: r.musicBrainzReleaseGroupId || null,
     available: Boolean(r.available),
+    rating: r.rating ?? null,
+    albumRating: r.albumRating ?? null,
+    albumViewed: Boolean(r.albumViewed),
   }) as Track;
 const parseStoredJson = (payload: string): unknown => {
   try {
@@ -189,13 +193,13 @@ export class Catalog {
   artistFolders(artists: string[]): ArtistFolder[] {
     const tracks = this.tracks(
       {
+        ...emptyFilter,
         libraryIds: [],
         folders: [],
         genres: [],
         artists,
         albumIds: [],
         search: "",
-        bookmarksOnly: false,
       },
       0,
       100000,
@@ -383,18 +387,37 @@ export class Catalog {
              WHERE t.albumArtists='[]' AND t.artists='[]' AND t.available=1
            ))
       `);
+      this.db.exec(`
+        DELETE FROM catalog_user_state
+        WHERE (kind='track' AND NOT EXISTS (SELECT 1 FROM tracks t WHERE t.id=catalog_user_state.id AND t.available=1))
+           OR (kind='album' AND NOT EXISTS (SELECT 1 FROM tracks t WHERE t.albumKey=catalog_user_state.id AND t.available=1))
+      `);
     })();
     return library;
   }
   track(id: string): Track | undefined {
-    const row = this.db.prepare("SELECT * FROM tracks WHERE id=?").get(id) as
-      Row | undefined;
+    const row = this.db
+      .prepare(
+        `SELECT t.*, trackState.rating rating, albumState.rating albumRating,
+                coalesce(albumState.viewed,0) albumViewed
+         FROM tracks t
+         LEFT JOIN catalog_user_state trackState ON trackState.kind='track' AND trackState.id=t.id
+         LEFT JOIN catalog_user_state albumState ON albumState.kind='album' AND albumState.id=t.albumKey
+         WHERE t.id=?`,
+      )
+      .get(id) as Row | undefined;
     return row ? fromRow(row) : undefined;
   }
   firstAlbumTrack(id: string): Track | undefined {
     const row = this.db
       .prepare(
-        `SELECT t.* FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE t.albumKey=? AND t.available=1 AND l.available=1 ORDER BY t.albumTitle COLLATE NOCASE, t.albumKey, coalesce(t.discNumber,0), coalesce(t.trackNumber,0), t.relativePath LIMIT 1`,
+        `SELECT t.*, trackState.rating rating, albumState.rating albumRating,
+                coalesce(albumState.viewed,0) albumViewed
+         FROM tracks t JOIN libraries l ON l.id=t.libraryId
+         LEFT JOIN catalog_user_state trackState ON trackState.kind='track' AND trackState.id=t.id
+         LEFT JOIN catalog_user_state albumState ON albumState.kind='album' AND albumState.id=t.albumKey
+         WHERE t.albumKey=? AND t.available=1 AND l.available=1
+         ORDER BY t.albumTitle COLLATE NOCASE, t.albumKey, coalesce(t.discNumber,0), coalesce(t.trackNumber,0), t.relativePath LIMIT 1`,
       )
       .get(id) as Row | undefined;
     return row ? fromRow(row) : undefined;
@@ -448,7 +471,53 @@ export class Catalog {
       .prepare("INSERT OR IGNORE INTO bookmarks(kind,id) VALUES (?,?)")
       .run(kind, id);
   }
-  where(filter: CatalogFilter): { sql: string; args: any[] } {
+  setUserState(
+    kind: "album" | "track",
+    ids: readonly string[],
+    patch: CatalogUserStatePatch,
+  ): void {
+    if (kind === "track" && patch.viewed !== undefined)
+      throw conflict("Статус «Просмотрено» доступен только для альбомов");
+    const targets = [...new Set(ids)];
+    this.db.transaction(() => {
+      const exists = this.db.prepare(
+        kind === "track"
+          ? "SELECT 1 FROM tracks WHERE id=? AND available=1"
+          : "SELECT 1 FROM tracks WHERE albumKey=? AND available=1",
+      );
+      for (const id of targets)
+        if (!exists.get(id))
+          throw conflict(
+            kind === "track"
+              ? "Один из треков не найден"
+              : "Один из альбомов не найден",
+          );
+      const read = this.db.prepare(
+        "SELECT rating,viewed FROM catalog_user_state WHERE kind=? AND id=?",
+      );
+      const remove = this.db.prepare(
+        "DELETE FROM catalog_user_state WHERE kind=? AND id=?",
+      );
+      const write = this.db.prepare(`
+        INSERT INTO catalog_user_state(kind,id,rating,viewed) VALUES (?,?,?,?)
+        ON CONFLICT(kind,id) DO UPDATE SET rating=excluded.rating,viewed=excluded.viewed
+      `);
+      for (const id of targets) {
+        const current = read.get(kind, id) as
+          { rating: number | null; viewed: number } | undefined;
+        const rating =
+          patch.rating !== undefined ? patch.rating : (current?.rating ?? null);
+        const viewed =
+          patch.viewed !== undefined ? patch.viewed : Boolean(current?.viewed);
+        if (rating === null && !viewed) remove.run(kind, id);
+        else write.run(kind, id, rating, Number(viewed));
+      }
+    })();
+  }
+  where(
+    filter: CatalogFilter,
+    personal: "none" | "album" | "track" = "none",
+  ): { sql: string; args: any[] } {
     const clauses = ["t.available=1", "l.available=1"];
     const args: any[] = [];
     const list = (values: string[], column: string) => {
@@ -534,10 +603,67 @@ export class Catalog {
         ))
       )`);
     }
+    if (personal === "album") {
+      const min = filter.albumRatingMin ?? null;
+      const max = filter.albumRatingMax ?? null;
+      const rated = min !== null || max !== null;
+      const ratingParts: string[] = [];
+      if (rated) {
+        const bounds: string[] = [];
+        if (min !== null && min !== undefined) {
+          bounds.push("state.rating>=?");
+          args.push(min);
+        }
+        if (max !== null && max !== undefined) {
+          bounds.push("state.rating<=?");
+          args.push(max);
+        }
+        ratingParts.push(
+          `EXISTS (SELECT 1 FROM catalog_user_state state WHERE state.kind='album' AND state.id=t.albumKey AND state.rating IS NOT NULL AND ${bounds.join(" AND ")})`,
+        );
+      }
+      if (filter.albumUnrated)
+        ratingParts.push(
+          `NOT EXISTS (SELECT 1 FROM catalog_user_state state WHERE state.kind='album' AND state.id=t.albumKey AND state.rating IS NOT NULL)`,
+        );
+      if (ratingParts.length) clauses.push(`(${ratingParts.join(" OR ")})`);
+      if (filter.albumViewed === "viewed")
+        clauses.push(
+          `EXISTS (SELECT 1 FROM catalog_user_state state WHERE state.kind='album' AND state.id=t.albumKey AND state.viewed=1)`,
+        );
+      else if (filter.albumViewed === "unviewed")
+        clauses.push(
+          `NOT EXISTS (SELECT 1 FROM catalog_user_state state WHERE state.kind='album' AND state.id=t.albumKey AND state.viewed=1)`,
+        );
+    } else if (personal === "track") {
+      const min = filter.trackRatingMin ?? null;
+      const max = filter.trackRatingMax ?? null;
+      const rated = min !== null || max !== null;
+      const ratingParts: string[] = [];
+      if (rated) {
+        const bounds: string[] = [];
+        if (min !== null && min !== undefined) {
+          bounds.push("state.rating>=?");
+          args.push(min);
+        }
+        if (max !== null && max !== undefined) {
+          bounds.push("state.rating<=?");
+          args.push(max);
+        }
+        ratingParts.push(
+          `EXISTS (SELECT 1 FROM catalog_user_state state WHERE state.kind='track' AND state.id=t.id AND ${bounds.join(" AND ")})`,
+        );
+      }
+      if (filter.trackUnrated)
+        ratingParts.push(
+          `NOT EXISTS (SELECT 1 FROM catalog_user_state state WHERE state.kind='track' AND state.id=t.id AND state.rating IS NOT NULL)`,
+        );
+      if (ratingParts.length) clauses.push(`(${ratingParts.join(" OR ")})`);
+    }
     return { sql: clauses.join(" AND "), args };
   }
   tracks(filter: CatalogFilter, offset = 0, limit = 200): Page<Track> {
-    const { sql, args } = this.where(filter);
+    const { sql, args } = this.where(filter, "track");
     const total = (
       this.db
         .prepare(
@@ -547,7 +673,12 @@ export class Catalog {
     ).n;
     const rows = this.db
       .prepare(
-        `SELECT t.* FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql} ORDER BY ${this.albumArtistOrder("t")}, t.year IS NOT NULL, t.year DESC, t.albumTitle COLLATE NOCASE, t.albumKey, coalesce(t.discNumber,0), coalesce(t.trackNumber,0), t.relativePath LIMIT ? OFFSET ?`,
+        `SELECT t.*, trackState.rating rating, albumState.rating albumRating,
+                coalesce(albumState.viewed,0) albumViewed
+         FROM tracks t JOIN libraries l ON l.id=t.libraryId
+         LEFT JOIN catalog_user_state trackState ON trackState.kind='track' AND trackState.id=t.id
+         LEFT JOIN catalog_user_state albumState ON albumState.kind='album' AND albumState.id=t.albumKey
+         WHERE ${sql} ORDER BY ${this.albumArtistOrder("t")}, t.year IS NOT NULL, t.year DESC, t.albumTitle COLLATE NOCASE, t.albumKey, coalesce(t.discNumber,0), coalesce(t.trackNumber,0), t.relativePath LIMIT ? OFFSET ?`,
       )
       .all(...args, limit, offset) as Row[];
     const albumIds = [...new Set(rows.map((row) => row.albumKey))];
@@ -609,7 +740,7 @@ export class Catalog {
     total: number;
     truncated: boolean;
   } {
-    const { sql, args } = this.where(filter);
+    const { sql, args } = this.where(filter, "track");
     const total = (
       this.db
         .prepare(
@@ -769,7 +900,7 @@ export class Catalog {
     ), '')`;
   }
   albums(filter: CatalogFilter, offset = 0, limit = 120): Page<Album> {
-    const { sql, args } = this.where(filter);
+    const { sql, args } = this.where(filter, "album");
     const total = (
       this.db
         .prepare(
@@ -794,11 +925,13 @@ export class Catalog {
            FROM tracks t JOIN libraries l ON l.id=t.libraryId
            WHERE ${sql}
          )
-         SELECT id, title, artists, year, coverId, trackCount
+         SELECT ranked.id, title, artists, year, coverId, trackCount,
+                state.rating rating, coalesce(state.viewed,0) viewed
          FROM ranked
-         WHERE albumRank=1
+         LEFT JOIN catalog_user_state state ON state.kind='album' AND state.id=ranked.id
+         WHERE ranked.albumRank=1
          ORDER BY artistGroupKey, year IS NOT NULL, year DESC,
-                  title COLLATE NOCASE, id
+                  title COLLATE NOCASE, ranked.id
          LIMIT ? OFFSET ?`,
       )
       .all(...args, limit, offset) as Row[];
@@ -818,6 +951,8 @@ export class Catalog {
             artists: album.artists.length
               ? album.artists
               : fallbackArtists.get(album.id) || [],
+            rating: album.rating ?? null,
+            viewed: Boolean(album.viewed),
           }) as Album,
       ),
       total,
@@ -838,7 +973,9 @@ export class Catalog {
       byAlbum.set(track.albumKey, group);
     }
     if (ids.some((id) => !byAlbum.has(id)))
-      throw conflict("Один из выбранных альбомов больше недоступен. Обновите выбор.");
+      throw conflict(
+        "Один из выбранных альбомов больше недоступен. Обновите выбор.",
+      );
 
     const locations = new Map<
       string,
@@ -883,7 +1020,9 @@ export class Catalog {
               .sort()
               .at(-1) ?? null,
           trackCount: albumTracks.length,
-          formats: [...new Set(albumTracks.map((track) => track.format))].sort(),
+          formats: [
+            ...new Set(albumTracks.map((track) => track.format)),
+          ].sort(),
           musicBrainzReleaseIds: [
             ...new Set(
               albumTracks
@@ -946,8 +1085,10 @@ export class Catalog {
     const albumRows = this.db
       .prepare(
         `SELECT t.albumKey id, t.albumTitle title, t.albumArtists artists, t.year,
-                max(t.coverId) coverId, count(*) trackCount
+                max(t.coverId) coverId, count(*) trackCount,
+                state.rating rating, coalesce(state.viewed,0) viewed
          FROM tracks t JOIN libraries l ON l.id=t.libraryId
+         LEFT JOIN catalog_user_state state ON state.kind='album' AND state.id=t.albumKey
          WHERE ${available} AND t.albumTitle LIKE ? ESCAPE '\\'
          GROUP BY t.albumKey
          ORDER BY CASE WHEN t.albumTitle=? COLLATE NOCASE THEN 0 WHEN t.albumTitle LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END,
@@ -957,7 +1098,11 @@ export class Catalog {
       .all(contains, value, prefix, limit) as Row[];
     const trackRows = this.db
       .prepare(
-        `SELECT t.* FROM tracks t JOIN libraries l ON l.id=t.libraryId
+        `SELECT t.*, trackState.rating rating, albumState.rating albumRating,
+                coalesce(albumState.viewed,0) albumViewed
+         FROM tracks t JOIN libraries l ON l.id=t.libraryId
+         LEFT JOIN catalog_user_state trackState ON trackState.kind='track' AND trackState.id=t.id
+         LEFT JOIN catalog_user_state albumState ON albumState.kind='album' AND albumState.id=t.albumKey
          WHERE ${available} AND (
            t.title LIKE ? ESCAPE '\\' OR t.albumTitle LIKE ? ESCAPE '\\' OR t.artists LIKE ? ESCAPE '\\'
          )
@@ -988,6 +1133,8 @@ export class Catalog {
             artists: album.artists.length
               ? album.artists
               : fallbackArtists.get(album.id) || [],
+            rating: album.rating ?? null,
+            viewed: Boolean(album.viewed),
           }) as Album,
       ),
       tracks: trackRows.map(fromRow),
@@ -995,6 +1142,19 @@ export class Catalog {
   }
   upsert(track: Track, scanId: string | null = null): void {
     this.db.transaction(() => {
+      const previous = this.db
+        .prepare("SELECT albumKey FROM tracks WHERE id=?")
+        .get(track.id) as { albumKey: string } | undefined;
+      if (previous && previous.albumKey !== track.albumKey)
+        this.db
+          .prepare(
+            `
+            INSERT OR IGNORE INTO catalog_user_state(kind,id,rating,viewed)
+            SELECT 'album',?,rating,viewed FROM catalog_user_state
+            WHERE kind='album' AND id=?
+          `,
+          )
+          .run(track.albumKey, previous.albumKey);
       this.db
         .prepare(
           `INSERT INTO tracks (id,libraryId,relativePath,title,artists,albumTitle,albumArtists,albumKey,genres,year,trackNumber,discNumber,duration,format,size,mtimeMs,coverId,available,scanId,missingTagFields,musicBrainzRecordingId,musicBrainzReleaseId,musicBrainzReleaseGroupId)

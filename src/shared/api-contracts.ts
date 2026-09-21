@@ -53,6 +53,9 @@ export const trackSchema: z.ZodType<Track> = z.object({
   musicBrainzReleaseId: z.string().nullable().optional(),
   musicBrainzReleaseGroupId: z.string().nullable().optional(),
   available: z.boolean(),
+  rating: z.number().int().min(1).max(5).nullable().default(null),
+  albumRating: z.number().int().min(1).max(5).nullable().default(null),
+  albumViewed: z.boolean().default(false),
 }) as z.ZodType<Track>;
 
 export const pageSchema = <T extends z.ZodType>(item: T) =>
@@ -91,6 +94,8 @@ const albumSchema = z.object({
   year: z.number().nullable(),
   coverId: z.string().nullable(),
   trackCount: z.number().int().nonnegative(),
+  rating: z.number().int().min(1).max(5).nullable().default(null),
+  viewed: z.boolean().default(false),
 });
 const albumMergeContextSchema = z.object({
   compatible: z.boolean(),
@@ -269,6 +274,7 @@ export function apiResponseContract(method: string, pathname: string) {
   if (/^\/api\/libraries\/[^/]+\/(remove|scan)$/.test(pathname))
     return jobSchema;
   if (pathname === "/api/bookmarks") return apiResponseSchemas.bookmarks;
+  if (pathname === "/api/catalog-user-state") return okSchema;
   if (
     pathname === "/api/appearance" ||
     pathname === "/api/appearance/background"

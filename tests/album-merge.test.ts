@@ -55,9 +55,9 @@ function track(
 
 describe("album identity", () => {
   it("normalizes disc folders and keeps an explicit zero year distinct", () => {
-    expect(normalizedAlbumFolder(path.join("Artist", "Album", "CD1", "01.flac"))).toBe(
-      path.join("Artist", "Album"),
-    );
+    expect(
+      normalizedAlbumFolder(path.join("Artist", "Album", "CD1", "01.flac")),
+    ).toBe(path.join("Artist", "Album"));
     const common = {
       libraryId: "library",
       relativePath: path.join("Artist", "Album", "01.flac"),
@@ -74,10 +74,20 @@ describe("album identity", () => {
     catalog = new Catalog(root);
     const library = catalog.addLibrary("Library", root);
     catalog.upsert(
-      track(library.id, "first", path.join("Artist", "Album", "CD1", "01.flac"), "old-release-a"),
+      track(
+        library.id,
+        "first",
+        path.join("Artist", "Album", "CD1", "01.flac"),
+        "old-release-a",
+      ),
     );
     catalog.upsert(
-      track(library.id, "second", path.join("Artist", "Album", "CD2", "02.flac"), "old-release-b"),
+      track(
+        library.id,
+        "second",
+        path.join("Artist", "Album", "CD2", "02.flac"),
+        "old-release-b",
+      ),
     );
     catalog.setBookmark("album", "old-release-a", true);
     catalog.setBookmark("album", "old-release-b", true);
@@ -93,12 +103,13 @@ describe("album identity", () => {
       albumArtists: ["Album artist"],
       year: 2020,
     });
-    expect(catalog.tracks(emptyFilter).items.map((item) => item.albumKey)).toEqual([
-      newKey,
-      newKey,
-    ]);
+    expect(
+      catalog.tracks(emptyFilter).items.map((item) => item.albumKey),
+    ).toEqual([newKey, newKey]);
     expect(catalog.bookmarks()).toContainEqual({ kind: "album", id: newKey });
-    expect(catalog.bookmarks().filter((item) => item.kind === "album")).toHaveLength(1);
+    expect(
+      catalog.bookmarks().filter((item) => item.kind === "album"),
+    ).toHaveLength(1);
   });
 });
 
@@ -109,8 +120,23 @@ describe("album merge context and execution guard", () => {
     const library = catalog.addLibrary("Library", root);
     const first = "first-album";
     const second = "second-album";
-    catalog.upsert(track(library.id, "first", path.join("Artist", "Album", "CD1", "01.flac"), first));
-    catalog.upsert(track(library.id, "second", path.join("Artist", "Album", "CD2", "02.flac"), second, "Other album"));
+    catalog.upsert(
+      track(
+        library.id,
+        "first",
+        path.join("Artist", "Album", "CD1", "01.flac"),
+        first,
+      ),
+    );
+    catalog.upsert(
+      track(
+        library.id,
+        "second",
+        path.join("Artist", "Album", "CD2", "02.flac"),
+        second,
+        "Other album",
+      ),
+    );
 
     expect(catalog.albumMergeContext([first, second])).toMatchObject({
       compatible: true,
@@ -123,7 +149,13 @@ describe("album merge context and execution guard", () => {
     });
 
     catalog.upsert(
-      track(library.id, "second", path.join("Artist", "Elsewhere", "02.flac"), second, "Other album"),
+      track(
+        library.id,
+        "second",
+        path.join("Artist", "Elsewhere", "02.flac"),
+        second,
+        "Other album",
+      ),
     );
     expect(catalog.albumMergeContext([first, second])).toMatchObject({
       compatible: false,
@@ -142,8 +174,18 @@ describe("album merge context and execution guard", () => {
       verificationDate: new Date().toISOString(),
     };
     const library = service.catalog.addLibrary("Library", root);
-    service.catalog.upsert(track(library.id, "first", "Album/01.flac", "first-album"));
-    service.catalog.upsert(track(library.id, "second", "Album/02.flac", "second-album", "Other album"));
+    service.catalog.upsert(
+      track(library.id, "first", "Album/01.flac", "first-album"),
+    );
+    service.catalog.upsert(
+      track(
+        library.id,
+        "second",
+        "Album/02.flac",
+        "second-album",
+        "Other album",
+      ),
+    );
 
     const preview = await service.preview(
       "tags",

@@ -10,6 +10,11 @@ import {
   type Track,
 } from "../shared/contracts";
 import { api, catalogUrl, duration } from "./api";
+import {
+  RatingControl,
+  ViewedToggle,
+  type UserStateChange,
+} from "./RatingControl";
 
 type SearchItem =
   | { kind: "track"; value: Track }
@@ -28,11 +33,15 @@ export function CoverMode({
   playing,
   onClose,
   onPlayTrack,
+  onUserStateChange,
+  pendingUserStateKeys,
 }: {
   track: Track;
   playing: boolean;
   onClose: () => void;
   onPlayTrack: (track: Track) => Promise<boolean>;
+  onUserStateChange: UserStateChange;
+  pendingUserStateKeys: Set<string>;
 }) {
   const [artworkOpen, setArtworkOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -100,6 +109,21 @@ export function CoverMode({
               {track.albumTitle || "Без альбома"}
               {track.year ? ` · ${track.year}` : ""}
             </p>
+            <div className="cover-mode-album-state">
+              <RatingControl
+                kind="album"
+                id={track.albumKey}
+                rating={track.albumRating}
+                pending={pendingUserStateKeys.has(`album:${track.albumKey}`)}
+                onChange={onUserStateChange}
+              />
+              <ViewedToggle
+                id={track.albumKey}
+                viewed={track.albumViewed}
+                pending={pendingUserStateKeys.has(`album:${track.albumKey}`)}
+                onChange={onUserStateChange}
+              />
+            </div>
           </div>
           <div
             className="cover-tracklist"
@@ -138,29 +162,42 @@ export function CoverMode({
                     ? `${item.discNumber}.${item.trackNumber || "—"}`
                     : item.trackNumber || "—";
                 return (
-                  <button
-                    type="button"
+                  <div
                     key={item.id}
                     data-cover-track-id={item.id}
                     className={`cover-track-row ${current ? "current" : ""}`}
                     aria-current={current ? "true" : undefined}
-                    onClick={() => void onPlayTrack(item)}
                   >
-                    <span className="cover-track-number">
-                      {current && playing ? (
-                        <span
-                          className="playing-bars"
-                          aria-label="Воспроизводится"
-                        />
-                      ) : (
-                        number
-                      )}
-                    </span>
-                    <span className="cover-track-title">
-                      {item.title || "Без названия"}
-                    </span>
-                    <span>{duration(item.duration)}</span>
-                  </button>
+                    <button
+                      type="button"
+                      className="cover-track-play"
+                      onClick={() => void onPlayTrack(item)}
+                      aria-label={`Воспроизвести «${item.title || "Без названия"}»`}
+                    >
+                      <span className="cover-track-number">
+                        {current && playing ? (
+                          <span
+                            className="playing-bars"
+                            aria-label="Воспроизводится"
+                          />
+                        ) : (
+                          number
+                        )}
+                      </span>
+                      <span className="cover-track-title">
+                        {item.title || "Без названия"}
+                      </span>
+                      <span>{duration(item.duration)}</span>
+                    </button>
+                    <RatingControl
+                      kind="track"
+                      id={item.id}
+                      rating={item.rating}
+                      compact
+                      pending={pendingUserStateKeys.has(`track:${item.id}`)}
+                      onChange={onUserStateChange}
+                    />
+                  </div>
                 );
               })
             )}

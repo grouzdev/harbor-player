@@ -54,6 +54,7 @@ import {
   type Capabilities,
   type CatalogBookmark,
   type CatalogFilter,
+  type CatalogUserStatePatch,
   type FacetRelevance,
   type FilterValidity,
   type Job,
@@ -114,6 +115,8 @@ import { CoverMode, QuickSearchDialog } from "./CoverMode";
 import { ContextMenu, type ContextMenuState } from "./ContextMenu";
 import { UpdatePanel } from "./UpdatePanel";
 import { BookmarkToggle, type BookmarkChange } from "./BookmarkToggle";
+import type { UserStateChange } from "./RatingControl";
+import { RatingFilter } from "./RatingFilter";
 import { GenrePanel, LibraryPanel } from "./LibraryGenrePanels";
 import {
   ArtistList,
@@ -177,6 +180,65 @@ type PanelVisibility = Record<PanelId, boolean>;
 const panelVisibilityStorageKey = "harbor-player-panel-visibility-v1";
 const legacyPanelVisibilityStorageKey = "mml-panel-visibility-v1";
 const virtualPanelTopInset = 14;
+
+function updateUserStateCache(
+  value: unknown,
+  kind: "album" | "track",
+  ids: ReadonlySet<string>,
+  patch: CatalogUserStatePatch,
+): unknown {
+  if (Array.isArray(value))
+    return value.map((item) => updateUserStateCache(item, kind, ids, patch));
+  if (!value || typeof value !== "object") return value;
+  const record = value as Record<string, unknown>;
+  let next: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(record))
+    next[key] = updateUserStateCache(child, kind, ids, patch);
+  const isTrack =
+    typeof record.id === "string" &&
+    typeof record.albumKey === "string" &&
+    "duration" in record;
+  const isAlbum =
+    typeof record.id === "string" && "trackCount" in record && !isTrack;
+  if (kind === "track" && isTrack && ids.has(record.id as string)) {
+    if (patch.rating !== undefined) next.rating = patch.rating;
+  } else if (kind === "album") {
+    if (isAlbum && ids.has(record.id as string)) {
+      if (patch.rating !== undefined) next.rating = patch.rating;
+      if (patch.viewed !== undefined) next.viewed = patch.viewed;
+    }
+    if (isTrack && ids.has(record.albumKey as string)) {
+      if (patch.rating !== undefined) next.albumRating = patch.rating;
+      if (patch.viewed !== undefined) next.albumViewed = patch.viewed;
+    }
+  }
+  return next;
+}
+
+function cachedAlbumViewed(
+  queryClient: ReturnType<typeof useQueryClient>,
+  id: string,
+) {
+  const stack = queryClient
+    .getQueryCache()
+    .findAll()
+    .map((query) => query.state.data as unknown);
+  while (stack.length) {
+    const value = stack.pop();
+    if (Array.isArray(value)) {
+      stack.push(...value);
+      continue;
+    }
+    if (!value || typeof value !== "object") continue;
+    const record = value as Record<string, unknown>;
+    if (record.id === id && record.trackCount !== undefined)
+      return Boolean(record.viewed);
+    if (record.albumKey === id && record.duration !== undefined)
+      return Boolean(record.albumViewed);
+    stack.push(...Object.values(record));
+  }
+  return false;
+}
 const defaultPanelVisibility: PanelVisibility = {
   libraries: true,
   genres: true,
@@ -507,6 +569,14 @@ export function App() {
   const pendingBookmarkKeysRef = useRef(new Set<string>());
   const bookmarkWriteChain = useRef(Promise.resolve());
   const bookmarkCatalogDirty = useRef(false);
+  const [pendingUserStateKeys, setPendingUserStateKeys] = useState<Set<string>>(
+    new Set(),
+  );
+  const pendingUserStateKeysRef = useRef(new Set<string>());
+  const [ratingDialog, setRatingDialog] = useState<{
+    kind: "album" | "track";
+    ids: string[];
+  } | null>(null);
   const notify = useCallback((message: string) => setToast(message), []);
   const player = usePlayer(notify);
   const [isFullscreen, setIsFullscreen] = useState(
@@ -1056,6 +1126,62 @@ export function App() {
       changeBookmarks(kind, [id], bookmarked),
     [changeBookmarks],
   );
+  const changeUserState = useCallback<UserStateChange>(
+    (kind, ids, patch) => {
+      const targets = [...new Set(ids)];
+      if (
+        !targets.length ||
+        targets.some((id) =>
+          pendingUserStateKeysRef.current.has(`${kind}:${id}`),
+        )
+      )
+        return;
+      const targetSet = new Set(targets);
+      const snapshots = queryClient
+        .getQueryCache()
+        .findAll()
+        .filter((query) => query.state.data !== undefined)
+        .map((query) => ({ key: query.queryKey, data: query.state.data }));
+      const previousPlayerTrack = player.queue?.track;
+      for (const id of targets)
+        pendingUserStateKeysRef.current.add(`${kind}:${id}`);
+      setPendingUserStateKeys(new Set(pendingUserStateKeysRef.current));
+      for (const snapshot of snapshots)
+        queryClient.setQueryData(snapshot.key, (current: unknown) =>
+          updateUserStateCache(current, kind, targetSet, patch),
+        );
+      player.updateTrack(
+        (track) => updateUserStateCache(track, kind, targetSet, patch) as Track,
+      );
+      void api("/catalog-user-state", { kind, ids: targets, patch })
+        .catch((error) => {
+          for (const snapshot of snapshots)
+            queryClient.setQueryData(snapshot.key, snapshot.data);
+          if (previousPlayerTrack)
+            player.updateTrack(() => previousPlayerTrack);
+          notify(
+            error instanceof Error
+              ? error.message
+              : "Не удалось сохранить оценку",
+          );
+        })
+        .finally(async () => {
+          for (const id of targets)
+            pendingUserStateKeysRef.current.delete(`${kind}:${id}`);
+          setPendingUserStateKeys(new Set(pendingUserStateKeysRef.current));
+          await queryClient.invalidateQueries({
+            predicate: (query) =>
+              [
+                "albums",
+                "tracks",
+                "quick-search",
+                "cover-mode-tracks",
+              ].includes(String(query.queryKey[0])),
+          });
+        });
+    },
+    [notify, player, queryClient],
+  );
   const showCatalogMenu = useCallback(
     (
       event: React.MouseEvent,
@@ -1118,13 +1244,49 @@ export function App() {
             disabled: bookmarksUnavailable || bookmarkPending,
             onSelect: () => changeBookmarks(kind, ids, !allBookmarked),
           },
+          ...(kind !== "artist"
+            ? [
+                {
+                  label: `Изменить оценку…${suffix}`,
+                  icon: <span aria-hidden="true">★</span>,
+                  disabled: ids.some((item) =>
+                    pendingUserStateKeys.has(`${kind}:${item}`),
+                  ),
+                  onSelect: () =>
+                    setRatingDialog({ kind: kind as "album" | "track", ids }),
+                },
+              ]
+            : []),
+          ...(kind === "album"
+            ? [
+                {
+                  label: ids.every((item) =>
+                    cachedAlbumViewed(queryClient, item),
+                  )
+                    ? `Отметить непросмотренными${suffix}`
+                    : `Отметить просмотренными${suffix}`,
+                  disabled: ids.some((item) =>
+                    pendingUserStateKeys.has(`album:${item}`),
+                  ),
+                  onSelect: () => {
+                    const viewed = !ids.every((item) =>
+                      cachedAlbumViewed(queryClient, item),
+                    );
+                    changeUserState("album", ids, { viewed });
+                  },
+                },
+              ]
+            : []),
           ...(kind === "album" && ids.length > 1
             ? [
                 {
                   label: `Объединить альбомы${suffix}`,
                   icon: <Combine size={16} />,
                   onSelect: () => {
-                    setAlbumMergeSelection({ albumIds: ids, anchorAlbumId: id });
+                    setAlbumMergeSelection({
+                      albumIds: ids,
+                      anchorAlbumId: id,
+                    });
                     setModal("album-merge");
                   },
                 },
@@ -1236,11 +1398,14 @@ export function App() {
       bookmarks.isPending,
       bookmarksUnavailable,
       changeBookmarks,
+      changeUserState,
       filter,
       filterBySelection,
       isSearching,
       notify,
       pendingBookmarkKeys,
+      pendingUserStateKeys,
+      queryClient,
     ],
   );
   const showGenreMenu = useCallback(
@@ -2499,7 +2664,10 @@ export function App() {
                 selected={filter.artists.length}
                 active={filter.artists.length > 0}
                 resetLabel="Сбросить исполнителей"
-                onReset={() => setFilter((f) => ({ ...f, artists: [] }))}
+                onReset={() => {
+                  setSelectedArtists([]);
+                  setFilter((f) => ({ ...f, artists: [] }));
+                }}
               />
             </div>
             <ArtistList
@@ -2552,12 +2720,21 @@ export function App() {
           >
             <div className="panel-heading">
               <h2>Альбомы</h2>
+              <RatingFilter
+                kind="album"
+                filter={filter}
+                disabled={isSearching}
+                onChange={setFilter}
+              />
               <PanelSelectionIndicator
                 total={albumTotal}
                 selected={filter.albumIds.length}
                 active={filter.albumIds.length > 0}
                 resetLabel="Сбросить альбомы"
-                onReset={() => setFilter((f) => ({ ...f, albumIds: [] }))}
+                onReset={() => {
+                  setSelectedAlbums([]);
+                  setFilter((f) => ({ ...f, albumIds: [] }));
+                }}
               />
             </div>
             <AlbumGrid
@@ -2586,6 +2763,8 @@ export function App() {
               bookmarksUnavailable={bookmarksUnavailable}
               pendingBookmarkKeys={pendingBookmarkKeys}
               onBookmarkChange={changeBookmark}
+              pendingUserStateKeys={pendingUserStateKeys}
+              onUserStateChange={changeUserState}
               scrollTarget={
                 albumScrollTarget?.filterKey === filterKey
                   ? albumScrollTarget
@@ -2600,6 +2779,12 @@ export function App() {
           >
             <div className="panel-heading tracks-heading">
               <h2>Треки</h2>
+              <RatingFilter
+                kind="track"
+                filter={filter}
+                disabled={isSearching}
+                onChange={setFilter}
+              />
               <PanelSelectionIndicator
                 total={total}
                 selected={selected.size}
@@ -2683,6 +2868,8 @@ export function App() {
                 bookmarksUnavailable={bookmarksUnavailable}
                 pendingBookmarkKeys={pendingBookmarkKeys}
                 onBookmarkChange={changeBookmark}
+                pendingUserStateKeys={pendingUserStateKeys}
+                onUserStateChange={changeUserState}
                 bookmarksOnly={filter.bookmarksOnly}
                 bookmarkCount={bookmarks.data?.length || 0}
                 hasOtherFilters={
@@ -2721,6 +2908,8 @@ export function App() {
           playing={player.playing}
           onClose={() => setCoverMode(false)}
           onPlayTrack={(track) => player.startAlbum(track.albumKey, track.id)}
+          onUserStateChange={changeUserState}
+          pendingUserStateKeys={pendingUserStateKeys}
         />
       )}
       <Player
@@ -2742,6 +2931,8 @@ export function App() {
           setCoverSearch("");
           setCoverMode((current) => !current);
         }}
+        onUserStateChange={changeUserState}
+        pendingUserStateKeys={pendingUserStateKeys}
       />
       <ContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
       <UpdatePanel />
@@ -2759,6 +2950,40 @@ export function App() {
       )}
       {modal === "add" && (
         <AddLibraryDialog onClose={() => setModal(null)} onAdded={refresh} />
+      )}
+      {ratingDialog && (
+        <Modal title="Изменить оценку" onClose={() => setRatingDialog(null)}>
+          <div className="batch-rating" role="group" aria-label="Новая оценка">
+            {[1, 2, 3, 4, 5].map((rating) => (
+              <button
+                type="button"
+                key={rating}
+                className="batch-rating-star"
+                aria-label={`${rating} из 5`}
+                onClick={() => {
+                  changeUserState(ratingDialog.kind, ratingDialog.ids, {
+                    rating: rating as 1 | 2 | 3 | 4 | 5,
+                  });
+                  setRatingDialog(null);
+                }}
+              >
+                ★
+              </button>
+            ))}
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => {
+                changeUserState(ratingDialog.kind, ratingDialog.ids, {
+                  rating: null,
+                });
+                setRatingDialog(null);
+              }}
+            >
+              Без оценки
+            </button>
+          </div>
+        </Modal>
       )}
       {modal === "rename-library" && libraryToRename && (
         <RenameLibraryDialog

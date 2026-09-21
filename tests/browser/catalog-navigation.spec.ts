@@ -344,7 +344,9 @@ test("album merge uses the multi-selection anchor and blocks an errored preview"
     expect.objectContaining({
       kind: "tags",
       intent: "album-merge",
-      selection: { filter: { ...emptyFilter, albumIds: ["Queen-0", "Queen-1"] } },
+      selection: {
+        filter: { ...emptyFilter, albumIds: ["Queen-0", "Queen-1"] },
+      },
       patch: expect.objectContaining({
         albumTitle: "Единый альбом",
         albumArtists: ["Queen"],

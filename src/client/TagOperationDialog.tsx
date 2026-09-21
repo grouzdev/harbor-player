@@ -186,10 +186,7 @@ export function ActionDialog({
         musicBrainzProposal?.cover;
       const coverTrackIds = remoteCover
         ? musicBrainzProposal.items
-            .filter(
-              (item) =>
-                item.patch,
-            )
+            .filter((item) => item.patch)
             .map((item) => item.trackId)
         : undefined;
       const preview = await api<OperationPreview>("/operations/preview", {
@@ -217,11 +214,10 @@ export function ActionDialog({
     ? musicBrainzProposal.items.reduce(
         (count, item) =>
           count +
-          [...proposalFields].filter(
-            (field) =>
-              (field === "cover"
-                ? !!musicBrainzProposal.cover && !!item.patch
-                : !!item.patch?.[field as keyof PerTrackTagPatch]),
+          [...proposalFields].filter((field) =>
+            field === "cover"
+              ? !!musicBrainzProposal.cover && !!item.patch
+              : !!item.patch?.[field as keyof PerTrackTagPatch],
           ).length,
         0,
       )

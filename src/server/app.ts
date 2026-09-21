@@ -15,7 +15,10 @@ import {
   tagPatchSchema,
 } from "../shared/contracts.js";
 import { apiResponseContract } from "../shared/api-contracts.js";
-import type { BookmarkKind } from "../shared/contracts.js";
+import type {
+  BookmarkKind,
+  CatalogUserStatePatch,
+} from "../shared/contracts.js";
 import { MusicService } from "./service.js";
 import { errorMessage } from "./config.js";
 import { normalizeWebpCover } from "./cover-image.js";
@@ -286,6 +289,28 @@ export async function createApp(options: {
       body.bookmarked,
     );
     return service.catalog.bookmarks();
+  });
+  app.post("/api/catalog-user-state", async (request) => {
+    const body = z
+      .object({
+        kind: z.enum(["album", "track"]),
+        ids: z.array(z.string().min(1).max(1000)).min(1).max(100000),
+        patch: z
+          .object({
+            rating: z.number().int().min(1).max(5).nullable().optional(),
+            viewed: z.boolean().optional(),
+          })
+          .strict()
+          .refine((patch) => Object.keys(patch).length > 0),
+      })
+      .strict()
+      .parse(request.body);
+    service.catalog.setUserState(
+      body.kind,
+      body.ids,
+      body.patch as CatalogUserStatePatch,
+    );
+    return { ok: true as const };
   });
   app.post("/api/libraries", async (request) => {
     const body = z

@@ -15,6 +15,7 @@ import {
 import type { CatalogFilter, Track } from "../shared/contracts";
 import { api, duration } from "./api";
 import { readMigratedStorageValue } from "./storage";
+import { RatingControl, type UserStateChange } from "./RatingControl";
 
 interface Queue {
   id: string;
@@ -275,6 +276,10 @@ export function usePlayer(notify: (message: string) => void) {
     setVolume,
     setShuffle,
     setRepeat,
+    updateTrack: (update: (track: Track) => Track) =>
+      setQueue((current) =>
+        current?.track ? { ...current, track: update(current.track) } : current,
+      ),
     seek: (value: number) => {
       if (audio.current) audio.current.currentTime = value;
     },
@@ -287,12 +292,16 @@ export function Player({
   onNavigateToArtist,
   coverMode,
   onToggleCoverMode,
+  onUserStateChange,
+  pendingUserStateKeys,
 }: {
   player: ReturnType<typeof usePlayer>;
   onNavigateToAlbum: (albumId: string, albumArtists: string[]) => void;
   onNavigateToArtist: (artist: string) => void;
   coverMode: boolean;
   onToggleCoverMode: () => void;
+  onUserStateChange: UserStateChange;
+  pendingUserStateKeys: Set<string>;
 }) {
   const track = player.queue?.track;
   const seekProgress =
@@ -374,6 +383,16 @@ export function Player({
           )}
         </div>
         {track && <span className="format-badge">{track.format}</span>}
+        {track && (
+          <RatingControl
+            kind="track"
+            id={track.id}
+            rating={track.rating}
+            compact
+            pending={pendingUserStateKeys.has(`track:${track.id}`)}
+            onChange={onUserStateChange}
+          />
+        )}
       </div>
       <div className="transport">
         <div className="transport-buttons">

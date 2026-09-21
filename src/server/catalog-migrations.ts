@@ -24,6 +24,14 @@ export function runCatalogMigrations(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS queues (id TEXT PRIMARY KEY, createdAt TEXT NOT NULL, trackIds TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS bookmarks (kind TEXT NOT NULL CHECK(kind IN ('artist','album','track')), id TEXT NOT NULL, PRIMARY KEY(kind,id));
+    CREATE TABLE IF NOT EXISTS catalog_user_state (
+      kind TEXT NOT NULL CHECK(kind IN ('album','track')),
+      id TEXT NOT NULL,
+      rating INTEGER CHECK(rating IS NULL OR rating BETWEEN 1 AND 5),
+      viewed INTEGER NOT NULL DEFAULT 0 CHECK(viewed IN (0,1) AND (kind='album' OR viewed=0)),
+      PRIMARY KEY(kind,id),
+      CHECK(rating IS NOT NULL OR viewed=1)
+    );
   `);
   const version = db.pragma("user_version", { simple: true }) as number;
   if (version < 2)
@@ -84,6 +92,12 @@ export function runCatalogMigrations(db: Database.Database): void {
         FROM bookmarks bookmark
         JOIN album_key_migration migration ON migration.oldKey=bookmark.id
         WHERE bookmark.kind='album';
+
+        INSERT OR IGNORE INTO catalog_user_state(kind,id,rating,viewed)
+        SELECT 'album', migration.newKey, state.rating, state.viewed
+        FROM catalog_user_state state
+        JOIN album_key_migration migration ON migration.oldKey=state.id
+        WHERE state.kind='album';
 
         DELETE FROM bookmarks
         WHERE kind='album'

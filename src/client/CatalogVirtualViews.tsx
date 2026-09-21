@@ -16,6 +16,11 @@ import {
 } from "../shared/artist-grouping";
 import { count, duration } from "./api";
 import { BookmarkToggle, type BookmarkChange } from "./BookmarkToggle";
+import {
+  RatingControl,
+  ViewedToggle,
+  type UserStateChange,
+} from "./RatingControl";
 import { ListTile } from "./ListTile";
 import { resolveContextSelection, usePanelSelection } from "./panel-selection";
 import { buildTrackListRows } from "./track-grouping";
@@ -289,6 +294,8 @@ export function AlbumGrid({
   bookmarksUnavailable,
   pendingBookmarkKeys,
   onBookmarkChange,
+  onUserStateChange,
+  pendingUserStateKeys,
   scrollTarget,
 }: {
   albums: Album[];
@@ -307,6 +314,8 @@ export function AlbumGrid({
   bookmarksUnavailable: boolean;
   pendingBookmarkKeys: Set<string>;
   onBookmarkChange: BookmarkChange;
+  onUserStateChange: UserStateChange;
+  pendingUserStateKeys: Set<string>;
   scrollTarget: {
     album: string;
     requestId: number;
@@ -383,7 +392,7 @@ export function AlbumGrid({
     estimateSize: (index) =>
       rows[index]?.type === "artist"
         ? 23
-        : cellWidth + 64 + (rows[index]?.endsArtistGroup ? 12 : 0),
+        : cellWidth + 86 + (rows[index]?.endsArtistGroup ? 12 : 0),
     paddingStart: virtualPanelTopInset,
     scrollPaddingStart: virtualPanelTopInset,
     overscan: 3,
@@ -510,6 +519,13 @@ export function AlbumGrid({
                         );
                       }}
                     >
+                      <ViewedToggle
+                        id={album.id}
+                        viewed={album.viewed}
+                        pending={pendingUserStateKeys.has(`album:${album.id}`)}
+                        onChange={onUserStateChange}
+                        className="album-viewed-toggle"
+                      />
                       <BookmarkToggle
                         kind="album"
                         id={album.id}
@@ -609,6 +625,13 @@ export function AlbumGrid({
                           <small>{album.year || ""}</small>
                         </span>
                       </button>
+                      <RatingControl
+                        kind="album"
+                        id={album.id}
+                        rating={album.rating}
+                        pending={pendingUserStateKeys.has(`album:${album.id}`)}
+                        onChange={onUserStateChange}
+                      />
                     </div>
                   ))}
               </div>
@@ -637,6 +660,8 @@ export function TrackList({
   bookmarksUnavailable,
   pendingBookmarkKeys,
   onBookmarkChange,
+  onUserStateChange,
+  pendingUserStateKeys,
   bookmarksOnly,
   bookmarkCount,
   hasOtherFilters,
@@ -659,6 +684,8 @@ export function TrackList({
   bookmarksUnavailable: boolean;
   pendingBookmarkKeys: Set<string>;
   onBookmarkChange: BookmarkChange;
+  onUserStateChange: UserStateChange;
+  pendingUserStateKeys: Set<string>;
   bookmarksOnly: boolean;
   bookmarkCount: number;
   hasOtherFilters: boolean;
@@ -849,16 +876,35 @@ export function TrackList({
                     </small>
                   )}
                 </div>
-                <BookmarkToggle
-                  kind="album"
-                  id={track.albumKey}
-                  label={track.albumTitle || "Без альбома"}
-                  bookmarked={bookmarkKeys.has(`album:${track.albumKey}`)}
-                  unavailable={bookmarksUnavailable}
-                  pending={pendingBookmarkKeys.has(`album:${track.albumKey}`)}
-                  onChange={onBookmarkChange}
-                  className="track-album-bookmark-toggle"
-                />
+                <div className="track-album-state" data-selection-ignore>
+                  <RatingControl
+                    kind="album"
+                    id={track.albumKey}
+                    rating={track.albumRating}
+                    pending={pendingUserStateKeys.has(
+                      `album:${track.albumKey}`,
+                    )}
+                    onChange={onUserStateChange}
+                  />
+                  <ViewedToggle
+                    id={track.albumKey}
+                    viewed={track.albumViewed}
+                    pending={pendingUserStateKeys.has(
+                      `album:${track.albumKey}`,
+                    )}
+                    onChange={onUserStateChange}
+                  />
+                  <BookmarkToggle
+                    kind="album"
+                    id={track.albumKey}
+                    label={track.albumTitle || "Без альбома"}
+                    bookmarked={bookmarkKeys.has(`album:${track.albumKey}`)}
+                    unavailable={bookmarksUnavailable}
+                    pending={pendingBookmarkKeys.has(`album:${track.albumKey}`)}
+                    onChange={onBookmarkChange}
+                    className="track-album-bookmark-toggle"
+                  />
+                </div>
               </div>
             ) : (
               <ListTile
@@ -915,16 +961,26 @@ export function TrackList({
                   );
                 }}
                 endAction={
-                  <BookmarkToggle
-                    kind="track"
-                    id={track.id}
-                    label={track.title}
-                    bookmarked={bookmarkKeys.has(`track:${track.id}`)}
-                    unavailable={bookmarksUnavailable}
-                    pending={pendingBookmarkKeys.has(`track:${track.id}`)}
-                    onChange={onBookmarkChange}
-                    className="track-bookmark-toggle"
-                  />
+                  <div className="track-row-actions" data-selection-ignore>
+                    <RatingControl
+                      kind="track"
+                      id={track.id}
+                      rating={track.rating}
+                      compact
+                      pending={pendingUserStateKeys.has(`track:${track.id}`)}
+                      onChange={onUserStateChange}
+                    />
+                    <BookmarkToggle
+                      kind="track"
+                      id={track.id}
+                      label={track.title}
+                      bookmarked={bookmarkKeys.has(`track:${track.id}`)}
+                      unavailable={bookmarksUnavailable}
+                      pending={pendingBookmarkKeys.has(`track:${track.id}`)}
+                      onChange={onBookmarkChange}
+                      className="track-bookmark-toggle"
+                    />
+                  </div>
                 }
               />
             );

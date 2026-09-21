@@ -254,8 +254,18 @@ describe("HTTP boundary", () => {
         coverId: null,
         available: true,
       });
-    addTrack("first", "first-album", path.join("Artist", "Album", "CD1", "01.flac"), "First");
-    addTrack("second", "second-album", path.join("Artist", "Album", "CD2", "02.flac"), "Second");
+    addTrack(
+      "first",
+      "first-album",
+      path.join("Artist", "Album", "CD1", "01.flac"),
+      "First",
+    );
+    addTrack(
+      "second",
+      "second-album",
+      path.join("Artist", "Album", "CD2", "02.flac"),
+      "Second",
+    );
     const session = await context.app.inject({
       url: "/api/session",
       headers: { host: "127.0.0.1:4317" },

@@ -32,6 +32,9 @@ export interface Track {
   albumTitle: string;
   albumArtists: string[];
   albumKey: string;
+  rating: number | null;
+  albumRating: number | null;
+  albumViewed: boolean;
   albumFormats?: string[];
   /** Unique non-empty genres found across all available tracks of this album. */
   albumGenres?: string[];
@@ -57,6 +60,8 @@ export interface Album {
   year: number | null;
   coverId: string | null;
   trackCount: number;
+  rating: number | null;
+  viewed: boolean;
 }
 export interface AlbumMergeSource {
   albumId: string;
@@ -87,6 +92,11 @@ export interface QuickSearchResults {
   tracks: Track[];
 }
 export type BookmarkKind = "artist" | "album" | "track";
+export type UserStateKind = "album" | "track";
+export interface CatalogUserStatePatch {
+  rating?: 1 | 2 | 3 | 4 | 5 | null;
+  viewed?: boolean;
+}
 export interface CatalogBookmark {
   kind: BookmarkKind;
   id: string;
@@ -124,6 +134,13 @@ export const filterSchema = z.object({
   albumIds: z.array(z.string()).max(10000).default([]),
   search: z.string().max(300).default(""),
   bookmarksOnly: z.boolean().default(false),
+  albumRatingMin: z.number().int().min(1).max(5).nullable().default(null),
+  albumRatingMax: z.number().int().min(1).max(5).nullable().default(null),
+  albumUnrated: z.boolean().default(false),
+  albumViewed: z.enum(["all", "unviewed", "viewed"]).default("all"),
+  trackRatingMin: z.number().int().min(1).max(5).nullable().default(null),
+  trackRatingMax: z.number().int().min(1).max(5).nullable().default(null),
+  trackUnrated: z.boolean().default(false),
 });
 export type CatalogFilter = z.infer<typeof filterSchema>;
 export const tagPatchSchema = z
@@ -293,4 +310,11 @@ export const emptyFilter: CatalogFilter = {
   albumIds: [],
   search: "",
   bookmarksOnly: false,
+  albumRatingMin: null,
+  albumRatingMax: null,
+  albumUnrated: false,
+  albumViewed: "all",
+  trackRatingMin: null,
+  trackRatingMax: null,
+  trackUnrated: false,
 };

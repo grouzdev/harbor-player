@@ -45,6 +45,7 @@ import type {
   PerTrackTagPatch,
   Track,
 } from "../shared/contracts.js";
+import { emptyFilter } from "../shared/contracts.js";
 
 interface JournalItem extends OperationItem {
   producedHash?: string;
@@ -331,13 +332,13 @@ export class MusicService extends EventEmitter {
     const tracks = folderRoots?.length
       ? this.catalog.selected({
           filter: {
+            ...emptyFilter,
             libraryIds: [],
             folders: folderRoots,
             genres: [],
             artists: [],
             albumIds: [],
             search: "",
-            bookmarksOnly: false,
           },
         })
       : this.catalog.selected(selection);
@@ -366,9 +367,7 @@ export class MusicService extends EventEmitter {
         Object.keys(patch).some((field) => !allowedFields.has(field))
       )
         throw new Error("Некорректные параметры объединения альбомов");
-      const context = this.catalog.albumMergeContext(
-        selection.filter.albumIds,
-      );
+      const context = this.catalog.albumMergeContext(selection.filter.albumIds);
       if (!context.compatible) throw new Error(context.blockers[0]);
     }
     const target = targetLibraryId
@@ -788,10 +787,10 @@ export class MusicService extends EventEmitter {
       op.intent === "album-merge"
         ? "Объединение альбомов"
         : {
-        move: "Перенос файлов",
-        trash: "Удаление с восстановлением",
-        tags: "Сохранение тегов",
-        restore: "Восстановление",
+            move: "Перенос файлов",
+            trash: "Удаление с восстановлением",
+            tags: "Сохранение тегов",
+            restore: "Восстановление",
           }[op.kind],
       async (job) => {
         try {

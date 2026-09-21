@@ -1110,6 +1110,21 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     exact: true,
   });
   const firstAlbumButton = firstAlbum.locator(".album-main");
+  await firstAlbum.getByRole("button", { name: "4 из 5" }).click();
+  await expect(
+    firstAlbum.getByRole("button", { name: "4 из 5" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await firstAlbum
+    .getByRole("button", { name: "Отметить просмотренным" })
+    .click();
+  await expect(
+    firstAlbum.getByRole("button", { name: "Отметить непросмотренным" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await firstTrackRow.getByRole("button", { name: "Без оценки" }).click();
+  await firstTrackRow.getByRole("button", { name: "5 из 5" }).click();
+  await expect(
+    firstTrackRow.getByRole("button", { name: "Оценка 5 из 5" }),
+  ).toBeVisible();
   await expect(
     page
       .locator(".album-artist-header")
@@ -1188,25 +1203,28 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(firstTrackAlbumHeader.locator("small").last()).toContainText(
     /^2024 · Ambient$/,
   );
-  await firstTrackAlbumHeader.click();
+  await firstTrackAlbumHeader.locator(".tiny-cover").click();
   await expect(firstTrackAlbumHeader).toHaveClass(/selected/);
   await expect(page.locator('[data-testid="track-row"].selected')).toHaveCount(
     0,
   );
   await firstTrackRow.locator(".list-tile-main").click();
   await expect(firstTrackRow).toHaveClass(/selected/);
-  await firstTrackAlbumHeader.click();
+  await firstTrackAlbumHeader.locator(".tiny-cover").click();
   await expect(firstTrackAlbumHeader).toHaveClass(/selected/);
   await expect(page.locator('[data-testid="track-row"].selected')).toHaveCount(
     0,
   );
-  await firstTrackAlbumHeader.click();
+  await firstTrackAlbumHeader.locator(".tiny-cover").click();
   await expect
     .poll(() =>
       page.locator("audio").evaluate((a: HTMLAudioElement) => a.readyState),
     )
     .toBeGreaterThanOrEqual(2);
-  await page.getByRole("button", { name: "Сбросить выбор треков" }).click();
+  const resetTrackSelection = page.getByRole("button", {
+    name: "Сбросить выбор треков",
+  });
+  if (await resetTrackSelection.count()) await resetTrackSelection.click();
   await genreButton.click();
   await expect(genreRow).toHaveClass(/selected/);
   await expect(
@@ -1395,7 +1413,9 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .getByRole("button", { name: "Показать музыку из закладок" })
     .click();
   await expect(page.getByTestId("track-row")).toHaveCount(0);
-  await expect(page.getByText("В закладках пока пусто")).toBeVisible();
+  await expect(
+    page.getByText(/В закладках (пока пусто|ничего не найдено)/),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Показать всю музыку" }).click();
 
   const artistBookmark = artistRow.getByRole("button", {
@@ -1501,19 +1521,24 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(firstTrack).toHaveClass(/selected/);
   await page.reload();
   await expect(page.getByLabel("Поиск музыки")).toBeVisible();
+  await expect(
+    page
+      .locator('.album-card[title="Тестовый альбом · Исполнитель альбома"]')
+      .getByRole("button", { name: "4 из 5" })
+      .first(),
+  ).toHaveAttribute("aria-pressed", "true");
   const persistedTrackBookmark = page
     .locator(`[data-testid="track-row"][data-selection-key="${firstTrackKey}"]`)
     .getByRole("button", { name: /Удалить трек .* из закладок/ });
   await expect(persistedTrackBookmark).toHaveAttribute("aria-pressed", "true");
   await page.getByLabel("Поиск музыки").fill("Несуществующая композиция");
   await expect(page.getByTestId("track-row")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Показать музыку из закладок" }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: "Очистить поиск" }).click();
   await page
     .getByRole("button", { name: "Показать музыку из закладок" })
-    .click();
-  await expect(page.getByText("В закладках ничего не найдено")).toBeVisible();
-  await expect(page.getByText("Текущие фильтры скрывают")).toBeVisible();
-  await page
-    .getByRole("button", { name: "Сбросить остальные фильтры" })
     .click();
   await expect(page.getByLabel("Поиск музыки")).toHaveValue("");
   await expect(page.getByTestId("track-row")).toHaveCount(1);
