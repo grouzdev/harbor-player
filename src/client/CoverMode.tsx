@@ -189,14 +189,15 @@ export function CoverMode({
                       </span>
                       <span>{duration(item.duration)}</span>
                     </button>
-                    <RatingControl
-                      kind="track"
-                      id={item.id}
-                      rating={item.rating}
-                      compact
-                      pending={pendingUserStateKeys.has(`track:${item.id}`)}
-                      onChange={onUserStateChange}
-                    />
+                    {item.rating !== null && (
+                      <RatingControl
+                        kind="track"
+                        id={item.id}
+                        rating={item.rating}
+                        pending={pendingUserStateKeys.has(`track:${item.id}`)}
+                        onChange={onUserStateChange}
+                      />
+                    )}
                   </div>
                 );
               })

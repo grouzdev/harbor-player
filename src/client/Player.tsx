@@ -388,7 +388,6 @@ export function Player({
             kind="track"
             id={track.id}
             rating={track.rating}
-            compact
             pending={pendingUserStateKeys.has(`track:${track.id}`)}
             onChange={onUserStateChange}
           />

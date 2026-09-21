@@ -41,6 +41,9 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Eye,
+  EyeOff,
+  Star,
   SquareLibrary,
   Tag,
   Trash2,
@@ -115,8 +118,8 @@ import { CoverMode, QuickSearchDialog } from "./CoverMode";
 import { ContextMenu, type ContextMenuState } from "./ContextMenu";
 import { UpdatePanel } from "./UpdatePanel";
 import { BookmarkToggle, type BookmarkChange } from "./BookmarkToggle";
-import type { UserStateChange } from "./RatingControl";
-import { RatingFilter } from "./RatingFilter";
+import { RatingPopover, type UserStateChange } from "./RatingControl";
+import { CatalogUserFilters } from "./CatalogUserFilters";
 import { GenrePanel, LibraryPanel } from "./LibraryGenrePanels";
 import {
   ArtistList,
@@ -238,6 +241,38 @@ function cachedAlbumViewed(
     stack.push(...Object.values(record));
   }
   return false;
+}
+
+function cachedUserRating(
+  queryClient: ReturnType<typeof useQueryClient>,
+  kind: "album" | "track",
+  id: string,
+) {
+  const stack = queryClient
+    .getQueryCache()
+    .findAll()
+    .map((query) => query.state.data as unknown);
+  while (stack.length) {
+    const value = stack.pop();
+    if (Array.isArray(value)) {
+      stack.push(...value);
+      continue;
+    }
+    if (!value || typeof value !== "object") continue;
+    const record = value as Record<string, unknown>;
+    if (kind === "album" && record.id === id && record.trackCount !== undefined)
+      return (record.rating ?? null) as number | null;
+    if (
+      kind === "album" &&
+      record.albumKey === id &&
+      record.duration !== undefined
+    )
+      return (record.albumRating ?? null) as number | null;
+    if (kind === "track" && record.id === id && record.duration !== undefined)
+      return (record.rating ?? null) as number | null;
+    stack.push(...Object.values(record));
+  }
+  return null;
 }
 const defaultPanelVisibility: PanelVisibility = {
   libraries: true,
@@ -576,6 +611,9 @@ export function App() {
   const [ratingDialog, setRatingDialog] = useState<{
     kind: "album" | "track";
     ids: string[];
+    rating: number | null;
+    x: number;
+    y: number;
   } | null>(null);
   const notify = useCallback((message: string) => setToast(message), []);
   const player = usePlayer(notify);
@@ -1199,6 +1237,16 @@ export function App() {
         pendingBookmarkKeys.has(`${kind}:${item}`),
       );
       const suffix = ids.length > 1 ? ` (${ids.length})` : "";
+      const ratings =
+        kind === "artist"
+          ? []
+          : ids.map((item) =>
+              cachedUserRating(queryClient, kind as "album" | "track", item),
+            );
+      const sharedRating =
+        ratings.length > 0 && ratings.every((rating) => rating === ratings[0])
+          ? ratings[0]
+          : null;
       const selection: Selection =
         kind === "album"
           ? {
@@ -1248,12 +1296,18 @@ export function App() {
             ? [
                 {
                   label: `Изменить оценку…${suffix}`,
-                  icon: <span aria-hidden="true">★</span>,
+                  icon: <Star size={16} />,
                   disabled: ids.some((item) =>
                     pendingUserStateKeys.has(`${kind}:${item}`),
                   ),
                   onSelect: () =>
-                    setRatingDialog({ kind: kind as "album" | "track", ids }),
+                    setRatingDialog({
+                      kind: kind as "album" | "track",
+                      ids,
+                      rating: sharedRating,
+                      x: event.clientX,
+                      y: event.clientY,
+                    }),
                 },
               ]
             : []),
@@ -1265,6 +1319,13 @@ export function App() {
                   )
                     ? `Отметить непросмотренными${suffix}`
                     : `Отметить просмотренными${suffix}`,
+                  icon: ids.every((item) =>
+                    cachedAlbumViewed(queryClient, item),
+                  ) ? (
+                    <Eye size={16} />
+                  ) : (
+                    <EyeOff size={16} />
+                  ),
                   disabled: ids.some((item) =>
                     pendingUserStateKeys.has(`album:${item}`),
                   ),
@@ -2458,6 +2519,16 @@ export function App() {
           </label>
         )}
         {!coverMode && (
+          <>
+            <CatalogUserFilters
+              filter={filter}
+              disabled={isSearching}
+              onChange={setFilter}
+            />
+            <span className="catalog-user-filter-spacer" aria-hidden="true" />
+          </>
+        )}
+        {!coverMode && (
           <button
             className={`icon-button bookmarks-button ${filter.bookmarksOnly ? "active" : ""} ${bookmarks.isError ? "error" : ""}`}
             aria-label={
@@ -2720,12 +2791,6 @@ export function App() {
           >
             <div className="panel-heading">
               <h2>Альбомы</h2>
-              <RatingFilter
-                kind="album"
-                filter={filter}
-                disabled={isSearching}
-                onChange={setFilter}
-              />
               <PanelSelectionIndicator
                 total={albumTotal}
                 selected={filter.albumIds.length}
@@ -2779,12 +2844,6 @@ export function App() {
           >
             <div className="panel-heading tracks-heading">
               <h2>Треки</h2>
-              <RatingFilter
-                kind="track"
-                filter={filter}
-                disabled={isSearching}
-                onChange={setFilter}
-              />
               <PanelSelectionIndicator
                 total={total}
                 selected={selected.size}
@@ -2952,38 +3011,18 @@ export function App() {
         <AddLibraryDialog onClose={() => setModal(null)} onAdded={refresh} />
       )}
       {ratingDialog && (
-        <Modal title="Изменить оценку" onClose={() => setRatingDialog(null)}>
-          <div className="batch-rating" role="group" aria-label="Новая оценка">
-            {[1, 2, 3, 4, 5].map((rating) => (
-              <button
-                type="button"
-                key={rating}
-                className="batch-rating-star"
-                aria-label={`${rating} из 5`}
-                onClick={() => {
-                  changeUserState(ratingDialog.kind, ratingDialog.ids, {
-                    rating: rating as 1 | 2 | 3 | 4 | 5,
-                  });
-                  setRatingDialog(null);
-                }}
-              >
-                ★
-              </button>
-            ))}
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => {
-                changeUserState(ratingDialog.kind, ratingDialog.ids, {
-                  rating: null,
-                });
-                setRatingDialog(null);
-              }}
-            >
-              Без оценки
-            </button>
-          </div>
-        </Modal>
+        <RatingPopover
+          anchor={{ x: ratingDialog.x, y: ratingDialog.y }}
+          rating={ratingDialog.rating}
+          pending={ratingDialog.ids.some((id) =>
+            pendingUserStateKeys.has(`${ratingDialog.kind}:${id}`),
+          )}
+          onChoose={(rating) => {
+            changeUserState(ratingDialog.kind, ratingDialog.ids, { rating });
+            setRatingDialog(null);
+          }}
+          onClose={() => setRatingDialog(null)}
+        />
       )}
       {modal === "rename-library" && libraryToRename && (
         <RenameLibraryDialog

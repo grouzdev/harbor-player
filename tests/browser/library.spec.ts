@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { emptyFilter, type Album, type Page } from "../../src/shared/contracts";
 
 test("Tab cycles only through text entry fields", async ({ page }) => {
   await page.goto("/");
@@ -58,6 +59,32 @@ test("icon buttons keep their geometry on hover", async ({ page }) => {
   expect(after).not.toBeNull();
   expect(after!.width).toBeCloseTo(before!.width, 5);
   expect(after!.height).toBeCloseTo(before!.height, 5);
+});
+
+test("catalog filters fit between search and toolbar actions", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.goto("/");
+  const search = page.locator(".search");
+  const filters = page.locator(".catalog-user-filters");
+  const bookmarks = page.getByRole("button", {
+    name: "Показать музыку из закладок",
+  });
+  const [searchBox, filterBox, bookmarkBox] = await Promise.all([
+    search.boundingBox(),
+    filters.boundingBox(),
+    bookmarks.boundingBox(),
+  ]);
+  expect(searchBox).not.toBeNull();
+  expect(filterBox).not.toBeNull();
+  expect(bookmarkBox).not.toBeNull();
+  expect(filterBox!.x).toBeGreaterThanOrEqual(searchBox!.x + searchBox!.width);
+  expect(filterBox!.x + filterBox!.width).toBeLessThanOrEqual(bookmarkBox!.x);
+  await bookmarks.click();
+  await expect(
+    page.getByRole("button", { name: "Отключить фильтр закладок" }),
+  ).toHaveAttribute("aria-pressed", "true");
 });
 
 test("fullscreen button changes the application shell", async ({ page }) => {
@@ -471,6 +498,9 @@ test("portrait workspace uses two independently resizable rows", async ({
   expect(afterRowResize[1]).toBeLessThan(beforeRowResize[1]);
 
   await page.setViewportSize({ width: 1200, height: 1000 });
+  await expect(page.locator(".workspace")).not.toHaveClass(
+    /workspace--portrait/,
+  );
   const landscapeTops = await page
     .locator(".panel")
     .evaluateAll((panels) =>
@@ -1109,22 +1139,93 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   const firstAlbum = page.getByTitle("Тестовый альбом · Исполнитель альбома", {
     exact: true,
   });
+  const firstAlbumId = await firstAlbum.getAttribute("data-selection-key");
+  expect(firstAlbumId).not.toBeNull();
   const firstAlbumButton = firstAlbum.locator(".album-main");
-  await firstAlbum.getByRole("button", { name: "4 из 5" }).click();
   await expect(
-    firstAlbum.getByRole("button", { name: "4 из 5" }),
-  ).toHaveAttribute("aria-pressed", "true");
+    firstAlbum.getByRole("button", { name: /Оценка .* из 5/ }),
+  ).toHaveCount(0);
+  await firstAlbum.dispatchEvent("contextmenu", { clientX: 900, clientY: 350 });
+  await page.getByRole("menuitem", { name: /Изменить оценку/ }).click();
+  await page
+    .getByRole("dialog", { name: "Изменить оценку" })
+    .getByRole("button", { name: "4 из 5" })
+    .click();
+  const savedAlbumRating = firstAlbum.getByRole("button", {
+    name: "Оценка 4 из 5",
+  });
+  await expect(savedAlbumRating).toBeVisible();
+  await expect(savedAlbumRating).toBeEnabled();
+  await firstAlbum.getByRole("button", { name: "Оценка 4 из 5" }).click();
+  await page
+    .getByRole("dialog", { name: "Изменить оценку" })
+    .getByRole("button", { name: "4 из 5" })
+    .click();
+  await expect(
+    firstAlbum.getByRole("button", { name: /Оценка .* из 5/ }),
+  ).toHaveCount(0);
+  await firstAlbum.dispatchEvent("contextmenu", { clientX: 900, clientY: 350 });
+  await page.getByRole("menuitem", { name: /Изменить оценку/ }).click();
+  await page
+    .getByRole("dialog", { name: "Изменить оценку" })
+    .getByRole("button", { name: "4 из 5" })
+    .click();
+  await expect(
+    firstAlbum.getByRole("button", { name: "Оценка 4 из 5" }),
+  ).toBeVisible();
+  await expect(
+    firstAlbum.getByRole("button", { name: "Оценка 4 из 5" }),
+  ).toBeEnabled();
   await firstAlbum
     .getByRole("button", { name: "Отметить просмотренным" })
     .click();
   await expect(
     firstAlbum.getByRole("button", { name: "Отметить непросмотренным" }),
   ).toHaveAttribute("aria-pressed", "true");
-  await firstTrackRow.getByRole("button", { name: "Без оценки" }).click();
-  await firstTrackRow.getByRole("button", { name: "5 из 5" }).click();
+  await expect(
+    firstTrackRow.getByRole("button", { name: "Без оценки" }),
+  ).toHaveCount(0);
+  await firstTrackRow.dispatchEvent("contextmenu", {
+    clientX: 1350,
+    clientY: 500,
+  });
+  await page.getByRole("menuitem", { name: /Изменить оценку/ }).click();
+  const edgeRatingBubble = page.getByRole("dialog", {
+    name: "Изменить оценку",
+  });
+  const edgeRatingBubbleBox = await edgeRatingBubble.boundingBox();
+  expect(edgeRatingBubbleBox).not.toBeNull();
+  expect(
+    edgeRatingBubbleBox!.x + edgeRatingBubbleBox!.width,
+  ).toBeLessThanOrEqual((await page.evaluate(() => window.innerWidth)) - 8);
+  await edgeRatingBubble.getByRole("button", { name: "5 из 5" }).click();
   await expect(
     firstTrackRow.getByRole("button", { name: "Оценка 5 из 5" }),
   ).toBeVisible();
+  const minimumRating = page.getByLabel("Минимальная оценка");
+  const maximumRating = page.getByLabel("Максимальная оценка");
+  await expect(minimumRating).toHaveValue("0");
+  await expect(maximumRating).toHaveValue("5");
+  await minimumRating.fill("3");
+  await maximumRating.fill("4");
+  await expect(minimumRating).toHaveValue("3");
+  await expect(maximumRating).toHaveValue("4");
+  await minimumRating.fill("0");
+  await maximumRating.fill("5");
+  const unviewedFilter = page.getByRole("switch", {
+    name: "Только непросмотренные",
+  });
+  await expect(
+    unviewedFilter.locator(".unviewed-filter-thumb svg"),
+  ).toHaveCount(1);
+  await unviewedFilter.click();
+  await expect(unviewedFilter).toHaveAttribute("aria-checked", "true");
+  await expect(firstAlbum).toHaveCount(0);
+  await unviewedFilter.click();
+  await expect(unviewedFilter).toHaveAttribute("aria-checked", "false");
+  await expect(firstAlbum).toBeVisible();
+  await firstAlbumButton.click({ modifiers: ["Control"] });
+  await expect(firstAlbum).not.toHaveClass(/selected/);
   await expect(
     page
       .locator(".album-artist-header")
@@ -1366,12 +1467,12 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     const coverRect = cover.getBoundingClientRect();
     const buttonRect = button.getBoundingClientRect();
     return {
-      topInset: buttonRect.top - coverRect.top,
-      rightInset: coverRect.right - buttonRect.right,
+      bottomInset: coverRect.bottom - buttonRect.bottom,
+      leftInset: buttonRect.left - coverRect.left,
     };
   });
-  expect(albumBookmarkAlignment.topInset).toBeCloseTo(7, 1);
-  expect(albumBookmarkAlignment.rightInset).toBeCloseTo(7, 1);
+  expect(albumBookmarkAlignment.bottomInset).toBeCloseTo(7, 1);
+  expect(albumBookmarkAlignment.leftInset).toBeCloseTo(7, 1);
   await addAlbumBookmark.click();
   await expect(firstAlbum).not.toHaveClass(/selected/);
   const removeAlbumBookmark = firstAlbum.getByRole("button", {
@@ -1521,12 +1622,17 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(firstTrack).toHaveClass(/selected/);
   await page.reload();
   await expect(page.getByLabel("Поиск музыки")).toBeVisible();
-  await expect(
-    page
-      .locator('.album-card[title="Тестовый альбом · Исполнитель альбома"]')
-      .getByRole("button", { name: "4 из 5" })
-      .first(),
-  ).toHaveAttribute("aria-pressed", "true");
+  const persistedAlbumResponse = await page.request.get(
+    `/api/albums?${new URLSearchParams({
+      filter: JSON.stringify({ ...emptyFilter, albumIds: [firstAlbumId!] }),
+      offset: "0",
+      limit: "1",
+    })}`,
+  );
+  expect(persistedAlbumResponse.ok()).toBe(true);
+  const persistedAlbum = (await persistedAlbumResponse.json()) as Page<Album>;
+  expect(persistedAlbum.items).toHaveLength(1);
+  expect(persistedAlbum.items[0]).toMatchObject({ rating: 4, viewed: true });
   const persistedTrackBookmark = page
     .locator(`[data-testid="track-row"][data-selection-key="${firstTrackKey}"]`)
     .getByRole("button", { name: /Удалить трек .* из закладок/ });
@@ -1860,6 +1966,23 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(
     nowPlaying.getByRole("button", { name: /Открыть альбом/ }),
   ).toBeVisible();
+  const playerRating = page.locator(".player .compact-rating");
+  await playerRating.click();
+  const playerRatingBubble = page.getByRole("dialog", {
+    name: "Изменить оценку",
+  });
+  const [playerRatingBox, playerRatingBubbleBox] = await Promise.all([
+    playerRating.boundingBox(),
+    playerRatingBubble.boundingBox(),
+  ]);
+  expect(playerRatingBox).not.toBeNull();
+  expect(playerRatingBubbleBox).not.toBeNull();
+  expect(playerRatingBubbleBox!.y + playerRatingBubbleBox!.height).toBeLessThan(
+    playerRatingBox!.y,
+  );
+  expect(playerRatingBubbleBox!.y).toBeGreaterThanOrEqual(8);
+  await page.keyboard.press("Escape");
+  await expect(playerRatingBubble).toHaveCount(0);
   expect(
     await nowPlaying
       .locator(".now-copy")
@@ -1947,7 +2070,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .selectOption({ label: `Collection renamed ${browser}` });
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog")).toBeFocused();
-  await page.keyboard.press("Enter");
+  await page.getByRole("button", { name: /^Применить к/ }).click();
   await expect(rows).toHaveCount(6);
   await page.getByRole("button", { name: "Сбросить библиотеки" }).click();
   await expect(

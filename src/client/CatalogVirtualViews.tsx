@@ -625,13 +625,18 @@ export function AlbumGrid({
                           <small>{album.year || ""}</small>
                         </span>
                       </button>
-                      <RatingControl
-                        kind="album"
-                        id={album.id}
-                        rating={album.rating}
-                        pending={pendingUserStateKeys.has(`album:${album.id}`)}
-                        onChange={onUserStateChange}
-                      />
+                      {album.rating !== null && (
+                        <RatingControl
+                          kind="album"
+                          id={album.id}
+                          rating={album.rating}
+                          pending={pendingUserStateKeys.has(
+                            `album:${album.id}`,
+                          )}
+                          onChange={onUserStateChange}
+                          className="album-rating-control"
+                        />
+                      )}
                     </div>
                   ))}
               </div>
@@ -877,15 +882,17 @@ export function TrackList({
                   )}
                 </div>
                 <div className="track-album-state" data-selection-ignore>
-                  <RatingControl
-                    kind="album"
-                    id={track.albumKey}
-                    rating={track.albumRating}
-                    pending={pendingUserStateKeys.has(
-                      `album:${track.albumKey}`,
-                    )}
-                    onChange={onUserStateChange}
-                  />
+                  {track.albumRating !== null && (
+                    <RatingControl
+                      kind="album"
+                      id={track.albumKey}
+                      rating={track.albumRating}
+                      pending={pendingUserStateKeys.has(
+                        `album:${track.albumKey}`,
+                      )}
+                      onChange={onUserStateChange}
+                    />
+                  )}
                   <ViewedToggle
                     id={track.albumKey}
                     viewed={track.albumViewed}
@@ -962,14 +969,15 @@ export function TrackList({
                 }}
                 endAction={
                   <div className="track-row-actions" data-selection-ignore>
-                    <RatingControl
-                      kind="track"
-                      id={track.id}
-                      rating={track.rating}
-                      compact
-                      pending={pendingUserStateKeys.has(`track:${track.id}`)}
-                      onChange={onUserStateChange}
-                    />
+                    {track.rating !== null && (
+                      <RatingControl
+                        kind="track"
+                        id={track.id}
+                        rating={track.rating}
+                        pending={pendingUserStateKeys.has(`track:${track.id}`)}
+                        onChange={onUserStateChange}
+                      />
+                    )}
                     <BookmarkToggle
                       kind="track"
                       id={track.id}
