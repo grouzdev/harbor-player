@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { stat, readFile, mkdir, writeFile, lstat } from "node:fs/promises";
 import path from "node:path";
 import type { Track } from "../shared/contracts.js";
+import { albumIdentityKey } from "./album-identity.js";
 
 const clean = (values: string[] | undefined) => [
   ...new Set((values || []).map((v) => v.trim()).filter(Boolean)),
@@ -182,28 +183,22 @@ export async function readTrack(
   if (!c.track?.no) missingTagFields.push("trackNumber");
   if (!c.disk?.no) missingTagFields.push("discNumber");
   if (!coverId) missingTagFields.push("cover");
-  let albumFolder = path.dirname(path.relative(root, file));
-  if (/^(cd|disc|disk|диск)[\s_-]*\d+\b/i.test(path.basename(albumFolder)))
-    albumFolder = path.dirname(albumFolder);
+  const relativePath = path.relative(root, file);
   // Folder identity separates editions; albumArtist (not track artist) keeps compilations together.
   const albumArtists = clean(
     c.albumartists || (c.albumartist ? [c.albumartist] : []),
   );
-  const albumKey = createHash("sha256")
-    .update(
-      JSON.stringify([
-        libraryId,
-        albumFolder,
-        c.album || "",
-        albumArtists,
-        c.musicbrainz_albumid || c.year || "",
-      ]),
-    )
-    .digest("hex");
+  const albumKey = albumIdentityKey({
+    libraryId,
+    relativePath,
+    albumTitle: c.album || "",
+    albumArtists,
+    year: c.year || null,
+  });
   return {
     id,
     libraryId,
-    relativePath: path.relative(root, file),
+    relativePath,
     title: c.title || path.basename(file, path.extname(file)),
     artists: clean(c.artists || (c.artist ? [c.artist] : [])),
     albumTitle: c.album || "",

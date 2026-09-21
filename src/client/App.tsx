@@ -23,6 +23,7 @@ import {
   CircleUserRound,
   ChevronRight,
   Clock3,
+  Combine,
   Copy,
   DiscAlbum,
   Disc3,
@@ -146,6 +147,11 @@ const HistoryDialog = lazy(() =>
 const PreviewDialog = lazy(() =>
   import("./TagOperationDialog").then((module) => ({
     default: module.PreviewDialog,
+  })),
+);
+const AlbumMergeDialog = lazy(() =>
+  import("./AlbumMergeDialog").then((module) => ({
+    default: module.AlbumMergeDialog,
   })),
 );
 
@@ -476,12 +482,17 @@ export function App() {
     | "rename-library"
     | "remove-library"
     | "artist-folders"
+    | "album-merge"
     | "settings"
     | null
   >(null);
   const [libraryToRename, setLibraryToRename] = useState<Library | null>(null);
   const [libraryToRemove, setLibraryToRemove] = useState<Library | null>(null);
   const [modalSelection, setModalSelection] = useState<Selection | null>(null);
+  const [albumMergeSelection, setAlbumMergeSelection] = useState<{
+    albumIds: string[];
+    anchorAlbumId: string;
+  } | null>(null);
   const [folderMoveRoots, setFolderMoveRoots] = useState<
     FolderMoveRoot[] | null
   >(null);
@@ -1107,6 +1118,18 @@ export function App() {
             disabled: bookmarksUnavailable || bookmarkPending,
             onSelect: () => changeBookmarks(kind, ids, !allBookmarked),
           },
+          ...(kind === "album" && ids.length > 1
+            ? [
+                {
+                  label: `Объединить альбомы${suffix}`,
+                  icon: <Combine size={16} />,
+                  onSelect: () => {
+                    setAlbumMergeSelection({ albumIds: ids, anchorAlbumId: id });
+                    setModal("album-merge");
+                  },
+                },
+              ]
+            : []),
           ...(kind === "artist"
             ? [
                 {
@@ -1891,6 +1914,7 @@ export function App() {
   const showPreview = (p: OperationPreview) => {
     setModal(null);
     setModalSelection(null);
+    setAlbumMergeSelection(null);
     setFolderMoveRoots(null);
     setPreview(p);
   };
@@ -2797,6 +2821,20 @@ export function App() {
               setModal(null);
               setModalSelection(null);
               setFolderMoveRoots(null);
+            }}
+            onPreview={showPreview}
+          />
+        </Suspense>
+      )}
+      {modal === "album-merge" && albumMergeSelection && (
+        <Suspense fallback={<LazyDialogFallback />}>
+          <AlbumMergeDialog
+            albumIds={albumMergeSelection.albumIds}
+            anchorAlbumId={albumMergeSelection.anchorAlbumId}
+            capabilities={capabilities}
+            onClose={() => {
+              setModal(null);
+              setAlbumMergeSelection(null);
             }}
             onPreview={showPreview}
           />

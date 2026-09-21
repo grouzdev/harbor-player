@@ -92,6 +92,25 @@ const albumSchema = z.object({
   coverId: z.string().nullable(),
   trackCount: z.number().int().nonnegative(),
 });
+const albumMergeContextSchema = z.object({
+  compatible: z.boolean(),
+  blockers: stringArray,
+  library: z.object({ id: z.string(), name: z.string() }).nullable(),
+  relativeFolder: z.string().nullable(),
+  trackCount: z.number().int().nonnegative(),
+  sources: z.array(
+    z.object({
+      albumId: z.string(),
+      title: z.string(),
+      albumArtists: stringArray,
+      year: z.number().nullable(),
+      coverId: z.string().nullable(),
+      trackCount: z.number().int().nonnegative(),
+      formats: stringArray,
+      musicBrainzReleaseIds: stringArray,
+    }),
+  ),
+});
 const artistFolderSchema = z.object({
   libraryId: z.string(),
   relativePath: z.string(),
@@ -156,6 +175,7 @@ const operationSummarySchema = z.object({
   total: z.number(),
   completed: z.number(),
   errors: stringArray,
+  intent: z.enum(["album-merge"]).optional(),
 });
 export const okSchema = z.object({ ok: z.literal(true) });
 export const queueSchema = z.object({
@@ -195,6 +215,7 @@ export const apiResponseSchemas = {
   operation: operationPreviewSchema,
   queue: queueSchema,
   albums: pageSchema(albumSchema),
+  albumMergeContext: albumMergeContextSchema,
   facets: pageSchema(facetSchema),
   quickSearch: z.object({
     genres: z.array(facetSchema),
@@ -258,6 +279,8 @@ export function apiResponseContract(method: string, pathname: string) {
   if (/^\/api\/tracks\/[^/]+$/.test(pathname)) return trackSchema;
   if (pathname === "/api/track-ids") return trackIdResultSchema;
   if (pathname === "/api/albums") return apiResponseSchemas.albums;
+  if (pathname === "/api/albums/merge-context")
+    return apiResponseSchemas.albumMergeContext;
   if (pathname === "/api/genres") return z.array(facetSchema);
   if (pathname === "/api/artists") return apiResponseSchemas.facets;
   if (pathname === "/api/quick-search") return apiResponseSchemas.quickSearch;

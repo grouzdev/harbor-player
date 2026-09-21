@@ -1231,7 +1231,7 @@ body.selection-dragging * {
   max-height: 90dvh;
 }
 .modal.wide {
-  width: min(820px, calc(100vw - 36px));
+  width: min(920px, calc(100vw - 36px));
 }
 .modal::backdrop {
   background: #071013aa;
@@ -1573,6 +1573,186 @@ body.selection-dragging * {
 }
 .notice svg {
   flex-shrink: 0;
+}
+.album-merge-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.82fr) minmax(0, 1.18fr);
+  gap: 24px;
+}
+.album-merge-layout h3 {
+  margin: 0 0 12px;
+  font-size: var(--type-caption);
+  font-weight: 500;
+  color: #b5c2c7;
+}
+.album-merge-sources {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+.album-merge-source {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 10px;
+  padding: 9px;
+  border: 1px solid #ffffff10;
+  border-radius: 7px;
+  background: #ffffff05;
+}
+.album-merge-cover {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #10181c;
+  color: #73848c;
+  font-size: 10px;
+  text-align: center;
+}
+.album-merge-cover img,
+.album-merge-cover-options img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.album-merge-source > div:last-child {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  min-width: 0;
+}
+.album-merge-source strong,
+.album-merge-source span,
+.album-merge-source small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.album-merge-source span,
+.album-merge-source small {
+  color: #84969f;
+  font-size: var(--type-caption);
+}
+.album-merge-source-release-id {
+  font-family: "Fira Mono", "Cascadia Mono", Consolas, monospace;
+}
+.album-merge-result {
+  display: grid;
+  align-content: start;
+  gap: 15px;
+  min-width: 0;
+}
+.album-merge-blocker {
+  display: flex;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid #c9796955;
+  border-radius: 6px;
+  color: #e2a79a;
+  font-size: var(--type-caption);
+  line-height: 1.5;
+}
+.album-merge-blocker svg {
+  flex: none;
+}
+.album-merge-field {
+  display: grid;
+  gap: 7px;
+}
+.album-merge-field-label {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  color: #afbdc3;
+  font-size: var(--type-caption);
+}
+.album-merge-field.conflict .album-merge-field-label {
+  color: #ddb08d;
+}
+.album-merge-field-label small {
+  color: #d59a7d;
+}
+.album-merge-candidates,
+.album-merge-cover-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.album-merge-candidates button,
+.album-merge-cover-options button,
+.album-merge-cover-options label {
+  border: 1px solid #ffffff18;
+  border-radius: 5px;
+  background: #ffffff06;
+  color: #aebbc0;
+  cursor: pointer;
+}
+.album-merge-candidates button {
+  max-width: 180px;
+  padding: 5px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-caption);
+}
+.album-merge-cover-options button,
+.album-merge-cover-options label {
+  display: grid;
+  width: 62px;
+  height: 78px;
+  grid-template-rows: 48px 1fr;
+  place-items: center;
+  overflow: hidden;
+  padding: 0;
+}
+.album-merge-cover-options label {
+  cursor: pointer;
+}
+.album-merge-cover-options span {
+  font-size: 22px;
+}
+.album-merge-cover-options small {
+  max-width: 58px;
+  overflow: hidden;
+  color: inherit;
+  font-size: 10px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.album-merge-candidates button:hover,
+.album-merge-candidates button.active,
+.album-merge-cover-options button:hover,
+.album-merge-cover-options button.active,
+.album-merge-cover-options label:hover,
+.album-merge-cover-options label.active {
+  border-color: #91b78d;
+  background: #91b78d20;
+  color: #d8e6d3;
+}
+.album-merge-field input {
+  min-width: 0;
+}
+.album-merge-technical {
+  font-size: var(--type-caption);
+  color: #84959d;
+}
+.album-merge-technical p {
+  margin: 7px 0;
+  line-height: 1.5;
+}
+.album-merge-technical code {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #aebdc2;
+}
+@media (max-width: 720px) {
+  .album-merge-layout {
+    grid-template-columns: 1fr;
+  }
 }
 .preview-list {
   height: 350px;

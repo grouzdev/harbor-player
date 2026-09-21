@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { jobSchema, operationPreviewSchema } from "../shared/contracts.js";
 import type {
   Album,
+  AlbumMergeContext,
   ArtistFolder,
   BookmarkKind,
   CatalogBookmark,
@@ -27,6 +28,8 @@ import {
 } from "../shared/artist-grouping.js";
 import { conflict, notFound } from "./http-error.js";
 import { runCatalogMigrations } from "./catalog-migrations.js";
+import { albumIdentityKey } from "./album-identity.js";
+import { normalizedAlbumFolder } from "./album-identity.js";
 
 type Row = Record<string, any>;
 const checkedFolderPath = (relativePath: string) => {
@@ -78,6 +81,24 @@ export class Catalog {
         const parent = path.dirname(relativePath);
         return parent === "." || parent === path.sep ? null : parent;
       },
+    );
+    this.db.function(
+      "album_identity_key",
+      { deterministic: true },
+      (
+        libraryId: string,
+        relativePath: string,
+        albumTitle: string,
+        albumArtists: string,
+        year: number | null,
+      ) =>
+        albumIdentityKey({
+          libraryId,
+          relativePath,
+          albumTitle,
+          albumArtists: JSON.parse(albumArtists) as string[],
+          year,
+        }),
     );
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
@@ -801,6 +822,77 @@ export class Catalog {
       ),
       total,
       offset,
+    };
+  }
+  albumMergeContext(albumIds: string[]): AlbumMergeContext {
+    const ids = [...new Set(albumIds)];
+    if (ids.length < 2)
+      throw conflict("Выберите как минимум два разных альбома");
+    const tracks = this.selected({
+      filter: { ...emptyFilter, albumIds: ids },
+    });
+    const byAlbum = new Map<string, Track[]>();
+    for (const track of tracks) {
+      const group = byAlbum.get(track.albumKey) || [];
+      group.push(track);
+      byAlbum.set(track.albumKey, group);
+    }
+    if (ids.some((id) => !byAlbum.has(id)))
+      throw conflict("Один из выбранных альбомов больше недоступен. Обновите выбор.");
+
+    const locations = new Map<
+      string,
+      { libraryId: string; relativeFolder: string }
+    >();
+    for (const track of tracks) {
+      const relativeFolder = normalizedAlbumFolder(track.relativePath);
+      locations.set(`${track.libraryId}\u0000${relativeFolder}`, {
+        libraryId: track.libraryId,
+        relativeFolder,
+      });
+    }
+    const location = locations.size === 1 ? [...locations.values()][0] : null;
+    const blockers = location
+      ? []
+      : [
+          "Выбранные альбомы находятся в разных библиотеках или папках. Перемещение файлов в объединение не входит.",
+        ];
+    return {
+      compatible: blockers.length === 0,
+      blockers,
+      library: location
+        ? {
+            id: location.libraryId,
+            name: this.library(location.libraryId).name,
+          }
+        : null,
+      relativeFolder: location?.relativeFolder ?? null,
+      trackCount: tracks.length,
+      sources: ids.map((albumId) => {
+        const albumTracks = byAlbum.get(albumId)!;
+        const first = albumTracks[0];
+        return {
+          albumId,
+          title: first.albumTitle,
+          albumArtists: first.albumArtists,
+          year: first.year,
+          coverId:
+            albumTracks
+              .map((track) => track.coverId)
+              .filter((coverId): coverId is string => !!coverId)
+              .sort()
+              .at(-1) ?? null,
+          trackCount: albumTracks.length,
+          formats: [...new Set(albumTracks.map((track) => track.format))].sort(),
+          musicBrainzReleaseIds: [
+            ...new Set(
+              albumTracks
+                .map((track) => track.musicBrainzReleaseId)
+                .filter((id): id is string => !!id),
+            ),
+          ].sort(),
+        };
+      }),
     };
   }
   artists(

@@ -58,6 +58,24 @@ export interface Album {
   coverId: string | null;
   trackCount: number;
 }
+export interface AlbumMergeSource {
+  albumId: string;
+  title: string;
+  albumArtists: string[];
+  year: number | null;
+  coverId: string | null;
+  trackCount: number;
+  formats: string[];
+  musicBrainzReleaseIds: string[];
+}
+export interface AlbumMergeContext {
+  compatible: boolean;
+  blockers: string[];
+  library: { id: string; name: string } | null;
+  relativeFolder: string | null;
+  trackCount: number;
+  sources: AlbumMergeSource[];
+}
 export interface QuickSearchFacet {
   name: string;
   count: number;
@@ -180,6 +198,7 @@ export const operationPreviewSchema = z
     coverTrackIds: z.array(z.string()).optional(),
     targetLibraryId: z.string().optional(),
     restoreOf: z.string().optional(),
+    intent: z.enum(["album-merge"]).optional(),
   })
   .strict();
 export type OperationPreview = z.infer<typeof operationPreviewSchema>;
@@ -264,6 +283,7 @@ export interface OperationSummary {
   total: number;
   completed: number;
   errors: string[];
+  intent?: "album-merge";
 }
 export const emptyFilter: CatalogFilter = {
   libraryIds: [],

@@ -26,6 +26,7 @@ export interface OperationBackend {
     itemPatches?: Record<string, PerTrackTagPatch>,
     coverTrackIds?: string[],
     folderRoots?: FolderMoveRoot[],
+    intent?: OperationPreview["intent"],
   ): Promise<OperationPreview>;
   previewRestore(id: string): Promise<OperationPreview>;
   previewRetry(id: string): Promise<OperationPreview>;

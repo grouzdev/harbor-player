@@ -326,6 +326,7 @@ export class MusicService extends EventEmitter {
     itemPatches: Record<string, PerTrackTagPatch> = {},
     coverTrackIds?: string[],
     folderRoots?: FolderMoveRoot[],
+    intent?: OperationPreview["intent"],
   ): Promise<OperationPreview> {
     const tracks = folderRoots?.length
       ? this.catalog.selected({
@@ -341,6 +342,35 @@ export class MusicService extends EventEmitter {
         })
       : this.catalog.selected(selection);
     if (!tracks.length) throw new Error("Выберите треки");
+    if (intent === "album-merge") {
+      const allowedFields = new Set([
+        "albumTitle",
+        "albumArtists",
+        "year",
+        "cover",
+      ]);
+      if (
+        kind !== "tags" ||
+        !("filter" in selection) ||
+        new Set(selection.filter.albumIds).size < 2 ||
+        selection.filter.libraryIds.length > 0 ||
+        selection.filter.folders.length > 0 ||
+        selection.filter.genres.length > 0 ||
+        selection.filter.artists.length > 0 ||
+        selection.filter.search !== "" ||
+        selection.filter.bookmarksOnly ||
+        companions ||
+        folderRoots?.length ||
+        Object.keys(itemPatches).length > 0 ||
+        !patch ||
+        Object.keys(patch).some((field) => !allowedFields.has(field))
+      )
+        throw new Error("Некорректные параметры объединения альбомов");
+      const context = this.catalog.albumMergeContext(
+        selection.filter.albumIds,
+      );
+      if (!context.compatible) throw new Error(context.blockers[0]);
+    }
     const target = targetLibraryId
       ? this.catalog.library(targetLibraryId)
       : undefined;
@@ -371,6 +401,7 @@ export class MusicService extends EventEmitter {
       targetLibraryId,
       patch,
       coverTrackIds,
+      intent,
     };
     await mkdir(path.join(this.dataDir, "recovery", op.id), {
       recursive: true,
@@ -710,7 +741,7 @@ export class MusicService extends EventEmitter {
         )
         .map((item) => [item.trackId!, item.patch!]),
     );
-    return this.previewInternal(
+    const retry = await this.previewInternal(
       "tags",
       { trackIds },
       undefined,
@@ -719,6 +750,11 @@ export class MusicService extends EventEmitter {
       itemPatches,
       original.coverTrackIds?.filter((trackId) => trackIds.includes(trackId)),
     );
+    if (original.intent) {
+      retry.intent = original.intent;
+      this.catalog.saveOperation(retry);
+    }
+    return retry;
   }
   async retry(id: string): Promise<OperationRetryResult> {
     return this.operations.retry(id);
@@ -737,17 +773,26 @@ export class MusicService extends EventEmitter {
       )
     )
       throw new Error("Операция уже завершена");
+    if (
+      op.intent === "album-merge" &&
+      op.items.some((item) => item.error && item.phase === "preview")
+    )
+      throw new Error(
+        "Объединение нельзя запустить, пока в предпросмотре есть ошибки",
+      );
     this.active.add(id);
     op.status = "running";
     this.catalog.saveOperation(op);
     return this.enqueue(
       "operation",
-      {
+      op.intent === "album-merge"
+        ? "Объединение альбомов"
+        : {
         move: "Перенос файлов",
         trash: "Удаление с восстановлением",
         tags: "Сохранение тегов",
         restore: "Восстановление",
-      }[op.kind],
+          }[op.kind],
       async (job) => {
         try {
           job.total = op.items.length;

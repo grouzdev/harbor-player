@@ -43,6 +43,8 @@ async function catalog(page: Page) {
     offset: number;
   }[] = [];
   const summaries: unknown[] = [];
+  const mergeContexts: unknown[] = [];
+  const mergePreviews: unknown[] = [];
   let delayed = "";
   let releaseDelay: (() => void) | undefined;
   const matches = (filter: CatalogFilter) =>
@@ -173,6 +175,51 @@ async function catalog(page: Page) {
         fields: {},
         musicBrainz: { supported: false, mode: null, title: "", artist: "" },
       };
+    } else if (endpoint === "albums/merge-context") {
+      const request = route.request().postDataJSON() as { albumIds: string[] };
+      mergeContexts.push(request);
+      body = {
+        compatible: true,
+        blockers: [],
+        library: { id: "rock", name: "rock" },
+        relativeFolder: "Queen/Albums",
+        trackCount: request.albumIds.length * 3,
+        sources: request.albumIds.map((albumId, index) => ({
+          albumId,
+          title: `${albumId} title`,
+          albumArtists: ["Queen"],
+          year: 2025 - index,
+          coverId: null,
+          trackCount: 3,
+          formats: ["flac"],
+          musicBrainzReleaseIds: [`release-${index + 1}`],
+        })),
+      };
+    } else if (endpoint === "operations/preview") {
+      const request = route.request().postDataJSON();
+      mergePreviews.push(request);
+      body = {
+        id: "merge-preview",
+        kind: "tags",
+        status: "preview",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        intent: "album-merge",
+        patch: request.patch,
+        items: [
+          {
+            id: "preview-error",
+            trackId: "Queen-0-0",
+            source: "Queen/Albums/01.flac",
+            destination: "Queen/Albums/01.flac",
+            size: 1,
+            mtimeMs: 1,
+            hash: "hash",
+            title: "Queen song 0",
+            phase: "preview",
+            error: "Файл больше недоступен",
+          },
+        ],
+      };
     } else return route.fallback();
     await route.fulfill({ json: body });
   });
@@ -181,6 +228,8 @@ async function catalog(page: Page) {
   return {
     requests,
     summaries,
+    mergeContexts,
+    mergePreviews,
     delay: (query: string) => {
       delayed = query;
     },
@@ -252,6 +301,57 @@ test("artist and album selection cascades to lower-priority panels", async ({
   await expect(
     page.locator(".albums-panel .panel-selection-chip"),
   ).toContainText("1/139");
+});
+
+test("album merge uses the multi-selection anchor and blocks an errored preview", async ({
+  page,
+}) => {
+  const data = await catalog(page);
+  await artist(page, "Queen").locator(".list-tile-main").click();
+  const first = page.locator('.album-card[data-selection-key="Queen-0"]');
+  const second = page.locator('.album-card[data-selection-key="Queen-1"]');
+  await first.click({ button: "right" });
+  await expect(
+    page.getByRole("menuitem", { name: /Объединить альбомы/ }),
+  ).not.toBeVisible();
+  await page.keyboard.press("Escape");
+  await second.locator(".album-main").click({ modifiers: ["Control"] });
+  await first.click({ button: "right" });
+  await expect(
+    page.getByRole("menuitem", { name: "Объединить альбомы (2)" }),
+  ).toBeVisible();
+  await page.getByRole("menuitem", { name: "Объединить альбомы (2)" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Объединить 2 альбома" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Название альбома")).toHaveValue(
+    "Queen-0 title",
+  );
+  await page.getByLabel("Название альбома").fill("Единый альбом");
+  await page.getByRole("button", { name: "Далее" }).click();
+
+  await expect(
+    page.getByRole("heading", {
+      name: "Объединение альбомов: предварительный просмотр",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Применить к 0 файлам/ }),
+  ).toBeDisabled();
+  expect(data.mergeContexts).toEqual([{ albumIds: ["Queen-0", "Queen-1"] }]);
+  expect(data.mergePreviews).toEqual([
+    expect.objectContaining({
+      kind: "tags",
+      intent: "album-merge",
+      selection: { filter: { ...emptyFilter, albumIds: ["Queen-0", "Queen-1"] } },
+      patch: expect.objectContaining({
+        albumTitle: "Единый альбом",
+        albumArtists: ["Queen"],
+        year: 2025,
+      }),
+    }),
+  ]);
 });
 
 test("global search restores filters, selection, expanded folders and scroll positions", async ({

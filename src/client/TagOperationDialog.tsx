@@ -34,7 +34,7 @@ import {
   catalogUrl,
   count,
   fieldLabels,
-  operationLabels,
+  operationLabel,
   prepareCoverFile,
 } from "./api";
 import { AutocompleteInput } from "./AutocompleteInput";
@@ -782,7 +782,7 @@ export function PreviewDialog({
   return (
     <Modal
       wide
-      title={`${operationLabels[preview.kind]}: предварительный просмотр`}
+      title={`${operationLabel(preview)}: предварительный просмотр`}
       subtitle={`${count(valid.length)} файлов готовы${conflicts ? ` · ${count(conflicts)} будут пропущены` : ""}`}
       onClose={busy ? () => {} : onClose}
       onKeyDown={(event) =>
@@ -863,7 +863,11 @@ export function PreviewDialog({
         <button
           ref={primaryButtonRef}
           className="button primary"
-          disabled={busy || !valid.length}
+          disabled={
+            busy ||
+            !valid.length ||
+            (preview.intent === "album-merge" && conflicts > 0)
+          }
           onClick={async () => {
             setBusy(true);
             try {
@@ -972,7 +976,7 @@ export function HistoryDialog({
         {history.data?.map((op) => (
           <article className="history-item" key={op.id}>
             <div className="history-title">
-              <strong>{operationLabels[op.kind]}</strong>
+              <strong>{operationLabel(op)}</strong>
               <span className="muted">
                 {new Date(op.createdAt).toLocaleString("ru-RU")}
               </span>

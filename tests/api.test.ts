@@ -226,6 +226,62 @@ describe("HTTP boundary", () => {
         ?.albumGenres,
     ).toEqual(["Pop", "Rock"]);
   });
+  it("returns complete merge context for the selected albums", async () => {
+    const library = context.service.catalog.addLibrary("Library", root);
+    const addTrack = (
+      id: string,
+      albumKey: string,
+      relativePath: string,
+      albumTitle: string,
+    ) =>
+      context.service.catalog.upsert({
+        id,
+        libraryId: library.id,
+        relativePath,
+        title: id,
+        artists: ["Track artist"],
+        albumTitle,
+        albumArtists: ["Album artist"],
+        albumKey,
+        genres: ["Rock"],
+        year: 2020,
+        trackNumber: 1,
+        discNumber: 1,
+        duration: 1,
+        format: "flac",
+        size: 1,
+        mtimeMs: 1,
+        coverId: null,
+        available: true,
+      });
+    addTrack("first", "first-album", path.join("Artist", "Album", "CD1", "01.flac"), "First");
+    addTrack("second", "second-album", path.join("Artist", "Album", "CD2", "02.flac"), "Second");
+    const session = await context.app.inject({
+      url: "/api/session",
+      headers: { host: "127.0.0.1:4317" },
+    });
+    const response = await context.app.inject({
+      method: "POST",
+      url: "/api/albums/merge-context",
+      headers: {
+        host: "127.0.0.1:4317",
+        cookie: String(session.headers["set-cookie"]).split(";")[0],
+        "x-csrf-token": session.json().csrf,
+      },
+      payload: { albumIds: ["first-album", "second-album"] },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      compatible: true,
+      relativeFolder: path.join("Artist", "Album"),
+      trackCount: 2,
+      sources: [
+        { albumId: "first-album", title: "First", trackCount: 1 },
+        { albumId: "second-album", title: "Second", trackCount: 1 },
+      ],
+    });
+  });
   it("loads album formats in one batch for a tracks page", () => {
     const library = context.service.catalog.addLibrary("Library", root);
     for (const [id, albumKey, format] of [

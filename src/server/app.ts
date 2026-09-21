@@ -333,6 +333,17 @@ export async function createApp(options: {
       q.limit,
     );
   });
+  app.post("/api/albums/merge-context", async (request) => {
+    const { albumIds } = z
+      .object({
+        albumIds: z.array(z.string().min(1)).min(2).max(10000),
+      })
+      .strict()
+      .parse(request.body);
+    if (new Set(albumIds).size < 2)
+      throw new Error("Выберите как минимум два разных альбома");
+    return service.catalog.albumMergeContext(albumIds);
+  });
   app.get("/api/genres", async (request) => {
     const q = pageSchema.parse(request.query);
     return service.catalog.genres(filterSchema.parse(JSON.parse(q.filter)));
@@ -623,6 +634,7 @@ export async function createApp(options: {
         errors: o.items
           .filter((i) => i.error)
           .map((i) => `${i.title}: ${i.error}`),
+        intent: o.intent,
       })),
   );
   app.delete("/api/operations/history", async () =>
@@ -658,6 +670,7 @@ export async function createApp(options: {
           )
           .max(10000)
           .optional(),
+        intent: z.enum(["album-merge"]).optional(),
       })
       .parse(request.body);
     if (body.patch?.cover && body.coverId)
@@ -696,6 +709,7 @@ export async function createApp(options: {
       body.itemPatches,
       body.coverId ? body.coverTrackIds : undefined,
       body.folderRoots,
+      body.intent,
     );
   });
   app.post("/api/operations/:id/execute", async (request) =>

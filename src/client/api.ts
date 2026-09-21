@@ -1,4 +1,9 @@
-import type { CatalogFilter } from "../shared/contracts";
+import type {
+  CatalogFilter,
+  OperationKind,
+  OperationPreview,
+  OperationSummary,
+} from "../shared/contracts";
 import { apiResponseContract } from "../shared/api-contracts";
 
 let csrf = "";
@@ -101,3 +106,15 @@ export const operationLabels = {
   tags: "Изменение тегов",
   restore: "Восстановление",
 };
+export function operationLabel(
+  operation:
+    | Pick<OperationPreview, "kind" | "intent">
+    | Pick<OperationSummary, "kind" | "intent">
+    | OperationKind,
+) {
+  if (typeof operation !== "string" && operation.intent === "album-merge")
+    return "Объединение альбомов";
+  return operationLabels[
+    typeof operation === "string" ? operation : operation.kind
+  ];
+}

@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 
-export const catalogSchemaVersion = 6;
+export const catalogSchemaVersion = 7;
 
 export function runCatalogMigrations(db: Database.Database): void {
   db.exec(`
@@ -70,5 +70,30 @@ export function runCatalogMigrations(db: Database.Database): void {
              json_each(CASE WHEN t.albumArtists='[]' THEN t.artists ELSE t.albumArtists END) j
       `);
       db.pragma("user_version = 6");
+    })();
+  if (version < 7)
+    db.transaction(() => {
+      db.exec(`
+        CREATE TEMP TABLE album_key_migration AS
+        SELECT DISTINCT albumKey oldKey,
+               album_identity_key(libraryId, relativePath, albumTitle, albumArtists, year) newKey
+        FROM tracks;
+
+        INSERT OR IGNORE INTO bookmarks(kind,id)
+        SELECT 'album', migration.newKey
+        FROM bookmarks bookmark
+        JOIN album_key_migration migration ON migration.oldKey=bookmark.id
+        WHERE bookmark.kind='album';
+
+        DELETE FROM bookmarks
+        WHERE kind='album'
+          AND id IN (SELECT oldKey FROM album_key_migration WHERE oldKey<>newKey);
+
+        UPDATE tracks
+        SET albumKey=album_identity_key(libraryId, relativePath, albumTitle, albumArtists, year);
+
+        DROP TABLE album_key_migration;
+      `);
+      db.pragma("user_version = 7");
     })();
 }
