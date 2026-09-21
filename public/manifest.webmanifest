@@ -1,0 +1,25 @@
+{
+  "id": "/",
+  "name": "Harbor Player",
+  "short_name": "Harbor Player",
+  "lang": "ru",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#171c21",
+  "background_color": "#171c21",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

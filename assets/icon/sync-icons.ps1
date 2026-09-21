@@ -18,6 +18,7 @@ $requiredSources = @(
     "icon.png",
     "icon.ico",
     "icon-1.png",
+    "icon-192.png",
     "icon-2.png",
     "icon-3.png",
     "icon-4.png",
@@ -42,6 +43,7 @@ $copyPlan = @(
     @{ Source = "icon.ico"; Destination = "assets\icon.ico" },
     @{ Source = "icon.ico"; Destination = "public\favicon.ico" },
     @{ Source = "icon-1.png"; Destination = "assets\icon.png" },
+    @{ Source = "icon-192.png"; Destination = "public\icon-192.png" },
     @{ Source = "icon-1.png"; Destination = "public\icon-512.png" }
 )
 
