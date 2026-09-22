@@ -2469,13 +2469,6 @@ export function App() {
             })}
           </div>
         )}
-        {!coverMode && (
-          <CatalogUserFilters
-            filter={filter}
-            disabled={isSearching}
-            onChange={setFilter}
-          />
-        )}
         {coverMode ? (
           <div className="cover-search">
             <label className="search">
@@ -2526,48 +2519,52 @@ export function App() {
           </label>
         )}
         {!coverMode && (
-          <button
-            className={`icon-button bookmarks-button ${filter.bookmarksOnly ? "active" : ""} ${bookmarks.isError ? "error" : ""}`}
-            aria-label={
-              bookmarks.isError
-                ? "Не удалось загрузить закладки. Повторить"
-                : filter.bookmarksOnly
-                  ? "Отключить фильтр закладок"
-                  : "Показать музыку из закладок"
-            }
-            aria-pressed={filter.bookmarksOnly}
-            title={
-              bookmarks.isError
-                ? "Не удалось загрузить закладки. Нажмите, чтобы повторить"
-                : filter.bookmarksOnly
-                  ? "Отключить фильтр закладок"
-                  : "Показать музыку из закладок"
-            }
-            disabled={
-              isSearching ||
-              bookmarks.isFetching ||
-              pendingBookmarkKeys.size > 0
-            }
-            onClick={() => {
-              if (bookmarks.isError) {
-                void bookmarks.refetch();
-                return;
+          <div className="catalog-actions">
+            <button
+              className={`icon-button bookmarks-button ${filter.bookmarksOnly ? "active" : ""} ${bookmarks.isError ? "error" : ""}`}
+              aria-label={
+                bookmarks.isError
+                  ? "Не удалось загрузить закладки. Повторить"
+                  : filter.bookmarksOnly
+                    ? "Отключить фильтр закладок"
+                    : "Показать музыку из закладок"
               }
-              setFilter((current) => ({
-                ...current,
-                bookmarksOnly: !current.bookmarksOnly,
-              }));
-            }}
-          >
-            {bookmarks.isFetching || pendingBookmarkKeys.size > 0 ? (
-              <RefreshCw size={18} className="spinning" />
-            ) : (
-              <BookmarkIcon
-                size={19}
-                fill={filter.bookmarksOnly ? "currentColor" : "none"}
-              />
-            )}
-          </button>
+              aria-pressed={filter.bookmarksOnly}
+              title={
+                bookmarks.isError
+                  ? "Не удалось загрузить закладки. Нажмите, чтобы повторить"
+                  : filter.bookmarksOnly
+                    ? "Отключить фильтр закладок"
+                    : "Показать музыку из закладок"
+              }
+              disabled={
+                isSearching ||
+                bookmarks.isFetching ||
+                pendingBookmarkKeys.size > 0
+              }
+              onClick={() => {
+                if (bookmarks.isError) {
+                  void bookmarks.refetch();
+                  return;
+                }
+                setFilter((current) => ({
+                  ...current,
+                  bookmarksOnly: !current.bookmarksOnly,
+                }));
+              }}
+            >
+              {bookmarks.isFetching || pendingBookmarkKeys.size > 0 ? (
+                <RefreshCw size={18} className="spinning" />
+              ) : (
+                <BookmarkIcon size={19} fill="none" />
+              )}
+            </button>
+            <CatalogUserFilters
+              filter={filter}
+              disabled={isSearching}
+              onChange={setFilter}
+            />
+          </div>
         )}
         {!coverMode && (
           <button

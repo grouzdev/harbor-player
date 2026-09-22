@@ -61,7 +61,7 @@ test("icon buttons keep their geometry on hover", async ({ page }) => {
   expect(after!.height).toBeCloseTo(before!.height, 5);
 });
 
-test("catalog filters follow section buttons and search stays centered", async ({
+test("catalog filters stay right of search in the requested order", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -72,35 +72,79 @@ test("catalog filters follow section buttons and search stays centered", async (
   const bookmarks = page.getByRole("button", {
     name: "Показать музыку из закладок",
   });
+  const unviewed = page.getByRole("button", { name: "Только непросмотренные" });
+  const rating = page.getByRole("button", { name: "Фильтр по рейтингу" });
+  const history = page.getByRole("button", { name: "Журнал операций" });
   const topbar = page.locator(".topbar");
-  const [searchBox, filterBox, sectionButtonsBox, bookmarkBox, topbarBox] =
-    await Promise.all([
-      search.boundingBox(),
-      filters.boundingBox(),
-      sectionButtons.boundingBox(),
-      bookmarks.boundingBox(),
-      topbar.boundingBox(),
-    ]);
+  const [
+    searchBox,
+    filterBox,
+    sectionButtonsBox,
+    bookmarkBox,
+    unviewedBox,
+    ratingBox,
+    historyBox,
+    topbarBox,
+  ] = await Promise.all([
+    search.boundingBox(),
+    filters.boundingBox(),
+    sectionButtons.boundingBox(),
+    bookmarks.boundingBox(),
+    unviewed.boundingBox(),
+    rating.boundingBox(),
+    history.boundingBox(),
+    topbar.boundingBox(),
+  ]);
   expect(searchBox).not.toBeNull();
   expect(filterBox).not.toBeNull();
   expect(sectionButtonsBox).not.toBeNull();
   expect(bookmarkBox).not.toBeNull();
+  expect(unviewedBox).not.toBeNull();
+  expect(ratingBox).not.toBeNull();
+  expect(historyBox).not.toBeNull();
   expect(topbarBox).not.toBeNull();
-  expect(filterBox!.x).toBeGreaterThanOrEqual(
-    sectionButtonsBox!.x + sectionButtonsBox!.width,
+  expect(bookmarkBox!.x).toBeGreaterThanOrEqual(
+    searchBox!.x + searchBox!.width,
   );
-  expect(filterBox!.x + filterBox!.width).toBeLessThanOrEqual(searchBox!.x);
+  expect(bookmarkBox!.x).toBeLessThan(unviewedBox!.x);
+  expect(unviewedBox!.x).toBeLessThan(ratingBox!.x);
+  expect(ratingBox!.x).toBeLessThan(historyBox!.x);
+  expect(filterBox!.x).toBeGreaterThanOrEqual(bookmarkBox!.x);
+  expect(filterBox!.x + filterBox!.width).toBeGreaterThanOrEqual(
+    ratingBox!.x + ratingBox!.width,
+  );
+  expect(sectionButtonsBox!.x + sectionButtonsBox!.width).toBeLessThan(
+    searchBox!.x,
+  );
   expect(searchBox!.x + searchBox!.width / 2).toBeCloseTo(
     topbarBox!.x + topbarBox!.width / 2,
     1,
   );
-  expect(bookmarkBox!.x).toBeGreaterThanOrEqual(
-    searchBox!.x + searchBox!.width,
-  );
   await bookmarks.click();
-  await expect(
-    page.getByRole("button", { name: "Отключить фильтр закладок" }),
-  ).toHaveAttribute("aria-pressed", "true");
+  const activeBookmarks = page.getByRole("button", {
+    name: "Отключить фильтр закладок",
+  });
+  await expect(activeBookmarks).toHaveAttribute("aria-pressed", "true");
+  const activeColors = await activeBookmarks.evaluate((node) => {
+    const accent = getComputedStyle(document.documentElement)
+      .getPropertyValue("--accent")
+      .trim();
+    const probe = document.createElement("span");
+    probe.style.color = accent;
+    document.body.append(probe);
+    const resolvedAccent = getComputedStyle(probe).color;
+    probe.remove();
+    return {
+      background: getComputedStyle(node).backgroundColor,
+      accent: resolvedAccent,
+    };
+  });
+  expect(activeColors.background).toBe(activeColors.accent);
+  await expect(activeBookmarks.locator("svg")).toHaveCSS(
+    "color",
+    "rgb(37, 58, 45)",
+  );
+  await expect(activeBookmarks.locator("svg")).toHaveAttribute("fill", "none");
 });
 
 test("fullscreen button changes the application shell", async ({ page }) => {

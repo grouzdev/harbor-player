@@ -2264,20 +2264,23 @@ body {
   margin: 0;
   transform: translateX(-50%);
 }
+.catalog-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+}
 .history-button {
-  margin-left: auto;
-}
-.bookmarks-button {
-  margin-left: auto;
-}
-.bookmarks-button + .history-button {
   margin-left: 0;
 }
 .cover-search + .settings-button {
   margin-left: auto;
 }
-.bookmarks-button.active {
-  background: #c0d6bb12;
+.bookmarks-button.active,
+.bookmarks-button.active:hover:not(:disabled) {
+  background: var(--accent);
+  color: #253a2d;
+  box-shadow: none;
 }
 .bookmarks-button.error {
   color: #e19a8c;
