@@ -2380,14 +2380,70 @@ body {
   top: 7px;
   left: 7px;
   z-index: 3;
+  border: 1px solid #e5e5d714;
+  background: linear-gradient(145deg, #252624, #131413);
+  box-shadow:
+    0 1px #f0f0e315 inset,
+    0 -1px #0000007a inset,
+    0 4px 11px #0202023d;
+}
+.album-viewed-toggle.viewed,
+.album-viewed-toggle.viewed:hover:not(:disabled),
+.album-viewed-toggle.viewed:focus-visible {
+  color: #253a2d;
+  border-color: transparent;
+  background: var(--accent);
+  box-shadow: none;
 }
 .album-rating-control {
   position: absolute;
   top: 7px;
   right: 7px;
   z-index: 3;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+.album-rating-control .compact-rating {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  padding: 6px;
+  border: 1px solid #e5e5d714;
   border-radius: 6px;
-  background: #111820cc;
+  color: #84939b;
+  background: linear-gradient(145deg, #252624, #131413);
+  box-shadow:
+    0 1px #f0f0e315 inset,
+    0 -1px #0000007a inset,
+    0 4px 11px #0202023d;
+}
+.album-rating-control .compact-rating svg {
+  width: 17px;
+  height: 17px;
+}
+.album-rating-control .compact-rating.rated,
+.album-rating-control .compact-rating.rated:hover:not(:disabled),
+.album-rating-control .compact-rating.rated:focus-visible {
+  width: 44px;
+  min-width: 44px;
+  color: #253a2d;
+  border-color: transparent;
+  background: var(--accent);
+  box-shadow: none;
+}
+.album-rating-control .compact-rating:hover:not(:disabled) {
+  color: #e6eee9;
+  background: #10161ce8;
+}
+.album-rating-control.rated {
+  opacity: 1;
+  pointer-events: auto;
+}
+.album-card:hover .album-rating-control,
+.album-card:focus-within .album-rating-control {
+  opacity: 1;
+  pointer-events: auto;
 }
 .track-row-actions,
 .track-album-state {
@@ -2544,6 +2600,14 @@ body {
 .bookmark-toggle.bookmarked {
   color: var(--accent);
   opacity: 1;
+}
+.album-bookmark-toggle.bookmarked,
+.album-bookmark-toggle.bookmarked:hover:not(:disabled),
+.album-bookmark-toggle.bookmarked:focus-visible {
+  color: #253a2d;
+  border-color: transparent;
+  background: var(--accent);
+  box-shadow: none;
 }
 .bookmark-toggle[aria-busy="true"] {
   opacity: 1;

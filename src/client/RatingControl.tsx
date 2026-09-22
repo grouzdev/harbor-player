@@ -133,6 +133,8 @@ export function RatingControl({
   pending = false,
   onChange,
   className = "",
+  outlineStar = false,
+  showValue = true,
 }: {
   kind: UserStateKind;
   id: string;
@@ -140,6 +142,8 @@ export function RatingControl({
   pending?: boolean;
   onChange: UserStateChange;
   className?: string;
+  outlineStar?: boolean;
+  showValue?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -148,7 +152,10 @@ export function RatingControl({
     requestAnimationFrame(() => trigger.current?.focus());
   };
   return (
-    <span className={`rating-control ${className}`} data-selection-ignore>
+    <span
+      className={`rating-control ${rating ? "rated" : ""} ${className}`}
+      data-selection-ignore
+    >
       <button
         ref={trigger}
         type="button"
@@ -163,8 +170,11 @@ export function RatingControl({
           setOpen((value) => !value);
         }}
       >
-        <Star size={15} fill={rating ? "currentColor" : "none"} />
-        {rating && <span>{rating}</span>}
+        <Star
+          size={15}
+          fill={rating && !outlineStar ? "currentColor" : "none"}
+        />
+        {rating && showValue && <span>{rating}</span>}
       </button>
       {open && (
         <RatingPopover

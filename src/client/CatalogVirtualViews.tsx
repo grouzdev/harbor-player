@@ -535,6 +535,7 @@ export function AlbumGrid({
                         pending={pendingBookmarkKeys.has(`album:${album.id}`)}
                         onChange={onBookmarkChange}
                         className="album-bookmark-toggle"
+                        filledWhenBookmarked={false}
                       />
                       <button
                         className="album-main"
@@ -625,18 +626,16 @@ export function AlbumGrid({
                           <small>{album.year || ""}</small>
                         </span>
                       </button>
-                      {album.rating !== null && (
-                        <RatingControl
-                          kind="album"
-                          id={album.id}
-                          rating={album.rating}
-                          pending={pendingUserStateKeys.has(
-                            `album:${album.id}`,
-                          )}
-                          onChange={onUserStateChange}
-                          className="album-rating-control"
-                        />
-                      )}
+                      <RatingControl
+                        kind="album"
+                        id={album.id}
+                        rating={album.rating}
+                        pending={pendingUserStateKeys.has(`album:${album.id}`)}
+                        onChange={onUserStateChange}
+                        className="album-rating-control"
+                        outlineStar
+                        showValue
+                      />
                     </div>
                   ))}
               </div>

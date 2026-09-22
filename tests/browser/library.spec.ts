@@ -1238,14 +1238,27 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   const firstAlbum = page.getByTitle("Тестовый альбом · Исполнитель альбома", {
     exact: true,
   });
+  const accentBackground = await page.evaluate(() => {
+    const swatch = document.createElement("span");
+    swatch.style.background = "var(--accent)";
+    document.body.append(swatch);
+    const background = getComputedStyle(swatch).backgroundColor;
+    swatch.remove();
+    return background;
+  });
   const firstAlbumId = await firstAlbum.getAttribute("data-selection-key");
   expect(firstAlbumId).not.toBeNull();
   const firstAlbumButton = firstAlbum.locator(".album-main");
-  await expect(
-    firstAlbum.getByRole("button", { name: /Оценка .* из 5/ }),
-  ).toHaveCount(0);
-  await firstAlbum.dispatchEvent("contextmenu", { clientX: 900, clientY: 350 });
-  await page.getByRole("menuitem", { name: /Изменить оценку/ }).click();
+  const unratedAlbumRating = firstAlbum.getByRole("button", {
+    name: "Без оценки",
+  });
+  await firstAlbum.hover();
+  await expect(unratedAlbumRating).toHaveCSS("opacity", "1");
+  await expect(unratedAlbumRating).toHaveCSS("width", "30px");
+  await expect(unratedAlbumRating).toHaveCSS("height", "30px");
+  await unratedAlbumRating.hover();
+  await expect(unratedAlbumRating).toHaveCSS("color", "rgb(230, 238, 233)");
+  await unratedAlbumRating.click();
   await page
     .getByRole("dialog", { name: "Изменить оценку" })
     .getByRole("button", { name: "4 из 5" })
@@ -1255,16 +1268,26 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   });
   await expect(savedAlbumRating).toBeVisible();
   await expect(savedAlbumRating).toBeEnabled();
-  await firstAlbum.getByRole("button", { name: "Оценка 4 из 5" }).click();
+  await expect(savedAlbumRating).toHaveCSS(
+    "background-color",
+    accentBackground,
+  );
+  await expect(savedAlbumRating).toHaveCSS("color", "rgb(37, 58, 45)");
+  await expect(savedAlbumRating).toHaveCSS("width", "44px");
+  await expect(savedAlbumRating.locator("span")).toHaveText("4");
+  await expect(savedAlbumRating.locator("svg")).toHaveAttribute("fill", "none");
+  await page.mouse.move(0, 0);
+  await expect(firstAlbum.locator(".album-rating-control")).toHaveCSS(
+    "opacity",
+    "1",
+  );
+  await savedAlbumRating.click();
   await page
     .getByRole("dialog", { name: "Изменить оценку" })
     .getByRole("button", { name: "4 из 5" })
     .click();
-  await expect(
-    firstAlbum.getByRole("button", { name: /Оценка .* из 5/ }),
-  ).toHaveCount(0);
-  await firstAlbum.dispatchEvent("contextmenu", { clientX: 900, clientY: 350 });
-  await page.getByRole("menuitem", { name: /Изменить оценку/ }).click();
+  await expect(unratedAlbumRating).toBeVisible();
+  await unratedAlbumRating.click();
   await page
     .getByRole("dialog", { name: "Изменить оценку" })
     .getByRole("button", { name: "4 из 5" })
@@ -1281,6 +1304,18 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(
     firstAlbum.getByRole("button", { name: "Отметить непросмотренным" }),
   ).toHaveAttribute("aria-pressed", "true");
+  const viewedAlbumToggle = firstAlbum.getByRole("button", {
+    name: "Отметить непросмотренным",
+  });
+  await expect(viewedAlbumToggle).toHaveCSS(
+    "background-color",
+    accentBackground,
+  );
+  await expect(viewedAlbumToggle).toHaveCSS("color", "rgb(37, 58, 45)");
+  await expect(viewedAlbumToggle.locator("svg.lucide-eye-off")).toHaveAttribute(
+    "fill",
+    "none",
+  );
   await expect(
     firstTrackRow.getByRole("button", { name: "Без оценки" }),
   ).toHaveCount(0);
@@ -1650,6 +1685,15 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     name: "Удалить альбом «Тестовый альбом» из закладок",
   });
   await expect(removeAlbumBookmark).toHaveAttribute("aria-pressed", "true");
+  await expect(removeAlbumBookmark).toHaveCSS(
+    "background-color",
+    accentBackground,
+  );
+  await expect(removeAlbumBookmark).toHaveCSS("color", "rgb(37, 58, 45)");
+  await expect(removeAlbumBookmark.locator("svg")).toHaveAttribute(
+    "fill",
+    "none",
+  );
   await page.mouse.move(0, 0);
   await expect(removeAlbumBookmark).toHaveCSS("opacity", "1");
   await firstAlbum.dispatchEvent("contextmenu", { clientX: 300, clientY: 300 });

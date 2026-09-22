@@ -22,6 +22,7 @@ export function BookmarkToggle({
   pending,
   onChange,
   className = "",
+  filledWhenBookmarked = true,
 }: {
   kind: BookmarkKind;
   id: string;
@@ -31,6 +32,7 @@ export function BookmarkToggle({
   pending: boolean;
   onChange: BookmarkChange;
   className?: string;
+  filledWhenBookmarked?: boolean;
 }) {
   const action = bookmarked
     ? `Удалить ${labels[kind]} «${label}» из закладок`
@@ -55,7 +57,10 @@ export function BookmarkToggle({
       {pending ? (
         <RefreshCw size={15} className="spinning" />
       ) : (
-        <BookmarkIcon size={16} fill={bookmarked ? "currentColor" : "none"} />
+        <BookmarkIcon
+          size={16}
+          fill={bookmarked && filledWhenBookmarked ? "currentColor" : "none"}
+        />
       )}
     </button>
   );
