@@ -519,24 +519,43 @@ export function AlbumGrid({
                         );
                       }}
                     >
-                      <ViewedToggle
-                        id={album.id}
-                        viewed={album.viewed}
-                        pending={pendingUserStateKeys.has(`album:${album.id}`)}
-                        onChange={onUserStateChange}
-                        className="album-viewed-toggle"
-                      />
-                      <BookmarkToggle
-                        kind="album"
-                        id={album.id}
-                        label={album.title || "Без альбома"}
-                        bookmarked={bookmarkKeys.has(`album:${album.id}`)}
-                        unavailable={bookmarksUnavailable}
-                        pending={pendingBookmarkKeys.has(`album:${album.id}`)}
-                        onChange={onBookmarkChange}
-                        className="album-bookmark-toggle"
-                        filledWhenBookmarked={false}
-                      />
+                      <div className="album-card-actions">
+                        <BookmarkToggle
+                          kind="album"
+                          id={album.id}
+                          label={album.title || "Без альбома"}
+                          bookmarked={bookmarkKeys.has(`album:${album.id}`)}
+                          unavailable={bookmarksUnavailable}
+                          pending={pendingBookmarkKeys.has(`album:${album.id}`)}
+                          onChange={onBookmarkChange}
+                          className="album-bookmark-toggle"
+                          filledWhenBookmarked={false}
+                        />
+                        <ViewedToggle
+                          id={album.id}
+                          viewed={album.viewed}
+                          pending={pendingUserStateKeys.has(
+                            `album:${album.id}`,
+                          )}
+                          onChange={onUserStateChange}
+                          className="album-viewed-toggle"
+                        />
+                        <RatingControl
+                          kind="album"
+                          id={album.id}
+                          rating={album.rating}
+                          pending={pendingUserStateKeys.has(
+                            `album:${album.id}`,
+                          )}
+                          onChange={onUserStateChange}
+                          className="album-rating-control"
+                          outlineStar
+                          showValue
+                        />
+                        <span className="album-track-count">
+                          {trackCountLabel(album.trackCount)}
+                        </span>
+                      </div>
                       <button
                         className="album-main"
                         aria-pressed={selected.includes(album.id)}
@@ -602,9 +621,6 @@ export function AlbumGrid({
                           ) : (
                             <div className="cover-placeholder" />
                           )}
-                          <span className="album-track-count">
-                            {trackCountLabel(album.trackCount)}
-                          </span>
                           {dropTarget === album.id && (
                             <span className="album-cover-drop-hint">
                               Отпустите обложку
@@ -626,16 +642,6 @@ export function AlbumGrid({
                           <small>{album.year || ""}</small>
                         </span>
                       </button>
-                      <RatingControl
-                        kind="album"
-                        id={album.id}
-                        rating={album.rating}
-                        pending={pendingUserStateKeys.has(`album:${album.id}`)}
-                        onChange={onUserStateChange}
-                        className="album-rating-control"
-                        outlineStar
-                        showValue
-                      />
                     </div>
                   ))}
               </div>

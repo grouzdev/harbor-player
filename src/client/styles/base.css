@@ -696,17 +696,27 @@ body.selection-dragging * {
   );
 }
 .album-track-count {
-  position: absolute;
-  bottom: 7px;
-  right: 7px;
-  padding: 3px 5px;
-  border-radius: 3px;
-  background: #1118;
+  min-width: 30px;
+  height: 30px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border: 1px solid #e5e5d714;
+  border-radius: 6px;
+  background: linear-gradient(145deg, #252624, #131413);
+  box-shadow:
+    0 1px #f0f0e315 inset,
+    0 -1px #0000007a inset,
+    0 4px 11px #0202023d;
   color: #eee;
   font-size: var(--type-caption);
   opacity: 0;
+  transition: opacity 0.15s;
 }
-.album-card:hover .album-track-count {
+.album-card:hover .album-track-count,
+.album-card:focus-within .album-track-count {
   opacity: 1;
 }
 .tracks-panel {
@@ -2376,10 +2386,6 @@ body {
   opacity: 1;
 }
 .album-viewed-toggle {
-  position: absolute;
-  top: 7px;
-  left: 7px;
-  z-index: 3;
   border: 1px solid #e5e5d714;
   background: linear-gradient(145deg, #252624, #131413);
   box-shadow:
@@ -2396,10 +2402,6 @@ body {
   box-shadow: none;
 }
 .album-rating-control {
-  position: absolute;
-  top: 7px;
-  right: 7px;
-  z-index: 3;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.15s;
@@ -2614,8 +2616,8 @@ body {
 }
 .artist-row:hover > .bookmark-toggle,
 .artist-row:focus-within > .bookmark-toggle,
-.album-card:hover > .bookmark-toggle,
-.album-card:focus-within > .bookmark-toggle,
+.album-card:hover .album-bookmark-toggle,
+.album-card:focus-within .album-bookmark-toggle,
 .track-row:hover > .bookmark-toggle,
 .track-row:focus-within > .bookmark-toggle,
 .track-album-header:hover > .bookmark-toggle,
@@ -2626,10 +2628,23 @@ body {
   background: transparent;
 }
 .album-bookmark-toggle {
+  border: 1px solid #e5e5d714;
+  background: linear-gradient(145deg, #252624, #131413);
+  box-shadow:
+    0 1px #f0f0e315 inset,
+    0 -1px #0000007a inset,
+    0 4px 11px #0202023d;
+}
+.album-card-actions {
   position: absolute;
-  z-index: 2;
-  top: calc(100cqw - 35px);
-  left: 7px;
+  z-index: 3;
+  top: 7px;
+  right: 7px;
+  height: calc(100cqw - 14px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
 }
 .track-bookmark-toggle,
 .track-album-bookmark-toggle {

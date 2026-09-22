@@ -1256,6 +1256,37 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(unratedAlbumRating).toHaveCSS("opacity", "1");
   await expect(unratedAlbumRating).toHaveCSS("width", "30px");
   await expect(unratedAlbumRating).toHaveCSS("height", "30px");
+  const albumActions = firstAlbum.locator(".album-card-actions");
+  const albumBookmark = firstAlbum.getByRole("button", {
+    name: /Добавить .*в закладки|Удалить .*из закладок/,
+  });
+  const albumViewed = firstAlbum.getByRole("button", {
+    name: "Отметить просмотренным",
+  });
+  const albumTrackCountBadge = firstAlbum.locator(".album-track-count");
+  await expect(albumBookmark).toHaveCSS("opacity", "1");
+  await expect(albumTrackCountBadge).toHaveCSS("height", "30px");
+  await expect(albumTrackCountBadge).toHaveCSS(
+    "background-image",
+    /linear-gradient/,
+  );
+  await expect(albumActions.locator(":scope > *")).toHaveCount(4);
+  const actionBoxes = await Promise.all(
+    [albumBookmark, albumViewed, unratedAlbumRating, albumTrackCountBadge].map(
+      (action) => action.boundingBox(),
+    ),
+  );
+  expect(actionBoxes.every((box) => box)).toBe(true);
+  expect(actionBoxes[0]!.y).toBeLessThan(actionBoxes[1]!.y);
+  expect(actionBoxes[1]!.y).toBeLessThan(actionBoxes[2]!.y);
+  expect(actionBoxes[2]!.y).toBeLessThan(actionBoxes[3]!.y);
+  const albumBox = await firstAlbum.boundingBox();
+  expect(albumBox).not.toBeNull();
+  expect(
+    actionBoxes.every(
+      (box) => box!.x + box!.width <= albumBox!.x + albumBox!.width,
+    ),
+  ).toBe(true);
   await unratedAlbumRating.hover();
   await expect(unratedAlbumRating).toHaveCSS("color", "rgb(230, 238, 233)");
   await unratedAlbumRating.click();
