@@ -2357,6 +2357,90 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   expect(errors).toEqual([]);
 });
 
+test("album actions do not interrupt active playback", async ({
+  page,
+}, info) => {
+  const browser = info.project.name;
+  const source = path.resolve(
+    ".test-data/browser",
+    browser,
+    "cover-mode",
+    "Downloads",
+  );
+  const libraryName = `Playback state ${browser}`;
+  await page.goto("/");
+
+  await page.locator(".add-library").click();
+  await page.getByLabel("Путь к папке", { exact: true }).fill(source);
+  await page.getByLabel("Название библиотеки").fill(libraryName);
+  await page.getByRole("button", { name: "Подключить", exact: true }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+
+  const library = page
+    .locator(".libraries-panel .list-tile")
+    .filter({ hasText: libraryName });
+  await library.locator(".list-tile-main").click();
+  const track = page.getByTestId("track-row").first();
+  await expect(track).toBeVisible();
+  await track.dblclick();
+
+  const audio = page.locator("audio");
+  await expect
+    .poll(() =>
+      audio.evaluate((element: HTMLAudioElement) => element.readyState),
+    )
+    .toBeGreaterThanOrEqual(2);
+  await audio.evaluate((element: HTMLAudioElement) => {
+    element.loop = true;
+    element.currentTime = 0.8;
+    return element.play();
+  });
+  const audioSource = await audio.getAttribute("src");
+  expect(audioSource).not.toBeNull();
+  const expectPlaybackToContinue = async () => {
+    await expect
+      .poll(() =>
+        audio.evaluate(
+          (element: HTMLAudioElement) =>
+            !element.paused && element.currentTime > 0.8,
+        ),
+      )
+      .toBe(true);
+    await expect(audio).toHaveAttribute("src", audioSource!);
+  };
+
+  const album = page.locator(".albums-panel .album-card.playing");
+  await expect(album).toBeVisible();
+  await album.hover();
+  await album.getByRole("button", { name: "Без оценки" }).click();
+  await page
+    .getByRole("dialog", { name: "Изменить оценку" })
+    .getByRole("button", { name: "4 из 5" })
+    .click();
+  await expectPlaybackToContinue();
+  await expect(
+    album.getByRole("button", { name: "Оценка 4 из 5" }),
+  ).toBeEnabled();
+
+  await album.getByRole("button", { name: "Отметить просмотренным" }).click();
+  await expectPlaybackToContinue();
+  await expect(
+    album.getByRole("button", { name: "Отметить непросмотренным" }),
+  ).toBeEnabled();
+
+  await album
+    .getByRole("button", { name: /Добавить альбом .* в закладки/ })
+    .click();
+  await expectPlaybackToContinue();
+  await expect(
+    album.getByRole("button", { name: /Удалить альбом .* из закладок/ }),
+  ).toBeEnabled();
+  await audio.evaluate((element: HTMLAudioElement) => {
+    element.pause();
+    element.loop = false;
+  });
+});
+
 test("cover mode shows the album, artwork and quick playback search", async ({
   page,
 }, info) => {

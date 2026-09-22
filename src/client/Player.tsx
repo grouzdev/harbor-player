@@ -48,6 +48,13 @@ export function usePlayer(notify: (message: string) => void) {
   } | null>(null);
   const events = useRef<(event: any) => void>(() => {});
   const transition = useRef(0);
+  const [sourceRevision, setSourceRevision] = useState(0);
+  const queueId = queue?.id;
+  const queuePosition = queue?.position;
+  const trackId = queue?.track?.id;
+  const trackAvailable = queue?.track?.available;
+  const trackMtimeMs = queue?.track?.mtimeMs;
+  const trackDuration = queue?.track?.duration;
   useEffect(() => {
     if (audio.current) audio.current.volume = volume;
     localStorage.setItem("harbor-player-volume", String(volume));
@@ -69,20 +76,28 @@ export function usePlayer(notify: (message: string) => void) {
     if (!element) return;
     element.pause();
     setPosition(0);
-    if (!queue?.track?.available) {
+    if (!trackAvailable || !trackId || !queueId) {
       element.removeAttribute("src");
       element.load();
       setPlaying(false);
       return;
     }
-    element.src = `/api/audio/${queue.track.id}?v=${queue.track.mtimeMs}`;
+    element.src = `/api/audio/${trackId}?v=${trackMtimeMs}`;
     element.load();
     localStorage.setItem(
       "harbor-player-queue",
-      JSON.stringify({ id: queue.id, position: queue.position }),
+      JSON.stringify({ id: queueId, position: queuePosition }),
     );
-    setLength(queue.track.duration);
-  }, [queue]);
+    setLength(trackDuration ?? 0);
+  }, [
+    queueId,
+    queuePosition,
+    sourceRevision,
+    trackAvailable,
+    trackDuration,
+    trackId,
+    trackMtimeMs,
+  ]);
   const loadQueue = async (
     body:
       | { filter: CatalogFilter; startId?: string }
@@ -189,6 +204,7 @@ export function usePlayer(notify: (message: string) => void) {
         shouldPlay.current = previous.playing && track.available;
         seekAfterLoad.current = previous.position;
         setQueue({ ...queue, track: track.available ? track : null });
+        setSourceRevision((current) => current + 1);
       } catch (e) {
         notify((e as Error).message);
       }
