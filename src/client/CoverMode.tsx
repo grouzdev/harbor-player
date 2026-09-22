@@ -226,8 +226,6 @@ function ArtworkViewer({
   onClose: () => void;
 }) {
   const [fit, setFit] = useState(true);
-  const [canFit, setCanFit] = useState(false);
-  const imageRef = useRef<HTMLImageElement>(null);
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -240,18 +238,6 @@ function ArtworkViewer({
     window.addEventListener("keydown", closeOnEscape, true);
     return () => window.removeEventListener("keydown", closeOnEscape, true);
   }, [onClose]);
-  useEffect(() => {
-    const measure = () => {
-      const image = imageRef.current;
-      if (!image) return;
-      setCanFit(
-        image.naturalWidth > window.innerWidth - 64 ||
-          image.naturalHeight > window.innerHeight - 64,
-      );
-    };
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, []);
   return (
     <div
       className="artwork-viewer"
@@ -262,22 +248,14 @@ function ArtworkViewer({
       <div
         className="artwork-viewer-scroll"
         onClick={(event) => {
-          if (!fit && event.target === event.currentTarget) setFit(true);
+          if (event.target === event.currentTarget) onClose();
         }}
       >
         <img
-          ref={imageRef}
-          className={`${fit ? "fit" : "original"} ${canFit ? "zoomable" : ""}`}
+          className={fit ? "fit" : "original"}
           src={src}
           alt={alt}
-          onLoad={(event) => {
-            const image = event.currentTarget;
-            setCanFit(
-              image.naturalWidth > window.innerWidth - 64 ||
-                image.naturalHeight > window.innerHeight - 64,
-            );
-          }}
-          onClick={() => canFit && setFit((current) => !current)}
+          onClick={() => setFit((current) => !current)}
         />
       </div>
     </div>

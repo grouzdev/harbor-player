@@ -2648,7 +2648,27 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   });
   await expect(artworkViewer).toBeVisible();
   await expect(artworkViewer.locator("img")).toHaveClass(/fit/);
-  await expect(artworkViewer.locator("img")).not.toHaveClass(/zoomable/);
+  await expect(artworkViewer.locator("img")).toHaveCSS("height", "800px");
+  await artworkViewer.locator("img").click();
+  await expect(artworkViewer.locator("img")).toHaveClass(/original/);
+  await expect
+    .poll(() =>
+      artworkViewer.locator("img").evaluate((image: HTMLImageElement) => {
+        return (
+          image.width === image.naturalWidth &&
+          image.height === image.naturalHeight
+        );
+      }),
+    )
+    .toBe(true);
+  await artworkViewer.locator(".artwork-viewer-scroll").click({
+    position: { x: 4, y: 4 },
+  });
+  await expect(artworkViewer).not.toBeVisible();
+
+  await coverMode
+    .getByRole("button", { name: "Открыть обложку в оригинальном размере" })
+    .click();
   await page.keyboard.press("Escape");
   await expect(artworkViewer).not.toBeVisible();
   await expect(coverMode).toBeVisible();
@@ -2657,16 +2677,14 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   await coverMode
     .getByRole("button", { name: "Открыть обложку в оригинальном размере" })
     .click();
-  await expect(artworkViewer.locator("img")).toHaveClass(/zoomable/);
+  await expect(artworkViewer.locator("img")).toHaveClass(/fit/);
+  await expect(artworkViewer.locator("img")).toHaveCSS("height", "400px");
   await artworkViewer.locator("img").click();
   await expect(artworkViewer.locator("img")).toHaveClass(/original/);
   await artworkViewer.locator(".artwork-viewer-scroll").click({
     position: { x: 4, y: 4 },
   });
-  await expect(artworkViewer.locator("img")).toHaveClass(/fit/);
-  await artworkViewer.locator("img").click();
-  await expect(artworkViewer.locator("img")).toHaveClass(/original/);
-  await page.keyboard.press("Escape");
+  await expect(artworkViewer).not.toBeVisible();
   await page.setViewportSize({ width: 1600, height: 1000 });
 
   await page.locator(".cover-mode-toggle").click();

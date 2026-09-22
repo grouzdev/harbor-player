@@ -2892,15 +2892,13 @@ body {
 }
 .artwork-viewer-scroll img.fit {
   width: auto;
-  height: auto;
-  max-width: calc(100vw - 64px);
-  max-height: calc(100dvh - 64px);
-}
-.artwork-viewer-scroll img.zoomable {
-  cursor: zoom-out;
-}
-.artwork-viewer-scroll img.zoomable.fit {
+  height: 80dvh;
+  max-width: none;
+  max-height: none;
   cursor: zoom-in;
+}
+.artwork-viewer-scroll img.original {
+  cursor: zoom-out;
 }
 .quick-search-dialog {
   position: absolute;
