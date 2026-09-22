@@ -33,6 +33,7 @@ export function RangeSlider(props: RangeSliderProps) {
   const [activeHandle, setActiveHandle] = useState<"minimum" | "maximum">(
     "maximum",
   );
+  const [isSingleDragging, setIsSingleDragging] = useState(false);
   const [draggingHandle, setDraggingHandle] = useState<
     "minimum" | "maximum" | null
   >(null);
@@ -48,12 +49,58 @@ export function RangeSlider(props: RangeSliderProps) {
 
   if (props.variant !== "double") {
     const end = 100 - progress(props.value, props.min, props.max);
+    const valueAtPointer = (event: PointerEvent<HTMLElement>) => {
+      const slider = sliderRef.current;
+      if (!slider) return props.value;
+      const rect = slider.getBoundingClientRect();
+      const ratio = Math.min(
+        1,
+        Math.max(0, (event.clientX - rect.left) / rect.width),
+      );
+      return Math.min(
+        props.max,
+        Math.max(
+          props.min,
+          props.min +
+            Math.round(((props.max - props.min) * ratio) / props.step) *
+              props.step,
+        ),
+      );
+    };
+    const beginSingleDrag = (event: PointerEvent<HTMLSpanElement>) => {
+      const slider = sliderRef.current;
+      if (props.disabled || !slider) return;
+      event.preventDefault();
+      event.stopPropagation();
+      slider.setPointerCapture(event.pointerId);
+      setIsSingleDragging(true);
+      props.onChange(valueAtPointer(event));
+    };
     return (
       <div
+        ref={sliderRef}
         className={className}
         style={
           { "--range-start": "0%", "--range-end": `${end}%` } as CSSProperties
         }
+        onPointerMove={(event) => {
+          if (
+            !isSingleDragging ||
+            !event.currentTarget.hasPointerCapture(event.pointerId)
+          )
+            return;
+          props.onChange(valueAtPointer(event));
+        }}
+        onPointerUp={(event) => {
+          if (event.currentTarget.hasPointerCapture(event.pointerId))
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          setIsSingleDragging(false);
+        }}
+        onPointerCancel={(event) => {
+          if (event.currentTarget.hasPointerCapture(event.pointerId))
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          setIsSingleDragging(false);
+        }}
       >
         <input
           className="range-slider-input"
@@ -65,6 +112,16 @@ export function RangeSlider(props: RangeSliderProps) {
           disabled={props.disabled}
           aria-label={props.ariaLabel}
           onChange={(event) => props.onChange(Number(event.target.value))}
+        />
+        <span
+          className={`range-slider-thumb range-slider-thumb--single${isSingleDragging ? " is-dragging" : ""}`}
+          style={
+            {
+              "--range-thumb-position": `${progress(props.value, props.min, props.max)}%`,
+            } as CSSProperties
+          }
+          aria-hidden="true"
+          onPointerDown={beginSingleDrag}
         />
       </div>
     );

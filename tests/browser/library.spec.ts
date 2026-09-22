@@ -832,11 +832,17 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(page.locator(".player")).toHaveCSS("height", "72px");
   const rangeStyles = await page.locator(".seek-range").evaluate((shell) => {
     const styles = getComputedStyle(shell);
+    const thumb = shell.querySelector<HTMLElement>(
+      ".range-slider-thumb--single",
+    )!;
+    const input = shell.querySelector<HTMLInputElement>("input")!;
     return {
       height: styles.height,
       backgroundImage: styles.backgroundImage,
       backgroundSize: styles.backgroundSize,
       borderRadius: styles.borderRadius,
+      cursor: styles.cursor,
+      thumbCursor: getComputedStyle(thumb).cursor,
       start: shell.style.getPropertyValue("--range-start"),
       end: shell.style.getPropertyValue("--range-end"),
     };
@@ -845,6 +851,8 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   expect(rangeStyles.backgroundImage).toContain("linear-gradient");
   expect(rangeStyles.backgroundSize).toBe("100% 5px");
   expect(rangeStyles.borderRadius).toBe("999px");
+  expect(rangeStyles.cursor).toBe("pointer");
+  expect(rangeStyles.thumbCursor).toBe("grab");
   expect(rangeStyles.start).toBe("0%");
   expect(rangeStyles.end).toBe("100%");
   const volumeStyles = await page.locator(".volume-range").evaluate((shell) => {
@@ -864,12 +872,17 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     .locator(".catalog-rating-range-track")
     .evaluate((shell) => {
       const styles = getComputedStyle(shell);
+      const minimumThumb = shell.querySelector<HTMLElement>(
+        ".range-slider-thumb--minimum",
+      )!;
       return {
         height: styles.height,
         width: styles.width,
         backgroundImage: styles.backgroundImage,
         backgroundSize: styles.backgroundSize,
         borderRadius: styles.borderRadius,
+        cursor: styles.cursor,
+        thumbCursor: getComputedStyle(minimumThumb).cursor,
       };
     });
   expect(ratingStyles.height).toBe(rangeStyles.height);
@@ -877,6 +890,8 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   expect(ratingStyles.backgroundImage).toBe(rangeStyles.backgroundImage);
   expect(ratingStyles.backgroundSize).toBe(rangeStyles.backgroundSize);
   expect(ratingStyles.borderRadius).toBe(rangeStyles.borderRadius);
+  expect(ratingStyles.cursor).toBe("pointer");
+  expect(ratingStyles.thumbCursor).toBe("grab");
   const playerLayout = await page.locator(".player").evaluate((player) => {
     const panel = player.getBoundingClientRect();
     const transport = player.querySelector<HTMLElement>(".transport")!;

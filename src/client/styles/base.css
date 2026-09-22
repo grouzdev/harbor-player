@@ -1109,6 +1109,7 @@ body.selection-dragging * {
   flex: 0 0 auto;
   border-radius: 999px;
   background: linear-gradient(#ffffff24, #ffffff24) center / 100% 5px no-repeat;
+  cursor: pointer;
   filter: none;
   transition: filter 140ms ease;
 }
@@ -3506,8 +3507,9 @@ input[type="range"] {
   margin-top: -3.5px;
   border: 0;
   border-radius: 50%;
-  background: var(--accent);
+  background: transparent;
   box-shadow: none;
+  cursor: grab;
 }
 
 .range-slider-input::-moz-range-thumb {
@@ -3515,8 +3517,9 @@ input[type="range"] {
   height: 12px;
   border: 0;
   border-radius: 50%;
-  background: var(--accent);
+  background: transparent;
   box-shadow: none;
+  cursor: grab;
 }
 
 .range-slider-input:hover::-webkit-slider-thumb,
@@ -3542,6 +3545,10 @@ input[type="range"] {
   transition:
     transform 140ms ease,
     box-shadow 140ms ease;
+}
+
+.range-slider .range-slider-thumb {
+  width: 12px;
 }
 
 .range-slider-thumb.active {
