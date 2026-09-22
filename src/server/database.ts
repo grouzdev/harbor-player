@@ -6,6 +6,7 @@ import { jobSchema, operationPreviewSchema } from "../shared/contracts.js";
 import type {
   Album,
   AlbumMergeContext,
+  ArtistPage,
   ArtistFolder,
   BookmarkKind,
   CatalogBookmark,
@@ -24,6 +25,7 @@ import type {
 } from "../shared/contracts.js";
 import { emptyFilter } from "../shared/contracts.js";
 import {
+  artistGroupStats,
   artistSortKey,
   compareArtistNames,
 } from "../shared/artist-grouping.js";
@@ -1040,7 +1042,7 @@ export class Catalog {
     filter: CatalogFilter,
     offset = 0,
     limit = 200,
-  ): Page<{ name: string; count: number }> {
+  ): ArtistPage {
     const { sql, args } = this.where(filter);
     const group = `FROM tracks t JOIN libraries l ON l.id=t.libraryId LEFT JOIN track_album_artists a ON a.trackId=t.id WHERE ${sql} GROUP BY coalesce(a.artist,'')`;
     const allItems = this.db
@@ -1049,10 +1051,14 @@ export class Catalog {
       )
       .all(...args) as { name: string; count: number }[];
     allItems.sort((a, b) => compareArtistNames(a.name, b.name));
+    const { averageSize: averageGroupSize } = artistGroupStats(
+      allItems.map((item) => item.name),
+    );
     return {
       items: allItems.slice(offset, offset + limit),
       total: allItems.length,
       offset,
+      averageGroupSize,
     };
   }
   quickSearch(query: string, limit = 6): QuickSearchResults {

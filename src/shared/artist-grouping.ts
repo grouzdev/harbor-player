@@ -56,3 +56,38 @@ export function startsNewArtistGroup(
       artistGroupKey(name) !== artistGroupKey(previousName))
   );
 }
+
+/**
+ * Summarizes the groups that receive a visible heading in the artist panel.
+ * Names are expected to be in artist display order.
+ */
+export function artistGroupStats(names: readonly string[]) {
+  let groupCount = 0;
+  let artistCount = 0;
+  let previousName: string | undefined;
+
+  for (const name of names) {
+    if (!isMissingArtistName(name)) {
+      artistCount += 1;
+      if (
+        previousName === undefined ||
+        startsNewArtistGroup(name, previousName)
+      )
+        groupCount += 1;
+    }
+    previousName = name;
+  }
+
+  return {
+    groupCount,
+    artistCount,
+    averageSize: groupCount ? artistCount / groupCount : 0,
+  };
+}
+
+export function shouldGroupArtists(
+  total: number,
+  averageGroupSize: number,
+): boolean {
+  return total > 10 && averageGroupSize >= 3;
+}

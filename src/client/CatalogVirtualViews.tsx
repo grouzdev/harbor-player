@@ -12,6 +12,7 @@ import {
   albumArtistGroupKey,
   artistGroupKey,
   isMissingArtistName,
+  shouldGroupArtists,
   startsNewArtistGroup,
 } from "../shared/artist-grouping";
 import { count, duration } from "./api";
@@ -69,6 +70,7 @@ function trackCountLabel(trackCount: number) {
 export function ArtistList({
   items,
   total,
+  averageGroupSize,
   selected,
   loading,
   onSelectionChange,
@@ -85,6 +87,7 @@ export function ArtistList({
 }: {
   items: { name: string; count: number }[];
   total: number;
+  averageGroupSize?: number;
   selected: string[];
   loading: boolean;
   onSelectionChange: (names: string[]) => void;
@@ -104,7 +107,7 @@ export function ArtistList({
   } | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const groupByLetters = total > 10;
+  const groupByLetters = shouldGroupArtists(total, averageGroupSize || 0);
   const rows = useMemo(() => {
     const result: (
       | { type: "group"; key: string; label: string; compact: boolean }

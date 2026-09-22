@@ -52,6 +52,7 @@ import {
 import {
   emptyFilter,
   type Album,
+  type ArtistPage,
   type FolderMoveRoot,
   type BookmarkKind,
   type Capabilities,
@@ -1825,7 +1826,7 @@ export function App() {
     queryKey: ["artists", artistFilter],
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
-      api<Page<{ name: string; count: number }>>(
+      api<ArtistPage>(
         catalogUrl("artists", artistFilter, pageParam),
       ),
     getNextPageParam: (last) =>
@@ -2738,6 +2739,7 @@ export function App() {
             <ArtistList
               items={artistItems}
               total={artists.data?.pages[0]?.total || 0}
+              averageGroupSize={artists.data?.pages[0]?.averageGroupSize}
               selected={selectedArtists}
               loading={artists.isFetching || searchPending}
               onSelectionChange={applyArtistSelection}

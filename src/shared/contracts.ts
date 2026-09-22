@@ -106,6 +106,10 @@ export interface Page<T> {
   total: number;
   offset: number;
 }
+export interface ArtistPage extends Page<{ name: string; count: number }> {
+  /** Average number of artists in each visible letter or # group. */
+  averageGroupSize?: number;
+}
 export interface FacetRelevance {
   libraryIds: string[];
   genres: string[];

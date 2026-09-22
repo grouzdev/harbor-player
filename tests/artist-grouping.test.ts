@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   artistGroupKey,
+  artistGroupStats,
   compareArtistNames,
   isMissingArtistName,
+  shouldGroupArtists,
   startsNewArtistGroup,
 } from "../src/shared/artist-grouping.js";
 
@@ -33,5 +35,19 @@ describe("artist grouping", () => {
   it("provides a compact visible label for every group", () => {
     expect(artistGroupKey("Éclair") || "#").toBe("E");
     expect(artistGroupKey("🎵 Artist") || "#").toBe("#");
+  });
+
+  it("counts only headed groups, including the # section", () => {
+    expect(artistGroupStats(["", "7 Seconds", "🎵 Artist", "Eels", "Écho", "Би-2"])).toEqual({
+      groupCount: 3,
+      artistCount: 5,
+      averageSize: 5 / 3,
+    });
+  });
+
+  it("groups only sufficiently large lists with average group size at least three", () => {
+    expect(shouldGroupArtists(10, 10)).toBe(false);
+    expect(shouldGroupArtists(11, 2.99)).toBe(false);
+    expect(shouldGroupArtists(11, 3)).toBe(true);
   });
 });

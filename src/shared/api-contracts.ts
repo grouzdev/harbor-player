@@ -3,6 +3,7 @@ import {
   jobSchema,
   operationPreviewSchema,
   type CatalogBookmark,
+  type ArtistPage,
   type Library,
   type LibraryFolder,
   type Page,
@@ -86,6 +87,12 @@ export const trackIdResultSchema = z.object({
 const facetSchema = z.object({
   name: z.string(),
   count: z.number().int().nonnegative(),
+});
+const artistPageSchema: z.ZodType<ArtistPage> = z.object({
+  items: z.array(facetSchema),
+  total: z.number(),
+  offset: z.number(),
+  averageGroupSize: z.number().nonnegative().optional(),
 });
 const albumSchema = z.object({
   id: z.string(),
@@ -220,6 +227,7 @@ export const apiResponseSchemas = {
   operation: operationPreviewSchema,
   queue: queueSchema,
   albums: pageSchema(albumSchema),
+  artists: artistPageSchema,
   albumMergeContext: albumMergeContextSchema,
   facets: pageSchema(facetSchema),
   quickSearch: z.object({
@@ -288,7 +296,7 @@ export function apiResponseContract(method: string, pathname: string) {
   if (pathname === "/api/albums/merge-context")
     return apiResponseSchemas.albumMergeContext;
   if (pathname === "/api/genres") return z.array(facetSchema);
-  if (pathname === "/api/artists") return apiResponseSchemas.facets;
+  if (pathname === "/api/artists") return apiResponseSchemas.artists;
   if (pathname === "/api/quick-search") return apiResponseSchemas.quickSearch;
   if (pathname === "/api/artist-folders")
     return apiResponseSchemas.artistFolders;

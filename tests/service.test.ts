@@ -200,6 +200,7 @@ describe("catalog and safe filesystem operations", () => {
       { name: "Artist B", count: 1 },
       { name: "Artist C", count: 1 },
     ]);
+    expect(catalog.artists(emptyFilter).averageGroupSize).toBe(3);
     expect(catalog.genres({ ...emptyFilter, libraryIds: [lib.id] })).toEqual([
       { name: "Jazz", count: 1 },
       { name: "Rock", count: 2 },
