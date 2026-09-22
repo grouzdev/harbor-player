@@ -67,6 +67,7 @@ const parseStoredJson = (payload: string): unknown => {
     return undefined;
   }
 };
+const searchKey = (value: string) => value.normalize("NFC").toLowerCase();
 
 export class Catalog {
   private readonly db: Database.Database;
@@ -78,6 +79,7 @@ export class Catalog {
       { deterministic: true },
       (artist: string) => artistSortKey(artist),
     );
+    this.db.function("search_key", { deterministic: true }, searchKey);
     this.db.function(
       "folder_parent",
       { deterministic: true },
@@ -112,7 +114,7 @@ export class Catalog {
   }
   libraries(filter: CatalogFilter = emptyFilter): Library[] {
     const { sql, args } = this.where(filter);
-    const search = filter.search.trim();
+    const search = searchKey(filter.search.trim());
     const hasManualFilters =
       filter.libraryIds.length > 0 ||
       filter.folders.length > 0 ||
@@ -122,7 +124,7 @@ export class Catalog {
       filter.bookmarksOnly;
     const libraryMatch =
       search && !hasManualFilters
-        ? "(l.name LIKE ? ESCAPE '\\' OR l.path LIKE ? ESCAPE '\\')"
+        ? "(search_key(l.name) LIKE ? ESCAPE '\\' OR search_key(l.path) LIKE ? ESCAPE '\\')"
         : "0";
     const searchValue = search ? `%${search.replace(/[\\%_]/g, "\\$&")}%` : "";
     return (
@@ -578,15 +580,15 @@ export class Catalog {
     }
     if (filter.search.trim()) {
       clauses.push(
-        `(t.title LIKE ? ESCAPE '\\'
-          OR t.albumTitle LIKE ? ESCAPE '\\'
-          OR l.name LIKE ? ESCAPE '\\'
-          OR l.path LIKE ? ESCAPE '\\'
-          OR EXISTS (SELECT 1 FROM track_genres g WHERE g.trackId=t.id AND g.genre LIKE ? ESCAPE '\\')
-          OR EXISTS (SELECT 1 FROM track_artists a WHERE a.trackId=t.id AND a.artist LIKE ? ESCAPE '\\')
-          OR EXISTS (SELECT 1 FROM track_album_artists a WHERE a.trackId=t.id AND a.artist LIKE ? ESCAPE '\\'))`,
+        `(search_key(t.title) LIKE ? ESCAPE '\\'
+          OR search_key(t.albumTitle) LIKE ? ESCAPE '\\'
+          OR search_key(l.name) LIKE ? ESCAPE '\\'
+          OR search_key(l.path) LIKE ? ESCAPE '\\'
+          OR EXISTS (SELECT 1 FROM track_genres g WHERE g.trackId=t.id AND search_key(g.genre) LIKE ? ESCAPE '\\')
+          OR EXISTS (SELECT 1 FROM track_artists a WHERE a.trackId=t.id AND search_key(a.artist) LIKE ? ESCAPE '\\')
+          OR EXISTS (SELECT 1 FROM track_album_artists a WHERE a.trackId=t.id AND search_key(a.artist) LIKE ? ESCAPE '\\'))`,
       );
-      const search = `%${filter.search.trim().replace(/[\\%_]/g, "\\$&")}%`;
+      const search = `%${searchKey(filter.search.trim()).replace(/[\\%_]/g, "\\$&")}%`;
       args.push(search, search, search, search, search, search, search);
     }
     if (filter.bookmarksOnly) {
@@ -1054,7 +1056,7 @@ export class Catalog {
     };
   }
   quickSearch(query: string, limit = 6): QuickSearchResults {
-    const value = query.trim();
+    const value = searchKey(query.trim());
     if (!value) return { genres: [], artists: [], albums: [], tracks: [] };
     const escaped = value.replace(/[\\%_]/g, "\\$&");
     const prefix = `${escaped}%`;
@@ -1064,9 +1066,9 @@ export class Catalog {
       .prepare(
         `SELECT g.genre name, count(DISTINCT t.id) count
          FROM track_genres g JOIN tracks t ON t.id=g.trackId JOIN libraries l ON l.id=t.libraryId
-         WHERE ${available} AND g.genre LIKE ? ESCAPE '\\'
+         WHERE ${available} AND search_key(g.genre) LIKE ? ESCAPE '\\'
          GROUP BY g.genre
-         ORDER BY CASE WHEN g.genre=? COLLATE NOCASE THEN 0 WHEN g.genre LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END,
+         ORDER BY CASE WHEN search_key(g.genre)=? THEN 0 WHEN search_key(g.genre) LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END,
                   g.genre COLLATE NOCASE
          LIMIT ?`,
       )
@@ -1075,9 +1077,9 @@ export class Catalog {
       .prepare(
         `SELECT a.artist name, count(DISTINCT t.albumKey) count
          FROM track_album_artists a JOIN tracks t ON t.id=a.trackId JOIN libraries l ON l.id=t.libraryId
-         WHERE ${available} AND a.artist LIKE ? ESCAPE '\\'
+         WHERE ${available} AND search_key(a.artist) LIKE ? ESCAPE '\\'
          GROUP BY a.artist
-         ORDER BY CASE WHEN a.artist=? COLLATE NOCASE THEN 0 WHEN a.artist LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END,
+         ORDER BY CASE WHEN search_key(a.artist)=? THEN 0 WHEN search_key(a.artist) LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END,
                   a.artist COLLATE NOCASE
          LIMIT ?`,
       )
@@ -1089,9 +1091,9 @@ export class Catalog {
                 state.rating rating, coalesce(state.viewed,0) viewed
          FROM tracks t JOIN libraries l ON l.id=t.libraryId
          LEFT JOIN catalog_user_state state ON state.kind='album' AND state.id=t.albumKey
-         WHERE ${available} AND t.albumTitle LIKE ? ESCAPE '\\'
+         WHERE ${available} AND search_key(t.albumTitle) LIKE ? ESCAPE '\\'
          GROUP BY t.albumKey
-         ORDER BY CASE WHEN t.albumTitle=? COLLATE NOCASE THEN 0 WHEN t.albumTitle LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END,
+         ORDER BY CASE WHEN search_key(t.albumTitle)=? THEN 0 WHEN search_key(t.albumTitle) LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END,
                   t.albumTitle COLLATE NOCASE, t.albumKey
          LIMIT ?`,
       )
@@ -1104,12 +1106,12 @@ export class Catalog {
          LEFT JOIN catalog_user_state trackState ON trackState.kind='track' AND trackState.id=t.id
          LEFT JOIN catalog_user_state albumState ON albumState.kind='album' AND albumState.id=t.albumKey
          WHERE ${available} AND (
-           t.title LIKE ? ESCAPE '\\' OR t.albumTitle LIKE ? ESCAPE '\\' OR t.artists LIKE ? ESCAPE '\\'
+           search_key(t.title) LIKE ? ESCAPE '\\' OR search_key(t.albumTitle) LIKE ? ESCAPE '\\' OR search_key(t.artists) LIKE ? ESCAPE '\\'
          )
          ORDER BY CASE
-           WHEN t.title=? COLLATE NOCASE THEN 0
-           WHEN t.title LIKE ? ESCAPE '\\' THEN 1
-           WHEN t.albumTitle LIKE ? ESCAPE '\\' THEN 2
+           WHEN search_key(t.title)=? THEN 0
+           WHEN search_key(t.title) LIKE ? ESCAPE '\\' THEN 1
+           WHEN search_key(t.albumTitle) LIKE ? ESCAPE '\\' THEN 2
            ELSE 3
          END,
          t.albumTitle COLLATE NOCASE, t.albumKey, coalesce(t.discNumber,0), coalesce(t.trackNumber,0), t.relativePath

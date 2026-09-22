@@ -394,6 +394,59 @@ describe("catalog and safe filesystem operations", () => {
       tracks: [],
     });
   });
+  it("searches Unicode substrings without depending on case", () => {
+    const catalog = service.catalog;
+    const lib = catalog.addLibrary(
+      "Мумий фонотека",
+      path.join(root, "Мумий фонотека"),
+    );
+    catalog.upsert({
+      id: "mummy",
+      libraryId: lib.id,
+      relativePath: path.join("Мумий тролль", "Альбом", "track.flac"),
+      title: "Песня Мумий",
+      artists: ["Мумий Тролль"],
+      albumTitle: "Мумий тролль",
+      albumArtists: ["Мумий Тролль"],
+      albumKey: "mummy-album",
+      genres: ["Мумий-рок"],
+      year: 2026,
+      trackNumber: 1,
+      discNumber: 1,
+      duration: 60,
+      format: "flac",
+      size: 1,
+      mtimeMs: 1,
+      coverId: null,
+      available: true,
+    });
+
+    for (const search of ["мум", "Мум", "МУМ"]) {
+      const filter = { ...emptyFilter, search };
+      expect(catalog.tracks(filter).items.map((track) => track.id)).toEqual([
+        "mummy",
+      ]);
+      expect(catalog.albums(filter).items.map((album) => album.id)).toEqual([
+        "mummy-album",
+      ]);
+      expect(catalog.artists(filter).items).toEqual([
+        { name: "Мумий Тролль", count: 1 },
+      ]);
+      expect(catalog.genres(filter)).toEqual([{ name: "Мумий-рок", count: 1 }]);
+      expect(catalog.libraries(filter).map((library) => library.id)).toEqual([
+        lib.id,
+      ]);
+      expect(catalog.folders(lib.id, null, filter)).toEqual([
+        expect.objectContaining({ name: "Мумий тролль", trackCount: 1 }),
+      ]);
+
+      const quick = catalog.quickSearch(search);
+      expect(quick.tracks.map((track) => track.id)).toEqual(["mummy"]);
+      expect(quick.albums.map((album) => album.id)).toEqual(["mummy-album"]);
+      expect(quick.artists).toEqual([{ name: "Мумий Тролль", count: 1 }]);
+      expect(quick.genres).toEqual([{ name: "Мумий-рок", count: 1 }]);
+    }
+  });
   it("uses one search result set for libraries, facets, albums, tracks and folders", () => {
     const catalog = service.catalog;
     const matchingLibrary = catalog.addLibrary(
