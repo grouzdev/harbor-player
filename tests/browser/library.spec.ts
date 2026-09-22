@@ -61,26 +61,42 @@ test("icon buttons keep their geometry on hover", async ({ page }) => {
   expect(after!.height).toBeCloseTo(before!.height, 5);
 });
 
-test("catalog filters fit between search and toolbar actions", async ({
+test("catalog filters follow section buttons and search stays centered", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto("/");
   const search = page.locator(".search");
   const filters = page.locator(".catalog-user-filters");
+  const sectionButtons = page.locator(".panel-visibility-controls");
   const bookmarks = page.getByRole("button", {
     name: "Показать музыку из закладок",
   });
-  const [searchBox, filterBox, bookmarkBox] = await Promise.all([
-    search.boundingBox(),
-    filters.boundingBox(),
-    bookmarks.boundingBox(),
-  ]);
+  const topbar = page.locator(".topbar");
+  const [searchBox, filterBox, sectionButtonsBox, bookmarkBox, topbarBox] =
+    await Promise.all([
+      search.boundingBox(),
+      filters.boundingBox(),
+      sectionButtons.boundingBox(),
+      bookmarks.boundingBox(),
+      topbar.boundingBox(),
+    ]);
   expect(searchBox).not.toBeNull();
   expect(filterBox).not.toBeNull();
+  expect(sectionButtonsBox).not.toBeNull();
   expect(bookmarkBox).not.toBeNull();
-  expect(filterBox!.x).toBeGreaterThanOrEqual(searchBox!.x + searchBox!.width);
-  expect(filterBox!.x + filterBox!.width).toBeLessThanOrEqual(bookmarkBox!.x);
+  expect(topbarBox).not.toBeNull();
+  expect(filterBox!.x).toBeGreaterThanOrEqual(
+    sectionButtonsBox!.x + sectionButtonsBox!.width,
+  );
+  expect(filterBox!.x + filterBox!.width).toBeLessThanOrEqual(searchBox!.x);
+  expect(searchBox!.x + searchBox!.width / 2).toBeCloseTo(
+    topbarBox!.x + topbarBox!.width / 2,
+    1,
+  );
+  expect(bookmarkBox!.x).toBeGreaterThanOrEqual(
+    searchBox!.x + searchBox!.width,
+  );
   await bookmarks.click();
   await expect(
     page.getByRole("button", { name: "Отключить фильтр закладок" }),
@@ -821,14 +837,16 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
       backgroundImage: styles.backgroundImage,
       backgroundSize: styles.backgroundSize,
       borderRadius: styles.borderRadius,
-      progress: shell.style.getPropertyValue("--range-progress"),
+      start: shell.style.getPropertyValue("--range-start"),
+      end: shell.style.getPropertyValue("--range-end"),
     };
   });
   expect(rangeStyles.height).toBe("18px");
   expect(rangeStyles.backgroundImage).toContain("linear-gradient");
   expect(rangeStyles.backgroundSize).toBe("100% 5px");
   expect(rangeStyles.borderRadius).toBe("999px");
-  expect(rangeStyles.progress).toBe("0%");
+  expect(rangeStyles.start).toBe("0%");
+  expect(rangeStyles.end).toBe("100%");
   const volumeStyles = await page.locator(".volume-range").evaluate((shell) => {
     const styles = getComputedStyle(shell);
     return {
@@ -842,6 +860,23 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   expect(volumeStyles.backgroundImage).toContain("linear-gradient");
   expect(volumeStyles.backgroundSize).toBe("100% 5px");
   expect(volumeStyles.borderRadius).toBe("999px");
+  const ratingStyles = await page
+    .locator(".catalog-rating-range-track")
+    .evaluate((shell) => {
+      const styles = getComputedStyle(shell);
+      return {
+        height: styles.height,
+        width: styles.width,
+        backgroundImage: styles.backgroundImage,
+        backgroundSize: styles.backgroundSize,
+        borderRadius: styles.borderRadius,
+      };
+    });
+  expect(ratingStyles.height).toBe(rangeStyles.height);
+  expect(ratingStyles.width).toBe("154px");
+  expect(ratingStyles.backgroundImage).toBe(rangeStyles.backgroundImage);
+  expect(ratingStyles.backgroundSize).toBe(rangeStyles.backgroundSize);
+  expect(ratingStyles.borderRadius).toBe(rangeStyles.borderRadius);
   const playerLayout = await page.locator(".player").evaluate((player) => {
     const panel = player.getBoundingClientRect();
     const transport = player.querySelector<HTMLElement>(".transport")!;
@@ -1202,24 +1237,83 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(
     firstTrackRow.getByRole("button", { name: "Оценка 5 из 5" }),
   ).toBeVisible();
+  await page.setViewportSize({ width: 1600, height: 1000 });
   const minimumRating = page.getByLabel("Минимальная оценка");
   const maximumRating = page.getByLabel("Максимальная оценка");
   await expect(minimumRating).toHaveValue("0");
   await expect(maximumRating).toHaveValue("5");
+  const minimumThumb = page.locator(".range-slider-thumb--minimum");
+  const maximumThumb = page.locator(".range-slider-thumb--maximum");
+  const ratingRange = page.locator(".catalog-rating-range-track");
+  await ratingRange.hover({ position: { x: 77, y: 9 } });
+  await expect(ratingRange).toHaveClass(/is-hovered/);
+  await expect
+    .poll(() =>
+      ratingRange.evaluate((slider) => getComputedStyle(slider).filter),
+    )
+    .not.toBe("none");
+  await minimumThumb.hover();
+  await expect(minimumThumb).toHaveClass(/is-hovered/);
   await minimumRating.fill("3");
   await maximumRating.fill("4");
   await expect(minimumRating).toHaveValue("3");
   await expect(maximumRating).toHaveValue("4");
   await minimumRating.fill("0");
   await maximumRating.fill("5");
+  await page.locator(".catalog-rating-range-track").click({
+    position: { x: 92, y: 9 },
+  });
+  await expect(maximumRating).toHaveValue("3");
+  await maximumRating.fill("5");
+  const sliderBox = await ratingRange.boundingBox();
+  const rightRatingValueBox = await page
+    .locator(".catalog-rating-range-value")
+    .last()
+    .boundingBox();
+  const minimumThumbBox = await minimumThumb.boundingBox();
+  const maximumThumbBox = await maximumThumb.boundingBox();
+  expect(sliderBox).not.toBeNull();
+  expect(rightRatingValueBox).not.toBeNull();
+  expect(minimumThumbBox).not.toBeNull();
+  expect(maximumThumbBox).not.toBeNull();
+  expect(
+    rightRatingValueBox!.x - (sliderBox!.x + sliderBox!.width),
+  ).toBeGreaterThanOrEqual(8);
+  await page.mouse.move(
+    minimumThumbBox!.x + minimumThumbBox!.width / 2,
+    minimumThumbBox!.y + minimumThumbBox!.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    sliderBox!.x + (sliderBox!.width * 2) / 5,
+    sliderBox!.y + sliderBox!.height / 2,
+  );
+  await page.mouse.up();
+  await expect(minimumRating).toHaveValue("2");
+  await page.mouse.move(
+    maximumThumbBox!.x + maximumThumbBox!.width / 2,
+    maximumThumbBox!.y + maximumThumbBox!.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    sliderBox!.x + (sliderBox!.width * 4) / 5,
+    sliderBox!.y + sliderBox!.height / 2,
+  );
+  await page.mouse.up();
+  await expect(maximumRating).toHaveValue("4");
+  await minimumRating.fill("0");
+  await maximumRating.fill("5");
   const unviewedFilter = page.getByRole("switch", {
     name: "Только непросмотренные",
   });
-  await expect(
-    unviewedFilter.locator(".unviewed-filter-thumb svg"),
-  ).toHaveCount(1);
+  await expect(unviewedFilter.locator(".lucide-eye-off")).toHaveCount(1);
   await unviewedFilter.click();
   await expect(unviewedFilter).toHaveAttribute("aria-checked", "true");
+  await expect(unviewedFilter.locator(".lucide-eye")).toHaveCount(1);
+  await expect(unviewedFilter).toHaveCSS(
+    "border-top-color",
+    "rgba(0, 0, 0, 0)",
+  );
   await expect(firstAlbum).toHaveCount(0);
   await unviewedFilter.click();
   await expect(unviewedFilter).toHaveAttribute("aria-checked", "false");

@@ -2469,6 +2469,13 @@ export function App() {
             })}
           </div>
         )}
+        {!coverMode && (
+          <CatalogUserFilters
+            filter={filter}
+            disabled={isSearching}
+            onChange={setFilter}
+          />
+        )}
         {coverMode ? (
           <div className="cover-search">
             <label className="search">
@@ -2517,16 +2524,6 @@ export function App() {
               </button>
             )}
           </label>
-        )}
-        {!coverMode && (
-          <>
-            <CatalogUserFilters
-              filter={filter}
-              disabled={isSearching}
-              onChange={setFilter}
-            />
-            <span className="catalog-user-filter-spacer" aria-hidden="true" />
-          </>
         )}
         {!coverMode && (
           <button

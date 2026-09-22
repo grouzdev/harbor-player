@@ -1,6 +1,6 @@
-import { useState, type CSSProperties } from "react";
-import { Eye, Star, StarOff } from "lucide-react";
+import { Eye, EyeOff, Star, StarOff } from "lucide-react";
 import type { CatalogFilter } from "../shared/contracts";
+import { RangeSlider } from "./RangeSlider";
 
 export type RatingRange = readonly [minimum: number, maximum: number];
 
@@ -39,11 +39,11 @@ function RangeValue({ value }: { value: number }) {
   return (
     <span className="catalog-rating-range-value" aria-hidden="true">
       {value === 0 ? (
-        <StarOff size={16} />
+        <StarOff size={19} />
       ) : (
         <>
           <span>{value}</span>
-          <Star size={14} />
+          <Star size={19} />
         </>
       )}
     </span>
@@ -59,58 +59,29 @@ export function CatalogUserFilters({
   disabled?: boolean;
   onChange: (update: (current: CatalogFilter) => CatalogFilter) => void;
 }) {
-  const [activeHandle, setActiveHandle] = useState<"minimum" | "maximum">(
-    "maximum",
-  );
   const [minimum, maximum] = ratingRangeFromFilter(filter);
   const commit = (nextMinimum: number, nextMaximum: number) =>
     onChange((current) =>
       withSharedRatingRange(current, nextMinimum, nextMaximum),
     );
-  const start = `${minimum * 20}%`;
-  const end = `${100 - maximum * 20}%`;
   const unviewedOnly = filter.albumViewed === "unviewed";
   return (
     <div className="catalog-user-filters" aria-label="Фильтры каталога">
       <div className={`catalog-rating-range ${disabled ? "disabled" : ""}`}>
         <RangeValue value={minimum} />
-        <div
+        <RangeSlider
           className="catalog-rating-range-track"
-          style={
-            { "--range-start": start, "--range-end": end } as CSSProperties
+          variant="double"
+          min={0}
+          max={5}
+          step={1}
+          values={[minimum, maximum]}
+          ariaLabels={["Минимальная оценка", "Максимальная оценка"]}
+          disabled={disabled}
+          onChange={([nextMinimum, nextMaximum]) =>
+            commit(nextMinimum, nextMaximum)
           }
-        >
-          <input
-            className={`rating-range-input minimum ${activeHandle === "minimum" ? "active" : ""}`}
-            type="range"
-            min="0"
-            max="5"
-            step="1"
-            value={minimum}
-            disabled={disabled}
-            aria-label="Минимальная оценка"
-            onFocus={() => setActiveHandle("minimum")}
-            onPointerDown={() => setActiveHandle("minimum")}
-            onChange={(event) =>
-              commit(Math.min(Number(event.target.value), maximum), maximum)
-            }
-          />
-          <input
-            className={`rating-range-input maximum ${activeHandle === "maximum" ? "active" : ""}`}
-            type="range"
-            min="0"
-            max="5"
-            step="1"
-            value={maximum}
-            disabled={disabled}
-            aria-label="Максимальная оценка"
-            onFocus={() => setActiveHandle("maximum")}
-            onPointerDown={() => setActiveHandle("maximum")}
-            onChange={(event) =>
-              commit(minimum, Math.max(Number(event.target.value), minimum))
-            }
-          />
-        </div>
+        />
         <RangeValue value={maximum} />
       </div>
       <button
@@ -130,7 +101,11 @@ export function CatalogUserFilters({
         }
       >
         <span className="unviewed-filter-thumb">
-          <Eye size={13} aria-hidden="true" />
+          {unviewedOnly ? (
+            <Eye size={19} aria-hidden="true" />
+          ) : (
+            <EyeOff size={19} aria-hidden="true" />
+          )}
         </span>
       </button>
     </div>

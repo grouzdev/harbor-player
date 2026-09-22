@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import type { CSSProperties } from "react";
 import {
   Music2,
   Pause,
@@ -16,6 +15,7 @@ import type { CatalogFilter, Track } from "../shared/contracts";
 import { api, duration } from "./api";
 import { readMigratedStorageValue } from "./storage";
 import { RatingControl, type UserStateChange } from "./RatingControl";
+import { RangeSlider } from "./RangeSlider";
 
 interface Queue {
   id: string;
@@ -304,16 +304,6 @@ export function Player({
   pendingUserStateKeys: Set<string>;
 }) {
   const track = player.queue?.track;
-  const seekProgress =
-    player.length > 0
-      ? Math.min(100, Math.max(0, (player.position / player.length) * 100))
-      : 0;
-  const seekStyle = {
-    "--range-progress": `${seekProgress}%`,
-  } as CSSProperties;
-  const volumeStyle = {
-    "--range-progress": `${Math.min(100, Math.max(0, player.volume * 100))}%`,
-  } as CSSProperties;
   const albumArtists = track?.albumArtists.length
     ? track.albumArtists
     : track?.artists || [];
@@ -426,18 +416,16 @@ export function Player({
         </div>
         <div className="seek">
           <span className="seek-time">{duration(player.position)}</span>
-          <div className="range-shell seek-range" style={seekStyle}>
-            <input
-              aria-label="Позиция воспроизведения"
-              type="range"
-              min="0"
-              max={Number.isFinite(player.length) ? player.length : 0}
-              step="0.1"
-              value={player.position}
-              disabled={!track}
-              onChange={(e) => player.seek(Number(e.target.value))}
-            />
-          </div>
+          <RangeSlider
+            className="seek-range"
+            min={0}
+            max={Number.isFinite(player.length) ? player.length : 0}
+            step={0.1}
+            value={player.position}
+            disabled={!track}
+            ariaLabel="Позиция воспроизведения"
+            onChange={player.seek}
+          />
           <span className="seek-time">{duration(player.length)}</span>
         </div>
       </div>
@@ -455,20 +443,15 @@ export function Player({
         >
           {player.volume ? <Volume2 size={18} /> : <VolumeX size={18} />}
         </button>
-        <div
-          className="range-shell volume-range player-volume-control"
-          style={volumeStyle}
-        >
-          <input
-            aria-label="Громкость"
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={player.volume}
-            onChange={(e) => player.setVolume(Number(e.target.value))}
-          />
-        </div>
+        <RangeSlider
+          className="volume-range player-volume-control"
+          min={0}
+          max={1}
+          step={0.01}
+          value={player.volume}
+          ariaLabel="Громкость"
+          onChange={player.setVolume}
+        />
         <button
           className={`icon-button player-playback-mode ${player.repeat !== "off" ? "active" : ""}`}
           aria-label={`Повтор: ${player.repeat === "off" ? "выключен" : player.repeat === "all" ? "вся очередь" : "один трек"}`}
