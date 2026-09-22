@@ -868,6 +868,10 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   expect(volumeStyles.backgroundImage).toContain("linear-gradient");
   expect(volumeStyles.backgroundSize).toBe("100% 5px");
   expect(volumeStyles.borderRadius).toBe("999px");
+  const visualRatingFilter = page.getByRole("button", {
+    name: "Фильтр по рейтингу",
+  });
+  await visualRatingFilter.click();
   const ratingStyles = await page
     .locator(".catalog-rating-range-track")
     .evaluate((shell) => {
@@ -892,6 +896,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   expect(ratingStyles.borderRadius).toBe(rangeStyles.borderRadius);
   expect(ratingStyles.cursor).toBe("pointer");
   expect(ratingStyles.thumbCursor).toBe("grab");
+  await page.keyboard.press("Escape");
   const playerLayout = await page.locator(".player").evaluate((player) => {
     const panel = player.getBoundingClientRect();
     const transport = player.querySelector<HTMLElement>(".transport")!;
@@ -1253,6 +1258,12 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
     firstTrackRow.getByRole("button", { name: "Оценка 5 из 5" }),
   ).toBeVisible();
   await page.setViewportSize({ width: 1600, height: 1000 });
+  const ratingFilter = page.getByRole("button", {
+    name: "Фильтр по рейтингу",
+  });
+  await expect(ratingFilter).toHaveAttribute("aria-expanded", "false");
+  await ratingFilter.click();
+  await expect(ratingFilter).toHaveAttribute("aria-expanded", "true");
   const minimumRating = page.getByLabel("Минимальная оценка");
   const maximumRating = page.getByLabel("Максимальная оценка");
   await expect(minimumRating).toHaveValue("0");
@@ -1273,6 +1284,15 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await maximumRating.fill("4");
   await expect(minimumRating).toHaveValue("3");
   await expect(maximumRating).toHaveValue("4");
+  await expect(ratingFilter).toHaveClass(/active/);
+  await page
+    .getByRole("button", { name: "Установить минимальную оценку 0" })
+    .click();
+  await expect(minimumRating).toHaveValue("0");
+  await page
+    .getByRole("button", { name: "Установить максимальную оценку 5" })
+    .click();
+  await expect(maximumRating).toHaveValue("5");
   await minimumRating.fill("0");
   await maximumRating.fill("5");
   await page.locator(".catalog-rating-range-track").click({
@@ -1318,20 +1338,18 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(maximumRating).toHaveValue("4");
   await minimumRating.fill("0");
   await maximumRating.fill("5");
-  const unviewedFilter = page.getByRole("switch", {
+  await page.keyboard.press("Escape");
+  await expect(ratingFilter).toHaveAttribute("aria-expanded", "false");
+  const unviewedFilter = page.getByRole("button", {
     name: "Только непросмотренные",
   });
-  await expect(unviewedFilter.locator(".lucide-eye-off")).toHaveCount(1);
-  await unviewedFilter.click();
-  await expect(unviewedFilter).toHaveAttribute("aria-checked", "true");
   await expect(unviewedFilter.locator(".lucide-eye")).toHaveCount(1);
-  await expect(unviewedFilter).toHaveCSS(
-    "border-top-color",
-    "rgba(0, 0, 0, 0)",
-  );
+  await unviewedFilter.click();
+  await expect(unviewedFilter).toHaveAttribute("aria-pressed", "true");
+  await expect(unviewedFilter).toHaveClass(/active/);
   await expect(firstAlbum).toHaveCount(0);
   await unviewedFilter.click();
-  await expect(unviewedFilter).toHaveAttribute("aria-checked", "false");
+  await expect(unviewedFilter).toHaveAttribute("aria-pressed", "false");
   await expect(firstAlbum).toBeVisible();
   await firstAlbumButton.click({ modifiers: ["Control"] });
   await expect(firstAlbum).not.toHaveClass(/selected/);
