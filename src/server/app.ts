@@ -659,6 +659,7 @@ export async function createApp(options: {
         errors: o.items
           .filter((i) => i.error)
           .map((i) => `${i.title}: ${i.error}`),
+        recoverable: o.recoverable,
         intent: o.intent,
       })),
   );

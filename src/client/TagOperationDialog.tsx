@@ -638,10 +638,7 @@ export function ActionDialog({
       {kind === "trash" && (
         <div className="notice">
           <History size={24} />
-          <p>
-            Файлы будут перемещены в область восстановления. Вернуть их можно
-            через журнал операций.
-          </p>
+          <p>Файлы будут удалены без возможности восстановления.</p>
         </div>
       )}
       {error && (
@@ -816,7 +813,7 @@ export function PreviewDialog({
                 <div className="path-text" title={item.source}>
                   {item.source}
                 </div>
-                {preview.kind !== "tags" && (
+                {["move", "restore"].includes(preview.kind) && (
                   <div className="path-text target" title={item.destination}>
                     → {item.destination}
                   </div>
@@ -923,13 +920,14 @@ export function HistoryDialog({
     <Modal
       wide
       title="Журнал операций"
-      subtitle="История изменений и восстановление файлов"
+      subtitle="История изменений и доступное восстановление файлов"
       onClose={onClose}
     >
       {history.data?.some(
         (operation) =>
           operation.status === "done" &&
-          ["move", "restore"].includes(operation.kind) &&
+          (["move", "restore"].includes(operation.kind) ||
+            (operation.kind === "trash" && operation.recoverable === false)) &&
           operation.errors.length === 0,
       ) && (
         <div className="history-clear">
@@ -1006,6 +1004,7 @@ export function HistoryDialog({
                 Подробнее
               </button>
               {["trash", "tags"].includes(op.kind) &&
+                op.recoverable !== false &&
                 op.completed > 0 &&
                 op.status !== "running" && (
                   <button

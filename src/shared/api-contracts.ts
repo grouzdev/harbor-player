@@ -187,6 +187,7 @@ const operationSummarySchema = z.object({
   total: z.number(),
   completed: z.number(),
   errors: stringArray,
+  recoverable: z.boolean().optional(),
   intent: z.enum(["album-merge"]).optional(),
 });
 export const okSchema = z.object({ ok: z.literal(true) });

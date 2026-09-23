@@ -1119,6 +1119,10 @@ describe("Explorer endpoint", () => {
     });
     context.service.catalog.saveOperation(saved("move-done", "move", "done"));
     context.service.catalog.saveOperation(saved("trash-done", "trash", "done"));
+    context.service.catalog.saveOperation({
+      ...saved("hard-trash-done", "trash", "done"),
+      recoverable: false,
+    });
     context.service.catalog.saveOperation(
       saved("move-interrupted", "move", "interrupted"),
     );
@@ -1155,13 +1159,16 @@ describe("Explorer endpoint", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ operations: 1, jobs: 1, cache: 1 });
+    expect(response.json()).toEqual({ operations: 2, jobs: 1, cache: 1 });
     expect(
       context.service.catalog.history().map((operation) => operation.id),
     ).toEqual(expect.arrayContaining(["trash-done", "move-interrupted"]));
     expect(
       context.service.catalog.history().map((operation) => operation.id),
     ).not.toContain("move-done");
+    expect(
+      context.service.catalog.history().map((operation) => operation.id),
+    ).not.toContain("hard-trash-done");
     expect(context.service.catalog.jobs().map((job) => job.id)).toContain(
       "trash-job",
     );

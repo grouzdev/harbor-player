@@ -53,6 +53,9 @@ interface JournalItem extends OperationItem {
   backup?: string;
   restoreExpectedHash?: string;
 }
+// Keep the verified recovery workflow available for a future opt-in, but make
+// ordinary deletion irreversible until that mode is explicitly re-enabled.
+const softDeleteEnabled = false;
 const exists = async (file: string) => {
   try {
     await lstat(file);
@@ -401,10 +404,12 @@ export class MusicService extends EventEmitter {
       patch,
       coverTrackIds,
       intent,
+      recoverable: kind !== "trash" || softDeleteEnabled,
     };
-    await mkdir(path.join(this.dataDir, "recovery", op.id), {
-      recursive: true,
-    });
+    if (kind === "tags" || (kind === "trash" && softDeleteEnabled))
+      await mkdir(path.join(this.dataDir, "recovery", op.id), {
+        recursive: true,
+      });
     const tracksBySource = new Map<string, Track>();
     for (const track of tracks) {
       const library = this.catalog.library(track.libraryId);
@@ -515,12 +520,14 @@ export class MusicService extends EventEmitter {
         kind === "move"
           ? path.join(target!.path, track.relativePath)
           : kind === "trash"
-            ? path.join(
-                this.dataDir,
-                "recovery",
-                op.id,
-                track.id + path.extname(source),
-              )
+            ? softDeleteEnabled
+              ? path.join(
+                  this.dataDir,
+                  "recovery",
+                  op.id,
+                  track.id + path.extname(source),
+                )
+              : source
             : source;
       const item: OperationItem = {
         id: randomUUID(),
@@ -674,6 +681,10 @@ export class MusicService extends EventEmitter {
     const original = this.catalog.operation(id);
     if (!["trash", "tags"].includes(original.kind))
       throw new Error("Восстановление доступно для удаления и тегов");
+    if (original.kind === "trash" && original.recoverable === false)
+      throw new Error(
+        "Удаление было окончательным и не может быть восстановлено",
+      );
     const op: OperationPreview = {
       id: randomUUID(),
       kind: "restore",
@@ -870,8 +881,28 @@ export class MusicService extends EventEmitter {
       op.kind === "restore" &&
       this.catalog.operation(op.restoreOf!).kind === "tags";
     const editing = op.kind === "tags" || restoringTags;
+    const hardDeleting = op.kind === "trash" && op.recoverable === false;
     await this.safePath(item.source, true, op.kind === "restore");
-    await this.safePath(item.destination, true, op.kind === "trash");
+    if (!hardDeleting)
+      await this.safePath(item.destination, true, op.kind === "trash");
+    if (hardDeleting) {
+      if (item.phase === "copied") {
+        await this.reindexItem(op, item);
+        return;
+      }
+      if (await exists(item.source)) {
+        await this.assertOriginal(item);
+        item.phase = "prepared";
+        this.catalog.saveOperation(op);
+        await unlink(item.source);
+      } else if (item.phase !== "prepared") {
+        throw new Error("Исходный файл больше не существует");
+      }
+      item.phase = "copied";
+      this.catalog.saveOperation(op);
+      await this.reindexItem(op, item);
+      return;
+    }
     if (op.kind === "tags" && item.phase === "preview" && !item.hash) {
       const fast = await writeId3InPlace(
         item.destination,

@@ -1243,7 +1243,8 @@ export class Catalog {
     const removable = this.history().filter(
       (operation) =>
         operation.status === "done" &&
-        ["move", "restore"].includes(operation.kind) &&
+        (["move", "restore"].includes(operation.kind) ||
+          (operation.kind === "trash" && operation.recoverable === false)) &&
         !operation.items.some((item) => item.error),
     );
     if (!removable.length)

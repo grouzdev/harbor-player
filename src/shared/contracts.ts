@@ -219,6 +219,7 @@ export const operationPreviewSchema = z
     coverTrackIds: z.array(z.string()).optional(),
     targetLibraryId: z.string().optional(),
     restoreOf: z.string().optional(),
+    recoverable: z.boolean().optional(),
     intent: z.enum(["album-merge"]).optional(),
   })
   .strict();
@@ -304,6 +305,7 @@ export interface OperationSummary {
   total: number;
   completed: number;
   errors: string[];
+  recoverable?: boolean;
   intent?: "album-merge";
 }
 export const emptyFilter: CatalogFilter = {

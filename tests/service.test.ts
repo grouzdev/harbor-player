@@ -1102,22 +1102,41 @@ describe("catalog and safe filesystem operations", () => {
       "externally changed",
     );
   });
-  it("deletes into recovery and restores original bytes and catalog entry", async () => {
+  it("permanently deletes tracks without creating recovery copies", async () => {
     const a = await library("Downloads");
     const t = tracks()[0];
-    const original = await readFile(path.join(a.path, t.relativePath));
+    const source = path.join(a.path, t.relativePath);
     const op = await service.preview("trash", { trackIds: [t.id] });
     service.execute(op.id);
     await service.idle();
     expect(tracks()).toHaveLength(0);
+    expect(existsSync(source)).toBe(false);
+    expect(op.recoverable).toBe(false);
+    expect(existsSync(path.join(root, "data", "recovery", op.id))).toBe(false);
+    await expect(service.previewRestore(op.id)).rejects.toThrow(
+      "окончательным",
+    );
+  });
+  it("restores a legacy soft deletion kept in recovery", async () => {
+    const a = await library("Downloads");
+    const t = tracks()[0];
+    const source = path.join(a.path, t.relativePath);
+    const original = await readFile(source);
+    const op = await service.preview("trash", { trackIds: [t.id] });
+    const recovery = path.join(root, "data", "recovery", op.id, `${t.id}.flac`);
+    await mkdir(path.dirname(recovery), { recursive: true });
+    op.recoverable = true;
+    op.items[0].destination = recovery;
+    service.catalog.saveOperation(op);
+    service.execute(op.id);
+    await service.idle();
     const restore = await service.previewRestore(op.id);
     service.execute(restore.id);
     await service.idle();
     expect(
       service.catalog.operation(restore.id).items[0].error,
     ).toBeUndefined();
-    expect(tracks()[0].id).toBe(t.id);
-    expect(await readFile(path.join(a.path, t.relativePath))).toEqual(original);
+    expect(await readFile(source)).toEqual(original);
   });
   it("writes tags through verified copies, preserves audio, and restores original bytes", async () => {
     const lib = await library("Music");

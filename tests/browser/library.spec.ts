@@ -844,7 +844,7 @@ test("player prioritizes the current track over progress in a narrow window", as
   ).toBeGreaterThan(layouts[1].seekRangeWidth);
 });
 
-test("local library: readable UI, playback, tags, move, delete and restore", async ({
+test("local library: readable UI, playback, tags, move and permanent delete", async ({
   page,
 }, info) => {
   test.setTimeout(90_000);
@@ -1098,6 +1098,7 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await expect(
     page.locator(".track-row .track-number, .track-row .row-play"),
   ).toHaveCount(0);
+  await page.keyboard.press("Escape");
   const collectionTile = page
     .locator(".libraries-panel .list-tile")
     .filter({ hasText: `Collection renamed ${browser}` });
@@ -2334,14 +2335,13 @@ test("local library: readable UI, playback, tags, move, delete and restore", asy
   await page
     .getByRole("button", { name: "Журнал операций", exact: true })
     .click();
-  await page
-    .locator(".history-item")
-    .filter({ has: page.getByText("Удаление", { exact: true }) })
-    .first()
-    .getByRole("button", { name: "Восстановить", exact: true })
-    .click();
-  await page.getByRole("button", { name: /^Применить к/ }).click();
-  await expect(rows).toHaveCount(1);
+  await expect(
+    page
+      .locator(".history-item")
+      .filter({ has: page.getByText("Удаление", { exact: true }) })
+      .first()
+      .getByRole("button", { name: "Восстановить", exact: true }),
+  ).toHaveCount(0);
   await page
     .getByRole("button", { name: new RegExp(`Collection renamed ${browser}`) })
     .first()
