@@ -1,0 +1,16 @@
+---
+import { release, releaseState, repository } from '../config/release';
+import type { Copy } from '../content/copy';
+interface Props { t: Copy; }
+const { t } = Astro.props;
+const state = releaseState(release);
+---
+<div class="download-block">
+  <div class="download-actions">
+    {state.installer ? <a class="button primary" href={state.installer}>{t.download}</a> : <span class="button pending">{t.soon}</span>}
+    {state.portable && <a class="text-link" href={state.portable}>Portable</a>}
+    <a class="text-link" href={repository}>GitHub</a>
+  </div>
+  {state.available && <p class="release-caption">Windows x64 · {release.version}</p>}
+  {state.unsigned && <p class="unsigned-note">{t.unsigned}</p>}
+</div>

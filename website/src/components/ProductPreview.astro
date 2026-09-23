@@ -1,0 +1,11 @@
+---
+import type { Copy } from '../content/copy';
+interface Props { t: Copy; }
+const { t } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+<figure class="product-preview">
+  <a class="screen-frame" href={`${base}/images/player.webp`} aria-label={t.enlarge}>
+    <img src={`${base}/images/player.webp`} srcset={`${base}/images/player-small.webp 960w, ${base}/images/player.webp 1920w`} sizes="(max-width: 760px) 94vw, 88vw" width="1920" height="1080" alt={t.screenshot} fetchpriority="high" />
+  </a>
+</figure>
