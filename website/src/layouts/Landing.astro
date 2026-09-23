@@ -52,7 +52,34 @@ const absolute = (path: string) => new URL(path, Astro.site).href;
         </div>
         <ProductPreview t={t} />
       </section>
-      <div class="shell"><ul class="features" role="list">{t.features.map(feature => <li>{feature}</li>)}</ul></div>
+      <section class="features-section shell" aria-labelledby="features-title">
+        <h2 id="features-title" class="section-title">{t.featuresTitle}</h2>
+        <div class="feature-grid">
+          {t.features.map(feature => (
+            <article class="feature-card">
+              <h3>{feature.title}</h3>
+              <p>{feature.description}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+      <section class="roadmap-section shell" aria-labelledby="roadmap-title">
+        <h2 id="roadmap-title" class="section-title">{t.roadmapTitle}</h2>
+        <ol class="roadmap">
+          {t.roadmap.map((stage, index) => (
+            <li class:list={["roadmap-stage", { "is-current": stage.current }]}>
+              <article>
+                <span class="stage-number" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+                <div class="stage-copy">
+                  <p class="stage-status">{stage.status}</p>
+                  <h3>{stage.title}</h3>
+                  <p>{stage.description}</p>
+                </div>
+              </article>
+            </li>
+          ))}
+        </ol>
+      </section>
     </main>
     <footer class="site-footer shell"><a href={`${repository}/blob/main/LICENSE`}>{t.license}</a></footer>
   </body>

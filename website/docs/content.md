@@ -7,17 +7,17 @@ Slogans: “Collect, not consume” / «Коллекционируй, а не п
 Description (draft): “A music player and organizer for your local collection.” / «Музыкальный плеер и каталогизатор для вашей локальной коллекции».
 
 Features, RU:
-- Навигация по папкам, жанрам, исполнителям и альбомам.
-- Прослушивание и организация музыкальной коллекции.
-- Пакетное редактирование тегов, сведения и обложки из MusicBrainz.
-- Предпросмотр изменений и восстановление через журнал.
+- Организуй коллекцию — личная локальная коллекция без стримингов, подписок и зависимости от чужого каталога.
+- Исследуй коллекцию — подключение любых папок и навигация по папкам, жанрам, исполнителям и альбомам.
+- Наведи порядок — пакетное редактирование тегов и поиск недостающих сведений и обложек в интернете.
 
 Features, EN:
-- Browse folders, genres, artists and albums.
-- Listen to and organize your music collection.
-- Edit tags in batches. Find metadata and cover art through MusicBrainz.
-- Preview changes and restore files or tags through the operation history.
+- Curate your collection — a personal local collection free from streaming, subscriptions, and someone else's catalog.
+- Explore your music — connect folders and browse folders, genres, artists, and albums in one place.
+- Put things in order — batch-edit tags and find missing information and cover art online.
+
+Roadmap: four stages without dates. The current Windows release is marked as available now; Playlists, Cross-platform, and Mobile app are marked as planned and have only brief directional descriptions.
 
 Unreleased: only “Download coming soon” / «Скачивание скоро» plus GitHub. Available releases show Windows x64 and version, an installer link and optional Portable. Only unsigned beta shows a brief SmartScreen note. Release notes are no longer linked; the config is preserved for compatibility.
 
-No visible FAQ, section subtitles, screenshot captions, language navigation or closing slogan. The screenshot's accessible description identifies the Russian app UI.
+No visible FAQ, screenshot captions, language navigation or closing slogan. Features and the roadmap are prominent semantic sections with headings. The screenshot's accessible description identifies the Russian app UI.
