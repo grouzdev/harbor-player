@@ -1827,9 +1827,7 @@ export function App() {
     queryKey: ["artists", artistFilter],
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
-      api<ArtistPage>(
-        catalogUrl("artists", artistFilter, pageParam),
-      ),
+      api<ArtistPage>(catalogUrl("artists", artistFilter, pageParam)),
     getNextPageParam: (last) =>
       last.offset + last.items.length < last.total
         ? last.offset + last.items.length

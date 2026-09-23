@@ -961,6 +961,9 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await page.locator(".add-library").click();
   const addLibraryDialog = page.getByRole("dialog");
   await expect(addLibraryDialog).toBeVisible();
+  await expect(
+    addLibraryDialog.getByRole("button", { name: "Обзор…" }),
+  ).toBeHidden();
   await page.mouse.click(10, 10);
   await expect(addLibraryDialog).toBeVisible();
   await addLibraryDialog.getByRole("button", { name: "Закрыть" }).click();

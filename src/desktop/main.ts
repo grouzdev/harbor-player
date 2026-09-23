@@ -581,6 +581,14 @@ async function bootstrap() {
         });
         return result.canceled ? null : result.filePaths[0] || null;
       });
+      ipcMain.handle("desktop:choose-library-directory", async (event) => {
+        requireDesktopSender(event);
+        const result = await dialog.showOpenDialog(mainWindow!, {
+          title: "Выберите папку библиотеки",
+          properties: ["openDirectory"],
+        });
+        return result.canceled ? null : result.filePaths[0] || null;
+      });
       ipcMain.handle("desktop:report-client-ready", async (event) => {
         requireDesktopSender(event);
         await reportStartupBenchmark();

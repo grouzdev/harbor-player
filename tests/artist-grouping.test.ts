@@ -40,7 +40,9 @@ describe("artist grouping", () => {
   });
 
   it("counts only headed groups, including the # section", () => {
-    expect(artistGroupStats(["", "7 Seconds", "🎵 Artist", "Eels", "Écho", "Би-2"])).toEqual({
+    expect(
+      artistGroupStats(["", "7 Seconds", "🎵 Artist", "Eels", "Écho", "Би-2"]),
+    ).toEqual({
       groupCount: 3,
       artistCount: 5,
       averageSize: 5 / 3,

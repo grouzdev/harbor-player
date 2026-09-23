@@ -3,9 +3,10 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
-import { FolderInput } from "lucide-react";
+import { FolderInput, FolderOpen } from "lucide-react";
 import type { Library } from "../shared/contracts";
 import { api } from "./api";
+import "./desktop";
 import { Modal } from "./Modal";
 
 function activatePrimaryOnEnter(
@@ -43,13 +44,11 @@ export function AddLibraryDialog({
   const [name, setName] = useState("");
   const [folder, setFolder] = useState("");
   const [busy, setBusy] = useState(false);
+  const [choosingFolder, setChoosingFolder] = useState(false);
   const [error, setError] = useState("");
+  const desktop = window.harborPlayerDesktop;
   return (
-    <Modal
-      title="Подключить библиотеку"
-      subtitle="Музыка останется в своей папке. Мы добавим её в каталог."
-      onClose={onClose}
-    >
+    <Modal title="Подключить библиотеку" onClose={onClose}>
       <form
         onSubmit={async (event) => {
           event.preventDefault();
@@ -68,26 +67,45 @@ export function AddLibraryDialog({
       >
         <label className="field">
           Путь к папке
-          <input
-            autoFocus
-            required
-            value={folder}
-            onChange={(event) => setFolder(event.target.value)}
-            placeholder={"D:\\Music\\Collection"}
-          />
+          <span className="library-path-input">
+            <input
+              autoFocus
+              required
+              value={folder}
+              onChange={(event) => setFolder(event.target.value)}
+            />
+            {desktop && (
+              <button
+                type="button"
+                className="button secondary"
+                disabled={busy || choosingFolder}
+                onClick={() => {
+                  setChoosingFolder(true);
+                  setError("");
+                  void desktop
+                    .chooseLibraryDirectory()
+                    .then((selected) => selected && setFolder(selected))
+                    .catch((cause) =>
+                      setError(
+                        cause instanceof Error ? cause.message : String(cause),
+                      ),
+                    )
+                    .finally(() => setChoosingFolder(false));
+                }}
+              >
+                <FolderOpen size={16} />
+                Обзор…
+              </button>
+            )}
+          </span>
         </label>
         <label className="field">
-          Название библиотеки <span className="muted">необязательно</span>
+          Название библиотеки
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Например, Коллекция"
           />
         </label>
-        <p className="hint">
-          Можно подключить несколько папок с разных дисков. Вложенные папки
-          будут просканированы автоматически.
-        </p>
         {error && (
           <p className="error-text" role="alert">
             {error}
@@ -97,7 +115,10 @@ export function AddLibraryDialog({
           <button type="button" className="button secondary" onClick={onClose}>
             Отмена
           </button>
-          <button className="button primary" disabled={busy || !folder.trim()}>
+          <button
+            className="button primary"
+            disabled={busy || choosingFolder || !folder.trim()}
+          >
             <FolderInput size={16} />
             {busy ? "Подключение…" : "Подключить"}
           </button>

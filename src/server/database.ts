@@ -1074,11 +1074,7 @@ export class Catalog {
       }),
     };
   }
-  artists(
-    filter: CatalogFilter,
-    offset = 0,
-    limit = 200,
-  ): ArtistPage {
+  artists(filter: CatalogFilter, offset = 0, limit = 200): ArtistPage {
     const { sql, args } = this.where(filter);
     const group = `FROM tracks t JOIN libraries l ON l.id=t.libraryId LEFT JOIN track_album_artists a ON a.trackId=t.id WHERE ${sql} GROUP BY coalesce(a.artist,'')`;
     const allItems = this.db

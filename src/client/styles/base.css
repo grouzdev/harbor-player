@@ -1297,6 +1297,15 @@ body.selection-dragging * {
 .field .muted {
   display: inline;
 }
+.library-path-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.library-path-input input {
+  min-width: 0;
+  flex: 1;
+}
 .hint {
   color: #82959f;
   font-size: var(--type-caption);
