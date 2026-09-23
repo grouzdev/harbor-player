@@ -3,6 +3,8 @@ import {
   jobSchema,
   operationPreviewSchema,
   type CatalogBookmark,
+  type Album,
+  type AlbumPage,
   type ArtistPage,
   type Library,
   type LibraryFolder,
@@ -94,7 +96,7 @@ const artistPageSchema: z.ZodType<ArtistPage> = z.object({
   offset: z.number(),
   averageGroupSize: z.number().nonnegative().optional(),
 });
-const albumSchema = z.object({
+const albumSchema: z.ZodType<Album> = z.object({
   id: z.string(),
   title: z.string(),
   artists: stringArray,
@@ -103,6 +105,12 @@ const albumSchema = z.object({
   trackCount: z.number().int().nonnegative(),
   rating: z.number().int().min(1).max(5).nullable().default(null),
   viewed: z.boolean().default(false),
+});
+const albumPageSchema: z.ZodType<AlbumPage> = z.object({
+  items: z.array(albumSchema),
+  total: z.number(),
+  offset: z.number(),
+  averageGroupSize: z.number().nonnegative().optional(),
 });
 const albumMergeContextSchema = z.object({
   compatible: z.boolean(),
@@ -227,7 +235,7 @@ export const apiResponseSchemas = {
   jobs: z.array(jobSchema),
   operation: operationPreviewSchema,
   queue: queueSchema,
-  albums: pageSchema(albumSchema),
+  albums: albumPageSchema,
   artists: artistPageSchema,
   albumMergeContext: albumMergeContextSchema,
   facets: pageSchema(facetSchema),

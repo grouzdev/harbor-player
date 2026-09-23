@@ -24,6 +24,16 @@ export function albumArtistGroupKey(artists: readonly string[]): string {
   return [...artists].map(artistSortKey).sort().join("\u001f");
 }
 
+/** Summarizes the visible album-artist groups in an album result. */
+export function albumArtistGroupStats(artists: readonly (readonly string[])[]) {
+  const groupCount = new Set(artists.map(albumArtistGroupKey)).size;
+  return {
+    groupCount,
+    albumCount: artists.length,
+    averageSize: groupCount ? artists.length / groupCount : 0,
+  };
+}
+
 /**
  * Returns the normalized first letter of an artist name, or null when its
  * first visible character is not a letter.
@@ -90,4 +100,8 @@ export function shouldGroupArtists(
   averageGroupSize: number,
 ): boolean {
   return total > 10 && averageGroupSize >= 3;
+}
+
+export function shouldGroupAlbums(averageGroupSize: number): boolean {
+  return averageGroupSize >= 3;
 }

@@ -52,6 +52,7 @@ import {
 import {
   emptyFilter,
   type Album,
+  type AlbumPage,
   type ArtistPage,
   type FolderMoveRoot,
   type BookmarkKind,
@@ -2105,7 +2106,7 @@ export function App() {
     queryKey: ["albums", albumFilter],
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
-      api<Page<Album>>(catalogUrl("albums", albumFilter, pageParam, 100)),
+      api<AlbumPage>(catalogUrl("albums", albumFilter, pageParam, 100)),
     getNextPageParam: (last) =>
       last.offset + last.items.length < last.total
         ? last.offset + last.items.length
@@ -2801,6 +2802,7 @@ export function App() {
             <AlbumGrid
               albums={albumItems}
               total={albumTotal}
+              averageGroupSize={albums.data?.pages[0]?.averageGroupSize}
               selected={selectedAlbums}
               currentAlbumId={currentPlayerTrack?.albumKey ?? null}
               onSelectionChange={applyAlbumSelection}

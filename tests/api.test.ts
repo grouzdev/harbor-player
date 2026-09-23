@@ -711,6 +711,9 @@ describe("Album catalog sorting", () => {
     const firstPage = context.service.catalog.albums(filter, 0, 3);
     const secondPage = context.service.catalog.albums(filter, 3, 3);
 
+    expect(firstPage.averageGroupSize).toBe(2);
+    expect(secondPage.averageGroupSize).toBe(2);
+
     expect(
       [...firstPage.items, ...secondPage.items].map((album) => album.id),
     ).toEqual([

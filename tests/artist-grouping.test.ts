@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  albumArtistGroupStats,
   artistGroupKey,
   artistGroupStats,
   compareArtistNames,
   isMissingArtistName,
   shouldGroupArtists,
+  shouldGroupAlbums,
   startsNewArtistGroup,
 } from "../src/shared/artist-grouping.js";
 
@@ -49,5 +51,15 @@ describe("artist grouping", () => {
     expect(shouldGroupArtists(10, 10)).toBe(false);
     expect(shouldGroupArtists(11, 2.99)).toBe(false);
     expect(shouldGroupArtists(11, 3)).toBe(true);
+  });
+
+  it("groups albums solely by their average album-artist group size", () => {
+    expect(albumArtistGroupStats([["Alpha"], ["Alpha"], ["Beta"]])).toEqual({
+      groupCount: 2,
+      albumCount: 3,
+      averageSize: 1.5,
+    });
+    expect(shouldGroupAlbums(2.99)).toBe(false);
+    expect(shouldGroupAlbums(3)).toBe(true);
   });
 });

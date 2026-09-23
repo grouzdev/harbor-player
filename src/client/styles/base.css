@@ -573,7 +573,7 @@ body.selection-dragging * {
   gap: 8px;
   padding: 0 14px;
 }
-.album-artist-header {
+.album-artist-label {
   display: flex;
   align-items: center;
   padding: 0 16px 2px;
@@ -615,6 +615,12 @@ body.selection-dragging * {
   min-width: 0;
   padding: 0;
   text-align: left;
+}
+.album-card > .album-artist-label {
+  padding: 0 2px 5px;
+}
+.album-card > .album-artist-label + .album-card-actions {
+  top: 33px;
 }
 .album-cover {
   aspect-ratio: 1;

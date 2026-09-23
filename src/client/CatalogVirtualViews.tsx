@@ -12,6 +12,7 @@ import {
   albumArtistGroupKey,
   artistGroupKey,
   isMissingArtistName,
+  shouldGroupAlbums,
   shouldGroupArtists,
   startsNewArtistGroup,
 } from "../shared/artist-grouping";
@@ -27,6 +28,45 @@ import { resolveContextSelection, usePanelSelection } from "./panel-selection";
 import { buildTrackListRows } from "./track-grouping";
 
 const virtualPanelTopInset = 14;
+
+function AlbumArtistLabel({
+  artists,
+  onSelectArtist,
+}: {
+  artists: string[];
+  onSelectArtist: (artist: string) => void;
+}) {
+  return (
+    <div className="album-artist-label">
+      {artists.length ? (
+        artists.map((artist, index) => (
+          <span key={`${artist}-${index}`}>
+            {index > 0 && ", "}
+            <button
+              type="button"
+              className="album-artist-link"
+              aria-label={`Выбрать исполнителя «${artist}»`}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => onSelectArtist(artist)}
+            >
+              {artist}
+            </button>
+          </span>
+        ))
+      ) : (
+        <button
+          type="button"
+          className="album-artist-link"
+          aria-label="Выбрать неизвестного исполнителя"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => onSelectArtist("")}
+        >
+          Неизвестный исполнитель
+        </button>
+      )}
+    </div>
+  );
+}
 
 export type CatalogContextMenuHandler = (
   event: React.MouseEvent,
@@ -283,6 +323,7 @@ export function ArtistList({
 export function AlbumGrid({
   albums,
   total,
+  averageGroupSize,
   selected,
   currentAlbumId,
   onSelectionChange,
@@ -303,6 +344,7 @@ export function AlbumGrid({
 }: {
   albums: Album[];
   total: number;
+  averageGroupSize?: number;
   selected: string[];
   currentAlbumId: string | null;
   onSelectionChange: (ids: string[]) => void;
@@ -332,6 +374,7 @@ export function AlbumGrid({
     onChange: onSelectionChange,
   });
   const highlighted = selection.previewKeys || new Set(selected);
+  const groupByArtists = shouldGroupAlbums(averageGroupSize || 0);
   const albumById = useMemo(
     () => new Map(albums.map((album) => [album.id, album])),
     [albums],
@@ -360,6 +403,16 @@ export function AlbumGrid({
           endsArtistGroup: boolean;
         }
     > = [];
+    if (!groupByArtists) {
+      for (let index = 0; index < albums.length; index += columns)
+        result.push({
+          type: "albums",
+          key: `albums:${index}`,
+          albums: albums.slice(index, index + columns),
+          endsArtistGroup: false,
+        });
+      return result;
+    }
     let group: Album[] = [];
     let groupKey = "";
     const appendGroup = () => {
@@ -388,14 +441,17 @@ export function AlbumGrid({
     }
     appendGroup();
     return result;
-  }, [albums, columns]);
+  }, [albums, columns, groupByArtists]);
   const virtual = useVirtualizer({
     count: rows.length + (albums.length < total ? 1 : 0),
     getScrollElement: () => ref.current,
     estimateSize: (index) =>
       rows[index]?.type === "artist"
         ? 23
-        : cellWidth + 86 + (rows[index]?.endsArtistGroup ? 12 : 0),
+        : cellWidth +
+          86 +
+          (groupByArtists ? 0 : 26) +
+          (rows[index]?.endsArtistGroup ? 12 : 0),
     paddingStart: virtualPanelTopInset,
     scrollPaddingStart: virtualPanelTopInset,
     overscan: 3,
@@ -449,39 +505,16 @@ export function AlbumGrid({
               return (
                 <div
                   key={row.key}
-                  className="album-artist-header"
                   style={{
                     position: "absolute",
                     width: "100%",
                     transform: `translateY(${row.start}px)`,
                   }}
                 >
-                  {entry.artists.length ? (
-                    entry.artists.map((artist, index) => (
-                      <span key={`${artist}-${index}`}>
-                        {index > 0 && ", "}
-                        <button
-                          type="button"
-                          className="album-artist-link"
-                          aria-label={`Выбрать исполнителя «${artist}»`}
-                          onPointerDown={(event) => event.stopPropagation()}
-                          onClick={() => onSelectArtist(artist)}
-                        >
-                          {artist}
-                        </button>
-                      </span>
-                    ))
-                  ) : (
-                    <button
-                      type="button"
-                      className="album-artist-link"
-                      aria-label="Выбрать неизвестного исполнителя"
-                      onPointerDown={(event) => event.stopPropagation()}
-                      onClick={() => onSelectArtist("")}
-                    >
-                      Неизвестный исполнитель
-                    </button>
-                  )}
+                  <AlbumArtistLabel
+                    artists={entry.artists}
+                    onSelectArtist={onSelectArtist}
+                  />
                 </div>
               );
             return (
@@ -522,6 +555,12 @@ export function AlbumGrid({
                         );
                       }}
                     >
+                      {!groupByArtists && (
+                        <AlbumArtistLabel
+                          artists={album.artists}
+                          onSelectArtist={onSelectArtist}
+                        />
+                      )}
                       <div className="album-card-actions">
                         <BookmarkToggle
                           kind="album"

@@ -1462,14 +1462,16 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await unviewedFilter.click();
   await expect(unviewedFilter).toHaveAttribute("aria-pressed", "false");
   await expect(firstAlbum).toBeVisible();
-  await firstAlbumButton.click({ modifiers: ["Control"] });
-  await expect(firstAlbum).not.toHaveClass(/selected/);
   await expect(
     page
-      .locator(".album-artist-header")
+      .locator(".album-artist-label")
       .filter({ hasText: "Исполнитель альбома" }),
   ).toHaveCount(1);
-  const albumArtistLink = page.getByRole("button", {
+  await firstAlbumButton.click({ modifiers: ["Control"] });
+  await expect(firstAlbum).toHaveClass(/selected/);
+  await firstAlbumButton.click({ modifiers: ["Control"] });
+  await expect(firstAlbum).not.toHaveClass(/selected/);
+  const albumArtistLink = firstAlbum.getByRole("button", {
     name: "Выбрать исполнителя «Исполнитель альбома»",
   });
   await page.getByRole("button", { name: "Сбросить исполнителей" }).click();

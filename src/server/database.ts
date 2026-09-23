@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { jobSchema, operationPreviewSchema } from "../shared/contracts.js";
 import type {
   Album,
+  AlbumPage,
   AlbumMergeContext,
   ArtistPage,
   ArtistFolder,
@@ -25,6 +26,7 @@ import type {
 } from "../shared/contracts.js";
 import { emptyFilter } from "../shared/contracts.js";
 import {
+  albumArtistGroupStats,
   artistGroupStats,
   artistSortKey,
   compareArtistNames,
@@ -875,17 +877,20 @@ export class Catalog {
   private fallbackAlbumArtists(ids: string[]): Map<string, string[]> {
     const artists = new Map<string, string[]>();
     if (!ids.length) return artists;
-    const placeholders = ids.map(() => "?").join(",");
-    const values = this.db
-      .prepare(
-        `SELECT DISTINCT t.albumKey id, a.artist
-         FROM track_album_artists a JOIN tracks t ON t.id=a.trackId
-         WHERE t.available=1 AND t.albumKey IN (${placeholders})
-         ORDER BY t.albumKey, artist_sort_key(a.artist), a.artist`,
-      )
-      .all(...ids) as { id: string; artist: string }[];
-    for (const { id, artist } of values)
-      artists.set(id, [...(artists.get(id) || []), artist]);
+    for (let offset = 0; offset < ids.length; offset += 900) {
+      const batch = ids.slice(offset, offset + 900);
+      const placeholders = batch.map(() => "?").join(",");
+      const values = this.db
+        .prepare(
+          `SELECT DISTINCT t.albumKey id, a.artist
+           FROM track_album_artists a JOIN tracks t ON t.id=a.trackId
+           WHERE t.available=1 AND t.albumKey IN (${placeholders})
+           ORDER BY t.albumKey, artist_sort_key(a.artist), a.artist`,
+        )
+        .all(...batch) as { id: string; artist: string }[];
+      for (const { id, artist } of values)
+        artists.set(id, [...(artists.get(id) || []), artist]);
+    }
     return artists;
   }
   private albumArtistOrder(trackAlias: string): string {
@@ -903,7 +908,7 @@ export class Catalog {
       )
     ), '')`;
   }
-  albums(filter: CatalogFilter, offset = 0, limit = 120): Page<Album> {
+  albums(filter: CatalogFilter, offset = 0, limit = 120): AlbumPage {
     const { sql, args } = this.where(filter, "album");
     const total = (
       this.db
@@ -947,6 +952,36 @@ export class Catalog {
       .filter((album) => !album.artists.length)
       .map((album) => album.id);
     const fallbackArtists = this.fallbackAlbumArtists(ids);
+    const groupRows = this.db
+      .prepare(
+        `WITH ranked AS (
+           SELECT t.albumKey id, t.albumArtists artists,
+                  row_number() OVER (
+                    PARTITION BY t.albumKey
+                    ORDER BY t.year IS NOT NULL, t.year DESC,
+                             t.albumTitle COLLATE NOCASE, t.albumKey,
+                             coalesce(t.discNumber,0), coalesce(t.trackNumber,0),
+                             t.relativePath
+                  ) albumRank
+           FROM tracks t JOIN libraries l ON l.id=t.libraryId
+           WHERE ${sql}
+         )
+         SELECT id, artists FROM ranked WHERE albumRank=1`,
+      )
+      .all(...args) as { id: string; artists: string }[];
+    const groupFallbackArtists = this.fallbackAlbumArtists(
+      groupRows
+        .filter((album) => !(JSON.parse(album.artists) as string[]).length)
+        .map((album) => album.id),
+    );
+    const { averageSize: averageGroupSize } = albumArtistGroupStats(
+      groupRows.map((album) => {
+        const artists = JSON.parse(album.artists) as string[];
+        return artists.length
+          ? artists
+          : groupFallbackArtists.get(album.id) || [];
+      }),
+    );
     return {
       items: items.map(
         (album) =>
@@ -961,6 +996,7 @@ export class Catalog {
       ),
       total,
       offset,
+      averageGroupSize,
     };
   }
   albumMergeContext(albumIds: string[]): AlbumMergeContext {
