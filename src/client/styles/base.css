@@ -390,6 +390,7 @@ body.selection-dragging * {
   margin: 0 12px 10px;
 }
 .library-list {
+  flex: 1;
   min-height: 0;
   overflow: auto;
 }
@@ -535,6 +536,7 @@ body.selection-dragging * {
 }
 .genre-list {
   display: flex;
+  flex: 1;
   flex-direction: column;
   min-height: 0;
   overflow: auto;

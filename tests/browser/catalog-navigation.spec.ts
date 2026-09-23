@@ -629,3 +629,37 @@ test("marquee selects neighbouring library and genre options without shrinking e
     await expect(count(page, "tracks")).toHaveText("417");
   }
 });
+
+test("empty panel space starts marquee selection and clears it on click", async ({
+  page,
+}) => {
+  await catalog(page);
+  for (const [surfaceSelector, rowSelector, selectedSelector] of [
+    [
+      ".libraries-panel .library-list",
+      ".library-container > .list-tile",
+      ".library-container > .list-tile.selected",
+    ],
+    [".genres-panel .genre-list", ".list-tile", ".list-tile.selected"],
+  ] as const) {
+    const surface = page.locator(surfaceSelector);
+    const rows = surface.locator(rowSelector);
+    const last = await rows.last().boundingBox();
+    const surfaceBox = await surface.boundingBox();
+    expect(last).not.toBeNull();
+    expect(surfaceBox).not.toBeNull();
+    const emptyAreaY = surfaceBox!.y + surfaceBox!.height - 6;
+    expect(emptyAreaY).toBeGreaterThan(last!.y + last!.height + 4);
+
+    await page.mouse.move(last!.x + last!.width - 4, emptyAreaY);
+    await page.mouse.down();
+    await page.mouse.move(last!.x + last!.width - 4, last!.y + 4, {
+      steps: 4,
+    });
+    await expect(page.getByTestId("selection-marquee")).toBeVisible();
+    await page.mouse.up();
+    await expect(surface.locator(selectedSelector)).toHaveCount(1);
+    await page.mouse.click(last!.x + last!.width - 4, emptyAreaY);
+    await expect(surface.locator(selectedSelector)).toHaveCount(0);
+  }
+});
