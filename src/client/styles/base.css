@@ -2570,6 +2570,10 @@ body {
 }
 .track-album-header:hover .track-album-action--rating,
 .track-album-header:focus-within .track-album-action--rating {
+  width: 30px;
+}
+.track-album-header:hover .track-album-action--rating.is-active,
+.track-album-header:focus-within .track-album-action--rating.is-active {
   width: 44px;
 }
 .track-album-header:hover .track-album-action--viewed,

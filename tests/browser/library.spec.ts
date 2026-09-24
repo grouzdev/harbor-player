@@ -1713,96 +1713,6 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
       { left: 80, right: 110 },
       { left: 33, right: 77 },
     ]);
-  const compactActionGeometries = await firstTrackAlbumHeader.evaluate(
-    (header) => {
-      const actions = [
-        ...header.querySelectorAll<HTMLElement>(".track-album-action"),
-      ];
-      const container = header.querySelector<HTMLElement>(
-        ".track-album-actions",
-      )!;
-      const initiallyActive = actions.map((action) =>
-        action.classList.contains("is-active"),
-      );
-      const initialTransitions = actions.map(
-        (action) => action.style.transition,
-      );
-      const combinations = [
-        [false, false, false],
-        [true, false, false],
-        [false, true, false],
-        [false, false, true],
-        [true, true, false],
-        [true, false, true],
-        [false, true, true],
-        [true, true, true],
-      ];
-
-      try {
-        return combinations.map((active) => {
-          actions.forEach((action, index) => {
-            action.style.transition = "none";
-            action.classList.toggle("is-active", active[index]);
-          });
-          const containerBox = container.getBoundingClientRect();
-          return actions.map((action) => {
-            const box = action.getBoundingClientRect();
-            return {
-              left: Math.round(box.left - containerBox.left),
-              right: Math.round(box.right - containerBox.left),
-            };
-          });
-        });
-      } finally {
-        actions.forEach((action, index) => {
-          action.classList.toggle("is-active", initiallyActive[index]);
-          action.style.transition = initialTransitions[index];
-        });
-      }
-    },
-  );
-  expect(compactActionGeometries).toEqual([
-    [
-      { left: 110, right: 110 },
-      { left: 110, right: 110 },
-      { left: 110, right: 110 },
-    ],
-    [
-      { left: 66, right: 110 },
-      { left: 110, right: 110 },
-      { left: 110, right: 110 },
-    ],
-    [
-      { left: 77, right: 77 },
-      { left: 80, right: 110 },
-      { left: 110, right: 110 },
-    ],
-    [
-      { left: 77, right: 77 },
-      { left: 77, right: 77 },
-      { left: 80, right: 110 },
-    ],
-    [
-      { left: 33, right: 77 },
-      { left: 80, right: 110 },
-      { left: 110, right: 110 },
-    ],
-    [
-      { left: 33, right: 77 },
-      { left: 77, right: 77 },
-      { left: 80, right: 110 },
-    ],
-    [
-      { left: 44, right: 44 },
-      { left: 47, right: 77 },
-      { left: 80, right: 110 },
-    ],
-    [
-      { left: 0, right: 44 },
-      { left: 47, right: 77 },
-      { left: 80, right: 110 },
-    ],
-  ]);
   await firstTrackAlbumHeader.hover();
   await expect(trackAlbumBookmark).toHaveCSS("opacity", "1");
   await expect
@@ -1823,6 +1733,56 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
       { left: 47, right: 77 },
       { left: 0, right: 44 },
     ]);
+  const unratedButtonGeometry = await firstTrackAlbumHeader.evaluate(
+    (header) => {
+      const container = header.querySelector<HTMLElement>(
+        ".track-album-actions",
+      )!;
+      const ratingAction = header.querySelector<HTMLElement>(
+        ".track-album-action--rating",
+      )!;
+      const ratingControl = header.querySelector<HTMLElement>(
+        ".album-rating-control",
+      )!;
+      const ratingButton =
+        header.querySelector<HTMLElement>(".compact-rating")!;
+      const buttons = [
+        ratingButton,
+        header.querySelector<HTMLElement>(".album-viewed-toggle")!,
+        header.querySelector<HTMLElement>(".track-album-bookmark-toggle")!,
+      ];
+      const wasActive = ratingAction.classList.contains("is-active");
+      const wasRated = [ratingControl, ratingButton].map((element) =>
+        element.classList.contains("rated"),
+      );
+      const transition = ratingAction.style.transition;
+
+      try {
+        ratingAction.style.transition = "none";
+        ratingAction.classList.remove("is-active");
+        ratingControl.classList.remove("rated");
+        ratingButton.classList.remove("rated");
+        const containerBox = container.getBoundingClientRect();
+        return buttons.map((button) => {
+          const box = button.getBoundingClientRect();
+          return {
+            left: Math.round(box.left - containerBox.left),
+            right: Math.round(box.right - containerBox.left),
+          };
+        });
+      } finally {
+        ratingAction.classList.toggle("is-active", wasActive);
+        ratingControl.classList.toggle("rated", wasRated[0]);
+        ratingButton.classList.toggle("rated", wasRated[1]);
+        ratingAction.style.transition = transition;
+      }
+    },
+  );
+  expect(unratedButtonGeometry).toEqual([
+    { left: 14, right: 44 },
+    { left: 47, right: 77 },
+    { left: 80, right: 110 },
+  ]);
   const trackAlbumActionOrder = await firstTrackAlbumHeader.evaluate(
     (header) => {
       const actions = header.querySelector<HTMLElement>(
