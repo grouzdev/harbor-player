@@ -1022,15 +1022,13 @@ export function TrackList({
                 }}
                 endAction={
                   <div className="track-row-actions" data-selection-ignore>
-                    {track.rating !== null && (
-                      <RatingControl
-                        kind="track"
-                        id={track.id}
-                        rating={track.rating}
-                        pending={pendingUserStateKeys.has(`track:${track.id}`)}
-                        onChange={onUserStateChange}
-                      />
-                    )}
+                    <RatingControl
+                      kind="track"
+                      id={track.id}
+                      rating={track.rating}
+                      pending={pendingUserStateKeys.has(`track:${track.id}`)}
+                      onChange={onUserStateChange}
+                    />
                     <BookmarkToggle
                       kind="track"
                       id={track.id}

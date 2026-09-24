@@ -866,13 +866,20 @@ body.selection-dragging * {
 }
 .track-row.has-end-action .list-tile-main {
   height: 100%;
-  padding: 0 36px 0 24px;
+  position: relative;
+  padding: 0 106px 0 24px;
   border-radius: 0;
   color: #c2cbd1;
 }
 .track-row .list-tile-suffix {
+  position: absolute;
+  right: 7px;
   width: 29px;
   color: #8a9aa4;
+}
+.track-row.has-end-action:hover .list-tile-suffix,
+.track-row.has-end-action:focus-within .list-tile-suffix {
+  visibility: visible;
 }
 .empty-small {
   display: flex;
@@ -2485,8 +2492,19 @@ body {
   position: absolute;
   z-index: 2;
   top: 50%;
-  right: 65px;
+  right: 70px;
   transform: translateY(-50%);
+  opacity: 0;
+  transition: none;
+}
+.track-row.has-end-action .track-row-actions > .track-bookmark-toggle {
+  right: 39px;
+  transition: none;
+}
+.track-row-actions .rating-control.rated,
+.track-row:hover .track-row-actions .rating-control,
+.track-row:focus-within .track-row-actions .rating-control {
+  opacity: 1;
 }
 .track-row:focus-within {
   z-index: 20;
@@ -2643,8 +2661,8 @@ body {
 .artist-row:focus-within > .bookmark-toggle,
 .album-card:hover .album-bookmark-toggle,
 .album-card:focus-within .album-bookmark-toggle,
-.track-row:hover > .bookmark-toggle,
-.track-row:focus-within > .bookmark-toggle,
+.track-row:hover .track-row-actions > .bookmark-toggle,
+.track-row:focus-within .track-row-actions > .bookmark-toggle,
 .track-album-header:hover > .bookmark-toggle,
 .track-album-header:focus-within > .bookmark-toggle {
   opacity: 1;

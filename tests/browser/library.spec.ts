@@ -1202,7 +1202,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     const durationRect = duration.getBoundingClientRect();
     return scrollRect.left + scroll.clientWidth - durationRect.right;
   });
-  expect(Math.abs(trackDurationInset - 36)).toBeLessThan(0.5);
+  expect(Math.abs(trackDurationInset - 7)).toBeLessThan(0.5);
   await expect(
     page.getByRole("button", { name: "Сбросить выбор треков" }),
   ).toHaveCount(0);
@@ -1360,14 +1360,46 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     "fill",
     "none",
   );
-  await expect(
-    firstTrackRow.getByRole("button", { name: "Без оценки" }),
-  ).toHaveCount(0);
-  await firstTrackRow.dispatchEvent("contextmenu", {
-    clientX: 1350,
-    clientY: 500,
+  const unratedTrackRating = firstTrackRow.getByRole("button", {
+    name: "Без оценки",
   });
-  await page.getByRole("menuitem", { name: /Изменить оценку/ }).click();
+  const trackBookmark = firstTrackRow.getByRole("button", {
+    name: /Добавить трек .* в закладки/,
+  });
+  const trackRatingControl = firstTrackRow.locator(
+    ".track-row-actions .rating-control",
+  );
+  await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+  await page.getByLabel("Поиск музыки").hover();
+  await expect(trackRatingControl).toHaveCSS("opacity", "0");
+  await expect(trackBookmark).toHaveCSS("opacity", "0");
+  await unratedTrackRating.focus();
+  await expect(trackRatingControl).toHaveCSS("opacity", "1");
+  await firstTrackRow.hover();
+  await expect(trackRatingControl).toHaveCSS("opacity", "1");
+  await expect(trackBookmark).toHaveCSS("opacity", "1");
+  await expect(firstTrackRow.locator(".list-tile-suffix")).toHaveCSS(
+    "visibility",
+    "visible",
+  );
+  const trackActionOrder = await firstTrackRow.evaluate((row) => {
+    const rating = row.querySelector<HTMLElement>(".rating-control")!;
+    const bookmark = row.querySelector<HTMLElement>(".bookmark-toggle")!;
+    const duration = row.querySelector<HTMLElement>(".list-tile-suffix")!;
+    return {
+      ratingRight: rating.getBoundingClientRect().right,
+      bookmarkLeft: bookmark.getBoundingClientRect().left,
+      bookmarkRight: bookmark.getBoundingClientRect().right,
+      durationLeft: duration.getBoundingClientRect().left,
+    };
+  });
+  expect(trackActionOrder.ratingRight).toBeLessThanOrEqual(
+    trackActionOrder.bookmarkLeft,
+  );
+  expect(trackActionOrder.bookmarkRight).toBeLessThanOrEqual(
+    trackActionOrder.durationLeft,
+  );
+  await unratedTrackRating.click();
   const edgeRatingBubble = page.getByRole("dialog", {
     name: "Изменить оценку",
   });
@@ -1377,9 +1409,22 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     edgeRatingBubbleBox!.x + edgeRatingBubbleBox!.width,
   ).toBeLessThanOrEqual((await page.evaluate(() => window.innerWidth)) - 8);
   await edgeRatingBubble.getByRole("button", { name: "5 из 5" }).click();
-  await expect(
-    firstTrackRow.getByRole("button", { name: "Оценка 5 из 5" }),
-  ).toBeVisible();
+  const savedTrackRating = firstTrackRow.getByRole("button", {
+    name: "Оценка 5 из 5",
+  });
+  await page.getByLabel("Поиск музыки").hover();
+  await expect(trackRatingControl).toHaveCSS("opacity", "1");
+  await trackBookmark.click();
+  await expect(firstTrackRow).not.toHaveClass(/selected/);
+  const removeTrackBookmark = firstTrackRow.getByRole("button", {
+    name: /Удалить трек .* из закладок/,
+  });
+  await removeTrackBookmark.focus();
+  await expect(unratedTrackRating).toHaveCount(0);
+  await expect(trackRatingControl).toHaveCSS("opacity", "1");
+  await expect(removeTrackBookmark).toHaveCSS("opacity", "1");
+  await removeTrackBookmark.press("Enter");
+  await expect(firstTrackRow).not.toHaveClass(/selected/);
   await page.setViewportSize({ width: 1600, height: 1000 });
   const ratingFilter = page.getByRole("button", {
     name: "Фильтр по рейтингу",
