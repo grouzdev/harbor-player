@@ -2711,7 +2711,11 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   await expect(libraryTile.locator(".list-tile-status-icon svg")).toBeVisible();
   const currentAlbum = page.locator(".albums-panel .album-card.playing");
   await expect(currentAlbum).toHaveCount(1);
-  await expect(currentAlbum.locator(".album-playing-icon")).toBeVisible();
+  const albumPlayingIcon = currentAlbum.locator(".album-playing-icon");
+  await expect(albumPlayingIcon).toBeVisible();
+  await expect(albumPlayingIcon).toHaveCSS("width", "13px");
+  await expect(albumPlayingIcon).toHaveCSS("height", "13px");
+  await expect(albumPlayingIcon).toHaveCSS("flex-shrink", "0");
   await expect(currentAlbum.locator(".album-main > strong")).toHaveCSS(
     "color",
     "rgb(185, 212, 183)",

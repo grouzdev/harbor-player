@@ -681,6 +681,9 @@ body.selection-dragging * {
   background: #c6ca91;
   box-shadow: 0 0 6px #c6ca91a6;
 }
+.album-playing-icon {
+  flex: 0 0 13px;
+}
 .album-card.playing .album-main > strong {
   color: #b9d4b7;
   text-shadow: 0 0 6px #b9d4b766;
