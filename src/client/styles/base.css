@@ -2671,6 +2671,13 @@ body {
   align-items: flex-end;
   justify-content: space-between;
 }
+.album-card-actions .bookmark-toggle {
+  transition-property: color, background;
+}
+.album-card-actions .album-rating-control,
+.album-card-actions .album-track-count {
+  transition: none;
+}
 .track-bookmark-toggle,
 .track-album-bookmark-toggle {
   background: transparent;

@@ -1274,6 +1274,15 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     "background-image",
     /linear-gradient/,
   );
+  await expect(albumBookmark).toHaveCSS(
+    "transition-property",
+    "color, background",
+  );
+  await expect(firstAlbum.locator(".album-rating-control")).toHaveCSS(
+    "transition-property",
+    "none",
+  );
+  await expect(albumTrackCountBadge).toHaveCSS("transition-property", "none");
   await expect(albumActions.locator(":scope > *")).toHaveCount(4);
   const actionBoxes = await Promise.all(
     [albumBookmark, albumViewed, unratedAlbumRating, albumTrackCountBadge].map(
