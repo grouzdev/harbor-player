@@ -76,6 +76,13 @@ test("catalog filters stay right of search in the requested order", async ({
   const rating = page.getByRole("button", { name: "Фильтр по рейтингу" });
   const history = page.getByRole("button", { name: "Журнал операций" });
   const topbar = page.locator(".topbar");
+  const settings = topbar.getByRole("button", { name: "Открыть настройки" });
+  const coverMode = topbar.getByRole("button", {
+    name: "Открыть режим обложки",
+  });
+  const fullscreen = topbar.getByRole("button", {
+    name: "Развернуть окно на весь экран",
+  });
   const [
     searchBox,
     filterBox,
@@ -84,6 +91,9 @@ test("catalog filters stay right of search in the requested order", async ({
     unviewedBox,
     ratingBox,
     historyBox,
+    settingsBox,
+    coverModeBox,
+    fullscreenBox,
     topbarBox,
   ] = await Promise.all([
     search.boundingBox(),
@@ -93,6 +103,9 @@ test("catalog filters stay right of search in the requested order", async ({
     unviewed.boundingBox(),
     rating.boundingBox(),
     history.boundingBox(),
+    settings.boundingBox(),
+    coverMode.boundingBox(),
+    fullscreen.boundingBox(),
     topbar.boundingBox(),
   ]);
   expect(searchBox).not.toBeNull();
@@ -102,6 +115,9 @@ test("catalog filters stay right of search in the requested order", async ({
   expect(unviewedBox).not.toBeNull();
   expect(ratingBox).not.toBeNull();
   expect(historyBox).not.toBeNull();
+  expect(settingsBox).not.toBeNull();
+  expect(coverModeBox).not.toBeNull();
+  expect(fullscreenBox).not.toBeNull();
   expect(topbarBox).not.toBeNull();
   expect(bookmarkBox!.x).toBeGreaterThanOrEqual(
     searchBox!.x + searchBox!.width,
@@ -109,6 +125,36 @@ test("catalog filters stay right of search in the requested order", async ({
   expect(bookmarkBox!.x).toBeLessThan(unviewedBox!.x);
   expect(unviewedBox!.x).toBeLessThan(ratingBox!.x);
   expect(ratingBox!.x).toBeLessThan(historyBox!.x);
+  expect(historyBox!.x).toBeLessThan(settingsBox!.x);
+  expect(settingsBox!.x).toBeLessThan(coverModeBox!.x);
+  expect(coverModeBox!.x).toBeLessThan(fullscreenBox!.x);
+  const buttonGap = (
+    left: { x: number; width: number },
+    right: { x: number },
+  ) => right.x - (left.x + left.width);
+  const leftButtons = sectionButtons.locator("button");
+  const leftButtonBoxes = await Promise.all(
+    Array.from({ length: await leftButtons.count() }, (_, index) =>
+      leftButtons.nth(index).boundingBox(),
+    ),
+  );
+  expect(leftButtonBoxes).toHaveLength(5);
+  expect(leftButtonBoxes.every((box) => box !== null)).toBe(true);
+  for (let index = 1; index < leftButtonBoxes.length; index += 1) {
+    expect(
+      buttonGap(leftButtonBoxes[index - 1]!, leftButtonBoxes[index]!),
+    ).toBeCloseTo(7, 1);
+  }
+  for (const [left, right] of [
+    [bookmarkBox!, unviewedBox!],
+    [unviewedBox!, ratingBox!],
+    [ratingBox!, historyBox!],
+    [historyBox!, settingsBox!],
+    [settingsBox!, coverModeBox!],
+    [coverModeBox!, fullscreenBox!],
+  ]) {
+    expect(buttonGap(left, right)).toBeCloseTo(7, 1);
+  }
   expect(filterBox!.x).toBeGreaterThanOrEqual(bookmarkBox!.x);
   expect(filterBox!.x + filterBox!.width).toBeGreaterThanOrEqual(
     ratingBox!.x + ratingBox!.width,

@@ -103,11 +103,12 @@ a {
   container-type: inline-size;
 }
 .topbar {
+  --topbar-button-gap: 7px;
   height: 65px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--topbar-button-gap);
   padding: 0 28px 0 24px;
   border-bottom: 1px solid var(--line);
   background: #191e23;
@@ -2286,7 +2287,7 @@ body {
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--topbar-button-gap);
 }
 .panel-visibility-button {
   color: #a6ada6;
@@ -2313,7 +2314,7 @@ body {
 .catalog-actions {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--topbar-button-gap);
   margin-left: auto;
 }
 .history-button {
@@ -2595,7 +2596,7 @@ body {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 7px;
+  gap: var(--topbar-button-gap);
 }
 .catalog-rating-range {
   display: flex;
