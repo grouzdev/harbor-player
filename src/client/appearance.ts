@@ -22,7 +22,7 @@ export function normalizeAppearance(value: unknown): AppearanceSettings {
   if (!value || typeof value !== "object") return defaultAppearance;
   const candidate = value as Partial<AppearanceSettings>;
   return {
-    theme: candidate.theme === "light" ? "light" : "dark",
+    theme: "dark",
     accent:
       typeof candidate.accent === "string" &&
       accentPattern.test(candidate.accent)
@@ -49,16 +49,20 @@ export function readCachedAppearance(): AppearanceSettings {
 }
 
 export function cacheAppearance(settings: AppearanceSettings) {
-  localStorage.setItem(storageKey, JSON.stringify(settings));
+  localStorage.setItem(
+    storageKey,
+    JSON.stringify(normalizeAppearance(settings)),
+  );
 }
 
 export function applyAppearance(settings: AppearanceSettings) {
-  document.documentElement.dataset.theme = settings.theme;
-  document.documentElement.style.setProperty("--accent", settings.accent);
-  if (settings.backgroundRevision > 0) {
+  const normalized = normalizeAppearance(settings);
+  document.documentElement.dataset.theme = normalized.theme;
+  document.documentElement.style.setProperty("--accent", normalized.accent);
+  if (normalized.backgroundRevision > 0) {
     document.documentElement.style.setProperty(
       "--appearance-background",
-      `url("/api/appearance/background?v=${settings.backgroundRevision}")`,
+      `url("/api/appearance/background?v=${normalized.backgroundRevision}")`,
     );
   } else {
     document.documentElement.style.removeProperty("--appearance-background");

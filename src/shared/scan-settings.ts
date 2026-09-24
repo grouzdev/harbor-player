@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const autoScanIntervals = [0, 5, 15, 60] as const;
+export const autoScanIntervals = [0, 60, 15, 5] as const;
 
 export const scanSettingsSchema = z
   .object({

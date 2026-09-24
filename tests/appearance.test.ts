@@ -23,7 +23,7 @@ afterEach(async () => {
 });
 
 describe("appearance storage", () => {
-  it("persists the selected palette and normalizes an imported background", async () => {
+  it("persists the selected palette, forces the dark theme, and normalizes an imported background", async () => {
     await writeAppearance(root, {
       theme: "light",
       accent: "#79b9d4",
@@ -38,7 +38,7 @@ describe("appearance storage", () => {
     const saved = await importAppearanceBackground(root, source);
 
     expect(saved).toEqual({
-      theme: "light",
+      theme: "dark",
       accent: "#79b9d4",
       backgroundRevision: 1,
     });
@@ -62,7 +62,7 @@ describe("appearance storage", () => {
     await importAppearanceBackground(root, source);
 
     await expect(clearAppearanceBackground(root)).resolves.toEqual({
-      theme: "light",
+      theme: "dark",
       accent: "#79b9d4",
       backgroundRevision: 0,
     });

@@ -89,6 +89,7 @@ import { readMigratedStorageValue } from "./storage";
 import {
   applyAppearance,
   cacheAppearance,
+  normalizeAppearance,
   readCachedAppearance,
   type AppearanceSettings,
 } from "./appearance";
@@ -627,10 +628,11 @@ export function App() {
     requestTrackScroll,
   } = useCatalogScrollTargets(filterKey);
   const updateAppearance = useCallback((next: AppearanceSettings) => {
+    const normalized = normalizeAppearance(next);
     appearanceTouchedRef.current = true;
-    cacheAppearance(next);
-    applyAppearance(next);
-    setAppearance(next);
+    cacheAppearance(normalized);
+    applyAppearance(normalized);
+    setAppearance(normalized);
   }, []);
   const saveFullscreenWindowState = useCallback(
     (state: FullscreenWindowState) => {
@@ -647,9 +649,10 @@ export function App() {
     void api<AppearanceSettings>("/appearance")
       .then((remote) => {
         if (appearanceTouchedRef.current) return;
-        cacheAppearance(remote);
-        applyAppearance(remote);
-        setAppearance(remote);
+        const normalized = normalizeAppearance(remote);
+        cacheAppearance(normalized);
+        applyAppearance(normalized);
+        setAppearance(normalized);
       })
       .catch(() => {
         // Cached appearance remains available when the local server is restarting.

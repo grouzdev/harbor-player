@@ -24,7 +24,7 @@ export async function readAppearance(
       await readFile(path.join(dataDir, "appearance.json"), "utf8"),
     ) as Partial<AppearanceSettings>;
     return {
-      theme: parsed.theme === "light" ? "light" : "dark",
+      theme: "dark",
       accent:
         typeof parsed.accent === "string" && accent.test(parsed.accent)
           ? parsed.accent.toLowerCase()
@@ -44,13 +44,18 @@ export async function writeAppearance(
   dataDir: string,
   settings: AppearanceSettings,
 ) {
+  const normalized: AppearanceSettings = {
+    ...settings,
+    theme: "dark",
+    accent: settings.accent.toLowerCase(),
+  };
   await mkdir(dataDir, { recursive: true });
   await writeFile(
     path.join(dataDir, "appearance.json"),
-    JSON.stringify(settings),
+    JSON.stringify(normalized),
     "utf8",
   );
-  return settings;
+  return normalized;
 }
 
 export const appearanceBackgroundPath = (dataDir: string) =>

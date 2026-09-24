@@ -149,28 +149,6 @@ export function AppearanceSettingsDialog({
     <Modal title="Настройки" subtitle="Внешний вид" onClose={onClose}>
       <section className="appearance-settings" aria-label="Внешний вид">
         <div className="appearance-section">
-          <h3>Тема</h3>
-          <div
-            className="appearance-choice-row"
-            role="radiogroup"
-            aria-label="Тема"
-          >
-            {(["dark", "light"] as const).map((theme) => (
-              <button
-                key={theme}
-                type="button"
-                className={`appearance-theme-card ${settings.theme === theme ? "selected" : ""}`}
-                role="radio"
-                aria-checked={settings.theme === theme}
-                onClick={() => void save({ ...settings, theme })}
-              >
-                <span className={`theme-preview theme-preview--${theme}`} />
-                {theme === "dark" ? "Тёмная" : "Светлая"}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="appearance-section">
           <h3>Акцентный цвет</h3>
           <div className="accent-picker">
             {accents.map((accent) => (
@@ -198,10 +176,6 @@ export function AppearanceSettingsDialog({
         </div>
         <div className="appearance-section">
           <h3>Фон</h3>
-          <p className="hint">
-            Картинка копируется в данные Harbor Player — исходный файл можно
-            удалить.
-          </p>
           <div className="appearance-actions">
             <button
               type="button"
@@ -279,17 +253,11 @@ export function AppearanceSettingsDialog({
             </div>
           )}
           {error && <p className="error-text">{error}</p>}
-          <p className="appearance-upcoming">
-            Галерея Unsplash появится здесь позже.
-          </p>
         </div>
         <div className="appearance-section">
           <h3>Сканирование</h3>
-          <p className="hint">
-            Автосканирование проверяет изменения в подключённых библиотеках.
-          </p>
           <div
-            className="appearance-choice-row scan-intervals"
+            className="appearance-segmented-control"
             role="radiogroup"
             aria-label="Автосканирование"
           >
@@ -297,24 +265,21 @@ export function AppearanceSettingsDialog({
               <button
                 key={minutes}
                 type="button"
-                className={`button secondary ${scanSettings.autoScanIntervalMinutes === minutes ? "selected" : ""}`}
+                className={`appearance-segment ${scanSettings.autoScanIntervalMinutes === minutes ? "selected" : ""}`}
                 role="radio"
                 aria-checked={scanSettings.autoScanIntervalMinutes === minutes}
                 disabled={scanBusy}
                 onClick={() => void saveScanSettings(minutes)}
               >
-                {minutes === 0 ? "Выключено" : `Каждые ${minutes} мин.`}
+                {minutes === 0 ? "Только вручную" : `Каждые ${minutes} мин.`}
               </button>
             ))}
           </div>
         </div>
         <div className="appearance-section" aria-label="Резервные копии">
           <h3>Резервные копии</h3>
-          <p className="hint">
-            Перед записью тегов прежний файл можно сохранить для восстановления.
-          </p>
           <div
-            className="appearance-choice-row"
+            className="appearance-segmented-control"
             role="radiogroup"
             aria-label="Срок хранения резервных копий"
           >
@@ -322,7 +287,7 @@ export function AppearanceSettingsDialog({
               <button
                 key={option.value}
                 type="button"
-                className={`button secondary ${recovery?.backupRetention === option.value ? "selected" : ""}`}
+                className={`appearance-segment ${recovery?.backupRetention === option.value ? "selected" : ""}`}
                 role="radio"
                 aria-checked={recovery?.backupRetention === option.value}
                 disabled={recoveryBusy || !recovery}
@@ -334,13 +299,17 @@ export function AppearanceSettingsDialog({
           </div>
           <div className="appearance-actions">
             <span className="hint">
-              Занято: {recovery ? formatSize(recovery.size) : "…"}
+              {recovery
+                ? recovery.size === 0
+                  ? "Резервных копий нет"
+                  : `Занято: ${formatSize(recovery.size)}`
+                : "Занято: …"}
             </span>
-            {recovery && recovery.size > 0 && (
+            {recovery && (
               <button
                 type="button"
                 className="button secondary"
-                disabled={recoveryBusy}
+                disabled={recoveryBusy || recovery.size === 0}
                 onClick={() => void clearRecovery()}
               >
                 <Trash2 size={17} /> Очистить резервные копии
