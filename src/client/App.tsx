@@ -626,11 +626,6 @@ export function App() {
     requestAlbumScroll,
     requestTrackScroll,
   } = useCatalogScrollTargets(filterKey);
-  const [pendingCatalogContext, setPendingCatalogContext] = useState<{
-    artist?: string;
-    album?: string;
-    track?: string;
-  } | null>(null);
   const updateAppearance = useCallback((next: AppearanceSettings) => {
     appearanceTouchedRef.current = true;
     cacheAppearance(next);
@@ -1468,7 +1463,9 @@ export function App() {
       event.preventDefault();
       const genres = resolveContextSelection(filter.genres, genre);
       if (!filter.genres.includes(genre))
-        setFilter((current) => ({ ...current, genres }));
+        preservePanelPositions(() =>
+          setFilter((current) => ({ ...current, genres })),
+        );
       const suffix = genres.length > 1 ? ` (${genres.length})` : "";
       setContextMenu({
         x: event.clientX,
@@ -1485,7 +1482,7 @@ export function App() {
         ],
       });
     },
-    [filter, setFilter],
+    [filter, preservePanelPositions, setFilter],
   );
   const showLibraryMenu = useCallback(
     (event: React.MouseEvent, library: Library) => {
@@ -1850,45 +1847,6 @@ export function App() {
       ),
     [currentPlayerTrack],
   );
-  useEffect(() => {
-    if (!pendingCatalogContext) return;
-    if (pendingCatalogContext.artist)
-      requestArtistScroll(pendingCatalogContext.artist);
-    if (pendingCatalogContext.album)
-      requestAlbumScroll(pendingCatalogContext.album);
-    if (pendingCatalogContext.track)
-      requestTrackScroll(pendingCatalogContext.track);
-    setPendingCatalogContext(null);
-  }, [
-    pendingCatalogContext,
-    filterKey,
-    requestAlbumScroll,
-    requestArtistScroll,
-    requestTrackScroll,
-  ]);
-  const restoreCatalogContext = useCallback(
-    (nextFilter: CatalogFilter, update: () => void) => {
-      const artist =
-        currentPlayerTrack?.albumArtists[0] ||
-        currentPlayerTrack?.artists[0] ||
-        nextFilter.artists[0];
-      const album = currentPlayerTrack?.albumKey || nextFilter.albumIds[0];
-      const track = currentPlayerTrack?.id || [...selected][0];
-      setPendingCatalogContext({ artist, album, track });
-      const folder = nextFilter.folders[0];
-      preservePanelPositions(update, {
-        libraries: currentPlayerTrack
-          ? librarySelectionKey(currentPlayerTrack.libraryId)
-          : nextFilter.libraryIds[0]
-            ? librarySelectionKey(nextFilter.libraryIds[0])
-            : folder
-              ? folderSelectionKey(folder.libraryId, folder.relativePath)
-              : undefined,
-        genres: [...currentPlayerGenres][0] || nextFilter.genres[0],
-      });
-    },
-    [currentPlayerGenres, currentPlayerTrack, preservePanelPositions, selected],
-  );
   const applyArtistSelection = useCallback(
     (artists: string[]) => {
       if (isSearching) {
@@ -1896,12 +1854,18 @@ export function App() {
         return;
       }
       const next = { ...filter, artists };
-      restoreCatalogContext(next, () => {
+      preservePanelPositions(() => {
         setSelectedArtists(artists);
         setFilter(next);
       });
     },
-    [filter, isSearching, restoreCatalogContext, setFilter, setSelectedArtists],
+    [
+      filter,
+      isSearching,
+      preservePanelPositions,
+      setFilter,
+      setSelectedArtists,
+    ],
   );
   const applyAlbumSelection = useCallback(
     (albumIds: string[]) => {
@@ -1921,9 +1885,9 @@ export function App() {
     (genres: string[]) => {
       if (isSearching) return;
       const next = { ...filter, genres };
-      restoreCatalogContext(next, () => setFilter(next));
+      preservePanelPositions(() => setFilter(next));
     },
-    [filter, isSearching, restoreCatalogContext, setFilter],
+    [filter, isSearching, preservePanelPositions, setFilter],
   );
   const valid = useQuery({
     queryKey: ["filter-validity", filter],
@@ -2318,9 +2282,9 @@ export function App() {
       if (isSearching) return;
       const locations = locationsFromSelectionKeys(keys);
       const next = { ...filter, ...locations };
-      restoreCatalogContext(next, () => setFilter(next));
+      preservePanelPositions(() => setFilter(next));
     },
-    [filter, isSearching, restoreCatalogContext, setFilter],
+    [filter, isSearching, preservePanelPositions, setFilter],
   );
   const selectLocation = (event: React.MouseEvent, key: string) => {
     if (isSearching) {
@@ -2743,14 +2707,12 @@ export function App() {
               marquee={librarySelection.marquee}
               renderFolderLevel={renderFolderLevel}
               onReset={() =>
-                restoreCatalogContext(
-                  { ...filter, libraryIds: [], folders: [] },
-                  () =>
-                    setFilter((f) => ({
-                      ...f,
-                      libraryIds: [],
-                      folders: [],
-                    })),
+                preservePanelPositions(() =>
+                  setFilter((f) => ({
+                    ...f,
+                    libraryIds: [],
+                    folders: [],
+                  })),
                 )
               }
               onToggleExpanded={(libraryId) =>
@@ -2779,7 +2741,7 @@ export function App() {
               surfaceProps={genreSelection.surfaceProps}
               marquee={genreSelection.marquee}
               onReset={() =>
-                restoreCatalogContext({ ...filter, genres: [] }, () =>
+                preservePanelPositions(() =>
                   setFilter((f) => ({ ...f, genres: [] })),
                 )
               }
@@ -2811,7 +2773,7 @@ export function App() {
                 active={filter.artists.length > 0}
                 resetLabel="Сбросить исполнителей"
                 onReset={() => {
-                  restoreCatalogContext({ ...filter, artists: [] }, () => {
+                  preservePanelPositions(() => {
                     setSelectedArtists([]);
                     setFilter((f) => ({ ...f, artists: [] }));
                   });
@@ -2875,7 +2837,7 @@ export function App() {
                 active={filter.albumIds.length > 0}
                 resetLabel="Сбросить альбомы"
                 onReset={() => {
-                  restoreCatalogContext({ ...filter, albumIds: [] }, () => {
+                  preservePanelPositions(() => {
                     setSelectedAlbums([]);
                     setFilter((f) => ({ ...f, albumIds: [] }));
                   });

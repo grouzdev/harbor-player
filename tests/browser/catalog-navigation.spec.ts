@@ -7,7 +7,10 @@ import {
 
 // A paginated catalog with enough rows to exercise virtualized navigation and
 // restoration. Other app services (session, settings) use the real test server.
-async function catalog(page: Page, { extraRockArtists = 0 } = {}) {
+async function catalog(
+  page: Page,
+  { extraRockArtists = 0, extraJazzArtists = 0 } = {},
+) {
   const tracks: Track[] = [
     ...[
       ["Bowie", 3, "Rock"],
@@ -49,6 +52,28 @@ async function catalog(page: Page, { extraRockArtists = 0 } = {}) {
         albumKey: `Rock artist ${artist}-0`,
         albumTitle: `Rock artist ${artist} album`,
         genres: ["Rock"],
+        year: 2025,
+        trackNumber: index + 1,
+        discNumber: 1,
+        duration: 180,
+        format: "FLAC",
+        size: 1000,
+        mtimeMs: 0,
+        coverId: null,
+        available: true,
+      })),
+    ).flat(),
+    ...Array.from({ length: extraJazzArtists }, (_, artist) =>
+      Array.from({ length: 3 }, (_, index): Track => ({
+        id: `Jazz artist ${artist}-${index}`,
+        libraryId: "jazz",
+        relativePath: `Jazz artist ${artist}/0/${index}.flac`,
+        title: `Jazz artist ${artist} song ${index}`,
+        artists: [`Jazz artist ${artist}`],
+        albumArtists: [`Jazz artist ${artist}`],
+        albumKey: `Jazz artist ${artist}-0`,
+        albumTitle: `Jazz artist ${artist} album`,
+        genres: ["Jazz"],
         year: 2025,
         trackNumber: index + 1,
         discNumber: 1,
@@ -260,7 +285,9 @@ async function catalog(page: Page, { extraRockArtists = 0 } = {}) {
     await route.fulfill({ json: body });
   });
   await page.goto("/");
-  await expect(count(page, "artists")).toHaveText(String(4 + extraRockArtists));
+  await expect(count(page, "artists")).toHaveText(
+    String(4 + extraRockArtists + extraJazzArtists),
+  );
   return {
     requests,
     summaries,
@@ -405,6 +432,54 @@ test("selecting an album keeps the album grid in place while another album plays
       .slice(requestCount)
       .every((request) => request.endpoint === "tracks"),
   ).toBe(true);
+
+  const beforeReset = await page
+    .locator(".album-scroll")
+    .evaluate((node) => node.scrollTop);
+  await page.getByRole("button", { name: "Сбросить альбомы" }).click();
+  await expect(count(page, "tracks")).toHaveText("417");
+  await expect
+    .poll(() =>
+      page
+        .locator(".album-scroll")
+        .evaluate((node) => Math.round(node.scrollTop)),
+    )
+    .toBe(Math.round(beforeReset));
+});
+
+test("a manual genre filter does not seek an excluded playing album", async ({
+  page,
+}) => {
+  const data = await catalog(page, { extraJazzArtists: 120 });
+  const playing = page.locator(
+    '.album-card[data-selection-key="Queen-0"] .album-main',
+  );
+  await playing.click();
+  await playing.click();
+  await expect(
+    page.locator('.album-card[data-selection-key="Queen-0"]'),
+  ).toHaveClass(/playing/);
+
+  await page.getByRole("button", { name: "Сбросить альбомы" }).click();
+  await expect(count(page, "tracks")).toHaveText("777");
+  const requestCount = data.requests.length;
+  await page
+    .locator(".genres-panel .list-tile-main")
+    .filter({ hasText: "Jazz" })
+    .click();
+  await expect(count(page, "albums")).toHaveText("123");
+  await expect(count(page, "tracks")).toHaveText("369");
+  await page.waitForTimeout(250);
+  expect(
+    data.requests
+      .slice(requestCount)
+      .some(
+        (request) =>
+          request.endpoint === "albums" &&
+          request.filter.genres.includes("Jazz") &&
+          request.offset === 100,
+      ),
+  ).toBe(false);
 });
 
 test("album merge uses the multi-selection anchor and blocks an errored preview", async ({
