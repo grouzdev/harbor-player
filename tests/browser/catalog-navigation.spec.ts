@@ -177,7 +177,19 @@ async function catalog(page: Page, { extraRockArtists = 0 } = {}) {
         ).values(),
       ]);
     else if (endpoint === "tracks") body = paginated(rows);
-    else if (endpoint === "filter-validity")
+    else if (endpoint === "queue") {
+      const request = route.request().postDataJSON() as {
+        albumId?: string;
+      };
+      const track = tracks.find((item) => item.albumKey === request.albumId);
+      if (!track) return route.fallback();
+      body = {
+        id: `queue-${request.albumId}`,
+        position: 0,
+        total: 3,
+        track,
+      };
+    } else if (endpoint === "filter-validity")
       body = {
         genres: filter.genres,
         artists: filter.artists,
@@ -325,6 +337,74 @@ test("artist and album selection cascades to lower-priority panels", async ({
   await expect(
     page.locator(".albums-panel .panel-selection-chip"),
   ).toContainText("1/139");
+});
+
+test("selecting an album keeps the album grid in place while another album plays", async ({
+  page,
+}) => {
+  const data = await catalog(page);
+  const playing = page.locator(
+    '.album-card[data-selection-key="Queen-0"] .album-main',
+  );
+  await playing.click();
+  await playing.click();
+  await expect(
+    page.locator('.album-card[data-selection-key="Queen-0"]'),
+  ).toHaveClass(/playing/);
+
+  await page.locator(".album-scroll").evaluate((node) => {
+    node.scrollTop = node.scrollHeight / 2;
+  });
+  await expect
+    .poll(() =>
+      page.locator(".album-scroll").evaluate((node) => node.scrollTop),
+    )
+    .toBeGreaterThan(0);
+  const albumId = await page.locator(".album-card").evaluateAll((cards) => {
+    const scroll = document.querySelector(".album-scroll")!;
+    const bounds = scroll.getBoundingClientRect();
+    const target = cards
+      .map((card) => {
+        const box = card.getBoundingClientRect();
+        return {
+          card,
+          visible: box.top < bounds.bottom && box.bottom > bounds.top,
+          distance: Math.abs(
+            (box.top + box.bottom) / 2 - (bounds.top + bounds.bottom) / 2,
+          ),
+        };
+      })
+      .filter((item) => item.visible)
+      .sort((left, right) => left.distance - right.distance)[0];
+    return target?.card.getAttribute("data-selection-key") || null;
+  });
+  expect(albumId).toBeTruthy();
+  expect(albumId).not.toBe("Queen-0");
+  const selected = page.locator(`.album-card[data-selection-key="${albumId}"]`);
+  const before = await page
+    .locator(".album-scroll")
+    .evaluate((node) => node.scrollTop);
+  const requestCount = data.requests.length;
+
+  await selected.locator(".album-main").click();
+  await expect(selected).toHaveClass(/selected/);
+  await expect(
+    page.locator(
+      `[data-testid="track-row"][data-selection-key="${albumId}-0"]`,
+    ),
+  ).toBeInViewport();
+  await expect
+    .poll(() =>
+      page
+        .locator(".album-scroll")
+        .evaluate((node) => Math.round(node.scrollTop)),
+    )
+    .toBe(Math.round(before));
+  expect(
+    data.requests
+      .slice(requestCount)
+      .every((request) => request.endpoint === "tracks"),
+  ).toBe(true);
 });
 
 test("album merge uses the multi-selection anchor and blocks an errored preview", async ({

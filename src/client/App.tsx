@@ -1909,13 +1909,13 @@ export function App() {
         setSelectedAlbums(albumIds);
         return;
       }
-      const next = { ...filter, albumIds };
-      restoreCatalogContext(next, () => {
-        setSelectedAlbums(albumIds);
-        setFilter(next);
-      });
+      // Album selection only narrows the tracks panel. The album grid and all
+      // higher-priority facets keep the same query, so restoring their context
+      // would unnecessarily move them to the currently playing album.
+      setSelectedAlbums(albumIds);
+      setFilter((current) => ({ ...current, albumIds }));
     },
-    [filter, isSearching, restoreCatalogContext, setFilter, setSelectedAlbums],
+    [isSearching, setFilter, setSelectedAlbums],
   );
   const applyGenreSelection = useCallback(
     (genres: string[]) => {
