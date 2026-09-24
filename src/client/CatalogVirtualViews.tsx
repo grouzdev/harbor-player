@@ -913,6 +913,8 @@ export function TrackList({
                 </div>
               );
             const track = entry.track;
+            const bookmarked = bookmarkKeys.has(`album:${track.albumKey}`);
+            const rated = track.albumRating !== null;
             return entry.type === "album" ? (
               <div
                 key={`album-${track.albumKey}`}
@@ -966,35 +968,57 @@ export function TrackList({
                   )}
                 </div>
                 <div className="track-album-state" data-selection-ignore>
-                  {track.albumRating !== null && (
-                    <RatingControl
-                      kind="album"
-                      id={track.albumKey}
-                      rating={track.albumRating}
-                      pending={pendingUserStateKeys.has(
-                        `album:${track.albumKey}`,
-                      )}
-                      onChange={onUserStateChange}
-                    />
-                  )}
-                  <ViewedToggle
-                    id={track.albumKey}
-                    viewed={track.albumViewed}
-                    pending={pendingUserStateKeys.has(
-                      `album:${track.albumKey}`,
-                    )}
-                    onChange={onUserStateChange}
-                  />
-                  <BookmarkToggle
-                    kind="album"
-                    id={track.albumKey}
-                    label={track.albumTitle || "Без альбома"}
-                    bookmarked={bookmarkKeys.has(`album:${track.albumKey}`)}
-                    unavailable={bookmarksUnavailable}
-                    pending={pendingBookmarkKeys.has(`album:${track.albumKey}`)}
-                    onChange={onBookmarkChange}
-                    className="track-album-bookmark-toggle"
-                  />
+                  <div className="track-album-actions">
+                    <div
+                      className={`track-album-action track-album-action--rating ${rated ? "is-active" : ""}`}
+                    >
+                      <RatingControl
+                        kind="album"
+                        id={track.albumKey}
+                        rating={track.albumRating}
+                        pending={pendingUserStateKeys.has(
+                          `album:${track.albumKey}`,
+                        )}
+                        onChange={onUserStateChange}
+                        className="album-rating-control"
+                        outlineStar
+                        showValue
+                      />
+                    </div>
+                    <div
+                      className={`track-album-action track-album-action--viewed ${track.albumViewed ? "is-active" : ""}`}
+                    >
+                      <ViewedToggle
+                        id={track.albumKey}
+                        viewed={track.albumViewed}
+                        pending={pendingUserStateKeys.has(
+                          `album:${track.albumKey}`,
+                        )}
+                        onChange={onUserStateChange}
+                        className="album-viewed-toggle"
+                      />
+                    </div>
+                    <div
+                      className={`track-album-action track-album-action--bookmark ${bookmarked ? "is-active" : ""}`}
+                    >
+                      <BookmarkToggle
+                        kind="album"
+                        id={track.albumKey}
+                        label={track.albumTitle || "Без альбома"}
+                        bookmarked={bookmarked}
+                        unavailable={bookmarksUnavailable}
+                        pending={pendingBookmarkKeys.has(
+                          `album:${track.albumKey}`,
+                        )}
+                        onChange={onBookmarkChange}
+                        className="album-bookmark-toggle track-album-bookmark-toggle"
+                        filledWhenBookmarked={false}
+                      />
+                    </div>
+                  </div>
+                  <span className="track-album-duration">
+                    {duration(entry.duration)}
+                  </span>
                 </div>
               </div>
             ) : (

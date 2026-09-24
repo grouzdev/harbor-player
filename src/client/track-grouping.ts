@@ -2,7 +2,13 @@ import type { Track } from "../shared/contracts";
 import { compareArtistNames } from "../shared/artist-grouping";
 
 export type TrackListRow =
-  | { type: "album"; track: Track; artists: string[]; genres: string[] }
+  | {
+      type: "album";
+      track: Track;
+      artists: string[];
+      genres: string[];
+      duration: number;
+    }
   | { type: "disc"; albumKey: string; discNumber: number }
   | { type: "track"; track: Track };
 
@@ -61,6 +67,7 @@ export function buildTrackListRows(tracks: Track[]): TrackListRow[] {
       track,
       artists,
       genres: track.albumGenres || [],
+      duration: albumTracks.reduce((total, item) => total + item.duration, 0),
     });
 
     const discs = splitAlbumTracks(albumTracks);

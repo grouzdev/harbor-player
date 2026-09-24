@@ -45,6 +45,14 @@ describe("track list grouping", () => {
     ]);
   });
 
+  it("adds the total duration to the album row", () => {
+    const first = { ...track("1", 1), duration: 61 };
+    const second = { ...track("2", 1, 2), duration: 122 };
+    expect(buildTrackListRows([first, second])[0]).toEqual(
+      expect.objectContaining({ type: "album", duration: 183 }),
+    );
+  });
+
   it("splits an album when track numbers reset even if discNumber stays 1", () => {
     const rows = buildTrackListRows([
       track("1-1", 1),

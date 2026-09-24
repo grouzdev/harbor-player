@@ -1195,14 +1195,10 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     "height",
     "36px",
   );
-  const trackDurationInset = await firstTrackRow.evaluate((row) => {
-    const scroll = row.closest<HTMLElement>(".track-scroll")!;
-    const duration = row.querySelector<HTMLElement>(".list-tile-suffix")!;
-    const scrollRect = scroll.getBoundingClientRect();
-    const durationRect = duration.getBoundingClientRect();
-    return scrollRect.left + scroll.clientWidth - durationRect.right;
-  });
-  expect(Math.abs(trackDurationInset - 7)).toBeLessThan(0.5);
+  await expect(firstTrackRow.locator(".list-tile-suffix")).toHaveCSS(
+    "right",
+    "20px",
+  );
   await expect(
     page.getByRole("button", { name: "Сбросить выбор треков" }),
   ).toHaveCount(0);
@@ -1667,6 +1663,96 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await expect(firstTrackAlbumHeader.locator("small").last()).toContainText(
     /^2024 · Ambient$/,
   );
+  const trackAlbumActions = firstTrackAlbumHeader.locator(
+    ".track-album-actions",
+  );
+  const trackAlbumBookmark = firstTrackAlbumHeader.locator(
+    ".track-album-bookmark-toggle",
+  );
+  const trackAlbumRating = firstTrackAlbumHeader.getByRole("button", {
+    name: "Оценка 4 из 5",
+  });
+  const trackAlbumViewed = firstTrackAlbumHeader.getByRole("button", {
+    name: "Отметить непросмотренным",
+  });
+  const trackAlbumDuration = firstTrackAlbumHeader.locator(
+    ".track-album-duration",
+  );
+  await expect(trackAlbumDuration).toHaveText(/^\d+:\d{2}$/);
+  await expect(trackAlbumBookmark).toHaveCSS("opacity", "0");
+  await expect(trackAlbumRating).toHaveCSS("opacity", "1");
+  await expect(trackAlbumBookmark).toHaveCSS("transition-property", "none");
+  await expect(
+    firstTrackAlbumHeader.locator(".album-rating-control"),
+  ).toHaveCSS("transition-property", "none");
+  await expect(trackAlbumActions.locator(":scope > *")).toHaveCount(3);
+  await expect(
+    firstTrackAlbumHeader.locator(".track-album-action--rating"),
+  ).toHaveCSS("transition-property", /width/);
+  await expect(firstTrackAlbumHeader.locator(".track-album-state")).toHaveCSS(
+    "gap",
+    "12px",
+  );
+  await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+  await page.mouse.move(0, 0);
+  await expect
+    .poll(async () => {
+      const container = await trackAlbumActions.boundingBox();
+      const actions = await Promise.all(
+        [".track-album-action--viewed", ".track-album-action--rating"].map(
+          (selector) => firstTrackAlbumHeader.locator(selector).boundingBox(),
+        ),
+      );
+      if (!container || actions.some((box) => !box)) return null;
+      return actions.map((box) => ({
+        left: Math.round(box!.x - container.x),
+        right: Math.round(box!.x - container.x + box!.width),
+      }));
+    })
+    .toEqual([
+      { left: 80, right: 110 },
+      { left: 33, right: 77 },
+    ]);
+  await firstTrackAlbumHeader.hover();
+  await expect(trackAlbumBookmark).toHaveCSS("opacity", "1");
+  await expect
+    .poll(async () => {
+      const container = await trackAlbumActions.boundingBox();
+      const actions = await Promise.all(
+        [".track-album-action--viewed", ".track-album-action--rating"].map(
+          (selector) => firstTrackAlbumHeader.locator(selector).boundingBox(),
+        ),
+      );
+      if (!container || actions.some((box) => !box)) return null;
+      return actions.map((box) => ({
+        left: Math.round(box!.x - container.x),
+        right: Math.round(box!.x - container.x + box!.width),
+      }));
+    })
+    .toEqual([
+      { left: 47, right: 77 },
+      { left: 0, right: 44 },
+    ]);
+  const trackAlbumActionOrder = await firstTrackAlbumHeader.evaluate((header) => {
+    const actions = header.querySelector<HTMLElement>(".track-album-actions")!;
+    const duration = header.querySelector<HTMLElement>(".track-album-duration")!;
+    const trackDuration = document
+      .querySelector<HTMLElement>('[data-testid="track-row"] .list-tile-suffix')!
+      .getBoundingClientRect();
+    return {
+      actionsRight: actions.getBoundingClientRect().right,
+      durationLeft: duration.getBoundingClientRect().left,
+      albumDurationRight: duration.getBoundingClientRect().right,
+      trackDurationRight: trackDuration.right,
+    };
+  });
+  expect(trackAlbumActionOrder.actionsRight).toBeLessThanOrEqual(
+    trackAlbumActionOrder.durationLeft,
+  );
+  expect(trackAlbumActionOrder.albumDurationRight).toBeCloseTo(
+    trackAlbumActionOrder.trackDurationRight,
+    1,
+  );
   await firstTrackAlbumHeader.locator(".tiny-cover").click();
   await expect(firstTrackAlbumHeader).toHaveClass(/selected/);
   await expect(page.locator('[data-testid="track-row"].selected')).toHaveCount(
@@ -1991,7 +2077,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     };
   });
   expect(trackBookmarkAlignment.centerOffset).toBeCloseTo(0, 1);
-  expect(trackBookmarkAlignment.rightInset).toBeCloseTo(7, 1);
+  expect(trackBookmarkAlignment.rightInset).toBeCloseTo(52, 1);
   await firstTrack
     .getByRole("button", { name: /Добавить трек .* в закладки/ })
     .click();
