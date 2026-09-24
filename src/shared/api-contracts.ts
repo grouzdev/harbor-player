@@ -12,6 +12,7 @@ import {
   type Track,
 } from "./contracts.js";
 import { scanSettingsSchema } from "./scan-settings.js";
+import { recoveryStatusSchema } from "./recovery-settings.js";
 
 const stringArray = z.array(z.string());
 
@@ -229,6 +230,7 @@ export const apiResponseSchemas = {
   folders: z.array(libraryFolderSchema),
   bookmarks: z.array(bookmarkSchema),
   appearance: appearanceSchema,
+  recovery: recoveryStatusSchema,
   tracks: pageSchema(trackSchema),
   track: trackSchema,
   trackIds: trackIdResultSchema,
@@ -298,6 +300,8 @@ export function apiResponseContract(method: string, pathname: string) {
   )
     return appearanceSchema;
   if (pathname === "/api/scan-settings") return scanSettingsSchema;
+  if (pathname === "/api/recovery" || pathname === "/api/recovery/settings")
+    return recoveryStatusSchema;
   if (pathname === "/api/tracks") return apiResponseSchemas.tracks;
   if (/^\/api\/tracks\/[^/]+$/.test(pathname)) return trackSchema;
   if (pathname === "/api/track-ids") return trackIdResultSchema;

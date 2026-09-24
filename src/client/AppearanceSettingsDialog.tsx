@@ -1,8 +1,12 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImagePlus, MonitorCog, Trash2 } from "lucide-react";
 import type { AppearanceSettings } from "./appearance";
 import { autoScanIntervals, type ScanSettings } from "../shared/scan-settings";
 import { api } from "./api";
+import {
+  type BackupRetention,
+  type RecoveryStatus,
+} from "../shared/recovery-settings";
 import "./desktop";
 import { Modal } from "./Modal";
 
@@ -14,6 +18,19 @@ const accents = [
   "#dd9e7c",
   "#d0b66d",
 ];
+const retentionOptions: { value: BackupRetention; label: string }[] = [
+  { value: "none", label: "Не сохранять" },
+  { value: "1d", label: "1 день" },
+  { value: "7d", label: "7 дней" },
+  { value: "never", label: "Не очищать никогда" },
+];
+function formatSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} Б`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
+  if (bytes < 1024 * 1024 * 1024)
+    return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} ГБ`;
+}
 
 async function asBase64(file: File) {
   if (file.size > 8 * 1024 * 1024)
@@ -50,8 +67,15 @@ export function AppearanceSettingsDialog({
   const [path, setPath] = useState("");
   const [busy, setBusy] = useState(false);
   const [scanBusy, setScanBusy] = useState(false);
+  const [recovery, setRecovery] = useState<RecoveryStatus | null>(null);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [error, setError] = useState("");
   const desktop = window.harborPlayerDesktop;
+  useEffect(() => {
+    void api<RecoveryStatus>("/recovery")
+      .then(setRecovery)
+      .catch(() => {});
+  }, []);
   const save = async (next: AppearanceSettings) => {
     onChange(next);
     try {
@@ -89,6 +113,36 @@ export function AppearanceSettingsDialog({
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setScanBusy(false);
+    }
+  };
+  const saveRecoverySettings = async (backupRetention: BackupRetention) => {
+    setRecoveryBusy(true);
+    setError("");
+    try {
+      setRecovery(
+        await api<RecoveryStatus>("/recovery/settings", { backupRetention }),
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setRecoveryBusy(false);
+    }
+  };
+  const clearRecovery = async () => {
+    if (
+      !window.confirm(
+        "Все резервные копии будут удалены. Восстановление связанных изменений и удалений станет недоступно.",
+      )
+    )
+      return;
+    setRecoveryBusy(true);
+    setError("");
+    try {
+      setRecovery(await api<RecoveryStatus>("/recovery", undefined, "DELETE"));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setRecoveryBusy(false);
     }
   };
   return (
@@ -252,6 +306,46 @@ export function AppearanceSettingsDialog({
                 {minutes === 0 ? "Выключено" : `Каждые ${minutes} мин.`}
               </button>
             ))}
+          </div>
+        </div>
+        <div className="appearance-section" aria-label="Резервные копии">
+          <h3>Резервные копии</h3>
+          <p className="hint">
+            Перед записью тегов прежний файл можно сохранить для восстановления.
+          </p>
+          <div
+            className="appearance-choice-row"
+            role="radiogroup"
+            aria-label="Срок хранения резервных копий"
+          >
+            {retentionOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={`button secondary ${recovery?.backupRetention === option.value ? "selected" : ""}`}
+                role="radio"
+                aria-checked={recovery?.backupRetention === option.value}
+                disabled={recoveryBusy || !recovery}
+                onClick={() => void saveRecoverySettings(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <div className="appearance-actions">
+            <span className="hint">
+              Занято: {recovery ? formatSize(recovery.size) : "…"}
+            </span>
+            {recovery && recovery.size > 0 && (
+              <button
+                type="button"
+                className="button secondary"
+                disabled={recoveryBusy}
+                onClick={() => void clearRecovery()}
+              >
+                <Trash2 size={17} /> Очистить резервные копии
+              </button>
+            )}
           </div>
         </div>
       </section>

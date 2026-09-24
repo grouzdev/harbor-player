@@ -35,7 +35,12 @@ export async function api<T>(
       headers:
         method === "GET"
           ? {}
-          : { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+          : {
+              ...(body === undefined
+                ? {}
+                : { "Content-Type": "application/json" }),
+              "X-CSRF-Token": csrf,
+            },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   let response = await request();

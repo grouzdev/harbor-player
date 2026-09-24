@@ -7,6 +7,7 @@ import {
   mkdir,
   readdir,
   rmdir,
+  rm,
   realpath,
   stat,
   lstat,
@@ -46,6 +47,14 @@ import type {
   Track,
 } from "../shared/contracts.js";
 import { emptyFilter } from "../shared/contracts.js";
+import type {
+  RecoverySettings,
+  RecoveryStatus,
+} from "../shared/recovery-settings.js";
+import {
+  readRecoverySettings,
+  writeRecoverySettings,
+} from "./recovery-settings.js";
 
 interface JournalItem extends OperationItem {
   producedHash?: string;
@@ -86,6 +95,8 @@ export class MusicService extends EventEmitter {
   private active = new Set<string>();
   private stopping = false;
   private closePromise?: Promise<void>;
+  private recoverySettings: RecoverySettings = { backupRetention: "none" };
+  private recoveryTimer?: NodeJS.Timeout;
   capabilities: Capabilities = { writableFormats: [], verificationDate: null };
   closeStreams: (trackIds: string[]) => Promise<void> = async () => {};
   constructor(
@@ -128,6 +139,12 @@ export class MusicService extends EventEmitter {
       }
   }
   async initialize() {
+    this.recoverySettings = await readRecoverySettings(this.dataDir);
+    await this.maintainRecovery();
+    this.recoveryTimer = setInterval(
+      () => void this.maintainRecovery(),
+      60 * 60 * 1000,
+    );
     try {
       const report = JSON.parse(
         await readFile(
@@ -155,6 +172,84 @@ export class MusicService extends EventEmitter {
       /* No proof of safe writes: keep the editor read-only. */
     }
     await this.scanner.refreshAvailability();
+  }
+  async recoveryStatus(): Promise<RecoveryStatus> {
+    const recovery = path.join(this.dataDir, "recovery");
+    let size = 0;
+    let hasFiles = false;
+    const visit = async (directory: string): Promise<void> => {
+      let entries: Array<{
+        name: string;
+        isDirectory: () => boolean;
+        isFile: () => boolean;
+      }>;
+      try {
+        entries = await readdir(directory, { withFileTypes: true });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+        throw error;
+      }
+      for (const entry of entries) {
+        const file = path.join(directory, entry.name);
+        if (entry.isDirectory()) await visit(file);
+        else if (entry.isFile()) {
+          size += (await stat(file)).size;
+          hasFiles = true;
+        }
+      }
+    };
+    await visit(recovery);
+    return { ...this.recoverySettings, size, hasFiles };
+  }
+  async updateRecoverySettings(settings: RecoverySettings) {
+    this.recoverySettings = await writeRecoverySettings(this.dataDir, settings);
+    await this.maintainRecovery();
+    return this.recoveryStatus();
+  }
+  async clearRecovery() {
+    await rm(path.join(this.dataDir, "recovery"), {
+      recursive: true,
+      force: true,
+    });
+    this.markRecoveryUnavailable(() => true);
+    return this.recoveryStatus();
+  }
+  private markRecoveryUnavailable(
+    matches: (operation: OperationPreview) => boolean,
+  ) {
+    for (const operation of this.catalog.history()) {
+      if (
+        matches(operation) &&
+        ["tags", "trash"].includes(operation.kind) &&
+        operation.recoverable !== false
+      ) {
+        operation.recoverable = false;
+        this.catalog.saveOperation(operation);
+      }
+    }
+  }
+  private async maintainRecovery() {
+    const retention = this.recoverySettings.backupRetention;
+    if (retention === "none" || retention === "never") return;
+    const age =
+      retention === "1d" ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+    const cutoff = Date.now() - age;
+    const expired = this.catalog
+      .history()
+      .filter(
+        (operation) =>
+          operation.status === "done" &&
+          ["tags", "trash"].includes(operation.kind) &&
+          operation.recoverable !== false &&
+          Date.parse(operation.createdAt) < cutoff,
+      );
+    for (const operation of expired)
+      await rm(path.join(this.dataDir, "recovery", operation.id), {
+        recursive: true,
+        force: true,
+      });
+    const expiredIds = new Set(expired.map((operation) => operation.id));
+    this.markRecoveryUnavailable((operation) => expiredIds.has(operation.id));
   }
   async refreshAvailability() {
     await this.scanner.refreshAvailability();
@@ -404,9 +499,15 @@ export class MusicService extends EventEmitter {
       patch,
       coverTrackIds,
       intent,
-      recoverable: kind !== "trash" || softDeleteEnabled,
+      recoverable:
+        kind === "tags"
+          ? this.recoverySettings.backupRetention !== "none"
+          : kind !== "trash" || softDeleteEnabled,
     };
-    if (kind === "tags" || (kind === "trash" && softDeleteEnabled))
+    if (
+      (kind === "tags" && op.recoverable) ||
+      (kind === "trash" && softDeleteEnabled)
+    )
       await mkdir(path.join(this.dataDir, "recovery", op.id), {
         recursive: true,
       });
@@ -681,7 +782,7 @@ export class MusicService extends EventEmitter {
     const original = this.catalog.operation(id);
     if (!["trash", "tags"].includes(original.kind))
       throw new Error("Восстановление доступно для удаления и тегов");
-    if (original.kind === "trash" && original.recoverable === false)
+    if (original.recoverable === false)
       throw new Error(
         "Удаление было окончательным и не может быть восстановлено",
       );
@@ -965,19 +1066,20 @@ export class MusicService extends EventEmitter {
           path.dirname(item.destination),
           `.harbor-player-${op.id}-${item.id}${path.extname(item.destination)}`,
         );
-      const backup =
-        item.backup ||
-        path.join(
-          this.dataDir,
-          "recovery",
-          op.id,
-          item.id + path.extname(item.destination),
-        );
+      const backup = op.recoverable
+        ? item.backup ||
+          path.join(
+            this.dataDir,
+            "recovery",
+            op.id,
+            item.id + path.extname(item.destination),
+          )
+        : undefined;
       item.stage = stage;
       item.backup = backup;
       item.phase = "prepared";
       this.catalog.saveOperation(op);
-      await mkdir(path.dirname(backup), { recursive: true });
+      if (backup) await mkdir(path.dirname(backup), { recursive: true });
       // This path is generated by us and recorded before creation. Retry rebuilds only this owned copy.
       if (await exists(stage)) {
         await this.safePath(stage);
@@ -985,6 +1087,8 @@ export class MusicService extends EventEmitter {
       }
       await copyFile(item.source, stage, constants.COPYFILE_EXCL);
       try {
+        if ((await this.fingerprint(stage, "stage")).hash !== item.hash)
+          throw new Error("Временная копия не прошла проверку");
         if (op.kind === "tags")
           await this.tagWriter.write(stage, this.effectiveTagPatch(op, item));
         item.producedHash = (await this.fingerprint(stage, "stage")).hash;
@@ -997,17 +1101,15 @@ export class MusicService extends EventEmitter {
         const expectedBackup = restoringTags
           ? item.restoreExpectedHash
           : item.hash;
-        if (!(await exists(backup)))
-          await copyFile(item.destination, backup, constants.COPYFILE_EXCL);
-        // This verifies both the recovery copy and the source state immediately
-        // before replacement, so a separate successful-path source hash is redundant.
-        if ((await this.fingerprint(backup)).hash !== expectedBackup) {
-          // Distinguish a changed source from a failed backup verification without
-          // adding another full source hash on the successful path.
-          if (op.kind === "tags") await this.assertOriginal(item);
-          throw new Error("Резервная копия не прошла проверку");
+        if (backup) {
+          if (!(await exists(backup)))
+            await copyFile(item.destination, backup, constants.COPYFILE_EXCL);
+          if ((await this.fingerprint(backup)).hash !== expectedBackup) {
+            if (op.kind === "tags") await this.assertOriginal(item);
+            throw new Error("Резервная копия не прошла проверку");
+          }
+          await flushFile(backup);
         }
-        await flushFile(backup);
         await flushFile(stage);
         this.catalog.saveOperation(op);
         if (op.kind === "tags") await this.assertOriginal(item);
@@ -1147,6 +1249,7 @@ export class MusicService extends EventEmitter {
     return this.stopping;
   }
   async close() {
+    if (this.recoveryTimer) clearInterval(this.recoveryTimer);
     this.beginShutdown();
     if (!this.closePromise)
       this.closePromise = (async () => {

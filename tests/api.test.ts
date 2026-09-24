@@ -121,6 +121,51 @@ describe("HTTP boundary", () => {
       }),
     ).resolves.toMatchObject({ statusCode: 400 });
   });
+  it("manages recovery retention and reports the recovery size", async () => {
+    const session = await context.app.inject({
+      url: "/api/session",
+      headers: { host: "127.0.0.1:4317" },
+    });
+    const headers = {
+      host: "127.0.0.1:4317",
+      cookie: String(session.headers["set-cookie"]).split(";")[0],
+      "x-csrf-token": session.json().csrf,
+    };
+    expect(
+      (await context.app.inject({ url: "/api/recovery", headers })).json(),
+    ).toMatchObject({ backupRetention: "none", size: 0, hasFiles: false });
+    const saved = await context.app.inject({
+      method: "POST",
+      url: "/api/recovery/settings",
+      headers,
+      payload: { backupRetention: "7d" },
+    });
+    expect(saved.json()).toMatchObject({ backupRetention: "7d" });
+    await mkdir(path.join(root, "recovery", "legacy"), { recursive: true });
+    await writeFile(path.join(root, "recovery", "legacy", "copy.flac"), "1234");
+    expect(
+      (await context.app.inject({ url: "/api/recovery", headers })).json(),
+    ).toMatchObject({ size: 4, hasFiles: true });
+    expect(
+      (
+        await context.app.inject({
+          method: "POST",
+          url: "/api/recovery/settings",
+          headers,
+          payload: { backupRetention: "bad" },
+        })
+      ).statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await context.app.inject({
+          method: "DELETE",
+          url: "/api/recovery",
+          headers,
+        })
+      ).json(),
+    ).toMatchObject({ size: 0, hasFiles: false });
+  });
   it("distinguishes missing, conflicting, and internal API failures", async () => {
     const session = await context.app.inject({
       url: "/api/session",

@@ -37,8 +37,10 @@
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
 }
-.scan-intervals .button.selected {
+.appearance-choice-row .button.selected {
   border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: color-mix(in srgb, var(--accent) 78%, white);
   box-shadow: 0 0 0 1px var(--accent);
 }
 .theme-preview {

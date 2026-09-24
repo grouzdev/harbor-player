@@ -30,6 +30,7 @@ import type { TagWriter } from "./isolated-tag-writer.js";
 import { AutoScanScheduler } from "./auto-scan-scheduler.js";
 import { readScanSettings } from "./scan-settings.js";
 import { scanSettingsSchema } from "../shared/scan-settings.js";
+import { recoverySettingsSchema } from "../shared/recovery-settings.js";
 import {
   appearanceBackgroundPath,
   clearAppearanceBackground,
@@ -213,6 +214,11 @@ export async function createApp(options: {
   app.post("/api/scan-settings", async (request) =>
     scanScheduler.update(scanSettingsSchema.parse(request.body)),
   );
+  app.get("/api/recovery", async () => service.recoveryStatus());
+  app.post("/api/recovery/settings", async (request) =>
+    service.updateRecoverySettings(recoverySettingsSchema.parse(request.body)),
+  );
+  app.delete("/api/recovery", async () => service.clearRecovery());
   app.post("/api/appearance", async (request) => {
     const settings = appearanceSchema.parse(request.body);
     if (settings.backgroundRevision === 0)

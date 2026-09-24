@@ -1139,6 +1139,7 @@ describe("catalog and safe filesystem operations", () => {
     expect(await readFile(source)).toEqual(original);
   });
   it("writes tags through verified copies, preserves audio, and restores original bytes", async () => {
+    await service.updateRecoverySettings({ backupRetention: "never" });
     const lib = await library("Music");
     const t = tracks()[0];
     const file = path.join(lib.path, t.relativePath);
@@ -1160,6 +1161,34 @@ describe("catalog and safe filesystem operations", () => {
       service.catalog.operation(restore.id).items[0].error,
     ).toBeUndefined();
     expect(await readFile(file)).toEqual(bytes);
+  });
+  it("writes tags through a verified temporary file without recovery by default", async () => {
+    const lib = await library("No recovery");
+    const track = tracks()[0];
+    const file = path.join(lib.path, track.relativePath);
+    const before = await audioDigest(file);
+    const operation = await service.preview(
+      "tags",
+      { trackIds: [track.id] },
+      undefined,
+      {
+        title: "Без копии",
+      },
+    );
+    expect(operation.recoverable).toBe(false);
+    expect(existsSync(path.join(root, "data", "recovery", operation.id))).toBe(
+      false,
+    );
+    service.execute(operation.id);
+    await service.idle();
+    expect(
+      service.catalog.operation(operation.id).items[0].error,
+    ).toBeUndefined();
+    expect((await parseFile(file)).common.title).toBe("Без копии");
+    expect(await audioDigest(file)).toBe(before);
+    await expect(service.previewRestore(operation.id)).rejects.toThrow(
+      "окончательным",
+    );
   });
   it("uses an injected tag writer without weakening the verified copy workflow", async () => {
     await service.close();
@@ -1534,6 +1563,7 @@ describe("catalog and safe filesystem operations", () => {
     expect(all.items.filter((i) => i.companion)).toHaveLength(1);
   });
   it("recovers tag replacement committed just before process interruption", async () => {
+    await service.updateRecoverySettings({ backupRetention: "never" });
     const lib = await library("Music");
     const t = tracks()[0];
     const op = await service.preview("tags", { trackIds: [t.id] }, undefined, {
@@ -1560,6 +1590,7 @@ describe("catalog and safe filesystem operations", () => {
     ).toBe("Первый трек");
   });
   it("continues a batch after one source changes and refuses to restore over later edits", async () => {
+    await service.updateRecoverySettings({ backupRetention: "never" });
     const a = await library("A");
     await library("B");
     const original = tracks();
