@@ -22,6 +22,12 @@ const panelSurface = (id: string) =>
   document.querySelector<HTMLElement>(
     `[data-panel-id="${id}"] .selection-surface`,
   );
+type PanelPosition = {
+  id: string;
+  top: number;
+  left: number;
+  anchorKey?: string;
+};
 
 export type CatalogPanelId =
   "libraries" | "genres" | "artists" | "albums" | "tracks";
@@ -98,13 +104,30 @@ export function useCatalogBrowsing() {
     selectedAlbumId: string | null;
     expandedLibraryIds: Set<string>;
     expandedFolderKeys: Set<string>;
-    positions: { id: string; top: number; left: number }[];
+    positions: PanelPosition[];
     queries: { key: QueryKey; data: unknown; updatedAt: number }[];
   } | null>(null);
   const restorePositions = useRef<
     NonNullable<typeof snapshot.current>["positions"] | null
   >(null);
   const [navigationEpoch, setNavigationEpoch] = useState(0);
+  const panelPositions = useCallback(
+    (anchors: Partial<Record<CatalogPanelId, string>> = {}) =>
+      panelIds.flatMap((id) => {
+        const node = panelSurface(id);
+        return node
+          ? [
+              {
+                id,
+                top: node.scrollTop,
+                left: node.scrollLeft,
+                anchorKey: anchors[id as CatalogPanelId],
+              },
+            ]
+          : [];
+      }),
+    [],
+  );
 
   useEffect(() => {
     const timer = setTimeout(() => setSettledSearch(search.trim()), 200);
@@ -144,12 +167,7 @@ export function useCatalogBrowsing() {
           selectedAlbumId,
           expandedLibraryIds,
           expandedFolderKeys,
-          positions: panelIds.flatMap((id) => {
-            const node = panelSurface(id);
-            return node
-              ? [{ id, top: node.scrollTop, left: node.scrollLeft }]
-              : [];
-          }),
+          positions: panelPositions(),
           queries: queryClient
             .getQueryCache()
             .findAll()
@@ -205,6 +223,7 @@ export function useCatalogBrowsing() {
       expandedLibraryIds,
       expandedFolderKeys,
       queryClient,
+      panelPositions,
     ],
   );
 
@@ -222,12 +241,31 @@ export function useCatalogBrowsing() {
       for (const position of positions) {
         const node = panelSurface(position.id);
         if (!node) continue;
-        node.scrollTo({
-          top: position.top,
-          left: position.left,
-          behavior: "instant",
-        });
-        if (Math.abs(node.scrollTop - position.top) > 1) complete = false;
+        const anchor = position.anchorKey
+          ? [
+              ...node.querySelectorAll<HTMLElement>("[data-selection-key]"),
+            ].find((item) => item.dataset.selectionKey === position.anchorKey)
+          : undefined;
+        if (anchor) {
+          const box = node.getBoundingClientRect();
+          const item = anchor.getBoundingClientRect();
+          node.scrollTo({
+            top:
+              node.scrollTop +
+              item.top -
+              box.top -
+              (node.clientHeight - item.height) / 2,
+            left: position.left,
+            behavior: "instant",
+          });
+        } else
+          node.scrollTo({
+            top: position.top,
+            left: position.left,
+            behavior: "instant",
+          });
+        if (!anchor && Math.abs(node.scrollTop - position.top) > 1)
+          complete = false;
       }
       const fetching = queryClient.isFetching({
         predicate: (query) => catalogQueries.has(String(query.queryKey[0])),
@@ -277,12 +315,25 @@ export function useCatalogBrowsing() {
     [isSearching],
   );
 
+  const preservePanelPositions = useCallback(
+    (
+      update: () => void,
+      anchors: Partial<Record<CatalogPanelId, string>> = {},
+    ) => {
+      restorePositions.current = panelPositions(anchors);
+      update();
+      setNavigationEpoch((value) => value + 1);
+    },
+    [panelPositions],
+  );
+
   return {
     filter,
     setFilter,
     replaceFilter,
     search,
     setSearch,
+    preservePanelPositions,
     isSearching,
     searchPending,
     filterBySelection,

@@ -531,6 +531,7 @@ export function App() {
     replaceFilter,
     search,
     setSearch,
+    preservePanelPositions,
     isSearching,
     searchPending,
     filterBySelection,
@@ -550,20 +551,6 @@ export function App() {
   } = useCatalogBrowsing();
   const [panelVisibility, setPanelVisibility] =
     useState<PanelVisibility>(readPanelVisibility);
-  const applyArtistSelection = useCallback(
-    (artists: string[]) => {
-      setSelectedArtists(artists);
-      setFilter((current) => ({ ...current, artists }));
-    },
-    [setFilter, setSelectedArtists],
-  );
-  const applyAlbumSelection = useCallback(
-    (albumIds: string[]) => {
-      setSelectedAlbums(albumIds);
-      setFilter((current) => ({ ...current, albumIds }));
-    },
-    [setFilter, setSelectedAlbums],
-  );
   const [appearance, setAppearance] = useState<AppearanceSettings>(() => {
     const cached = readCachedAppearance();
     applyAppearance(cached);
@@ -639,6 +626,11 @@ export function App() {
     requestAlbumScroll,
     requestTrackScroll,
   } = useCatalogScrollTargets(filterKey);
+  const [pendingCatalogContext, setPendingCatalogContext] = useState<{
+    artist?: string;
+    album?: string;
+    track?: string;
+  } | null>(null);
   const updateAppearance = useCallback((next: AppearanceSettings) => {
     appearanceTouchedRef.current = true;
     cacheAppearance(next);
@@ -1858,6 +1850,81 @@ export function App() {
       ),
     [currentPlayerTrack],
   );
+  useEffect(() => {
+    if (!pendingCatalogContext) return;
+    if (pendingCatalogContext.artist)
+      requestArtistScroll(pendingCatalogContext.artist);
+    if (pendingCatalogContext.album)
+      requestAlbumScroll(pendingCatalogContext.album);
+    if (pendingCatalogContext.track)
+      requestTrackScroll(pendingCatalogContext.track);
+    setPendingCatalogContext(null);
+  }, [
+    pendingCatalogContext,
+    filterKey,
+    requestAlbumScroll,
+    requestArtistScroll,
+    requestTrackScroll,
+  ]);
+  const restoreCatalogContext = useCallback(
+    (nextFilter: CatalogFilter, update: () => void) => {
+      const artist =
+        currentPlayerTrack?.albumArtists[0] ||
+        currentPlayerTrack?.artists[0] ||
+        nextFilter.artists[0];
+      const album = currentPlayerTrack?.albumKey || nextFilter.albumIds[0];
+      const track = currentPlayerTrack?.id || [...selected][0];
+      setPendingCatalogContext({ artist, album, track });
+      const folder = nextFilter.folders[0];
+      preservePanelPositions(update, {
+        libraries: currentPlayerTrack
+          ? librarySelectionKey(currentPlayerTrack.libraryId)
+          : nextFilter.libraryIds[0]
+            ? librarySelectionKey(nextFilter.libraryIds[0])
+            : folder
+              ? folderSelectionKey(folder.libraryId, folder.relativePath)
+              : undefined,
+        genres: [...currentPlayerGenres][0] || nextFilter.genres[0],
+      });
+    },
+    [currentPlayerGenres, currentPlayerTrack, preservePanelPositions, selected],
+  );
+  const applyArtistSelection = useCallback(
+    (artists: string[]) => {
+      if (isSearching) {
+        setSelectedArtists(artists);
+        return;
+      }
+      const next = { ...filter, artists };
+      restoreCatalogContext(next, () => {
+        setSelectedArtists(artists);
+        setFilter(next);
+      });
+    },
+    [filter, isSearching, restoreCatalogContext, setFilter, setSelectedArtists],
+  );
+  const applyAlbumSelection = useCallback(
+    (albumIds: string[]) => {
+      if (isSearching) {
+        setSelectedAlbums(albumIds);
+        return;
+      }
+      const next = { ...filter, albumIds };
+      restoreCatalogContext(next, () => {
+        setSelectedAlbums(albumIds);
+        setFilter(next);
+      });
+    },
+    [filter, isSearching, restoreCatalogContext, setFilter, setSelectedAlbums],
+  );
+  const applyGenreSelection = useCallback(
+    (genres: string[]) => {
+      if (isSearching) return;
+      const next = { ...filter, genres };
+      restoreCatalogContext(next, () => setFilter(next));
+    },
+    [filter, isSearching, restoreCatalogContext, setFilter],
+  );
   const valid = useQuery({
     queryKey: ["filter-validity", filter],
     queryFn: () =>
@@ -2248,10 +2315,12 @@ export function App() {
   );
   const applyLocationSelection = useCallback(
     (keys: string[]) => {
+      if (isSearching) return;
       const locations = locationsFromSelectionKeys(keys);
-      setFilter((current) => ({ ...current, ...locations }));
+      const next = { ...filter, ...locations };
+      restoreCatalogContext(next, () => setFilter(next));
     },
-    [setFilter],
+    [filter, isSearching, restoreCatalogContext, setFilter],
   );
   const selectLocation = (event: React.MouseEvent, key: string) => {
     if (isSearching) {
@@ -2267,7 +2336,7 @@ export function App() {
   const genreSelection = usePanelSelection({
     scrollRef: genreListRef,
     selectedKeys: filter.genres,
-    onChange: (genres) => setFilter((current) => ({ ...current, genres })),
+    onChange: applyGenreSelection,
   });
   const highlightedLocations =
     librarySelection.previewKeys || new Set(locationSelectionKeys);
@@ -2674,7 +2743,15 @@ export function App() {
               marquee={librarySelection.marquee}
               renderFolderLevel={renderFolderLevel}
               onReset={() =>
-                setFilter((f) => ({ ...f, libraryIds: [], folders: [] }))
+                restoreCatalogContext(
+                  { ...filter, libraryIds: [], folders: [] },
+                  () =>
+                    setFilter((f) => ({
+                      ...f,
+                      libraryIds: [],
+                      folders: [],
+                    })),
+                )
               }
               onToggleExpanded={(libraryId) =>
                 setExpandedLibraryIds((current) => {
@@ -2701,7 +2778,11 @@ export function App() {
               listRef={genreListRef}
               surfaceProps={genreSelection.surfaceProps}
               marquee={genreSelection.marquee}
-              onReset={() => setFilter((f) => ({ ...f, genres: [] }))}
+              onReset={() =>
+                restoreCatalogContext({ ...filter, genres: [] }, () =>
+                  setFilter((f) => ({ ...f, genres: [] })),
+                )
+              }
               onSelect={(event, genre) => {
                 if (isSearching) {
                   if (!event.ctrlKey && !event.metaKey && !event.shiftKey)
@@ -2730,8 +2811,10 @@ export function App() {
                 active={filter.artists.length > 0}
                 resetLabel="Сбросить исполнителей"
                 onReset={() => {
-                  setSelectedArtists([]);
-                  setFilter((f) => ({ ...f, artists: [] }));
+                  restoreCatalogContext({ ...filter, artists: [] }, () => {
+                    setSelectedArtists([]);
+                    setFilter((f) => ({ ...f, artists: [] }));
+                  });
                 }}
               />
             </div>
@@ -2792,8 +2875,10 @@ export function App() {
                 active={filter.albumIds.length > 0}
                 resetLabel="Сбросить альбомы"
                 onReset={() => {
-                  setSelectedAlbums([]);
-                  setFilter((f) => ({ ...f, albumIds: [] }));
+                  restoreCatalogContext({ ...filter, albumIds: [] }, () => {
+                    setSelectedAlbums([]);
+                    setFilter((f) => ({ ...f, albumIds: [] }));
+                  });
                 }}
               />
             </div>

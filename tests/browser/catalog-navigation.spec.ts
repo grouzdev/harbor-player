@@ -7,25 +7,49 @@ import {
 
 // A paginated catalog with enough rows to exercise virtualized navigation and
 // restoration. Other app services (session, settings) use the real test server.
-async function catalog(page: Page) {
+async function catalog(page: Page, { extraRockArtists = 0 } = {}) {
   const tracks: Track[] = [
-    ["Bowie", 3, "Rock"],
-    ["Miles", 3, "Jazz"],
-    ["Queen", 130, "Rock"],
-    ["Zebra", 3, "Rock"],
-  ].flatMap(([name, count, genre]) =>
-    Array.from({ length: Number(count) }, (_, album) =>
+    ...[
+      ["Bowie", 3, "Rock"],
+      ["Miles", 3, "Jazz"],
+      ["Queen", 130, "Rock"],
+      ["Zebra", 3, "Rock"],
+    ].flatMap(([name, count, genre]) =>
+      Array.from({ length: Number(count) }, (_, album) =>
+        Array.from({ length: 3 }, (_, index): Track => ({
+          id: `${name}-${album}-${index}`,
+          libraryId: genre === "Jazz" ? "jazz" : "rock",
+          relativePath: `${name}/${album}/${index}.flac`,
+          title: `${name} song ${index}`,
+          artists: [String(name)],
+          albumArtists: [String(name)],
+          albumKey: `${name}-${album}`,
+          albumTitle: `${name} album ${String(album).padStart(3, "0")}`,
+          genres: [String(genre)],
+          year: 2025 - album,
+          trackNumber: index + 1,
+          discNumber: 1,
+          duration: 180,
+          format: "FLAC",
+          size: 1000,
+          mtimeMs: 0,
+          coverId: null,
+          available: true,
+        })),
+      ).flat(),
+    ),
+    ...Array.from({ length: extraRockArtists }, (_, artist) =>
       Array.from({ length: 3 }, (_, index): Track => ({
-        id: `${name}-${album}-${index}`,
-        libraryId: genre === "Jazz" ? "jazz" : "rock",
-        relativePath: `${name}/${album}/${index}.flac`,
-        title: `${name} song ${index}`,
-        artists: [String(name)],
-        albumArtists: [String(name)],
-        albumKey: `${name}-${album}`,
-        albumTitle: `${name} album ${String(album).padStart(3, "0")}`,
-        genres: [String(genre)],
-        year: 2025 - album,
+        id: `Rock artist ${artist}-${index}`,
+        libraryId: "rock",
+        relativePath: `Rock artist ${artist}/0/${index}.flac`,
+        title: `Rock artist ${artist} song ${index}`,
+        artists: [`Rock artist ${artist}`],
+        albumArtists: [`Rock artist ${artist}`],
+        albumKey: `Rock artist ${artist}-0`,
+        albumTitle: `Rock artist ${artist} album`,
+        genres: ["Rock"],
+        year: 2025,
         trackNumber: index + 1,
         discNumber: 1,
         duration: 180,
@@ -36,7 +60,7 @@ async function catalog(page: Page) {
         available: true,
       })),
     ).flat(),
-  );
+  ];
   const requests: {
     endpoint: string;
     filter: CatalogFilter;
@@ -224,7 +248,7 @@ async function catalog(page: Page) {
     await route.fulfill({ json: body });
   });
   await page.goto("/");
-  await expect(page.locator(".artists-panel .artist-row")).toHaveCount(4);
+  await expect(count(page, "artists")).toHaveText(String(4 + extraRockArtists));
   return {
     requests,
     summaries,
@@ -443,6 +467,38 @@ test("global search restores filters, selection, expanded folders and scroll pos
         ),
     )
     .toEqual(positions.map(Math.round));
+});
+
+test("resetting a library filter restores the artist panel scroll position", async ({
+  page,
+}) => {
+  await catalog(page, { extraRockArtists: 40 });
+  await page
+    .locator(".libraries-panel .list-tile-main")
+    .filter({ hasText: "rock" })
+    .click();
+  await expect(count(page, "artists")).toHaveText("43");
+  await page.locator(".artist-scroll").evaluate((node) => {
+    node.scrollTop = 700;
+  });
+  const position = await page
+    .locator(".artist-scroll")
+    .evaluate((node) => node.scrollTop);
+  expect(position).toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: "Сбросить библиотеки" }).click();
+
+  await expect(count(page, "artists")).toHaveText("44");
+  await expect
+    .poll(() =>
+      page
+        .locator(".artist-scroll")
+        .evaluate((node) => Math.round(node.scrollTop)),
+    )
+    .toBe(Math.round(position));
+  await expect(
+    page.locator('[data-selection-key="Rock artist 15"]'),
+  ).toBeInViewport();
 });
 
 test("filtering a search result replaces old restrictions and operations use the search selection", async ({
