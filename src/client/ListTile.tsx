@@ -71,12 +71,13 @@ export function ListTile({
           <span className="list-tile-prefix">{prefix}</span>
         )}
         <span className="list-tile-value">
+          {(selected || related) && (
+            <span className="list-tile-related-marker" aria-hidden="true" />
+          )}
           {statusIcon ? (
             <span className="list-tile-status-icon" aria-hidden="true">
               {statusIcon}
             </span>
-          ) : related ? (
-            <span className="list-tile-related-marker" aria-hidden="true" />
           ) : null}
           <span className="list-tile-label">{value}</span>
         </span>

@@ -670,6 +670,12 @@ export function AlbumGrid({
                           )}
                         </div>
                         <strong>
+                          {highlighted.has(album.id) && (
+                            <span
+                              className="album-selection-marker"
+                              aria-hidden="true"
+                            />
+                          )}
                           {currentAlbumId === album.id && (
                             <Play
                               className="album-playing-icon"

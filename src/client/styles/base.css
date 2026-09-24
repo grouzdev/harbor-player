@@ -673,6 +673,14 @@ body.selection-dragging * {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.album-selection-marker {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #c6ca91;
+  box-shadow: 0 0 6px #c6ca91a6;
+}
 .album-card.playing .album-main > strong {
   color: #b9d4b7;
   text-shadow: 0 0 6px #b9d4b766;
@@ -3489,15 +3497,6 @@ select {
     0 8px 20px #02020278,
     0 1px #efefdf18 inset;
 }
-.album-card.playing .album-cover,
-.album-card.playing.selected .album-cover {
-  border-color: #b9d4b7;
-  box-shadow:
-    0 0 0 1px #b9d4b733,
-    0 8px 20px #02020278,
-    0 1px #efefdf18 inset;
-}
-
 .track-row .list-tile-main {
   color: #cdcfca;
 }
@@ -3511,14 +3510,6 @@ select {
 .list-tile.playing .list-tile-label {
   text-shadow: 0 0 6px #b9d4b766;
 }
-.list-tile.playing.selected .list-tile-main {
-  background: #b9d4b716;
-  box-shadow:
-    0 1px #00000074 inset,
-    0 -1px #b9d4b726 inset,
-    0 0 7px #02020230 inset;
-}
-
 .album-details > small {
   font-size: inherit;
 }
