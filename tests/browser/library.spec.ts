@@ -1269,15 +1269,15 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   });
   const albumTrackCountBadge = firstAlbum.locator(".album-track-count");
   await expect(albumBookmark).toHaveCSS("opacity", "1");
+  await expect(albumBookmark).toHaveCSS("width", "30px");
+  await expect(albumBookmark).toHaveCSS("height", "30px");
   await expect(albumTrackCountBadge).toHaveCSS("height", "30px");
+  await expect(albumTrackCountBadge).toHaveCSS("white-space", "nowrap");
   await expect(albumTrackCountBadge).toHaveCSS(
     "background-image",
     /linear-gradient/,
   );
-  await expect(albumBookmark).toHaveCSS(
-    "transition-property",
-    "color, background",
-  );
+  await expect(albumBookmark).toHaveCSS("transition-property", "none");
   await expect(firstAlbum.locator(".album-rating-control")).toHaveCSS(
     "transition-property",
     "none",
@@ -1320,11 +1320,26 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await expect(savedAlbumRating).toHaveCSS("width", "44px");
   await expect(savedAlbumRating.locator("span")).toHaveText("4");
   await expect(savedAlbumRating.locator("svg")).toHaveAttribute("fill", "none");
+  await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
   await page.mouse.move(0, 0);
   await expect(firstAlbum.locator(".album-rating-control")).toHaveCSS(
     "opacity",
     "1",
   );
+  await expect(firstAlbum.locator(".album-card-action--rating")).toHaveCSS(
+    "top",
+    "0px",
+  );
+  await expect(firstAlbum.locator(".album-card-action--rating")).toHaveCSS(
+    "transition-property",
+    "top",
+  );
+  await firstAlbum.hover();
+  const hoveredRatingBox = await savedAlbumRating.boundingBox();
+  const hoveredBookmarkBox = await albumBookmark.boundingBox();
+  expect(hoveredRatingBox).not.toBeNull();
+  expect(hoveredBookmarkBox).not.toBeNull();
+  expect(hoveredBookmarkBox!.y).toBeLessThan(hoveredRatingBox!.y);
   await savedAlbumRating.click();
   await page
     .getByRole("dialog", { name: "Изменить оценку" })
@@ -1360,6 +1375,57 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     "fill",
     "none",
   );
+  await firstAlbum.hover();
+  await albumBookmark.click();
+  await expect(albumBookmark).toHaveAttribute("aria-pressed", "true");
+  await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+  await page.mouse.move(0, 0);
+  await expect
+    .poll(async () => {
+      const actionBox = await albumActions.boundingBox();
+      const compactActionBoxes = await Promise.all(
+        [
+          ".album-card-action--bookmark",
+          ".album-card-action--viewed",
+          ".album-card-action--rating",
+        ].map((selector) => firstAlbum.locator(selector).boundingBox()),
+      );
+      if (!actionBox || compactActionBoxes.some((box) => !box)) return null;
+      return compactActionBoxes.map((box) => Math.round(box!.y - actionBox.y));
+    })
+    .toEqual([0, 33, 66]);
+  await firstAlbum.hover();
+  await expect
+    .poll(async () => {
+      const actionBox = await albumActions.boundingBox();
+      const compactActionBoxes = await Promise.all(
+        [
+          ".album-card-action--bookmark",
+          ".album-card-action--viewed",
+          ".album-card-action--rating",
+        ].map((selector) => firstAlbum.locator(selector).boundingBox()),
+      );
+      if (!actionBox || compactActionBoxes.some((box) => !box)) return null;
+      return compactActionBoxes.map((box) => Math.round(box!.y - actionBox.y));
+    })
+    .toEqual([0, 33, 66]);
+  await albumBookmark.click();
+  await expect(albumBookmark).toHaveAttribute("aria-pressed", "false");
+  await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+  await page.mouse.move(0, 0);
+  const twoActiveActionOffsets = async () => {
+    const actionBox = await albumActions.boundingBox();
+    const actionBoxes = await Promise.all(
+      [".album-card-action--viewed", ".album-card-action--rating"].map(
+        (selector) => firstAlbum.locator(selector).boundingBox(),
+      ),
+    );
+    if (!actionBox || actionBoxes.some((box) => !box)) return null;
+    return actionBoxes.map((box) => Math.round(box!.y - actionBox.y));
+  };
+  await expect.poll(twoActiveActionOffsets).toEqual([0, 33]);
+  await firstAlbum.hover();
+  await expect.poll(twoActiveActionOffsets).toEqual([0, 33]);
   const unratedTrackRating = firstTrackRow.getByRole("button", {
     name: "Без оценки",
   });
@@ -1764,12 +1830,16 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     const coverRect = cover.getBoundingClientRect();
     const buttonRect = button.getBoundingClientRect();
     return {
-      bottomInset: coverRect.bottom - buttonRect.bottom,
-      leftInset: buttonRect.left - coverRect.left,
+      topInset: buttonRect.top - coverRect.top,
+      rightInset: coverRect.right - buttonRect.right,
+      coverHeight: coverRect.height,
     };
   });
-  expect(albumBookmarkAlignment.bottomInset).toBeCloseTo(7, 1);
-  expect(albumBookmarkAlignment.leftInset).toBeCloseTo(7, 1);
+  expect(albumBookmarkAlignment.topInset).toBeGreaterThanOrEqual(7);
+  expect(albumBookmarkAlignment.topInset).toBeLessThan(
+    albumBookmarkAlignment.coverHeight - 30,
+  );
+  expect(albumBookmarkAlignment.rightInset).toBeCloseTo(7, 1);
   await addAlbumBookmark.click();
   await expect(firstAlbum).not.toHaveClass(/selected/);
   const removeAlbumBookmark = firstAlbum.getByRole("button", {

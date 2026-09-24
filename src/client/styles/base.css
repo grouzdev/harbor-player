@@ -728,6 +728,7 @@ body.selection-dragging * {
     0 4px 11px #0202023d;
   color: #eee;
   font-size: var(--type-caption);
+  white-space: nowrap;
   opacity: 0;
   transition: opacity 0.15s;
 }
@@ -2671,6 +2672,9 @@ body {
   background: transparent;
 }
 .album-bookmark-toggle {
+  width: 30px;
+  height: 30px;
+  flex-basis: 30px;
   border: 1px solid #e5e5d714;
   background: linear-gradient(145deg, #252624, #131413);
   box-shadow:
@@ -2684,17 +2688,63 @@ body {
   top: 7px;
   right: 7px;
   height: calc(100cqw - 14px);
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: space-between;
 }
 .album-card-actions .bookmark-toggle {
-  transition-property: color, background;
+  transition: none;
 }
 .album-card-actions .album-rating-control,
 .album-card-actions .album-track-count {
   transition: none;
+}
+.album-card-action {
+  position: absolute;
+  right: 0;
+  height: 30px;
+  transition: top 120ms ease-out;
+}
+.album-card-action--bookmark {
+  top: 0;
+}
+.album-card-action--viewed {
+  top: calc((100% - 30px) / 3);
+}
+.album-card-action--rating {
+  top: calc((100% - 30px) * 2 / 3);
+}
+.album-card-action--count {
+  top: calc(100% - 30px);
+}
+.album-card:not(:hover):not(:focus-within)
+  .album-card-action.is-active.compact-action-0 {
+  top: 0;
+}
+.album-card:not(:hover):not(:focus-within)
+  .album-card-action.is-active.compact-action-1 {
+  top: 33px;
+}
+.album-card:not(:hover):not(:focus-within)
+  .album-card-action.is-active.compact-action-2 {
+  top: 66px;
+}
+.album-card-actions.active-actions-2
+  .album-card-action.is-active.compact-action-0,
+.album-card-actions.active-actions-3
+  .album-card-action.is-active.compact-action-0 {
+  top: 0;
+}
+.album-card-actions.active-actions-2
+  .album-card-action.is-active.compact-action-1,
+.album-card-actions.active-actions-3
+  .album-card-action.is-active.compact-action-1 {
+  top: 33px;
+}
+.album-card-actions.active-actions-3
+  .album-card-action.is-active.compact-action-2 {
+  top: 66px;
+}
+.album-card-actions.active-actions-2
+  .album-card-action:not(.is-active):not(.album-card-action--count) {
+  top: calc(100% - 63px);
 }
 .track-bookmark-toggle,
 .track-album-bookmark-toggle {

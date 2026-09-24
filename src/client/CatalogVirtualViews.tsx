@@ -529,169 +529,200 @@ export function AlbumGrid({
                 }}
               >
                 {entry?.type === "albums" &&
-                  entry.albums.map((album) => (
-                    <div
-                      key={album.id}
-                      className={`album-card ${highlighted.has(album.id) ? "selected" : ""} ${currentAlbumId === album.id ? "playing" : ""}`}
-                      data-selection-key={album.id}
-                      title={`${album.title || "Без альбома"} · ${album.artists.join(", ")}`}
-                      onContextMenu={(event) => {
-                        const selectedIds = resolveContextSelection(
-                          selected,
-                          album.id,
-                        );
-                        if (!selected.includes(album.id))
-                          onSelectionChange(selectedIds);
-                        const copyTexts = selectedIds
-                          .map((id) => albumById.get(id))
-                          .filter((item): item is Album => Boolean(item))
-                          .map(copyAlbumLabel);
-                        onContextMenu(
-                          event,
-                          "album",
-                          album.id,
-                          selectedIds,
-                          copyTexts,
-                        );
-                      }}
-                    >
-                      {!groupByArtists && (
-                        <AlbumArtistLabel
-                          artists={album.artists}
-                          onSelectArtist={onSelectArtist}
-                        />
-                      )}
-                      <div className="album-card-actions">
-                        <BookmarkToggle
-                          kind="album"
-                          id={album.id}
-                          label={album.title || "Без альбома"}
-                          bookmarked={bookmarkKeys.has(`album:${album.id}`)}
-                          unavailable={bookmarksUnavailable}
-                          pending={pendingBookmarkKeys.has(`album:${album.id}`)}
-                          onChange={onBookmarkChange}
-                          className="album-bookmark-toggle"
-                          filledWhenBookmarked={false}
-                        />
-                        <ViewedToggle
-                          id={album.id}
-                          viewed={album.viewed}
-                          pending={pendingUserStateKeys.has(
-                            `album:${album.id}`,
-                          )}
-                          onChange={onUserStateChange}
-                          className="album-viewed-toggle"
-                        />
-                        <RatingControl
-                          kind="album"
-                          id={album.id}
-                          rating={album.rating}
-                          pending={pendingUserStateKeys.has(
-                            `album:${album.id}`,
-                          )}
-                          onChange={onUserStateChange}
-                          className="album-rating-control"
-                          outlineStar
-                          showValue
-                        />
-                        <span className="album-track-count">
-                          {trackCountLabel(album.trackCount)}
-                        </span>
-                      </div>
-                      <button
-                        className="album-main"
-                        aria-pressed={selected.includes(album.id)}
-                        onClick={(event) => {
-                          if (
-                            !event.ctrlKey &&
-                            !event.metaKey &&
-                            !event.shiftKey &&
-                            selected.includes(album.id)
-                          ) {
-                            onPlay(album.id);
-                            return;
-                          }
-                          selection.selectFromClick(
-                            event,
+                  entry.albums.map((album) => {
+                    const bookmarked = bookmarkKeys.has(`album:${album.id}`);
+                    const rated = album.rating !== null;
+                    let compactActionIndex = 0;
+                    const bookmarkActionIndex = bookmarked
+                      ? compactActionIndex++
+                      : -1;
+                    const viewedActionIndex = album.viewed
+                      ? compactActionIndex++
+                      : -1;
+                    const ratingActionIndex = rated ? compactActionIndex++ : -1;
+
+                    return (
+                      <div
+                        key={album.id}
+                        className={`album-card ${highlighted.has(album.id) ? "selected" : ""} ${currentAlbumId === album.id ? "playing" : ""}`}
+                        data-selection-key={album.id}
+                        title={`${album.title || "Без альбома"} · ${album.artists.join(", ")}`}
+                        onContextMenu={(event) => {
+                          const selectedIds = resolveContextSelection(
+                            selected,
                             album.id,
-                            albums.map((item) => item.id),
                           );
-                          if (
-                            !event.ctrlKey &&
-                            !event.metaKey &&
-                            !event.shiftKey
-                          )
-                            onNavigate(album.id);
+                          if (!selected.includes(album.id))
+                            onSelectionChange(selectedIds);
+                          const copyTexts = selectedIds
+                            .map((id) => albumById.get(id))
+                            .filter((item): item is Album => Boolean(item))
+                            .map(copyAlbumLabel);
+                          onContextMenu(
+                            event,
+                            "album",
+                            album.id,
+                            selectedIds,
+                            copyTexts,
+                          );
                         }}
                       >
+                        {!groupByArtists && (
+                          <AlbumArtistLabel
+                            artists={album.artists}
+                            onSelectArtist={onSelectArtist}
+                          />
+                        )}
                         <div
-                          className={`album-cover ${dropTarget === album.id ? "drop-target" : ""}`}
-                          onDragEnter={(event) => {
-                            event.preventDefault();
-                            setDropTarget(album.id);
-                          }}
-                          onDragOver={(event) => event.preventDefault()}
-                          onDragLeave={(event) => {
-                            if (
-                              !event.currentTarget.contains(
-                                event.relatedTarget as Node,
-                              )
-                            )
-                              setDropTarget(null);
-                          }}
-                          onDrop={(event) => {
-                            event.preventDefault();
-                            setDropTarget(null);
-                            onCoverDrop(
-                              album,
-                              Array.from(event.dataTransfer.files),
-                            );
-                          }}
-                          style={
-                            {
-                              "--cover-hue":
-                                parseInt(album.id.slice(0, 4), 16) % 360,
-                            } as CSSProperties
-                          }
+                          className={`album-card-actions active-actions-${compactActionIndex}`}
                         >
-                          {album.coverId ? (
-                            <img
-                              loading="lazy"
-                              src={`/api/covers/${album.coverId}`}
-                              alt=""
+                          <div
+                            className={`album-card-action album-card-action--bookmark ${bookmarked ? `is-active compact-action-${bookmarkActionIndex}` : ""}`}
+                          >
+                            <BookmarkToggle
+                              kind="album"
+                              id={album.id}
+                              label={album.title || "Без альбома"}
+                              bookmarked={bookmarked}
+                              unavailable={bookmarksUnavailable}
+                              pending={pendingBookmarkKeys.has(
+                                `album:${album.id}`,
+                              )}
+                              onChange={onBookmarkChange}
+                              className="album-bookmark-toggle"
+                              filledWhenBookmarked={false}
                             />
-                          ) : (
-                            <div className="cover-placeholder" />
-                          )}
-                          {dropTarget === album.id && (
-                            <span className="album-cover-drop-hint">
-                              Отпустите обложку
+                          </div>
+                          <div
+                            className={`album-card-action album-card-action--viewed ${album.viewed ? `is-active compact-action-${viewedActionIndex}` : ""}`}
+                          >
+                            <ViewedToggle
+                              id={album.id}
+                              viewed={album.viewed}
+                              pending={pendingUserStateKeys.has(
+                                `album:${album.id}`,
+                              )}
+                              onChange={onUserStateChange}
+                              className="album-viewed-toggle"
+                            />
+                          </div>
+                          <div
+                            className={`album-card-action album-card-action--rating ${rated ? `is-active compact-action-${ratingActionIndex}` : ""}`}
+                          >
+                            <RatingControl
+                              kind="album"
+                              id={album.id}
+                              rating={album.rating}
+                              pending={pendingUserStateKeys.has(
+                                `album:${album.id}`,
+                              )}
+                              onChange={onUserStateChange}
+                              className="album-rating-control"
+                              outlineStar
+                              showValue
+                            />
+                          </div>
+                          <div className="album-card-action album-card-action--count">
+                            <span className="album-track-count">
+                              {trackCountLabel(album.trackCount)}
                             </span>
-                          )}
+                          </div>
                         </div>
-                        <strong>
-                          {highlighted.has(album.id) && (
-                            <span
-                              className="album-selection-marker"
-                              aria-hidden="true"
-                            />
-                          )}
-                          {currentAlbumId === album.id && (
-                            <Play
-                              className="album-playing-icon"
-                              size={13}
-                              fill="currentColor"
-                              aria-hidden="true"
-                            />
-                          )}
-                          <span>{album.title || "Без альбома"}</span>
-                        </strong>
-                        <span className="album-details">
-                          <small>{album.year || ""}</small>
-                        </span>
-                      </button>
-                    </div>
-                  ))}
+                        <button
+                          className="album-main"
+                          aria-pressed={selected.includes(album.id)}
+                          onClick={(event) => {
+                            if (
+                              !event.ctrlKey &&
+                              !event.metaKey &&
+                              !event.shiftKey &&
+                              selected.includes(album.id)
+                            ) {
+                              onPlay(album.id);
+                              return;
+                            }
+                            selection.selectFromClick(
+                              event,
+                              album.id,
+                              albums.map((item) => item.id),
+                            );
+                            if (
+                              !event.ctrlKey &&
+                              !event.metaKey &&
+                              !event.shiftKey
+                            )
+                              onNavigate(album.id);
+                          }}
+                        >
+                          <div
+                            className={`album-cover ${dropTarget === album.id ? "drop-target" : ""}`}
+                            onDragEnter={(event) => {
+                              event.preventDefault();
+                              setDropTarget(album.id);
+                            }}
+                            onDragOver={(event) => event.preventDefault()}
+                            onDragLeave={(event) => {
+                              if (
+                                !event.currentTarget.contains(
+                                  event.relatedTarget as Node,
+                                )
+                              )
+                                setDropTarget(null);
+                            }}
+                            onDrop={(event) => {
+                              event.preventDefault();
+                              setDropTarget(null);
+                              onCoverDrop(
+                                album,
+                                Array.from(event.dataTransfer.files),
+                              );
+                            }}
+                            style={
+                              {
+                                "--cover-hue":
+                                  parseInt(album.id.slice(0, 4), 16) % 360,
+                              } as CSSProperties
+                            }
+                          >
+                            {album.coverId ? (
+                              <img
+                                loading="lazy"
+                                src={`/api/covers/${album.coverId}`}
+                                alt=""
+                              />
+                            ) : (
+                              <div className="cover-placeholder" />
+                            )}
+                            {dropTarget === album.id && (
+                              <span className="album-cover-drop-hint">
+                                Отпустите обложку
+                              </span>
+                            )}
+                          </div>
+                          <strong>
+                            {highlighted.has(album.id) && (
+                              <span
+                                className="album-selection-marker"
+                                aria-hidden="true"
+                              />
+                            )}
+                            {currentAlbumId === album.id && (
+                              <Play
+                                className="album-playing-icon"
+                                size={13}
+                                fill="currentColor"
+                                aria-hidden="true"
+                              />
+                            )}
+                            <span>{album.title || "Без альбома"}</span>
+                          </strong>
+                          <span className="album-details">
+                            <small>{album.year || ""}</small>
+                          </span>
+                        </button>
+                      </div>
+                    );
+                  })}
               </div>
             );
           })}
