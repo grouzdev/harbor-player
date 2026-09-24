@@ -1713,6 +1713,96 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
       { left: 80, right: 110 },
       { left: 33, right: 77 },
     ]);
+  const compactActionGeometries = await firstTrackAlbumHeader.evaluate(
+    (header) => {
+      const actions = [
+        ...header.querySelectorAll<HTMLElement>(".track-album-action"),
+      ];
+      const container = header.querySelector<HTMLElement>(
+        ".track-album-actions",
+      )!;
+      const initiallyActive = actions.map((action) =>
+        action.classList.contains("is-active"),
+      );
+      const initialTransitions = actions.map(
+        (action) => action.style.transition,
+      );
+      const combinations = [
+        [false, false, false],
+        [true, false, false],
+        [false, true, false],
+        [false, false, true],
+        [true, true, false],
+        [true, false, true],
+        [false, true, true],
+        [true, true, true],
+      ];
+
+      try {
+        return combinations.map((active) => {
+          actions.forEach((action, index) => {
+            action.style.transition = "none";
+            action.classList.toggle("is-active", active[index]);
+          });
+          const containerBox = container.getBoundingClientRect();
+          return actions.map((action) => {
+            const box = action.getBoundingClientRect();
+            return {
+              left: Math.round(box.left - containerBox.left),
+              right: Math.round(box.right - containerBox.left),
+            };
+          });
+        });
+      } finally {
+        actions.forEach((action, index) => {
+          action.classList.toggle("is-active", initiallyActive[index]);
+          action.style.transition = initialTransitions[index];
+        });
+      }
+    },
+  );
+  expect(compactActionGeometries).toEqual([
+    [
+      { left: 110, right: 110 },
+      { left: 110, right: 110 },
+      { left: 110, right: 110 },
+    ],
+    [
+      { left: 66, right: 110 },
+      { left: 110, right: 110 },
+      { left: 110, right: 110 },
+    ],
+    [
+      { left: 77, right: 77 },
+      { left: 80, right: 110 },
+      { left: 110, right: 110 },
+    ],
+    [
+      { left: 77, right: 77 },
+      { left: 77, right: 77 },
+      { left: 80, right: 110 },
+    ],
+    [
+      { left: 33, right: 77 },
+      { left: 80, right: 110 },
+      { left: 110, right: 110 },
+    ],
+    [
+      { left: 33, right: 77 },
+      { left: 77, right: 77 },
+      { left: 80, right: 110 },
+    ],
+    [
+      { left: 44, right: 44 },
+      { left: 47, right: 77 },
+      { left: 80, right: 110 },
+    ],
+    [
+      { left: 0, right: 44 },
+      { left: 47, right: 77 },
+      { left: 80, right: 110 },
+    ],
+  ]);
   await firstTrackAlbumHeader.hover();
   await expect(trackAlbumBookmark).toHaveCSS("opacity", "1");
   await expect
@@ -1733,19 +1823,27 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
       { left: 47, right: 77 },
       { left: 0, right: 44 },
     ]);
-  const trackAlbumActionOrder = await firstTrackAlbumHeader.evaluate((header) => {
-    const actions = header.querySelector<HTMLElement>(".track-album-actions")!;
-    const duration = header.querySelector<HTMLElement>(".track-album-duration")!;
-    const trackDuration = document
-      .querySelector<HTMLElement>('[data-testid="track-row"] .list-tile-suffix')!
-      .getBoundingClientRect();
-    return {
-      actionsRight: actions.getBoundingClientRect().right,
-      durationLeft: duration.getBoundingClientRect().left,
-      albumDurationRight: duration.getBoundingClientRect().right,
-      trackDurationRight: trackDuration.right,
-    };
-  });
+  const trackAlbumActionOrder = await firstTrackAlbumHeader.evaluate(
+    (header) => {
+      const actions = header.querySelector<HTMLElement>(
+        ".track-album-actions",
+      )!;
+      const duration = header.querySelector<HTMLElement>(
+        ".track-album-duration",
+      )!;
+      const trackDuration = document
+        .querySelector<HTMLElement>(
+          '[data-testid="track-row"] .list-tile-suffix',
+        )!
+        .getBoundingClientRect();
+      return {
+        actionsRight: actions.getBoundingClientRect().right,
+        durationLeft: duration.getBoundingClientRect().left,
+        albumDurationRight: duration.getBoundingClientRect().right,
+        trackDurationRight: trackDuration.right,
+      };
+    },
+  );
   expect(trackAlbumActionOrder.actionsRight).toBeLessThanOrEqual(
     trackAlbumActionOrder.durationLeft,
   );

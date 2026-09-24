@@ -2522,7 +2522,7 @@ body {
 .track-album-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 3px;
+  gap: 0;
   width: 110px;
   height: 30px;
 }
@@ -2531,7 +2531,7 @@ body {
   flex: 0 0 auto;
   width: 0;
   height: 30px;
-  margin-left: -3px;
+  margin-left: 0;
   overflow: hidden;
   visibility: hidden;
   transition:
@@ -2539,8 +2539,11 @@ body {
     margin-left 120ms ease-out;
 }
 .track-album-action.is-active {
-  margin-left: 0;
   visibility: visible;
+}
+.track-album-action--viewed.is-active,
+.track-album-action--bookmark.is-active {
+  margin-left: 3px;
 }
 .track-album-header .track-album-bookmark-toggle,
 .track-album-header .album-rating-control {
@@ -2557,8 +2560,13 @@ body {
 }
 .track-album-header:hover .track-album-action,
 .track-album-header:focus-within .track-album-action {
-  margin-left: 0;
   visibility: visible;
+}
+.track-album-header:hover .track-album-action--viewed,
+.track-album-header:hover .track-album-action--bookmark,
+.track-album-header:focus-within .track-album-action--viewed,
+.track-album-header:focus-within .track-album-action--bookmark {
+  margin-left: 3px;
 }
 .track-album-header:hover .track-album-action--rating,
 .track-album-header:focus-within .track-album-action--rating {
