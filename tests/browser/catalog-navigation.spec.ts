@@ -315,6 +315,32 @@ async function filterArtist(page: Page, name: string) {
 const count = (page: Page, panel: string) =>
   page.locator(`.${panel}-panel .panel-heading .panel-count`);
 
+test("catalog names use one primary style", async ({ page }) => {
+  await catalog(page);
+
+  const album = page.locator('.album-card[data-selection-key="Queen-0"]');
+  const primaryNames = [
+    page.locator(".libraries-panel .list-tile-main").first(),
+    page.locator(".genres-panel .list-tile-main").first(),
+    artist(page, "Queen").locator(".list-tile-main"),
+    album.locator(".album-main > strong"),
+    page.locator(".track-album-header strong").first(),
+    page.locator(".track-row .list-tile-main").first(),
+  ];
+  for (const name of primaryNames) {
+    await expect(name).toHaveCSS("font-size", "14px");
+    await expect(name).toHaveCSS("font-weight", "400");
+    await expect(name).toHaveCSS("color", "rgb(162, 174, 181)");
+  }
+  await expect(album.locator(".album-details")).toHaveCSS("font-size", "14px");
+  await expect(
+    page
+      .locator(".albums-panel .album-artist-label")
+      .filter({ hasText: "Queen" })
+      .first(),
+  ).toHaveCSS("font-size", "14px");
+});
+
 test("artist and album selection cascades to lower-priority panels", async ({
   page,
 }) => {
