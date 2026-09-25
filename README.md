@@ -23,6 +23,8 @@ npm start
 
 Исходный код Harbor Player распространяется по [GNU GPL v3.0 only](LICENSE). Лицензии сторонних компонентов перечислены в [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
+Порядок подписи Windows-релизов, роли сопровождающего и правила обработки сетевых запросов описаны в [Code signing policy](docs/code-signing-policy.md).
+
 ## Desktop-сборка для Windows
 
 Доступны два самостоятельных x64-дистрибутива:
