@@ -690,7 +690,7 @@ export async function createApp(options: {
           .regex(/^[a-f0-9]{64}\.(jpg|png)$/)
           .optional(),
         coverTrackIds: z.array(z.string()).max(100000).optional(),
-        companions: z.boolean().default(false),
+        companions: z.boolean().default(true),
         folderRoots: z
           .array(
             z

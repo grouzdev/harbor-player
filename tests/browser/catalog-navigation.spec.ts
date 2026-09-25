@@ -228,6 +228,8 @@ async function catalog(
       };
     else if (endpoint === "bookmarks")
       body = [{ kind: "artist", id: "Queen", createdAt: "2026-01-01" }];
+    else if (endpoint === "artist-folders")
+      body = [{ libraryId: "rock", relativePath: "Queen", trackCount: 390 }];
     else if (endpoint === "selection-summary") {
       summaries.push(route.request().postDataJSON());
       body = {
@@ -559,6 +561,35 @@ test("album merge uses the multi-selection anchor and blocks an errored preview"
       }),
     }),
   ]);
+});
+
+test("artist folder transfer omits UI-only track counts from the preview request", async ({
+  page,
+}) => {
+  const data = await catalog(page);
+  await artist(page, "Queen").click({ button: "right" });
+  await page
+    .getByRole("menuitem", { name: "Перенести треки", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Выберите папки для переноса" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Далее" }).click();
+  await page.getByLabel("Куда перенести").selectOption("jazz");
+  await page.getByRole("button", { name: "Далее" }).click();
+
+  await expect.poll(() => data.mergePreviews.length).toBe(1);
+  expect(data.mergePreviews[0]).toEqual(
+    expect.objectContaining({
+      folderRoots: [{ libraryId: "rock", relativePath: "Queen" }],
+      selection: {
+        filter: {
+          ...emptyFilter,
+          folders: [{ libraryId: "rock", relativePath: "Queen" }],
+        },
+      },
+    }),
+  );
 });
 
 test("global search restores filters, selection, expanded folders and scroll positions", async ({

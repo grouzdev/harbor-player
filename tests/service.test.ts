@@ -1012,6 +1012,117 @@ describe("catalog and safe filesystem operations", () => {
     );
     expect(service.catalog.track(track.id)?.libraryId).toBe(dest.id);
   });
+  it("moves a complete album tree by default and removes its source folder", async () => {
+    const sourcePath = path.join(root, "Album tree source");
+    await mkdir(path.join(sourcePath, "Album", "CD1"), { recursive: true });
+    await mkdir(path.join(sourcePath, "Album", "CD2"), { recursive: true });
+    await copyFile(
+      path.join(fixtures, "sample.flac"),
+      path.join(sourcePath, "Album", "CD1", "one.flac"),
+    );
+    await copyFile(
+      path.join(fixtures, "sample.flac"),
+      path.join(sourcePath, "Album", "CD2", "two.flac"),
+    );
+    await writeFile(path.join(sourcePath, "Album", "notes.nfo"), "notes");
+    await writeFile(
+      path.join(sourcePath, "Album", "CD2", "artwork.bin"),
+      "artwork",
+    );
+    const source = (await service.addLibrary("Album tree source", sourcePath))
+      .library;
+    const destinationPath = path.join(root, "Album tree destination");
+    await mkdir(destinationPath);
+    const destination = (
+      await service.addLibrary("Album tree destination", destinationPath)
+    ).library;
+    await service.idle();
+
+    const sourceTracks = tracks().filter(
+      (track) => track.libraryId === source.id,
+    );
+    const op = await service.preview(
+      "move",
+      { trackIds: sourceTracks.map((track) => track.id) },
+      destination.id,
+    );
+    expect(op.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: path.join(sourcePath, "Album", "notes.nfo"),
+          companion: true,
+        }),
+        expect.objectContaining({
+          source: path.join(sourcePath, "Album", "CD2", "artwork.bin"),
+          companion: true,
+        }),
+        expect.objectContaining({
+          source: path.join(sourcePath, "Album"),
+          directory: true,
+        }),
+      ]),
+    );
+
+    service.execute(op.id);
+    await service.idle();
+
+    expect(
+      service.catalog.operation(op.id).items.filter((item) => item.error),
+    ).toEqual([]);
+    expect(existsSync(path.join(sourcePath, "Album"))).toBe(false);
+    await expect(
+      readFile(path.join(destinationPath, "Album", "notes.nfo"), "utf8"),
+    ).resolves.toBe("notes");
+    await expect(
+      readFile(
+        path.join(destinationPath, "Album", "CD2", "artwork.bin"),
+        "utf8",
+      ),
+    ).resolves.toBe("artwork");
+  });
+  it("does not expand an album root that contains unselected tracks", async () => {
+    const sourcePath = path.join(root, "Mixed album source");
+    await mkdir(path.join(sourcePath, "Album", "CD1"), { recursive: true });
+    await mkdir(path.join(sourcePath, "Album", "Bonus"), { recursive: true });
+    await copyFile(
+      path.join(fixtures, "sample.flac"),
+      path.join(sourcePath, "Album", "CD1", "selected.flac"),
+    );
+    await copyFile(
+      path.join(fixtures, "sample.flac"),
+      path.join(sourcePath, "Album", "Bonus", "other.flac"),
+    );
+    await writeFile(path.join(sourcePath, "Album", "notes.nfo"), "notes");
+    const source = (await service.addLibrary("Mixed album source", sourcePath))
+      .library;
+    const destinationPath = path.join(root, "Mixed album destination");
+    await mkdir(destinationPath);
+    const destination = (
+      await service.addLibrary("Mixed album destination", destinationPath)
+    ).library;
+    await service.idle();
+
+    const selected = tracks().find(
+      (track) =>
+        track.libraryId === source.id &&
+        track.relativePath.endsWith("selected.flac"),
+    )!;
+    const op = await service.preview(
+      "move",
+      { trackIds: [selected.id] },
+      destination.id,
+    );
+    expect(op.items).toHaveLength(1);
+    expect(op.items[0]).toMatchObject({ trackId: selected.id });
+
+    service.execute(op.id);
+    await service.idle();
+
+    expect(existsSync(path.join(sourcePath, "Album", "notes.nfo"))).toBe(true);
+    expect(
+      existsSync(path.join(sourcePath, "Album", "Bonus", "other.flac")),
+    ).toBe(true);
+  });
   it("moves a selected folder as a complete tree and keeps indexed track IDs", async () => {
     const source = await library("Folder source");
     const track = tracks()[0];

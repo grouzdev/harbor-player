@@ -27,6 +27,7 @@ import { errorMessage, inside } from "./config.js";
 import { badRequest, conflict, unavailable } from "./http-error.js";
 import { LibraryScanner } from "./library-scanner.js";
 import { readTrack } from "./metadata.js";
+import { normalizedAlbumFolder } from "./album-identity.js";
 import { MusicBrainzService, type MusicBrainzOptions } from "./musicbrainz.js";
 import {
   OperationOrchestrator,
@@ -421,7 +422,7 @@ export class MusicService extends EventEmitter {
     selection: Selection,
     targetLibraryId?: string,
     patch?: TagPatch,
-    companions = false,
+    companions = true,
     itemPatches: Record<string, PerTrackTagPatch> = {},
     coverTrackIds?: string[],
     folderRoots?: FolderMoveRoot[],
@@ -610,8 +611,8 @@ export class MusicService extends EventEmitter {
         await addFolder(root.libraryId, root.relativePath);
       op.items.sort(
         (left, right) =>
-          Number(left.directory) - Number(right.directory) ||
-          right.source.length - left.source.length,
+          Number(Boolean(left.directory)) - Number(Boolean(right.directory)) ||
+          (left.directory ? right.source.length - left.source.length : 0),
       );
     }
     for (const track of folderRoots?.length ? [] : tracks) {
@@ -707,60 +708,103 @@ export class MusicService extends EventEmitter {
           }),
         );
     if (kind === "move" && companions) {
-      const selectedIds = new Set(tracks.map((t) => t.id));
-      const folders = new Set(op.items.map((i) => path.dirname(i.source)));
-      for (const folder of folders) {
-        const selectedHere = tracks.filter(
-          (t) =>
-            path.dirname(
-              path.join(this.catalog.library(t.libraryId).path, t.relativePath),
-            ) === folder,
-        );
-        const library = this.catalog.library(selectedHere[0].libraryId);
-        const allHere = this.catalog.availableLibraryTracks(library.id);
+      const selectedIds = new Set(tracks.map((track) => track.id));
+      const albums = new Map<string, Track[]>();
+      for (const track of tracks) {
+        const key = `${track.libraryId}\u0000${track.albumKey}`;
+        albums.set(key, [...(albums.get(key) || []), track]);
+      }
+      const roots = new Set<string>();
+      for (const albumTracks of albums.values()) {
+        const first = albumTracks[0];
+        const library = this.catalog.library(first.libraryId);
         if (
-          allHere.some(
-            (t) =>
-              path.dirname(path.join(library.path, t.relativePath)) ===
-                folder && !selectedIds.has(t.id),
+          this.catalog.albumAvailableTrackCount(first.albumKey) !==
+          albumTracks.length
+        )
+          continue;
+        const root = path.join(
+          library.path,
+          normalizedAlbumFolder(first.relativePath),
+        );
+        // Never turn the library root itself into a removable album folder.
+        if (
+          path.resolve(root) === path.resolve(library.path) ||
+          roots.has(root)
+        )
+          continue;
+        const available = this.catalog.availableLibraryTracks(library.id);
+        if (
+          available.some(
+            (track) =>
+              inside(root, path.join(library.path, track.relativePath)) &&
+              !selectedIds.has(track.id),
           )
         )
           continue;
-        for (const entry of await readdir(folder, { withFileTypes: true })) {
-          if (
-            !entry.isFile() ||
-            !/\.(jpg|jpeg|png|webp|cue|log|txt|pdf)$/i.test(entry.name)
-          )
-            continue;
-          const source = path.join(folder, entry.name);
+        roots.add(root);
+        const addTree = async (directory: string) => {
           const destination = path.join(
             target!.path,
-            path.relative(library.path, source),
+            path.relative(library.path, directory),
           );
-          const item: OperationItem = {
+          op.items.push({
             id: randomUUID(),
             trackId: null,
-            title: entry.name,
-            source,
+            title: path.basename(directory),
+            source: directory,
             destination,
             size: 0,
             mtimeMs: 0,
             hash: "",
             phase: "preview",
-            companion: true,
-          };
-          try {
-            await this.safePath(source);
-            await this.safePath(destination, true);
-            Object.assign(item, await this.fingerprint(source));
-            if (await exists(destination))
-              throw new Error("В целевой папке уже есть файл с таким именем");
-          } catch (e) {
-            item.error = errorMessage(e);
+            directory: true,
+          });
+          for (const entry of await readdir(directory, {
+            withFileTypes: true,
+          })) {
+            const source = path.join(directory, entry.name);
+            if (entry.isSymbolicLink())
+              throw new Error(
+                `Символическая ссылка не поддерживается: ${source}`,
+              );
+            if (entry.isDirectory()) {
+              await addTree(source);
+              continue;
+            }
+            if (!entry.isFile()) continue;
+            if (tracksBySource.has(source)) continue;
+            const item: OperationItem = {
+              id: randomUUID(),
+              trackId: null,
+              title: entry.name,
+              source,
+              destination: path.join(destination, entry.name),
+              size: 0,
+              mtimeMs: 0,
+              hash: "",
+              phase: "preview",
+              companion: true,
+            };
+            try {
+              await this.safePath(source);
+              await this.safePath(item.destination, true);
+              Object.assign(item, await this.fingerprint(source));
+              if (await exists(item.destination))
+                throw new Error("В целевой папке уже есть файл с таким именем");
+            } catch (error) {
+              item.error = errorMessage(error);
+            }
+            op.items.push(item);
           }
-          op.items.push(item);
-        }
+        };
+        await addTree(root);
       }
+      op.items.sort(
+        (left, right) =>
+          Number(Boolean(left.directory)) - Number(Boolean(right.directory)) ||
+          (left.directory ? right.source.length - left.source.length : 0),
+      );
     }
     const destinations = new Set<string>();
     for (const item of op.items) {

@@ -105,7 +105,7 @@ export function ActionDialog({
           !folderRoots?.some((root) => root.libraryId === library.id),
       )?.id || "",
   );
-  const [companions, setCompanions] = useState(false);
+  const [companions, setCompanions] = useState(true);
   const [values, setValues] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Set<string>>(new Set());
   const [cover, setCover] = useState<TagPatch["cover"]>(undefined);
@@ -738,9 +738,12 @@ export function ArtistFolderDialog({
           disabled={!selectedKeys.size}
           onClick={() =>
             onContinue(
-              (folders.data || []).filter((folder) =>
-                selectedKeys.has(key(folder)),
-              ),
+              (folders.data || [])
+                .filter((folder) => selectedKeys.has(key(folder)))
+                .map(({ libraryId, relativePath }) => ({
+                  libraryId,
+                  relativePath,
+                })),
             )
           }
         >
@@ -809,6 +812,7 @@ export function PreviewDialog({
                   {item.companion && (
                     <span className="badge">Сопутствующий файл</span>
                   )}
+                  {item.directory && <span className="badge">Папка</span>}
                 </div>
                 <div className="path-text" title={item.source}>
                   {item.source}
