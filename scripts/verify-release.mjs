@@ -41,6 +41,17 @@ if (verifyArtifacts) {
   await Promise.all(
     artifacts.map((file) => access(path.join("release", file))),
   );
+  if (channel === "beta") {
+    const metadata = await readFile(path.join("release", "beta.yml"), "utf8");
+    const publishedSetup = artifacts[0].replaceAll(" ", ".");
+    if (
+      !metadata.includes(`  - url: ${publishedSetup}`) ||
+      !metadata.includes(`path: ${publishedSetup}`)
+    )
+      throw new Error(
+        `beta.yml must reference the published setup asset ${publishedSetup}`,
+      );
+  }
 }
 
 console.log(

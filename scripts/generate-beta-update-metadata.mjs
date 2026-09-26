@@ -10,6 +10,7 @@ if (!/^\d+\.\d+\.\d+-beta\.\d+$/.test(version)) {
 }
 
 const fileName = `Harbor Player-${version}-x64-unsigned-Setup.exe`;
+const publishedFileName = fileName.replaceAll(" ", ".");
 const artifactPath = path.join("release", fileName);
 const [artifact, artifactStats] = await Promise.all([
   readFile(artifactPath),
@@ -20,14 +21,14 @@ const releaseDate = new Date().toISOString();
 const metadata = [
   `version: ${version}`,
   "files:",
-  `  - url: ${fileName}`,
+  `  - url: ${publishedFileName}`,
   `    sha512: ${sha512}`,
   `    size: ${artifactStats.size}`,
-  `path: ${fileName}`,
+  `path: ${publishedFileName}`,
   `sha512: ${sha512}`,
   `releaseDate: '${releaseDate}'`,
   "",
 ].join("\n");
 
 await writeFile(path.join("release", "beta.yml"), metadata, "utf8");
-console.log(`Generated release/beta.yml for ${fileName}`);
+console.log(`Generated release/beta.yml for ${publishedFileName}`);
