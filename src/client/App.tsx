@@ -610,6 +610,8 @@ export function App() {
   const [isFullscreen, setIsFullscreen] = useState(
     () => document.fullscreenElement === document.documentElement,
   );
+  const desktop = window.harborPlayerDesktop;
+  const isWebFullscreen = isFullscreen && !desktop;
   const { appShellRef, appShellWidth, isPortraitLayout } = useAppShellLayout();
   const [fullscreenWindowMode, setFullscreenWindowMode] =
     useState<FullscreenWindowMode>("default");
@@ -667,6 +669,7 @@ export function App() {
       });
   }, [ready]);
   useEffect(() => {
+    if (desktop) return;
     const syncFullscreen = () => {
       const fullscreen =
         document.fullscreenElement === document.documentElement;
@@ -708,13 +711,36 @@ export function App() {
     return () =>
       document.removeEventListener("fullscreenchange", syncFullscreen);
   }, [saveFullscreenWindowState]);
+  useEffect(() => {
+    if (!desktop) return;
+    let mounted = true;
+    void desktop
+      .getWindowFullscreen()
+      .then((fullscreen) => {
+        if (mounted) setIsFullscreen(fullscreen);
+      })
+      .catch(() => {
+        // The window keeps its current state when desktop IPC is unavailable.
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [desktop]);
+  useEffect(() => {
+    if (!desktop) return;
+    return desktop.subscribeWindowFullscreen(setIsFullscreen);
+  }, [desktop]);
   const toggleFullscreen = useCallback(() => {
+    if (desktop) {
+      void desktop.toggleWindowFullscreen();
+      return;
+    }
     if (document.fullscreenElement === document.documentElement) {
       void document.exitFullscreen();
       return;
     }
     void document.documentElement.requestFullscreen();
-  }, []);
+  }, [desktop]);
   const getFullscreenRoom = useCallback(() => {
     const room = appShellRef.current?.parentElement?.getBoundingClientRect();
     return room && room.width > 0 && room.height > 0 ? room : null;
@@ -736,7 +762,7 @@ export function App() {
   }, [getFullscreenRoom]);
   const beginFullscreenWindowMove = useCallback(
     (event: React.PointerEvent<HTMLElement>) => {
-      if (!isFullscreen || event.button !== 0) return;
+      if (!isWebFullscreen || event.button !== 0) return;
       const target = event.target as Element;
       if (
         target.closest(
@@ -783,13 +809,13 @@ export function App() {
     [
       getCurrentFullscreenBounds,
       getFullscreenRoom,
-      isFullscreen,
+      isWebFullscreen,
       saveFullscreenWindowState,
     ],
   );
   const beginFullscreenWindowResize = useCallback(
     (edge: FullscreenResizeEdge, event: React.PointerEvent<HTMLDivElement>) => {
-      if (!isFullscreen || event.button !== 0) return;
+      if (!isWebFullscreen || event.button !== 0) return;
       const initial = getCurrentFullscreenBounds();
       if (!initial) return;
       const startX = event.clientX;
@@ -845,7 +871,7 @@ export function App() {
     [
       getCurrentFullscreenBounds,
       getFullscreenRoom,
-      isFullscreen,
+      isWebFullscreen,
       saveFullscreenWindowState,
     ],
   );
@@ -853,7 +879,7 @@ export function App() {
     (event: React.MouseEvent<HTMLElement>) => {
       const target = event.target as Element;
       if (
-        !isFullscreen ||
+        !isWebFullscreen ||
         target.closest(
           "button, input, select, a, .search, .local-status, [data-window-control]",
         )
@@ -874,12 +900,12 @@ export function App() {
       fullscreenWindowMode,
       fullscreenWindowBounds,
       getCurrentFullscreenBounds,
-      isFullscreen,
+      isWebFullscreen,
       saveFullscreenWindowState,
     ],
   );
   useEffect(() => {
-    if (!isFullscreen || fullscreenWindowMode !== "custom") return;
+    if (!isWebFullscreen || fullscreenWindowMode !== "custom") return;
     const constrainToRoom = () => {
       const room = getFullscreenRoom();
       if (!room) return;
@@ -895,7 +921,7 @@ export function App() {
     };
     window.addEventListener("resize", constrainToRoom);
     return () => window.removeEventListener("resize", constrainToRoom);
-  }, [fullscreenWindowMode, getFullscreenRoom, isFullscreen]);
+  }, [fullscreenWindowMode, getFullscreenRoom, isWebFullscreen]);
   const setPanelVisible = useCallback((id: PanelId, visible: boolean) => {
     setPanelVisibility((current) => {
       if (current[id] === visible) return current;
@@ -2422,7 +2448,7 @@ export function App() {
       </main>
     );
   const fullscreenWindowStyle = {
-    ...(isFullscreen &&
+    ...(isWebFullscreen &&
     fullscreenWindowMode === "custom" &&
     fullscreenWindowBounds
       ? {
@@ -2458,7 +2484,7 @@ export function App() {
       }`}
       style={fullscreenWindowStyle}
     >
-      {isFullscreen && (
+      {isWebFullscreen && (
         <>
           {(["n", "ne", "e", "se", "s", "sw", "w", "nw"] as const).map(
             (edge) => (

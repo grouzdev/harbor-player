@@ -356,6 +356,14 @@ function createWindow(url: string) {
       sandbox: true,
     },
   });
+  const sendFullscreenState = () => {
+    mainWindow?.webContents.send(
+      "desktop:window-fullscreen",
+      mainWindow.isFullScreen(),
+    );
+  };
+  mainWindow.on("enter-full-screen", sendFullscreenState);
+  mainWindow.on("leave-full-screen", sendFullscreenState);
   mainWindow.webContents.on("will-navigate", (event, target) => {
     if (!isAllowedLocalUrl(target)) event.preventDefault();
   });
@@ -574,6 +582,16 @@ async function bootstrap() {
       ipcMain.handle("desktop:install-update", (event) => {
         requireDesktopSender(event);
         return installUpdate();
+      });
+      ipcMain.handle("desktop:get-window-fullscreen", (event) => {
+        requireDesktopSender(event);
+        return mainWindow!.isFullScreen();
+      });
+      ipcMain.handle("desktop:toggle-window-fullscreen", (event) => {
+        requireDesktopSender(event);
+        const fullscreen = !mainWindow!.isFullScreen();
+        mainWindow!.setFullScreen(fullscreen);
+        return fullscreen;
       });
       ipcMain.handle("desktop:choose-image-file", async (event) => {
         requireDesktopSender(event);

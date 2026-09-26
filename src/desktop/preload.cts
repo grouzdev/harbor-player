@@ -22,6 +22,17 @@ contextBridge.exposeInMainWorld("harborPlayerDesktop", {
       string | null
     >,
   reportClientReady: () => ipcRenderer.invoke("desktop:report-client-ready"),
+  getWindowFullscreen: () =>
+    ipcRenderer.invoke("desktop:get-window-fullscreen") as Promise<boolean>,
+  toggleWindowFullscreen: () =>
+    ipcRenderer.invoke("desktop:toggle-window-fullscreen") as Promise<boolean>,
+  subscribeWindowFullscreen: (listener: (fullscreen: boolean) => void) => {
+    const receive = (_event: unknown, fullscreen: boolean) =>
+      listener(fullscreen);
+    ipcRenderer.on("desktop:window-fullscreen", receive);
+    return () =>
+      ipcRenderer.removeListener("desktop:window-fullscreen", receive);
+  },
   subscribeUpdateState: (
     listener: (
       state: import("../shared/desktop-contract.js").UpdateState,

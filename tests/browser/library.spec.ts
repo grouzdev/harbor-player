@@ -295,6 +295,71 @@ test("fullscreen button changes the application shell", async ({ page }) => {
   await expectAppShellBounds(page, moved!);
 });
 
+test("desktop fullscreen button controls the native window", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    let fullscreen = false;
+    const listeners = new Set<(value: boolean) => void>();
+    const notify = () => listeners.forEach((listener) => listener(fullscreen));
+    Object.assign(window, {
+      harborPlayerDesktop: {
+        getAppInfo: async () => ({
+          version: "0.2.1-beta.7",
+          commit: "abcdef0",
+          portable: false,
+        }),
+        getUpdateState: async () => ({ status: "idle" }),
+        checkForUpdates: async () => {},
+        downloadUpdate: async () => {},
+        installUpdate: async () => {},
+        chooseImageFile: async () => null,
+        chooseLibraryDirectory: async () => null,
+        reportClientReady: async () => {},
+        getWindowFullscreen: async () => fullscreen,
+        toggleWindowFullscreen: async () => {
+          fullscreen = !fullscreen;
+          notify();
+          return fullscreen;
+        },
+        subscribeWindowFullscreen: (listener: (value: boolean) => void) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+        subscribeUpdateState: () => () => {},
+      },
+      setNativeFullscreen: (value: boolean) => {
+        fullscreen = value;
+        notify();
+      },
+    });
+  });
+  await page.goto("/");
+
+  const button = page.getByRole("button", {
+    name: "Развернуть окно на весь экран",
+  });
+  await button.click();
+  await expect(
+    page.getByRole("button", {
+      name: "Свернуть окно из полноэкранного режима",
+    }),
+  ).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => document.fullscreenElement === null))
+    .toBe(true);
+  await expect(page.locator(".fullscreen-window-resize")).toHaveCount(0);
+
+  await page.evaluate(() => {
+    (
+      window as typeof window & {
+        setNativeFullscreen: (value: boolean) => void;
+      }
+    ).setNativeFullscreen(false);
+  });
+  await expect(button).toBeVisible();
+});
+
 test("fullscreen restores legacy saved window bounds", async ({ page }) => {
   await page.goto("/");
   await page.evaluate(() => {
