@@ -415,6 +415,9 @@ test("selecting an album keeps the album grid in place while another album plays
       page.locator(".album-scroll").evaluate((node) => node.scrollTop),
     )
     .toBeGreaterThan(0);
+  await expect
+    .poll(() => page.locator(".album-card").count())
+    .toBeGreaterThan(0);
   const albumId = await page.locator(".album-card").evaluateAll((cards) => {
     const scroll = document.querySelector(".album-scroll")!;
     const bounds = scroll.getBoundingClientRect();
