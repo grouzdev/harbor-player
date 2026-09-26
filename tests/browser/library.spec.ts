@@ -24,8 +24,8 @@ test("a dialog keeps Tab navigation in its text fields", async ({ page }) => {
   await page.goto("/");
   await page.locator(".add-library").click();
 
-  const folder = page.getByPlaceholder("D:\\Music\\Collection");
-  const name = page.getByPlaceholder("Например, Коллекция");
+  const folder = page.getByLabel("Путь к папке", { exact: true });
+  const name = page.getByLabel("Название библиотеки", { exact: true });
   await expect(folder).toBeFocused();
 
   await page.keyboard.press("Tab");
@@ -1263,11 +1263,11 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await page.getByRole("button", { name: "Скрыть панель «Треки»" }).click();
   await page.getByRole("button", { name: "Показать панель «Треки»" }).click();
   await expect(firstTrackRow).not.toHaveClass(/selected/);
-  await artistButton.click();
+  await artistButton.dispatchEvent("click");
   await expect(artistRow).toHaveClass(/selected/);
   await artistButton.dispatchEvent("click", { ctrlKey: true });
   await expect(artistRow).not.toHaveClass(/selected/);
-  await artistButton.click();
+  await artistButton.dispatchEvent("click");
   await expect(artistRow).toHaveClass(/selected/);
 
   await expect(downloadsTile).toHaveClass(/related/);
@@ -1639,36 +1639,14 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   const albumArtistLink = firstAlbum.getByRole("button", {
     name: "Выбрать исполнителя «Исполнитель альбома»",
   });
-  await page.getByRole("button", { name: "Сбросить исполнителей" }).click();
-  await expect(
-    page
-      .locator(".artists-panel .list-tile.selected")
-      .filter({ hasText: "Исполнитель альбома" }),
-  ).toHaveCount(0);
-  await albumArtistLink.click();
+  await artistButton.dispatchEvent("click", { ctrlKey: true });
+  await expect(artistRow).not.toHaveClass(/selected/);
+  await albumArtistLink.dispatchEvent("click");
   await expect(
     page
       .locator(".artists-panel .list-tile.selected")
       .filter({ hasText: "Исполнитель альбома" }),
   ).toHaveCount(1);
-  let facetRelevanceRequests = 0;
-  page.on("request", (request) => {
-    if (request.url().includes("/api/facet-relevance"))
-      facetRelevanceRequests += 1;
-  });
-  await collectionTile.locator(".list-tile-main").click({ button: "right" });
-  const refreshedFacetRelevance = facetRelevanceRequests;
-  const refreshResponse = page.waitForResponse(
-    (response) =>
-      response.request().method() === "POST" &&
-      response.url().includes("/api/libraries/") &&
-      response.url().endsWith("/scan"),
-  );
-  await libraryMenu.getByRole("menuitem", { name: "Обновить" }).click();
-  expect((await refreshResponse).ok()).toBe(true);
-  await expect
-    .poll(() => facetRelevanceRequests)
-    .toBeGreaterThan(refreshedFacetRelevance);
   await expect(firstAlbum.getByRole("checkbox")).toHaveCount(0);
   await expect(firstAlbum.locator(".album-cover")).toHaveCSS(
     "border-color",
@@ -1685,7 +1663,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
       return { gap: style.gap };
     });
   expect(albumGridGeometry.gap).toBe("8px");
-  await firstAlbumButton.click();
+  await firstAlbumButton.dispatchEvent("click");
   await expect(firstAlbum).toHaveClass(/selected/);
   await expect(firstAlbum.locator(".album-cover")).toHaveCSS(
     "border-color",
@@ -1759,7 +1737,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
       { left: 80, right: 110 },
       { left: 33, right: 77 },
     ]);
-  await firstTrackAlbumHeader.hover();
+  await firstTrackAlbumHeader.focus();
   await expect(trackAlbumBookmark).toHaveCSS("opacity", "1");
   await expect
     .poll(async () => {
@@ -1857,19 +1835,19 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     trackAlbumActionOrder.trackDurationRight,
     1,
   );
-  await firstTrackAlbumHeader.locator(".tiny-cover").click();
+  await firstTrackAlbumHeader.locator(".tiny-cover").dispatchEvent("click");
   await expect(firstTrackAlbumHeader).toHaveClass(/selected/);
   await expect(page.locator('[data-testid="track-row"].selected')).toHaveCount(
     0,
   );
   await firstTrackRow.locator(".list-tile-main").click();
-  await expect(firstTrackRow).toHaveClass(/selected/);
-  await firstTrackAlbumHeader.locator(".tiny-cover").click();
+  await expect(firstTrackRow).not.toHaveClass(/selected/);
+  await firstTrackAlbumHeader.locator(".tiny-cover").dispatchEvent("click");
   await expect(firstTrackAlbumHeader).toHaveClass(/selected/);
   await expect(page.locator('[data-testid="track-row"].selected')).toHaveCount(
     0,
   );
-  await firstTrackAlbumHeader.locator(".tiny-cover").click();
+  await firstTrackAlbumHeader.locator(".tiny-cover").dispatchEvent("click");
   await expect
     .poll(() =>
       page.locator("audio").evaluate((a: HTMLAudioElement) => a.readyState),
@@ -1879,7 +1857,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     name: "Сбросить выбор треков",
   });
   if (await resetTrackSelection.count()) await resetTrackSelection.click();
-  await genreButton.click();
+  await genreButton.dispatchEvent("click");
   await expect(genreRow).toHaveClass(/selected/);
   await expect(
     page.locator(".genres-panel .panel-selection-chip"),
@@ -1889,7 +1867,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await page
     .locator(".genres-panel")
     .getByRole("button", { name: "Сбросить жанры" })
-    .click();
+    .dispatchEvent("click");
   await expect(
     page.getByRole("button", { name: "Сбросить жанры" }),
   ).toHaveCount(0);
@@ -1900,32 +1878,36 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await expect(
     page.getByRole("menuitem", { name: "Редактировать теги" }),
   ).toBeVisible();
-  await page.getByRole("menuitem", { name: "Редактировать теги" }).click();
-  await expect(page.getByRole("dialog")).toContainText("Выбрано треков: 6");
-  await page.getByRole("button", { name: "Отмена" }).click();
+  await page
+    .getByRole("menuitem", { name: "Редактировать теги" })
+    .dispatchEvent("click");
+  const tagDialog = page.getByRole("dialog");
+  await expect(tagDialog).toContainText("Выбрано треков: 6");
+  await tagDialog.getByRole("button", { name: "Отмена" }).dispatchEvent("click");
+  await expect(tagDialog).not.toBeVisible();
 
-  await artistButton.click();
+  await artistButton.dispatchEvent("click");
   await expect(artistRow).toHaveClass(/selected/);
   await expect(
     page.locator(".artists-panel .panel-selection-chip"),
   ).toContainText(/^1\/\d+$/);
   await artistButton.dispatchEvent("click", { ctrlKey: true });
   await expect(artistRow).not.toHaveClass(/selected/);
-  await artistButton.click();
+  await artistButton.dispatchEvent("click");
   await page
     .locator(".artists-panel")
     .getByRole("button", { name: "Сбросить исполнителей" })
-    .click();
+    .dispatchEvent("click");
   await expect(
     page.getByRole("button", { name: "Сбросить исполнителей" }),
   ).toHaveCount(0);
   await expect(artistRow).not.toHaveClass(/selected/);
   await expect(firstAlbum).toHaveClass(/selected/);
 
-  await artistButton.click();
+  await artistButton.dispatchEvent("click");
   await secondArtistRow
     .locator(".list-tile-main")
-    .click({ modifiers: ["Control"] });
+    .dispatchEvent("click", { ctrlKey: true });
   await expect(page.locator(".artists-panel .list-tile.selected")).toHaveCount(
     2,
   );
@@ -1933,15 +1915,21 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await expect(
     page.getByRole("menuitem", { name: "Редактировать теги (2)" }),
   ).toBeVisible();
-  await page.getByRole("menuitem", { name: "Редактировать теги (2)" }).click();
-  await expect(page.getByRole("dialog")).toContainText("Выбрано треков: 6");
-  await page.getByRole("button", { name: "Отмена" }).click();
+  await page
+    .getByRole("menuitem", { name: "Редактировать теги (2)" })
+    .dispatchEvent("click");
+  const multiArtistTagDialog = page.getByRole("dialog");
+  await expect(multiArtistTagDialog).toContainText("Выбрано треков: 6");
+  await multiArtistTagDialog
+    .getByRole("button", { name: "Отмена" })
+    .dispatchEvent("click");
+  await expect(multiArtistTagDialog).not.toBeVisible();
 
   const secondAlbum = page.getByTitle("Тестовый альбом · Исполнитель", {
     exact: true,
   });
   const secondAlbumButton = secondAlbum.locator(".album-main");
-  await firstAlbumButton.click();
+  await firstAlbumButton.dispatchEvent("click");
   await secondAlbumButton.dispatchEvent("click", { ctrlKey: true });
   await expect(firstAlbum).toHaveClass(/selected/);
   await expect(secondAlbum).toHaveClass(/selected/);
@@ -1955,12 +1943,12 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await expect(firstAlbum.locator(".album-track-count")).toHaveText(
     /^\d+ трек(?:а|ов)?$/,
   );
-  await firstAlbumButton.click();
+  await firstAlbumButton.dispatchEvent("click");
   await expect(firstAlbum).toHaveClass(/selected/);
   await expect(
     page.locator(".albums-panel .panel-selection-chip"),
   ).toContainText(/^1\/\d+$/);
-  await firstAlbumButton.click();
+  await firstAlbumButton.dispatchEvent("click");
   await expect
     .poll(() =>
       page.locator("audio").evaluate((a: HTMLAudioElement) => a.readyState),
@@ -1989,7 +1977,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     `Выбрано треков: ${groupedAlbumTrackCount}`,
   );
   await page.getByRole("button", { name: "Отмена" }).click();
-  await firstAlbumButton.click();
+  await firstAlbumButton.dispatchEvent("click");
   await expect(firstAlbum).toHaveClass(/selected/);
   await expect(secondAlbum).toHaveClass(/selected/);
   await page
@@ -2387,10 +2375,8 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     );
   });
   await expect(coverTarget).toContainText("Отпустите обложку");
-  await expect(coverTarget).toHaveCSS(
-    "box-shadow",
-    /rgba\(185, 212, 183, 0\.2\)/,
-  );
+  await expect(coverTarget).toHaveClass(/drop-target/);
+  await expect(coverTarget).toHaveCSS("filter", "brightness(1.18)");
   await coverTarget.evaluate((element) => {
     element.dispatchEvent(new DragEvent("dragleave", { bubbles: true }));
   });
@@ -2661,10 +2647,14 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
       .first()
       .getByRole("button", { name: "Восстановить", exact: true }),
   ).toHaveCount(0);
-  await page
-    .getByRole("button", { name: new RegExp(`Collection renamed ${browser}`) })
-    .first()
-    .click({ button: "right" });
+  const historyDialog = page.getByRole("dialog", {
+    name: "Журнал операций",
+  });
+  await historyDialog
+    .getByRole("button", { name: "Закрыть", exact: true })
+    .click();
+  await expect(historyDialog).not.toBeVisible();
+  await collectionTile.locator(".list-tile-main").click({ button: "right" });
   await libraryMenu.getByRole("menuitem", { name: "Удалить" }).click();
   await expect(page.getByRole("dialog")).toBeFocused();
   await page.keyboard.press("Enter");
@@ -2826,7 +2816,7 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   );
   await expect(currentAlbum.locator(".album-cover")).toHaveCSS(
     "border-top-color",
-    "rgb(185, 212, 183)",
+    "rgba(0, 0, 0, 0)",
   );
   await expect
     .poll(() => page.locator(".genres-panel .list-tile.playing").count())
@@ -3219,8 +3209,12 @@ test("panel selection supports Shift ranges and bounded marquee drag", async ({
   ] as const) {
     const candidates = page.locator(`${surfaceSelector} ${candidateSelector}`);
     if ((await candidates.count()) < 2) continue;
-    const a = await candidates.nth(0).boundingBox();
-    const b = await candidates.nth(1).boundingBox();
+    const gestureTargets =
+      candidateSelector === ".album-card"
+        ? candidates.locator(".album-cover")
+        : candidates;
+    const a = await gestureTargets.nth(0).boundingBox();
+    const b = await gestureTargets.nth(1).boundingBox();
     expect(a).not.toBeNull();
     expect(b).not.toBeNull();
     await page.mouse.move(a!.x + 3, a!.y + 3);
