@@ -27,6 +27,7 @@ import type {
 const { autoUpdater } = electronUpdater;
 
 const appId = "app.harborplayer.desktop";
+const buildCommit = "__HARBOR_BUILD_COMMIT__";
 const smokeFixture = process.argv
   .find((argument) => argument.startsWith("--smoke-test="))
   ?.slice("--smoke-test=".length);
@@ -544,7 +545,11 @@ async function bootstrap() {
           !isAllowedLocalUrl(event.senderFrame?.url || "")
         )
           throw new Error("Недопустимый IPC sender");
-        return { version: app.getVersion(), portable: isPortable };
+        return {
+          version: app.getVersion(),
+          commit: buildCommit,
+          portable: isPortable,
+        };
       });
       const requireDesktopSender = (event: Electron.IpcMainInvokeEvent) => {
         if (

@@ -11,6 +11,9 @@ test("keeps the dark theme and persists appearance settings", async ({
 
   const dialog = page.getByRole("dialog", { name: /Настройки/ });
   await expect(dialog.getByRole("radiogroup", { name: "Тема" })).toHaveCount(0);
+  await expect(
+    dialog.getByText(/^Версия \d+\.\d+\.\d+(?:-[a-z0-9.-]+)? \([0-9a-f]{7}\)$/),
+  ).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await dialog.getByRole("button", { name: "Выбрать цвет #79b9d4" }).click();
   await expect(page.locator("html")).toHaveCSS("--accent", "#79b9d4");

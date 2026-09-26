@@ -1,7 +1,7 @@
 import type { UpdateState } from "../shared/desktop-contract";
 
 export interface DesktopBridge {
-  getAppInfo(): Promise<{ version: string; portable: boolean }>;
+  getAppInfo(): Promise<{ version: string; commit: string; portable: boolean }>;
   getUpdateState(): Promise<UpdateState>;
   checkForUpdates(): Promise<void>;
   downloadUpdate(): Promise<void>;

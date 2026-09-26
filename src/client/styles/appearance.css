@@ -13,6 +13,13 @@
 .appearance-section .hint {
   margin: -3px 0 0;
 }
+.appearance-build-info {
+  padding-top: 12px;
+  border-top: 1px solid #ffffff14;
+  color: var(--muted);
+  font-size: var(--type-caption);
+  text-align: center;
+}
 .appearance-choice-row,
 .accent-picker,
 .appearance-actions,

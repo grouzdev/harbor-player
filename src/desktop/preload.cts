@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld("harborPlayerDesktop", {
   getAppInfo: () =>
     ipcRenderer.invoke("desktop:get-app-info") as Promise<{
       version: string;
+      commit: string;
       portable: boolean;
     }>,
   getUpdateState: () =>

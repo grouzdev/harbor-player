@@ -1,6 +1,6 @@
 {
   "name": "harbor-player",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Desktop music library and player",
   "author": "grouzdev",
   "license": "GPL-3.0-only",
@@ -12,7 +12,7 @@
   },
   "scripts": {
     "build:server": "tsc -p tsconfig.server.json",
-    "build:desktop": "tsc -p tsconfig.desktop.json",
+    "build:desktop": "tsc -p tsconfig.desktop.json && node scripts/stamp-build-info.mjs",
     "build": "npm run typecheck && npm run build:server && npm run build:desktop && vite build",
     "start": "npm run build && node dist/server/index.js",
     "serve": "node dist/server/index.js",
@@ -30,6 +30,8 @@
     "test:desktop:smoke:portable": "npm run fixtures && cross-env HARBOR_PLAYER_SMOKE_EXPECT_PORTABLE=1 node scripts/desktop-smoke.mjs",
     "fixtures": "node scripts/generate-fixtures.mjs",
     "verify:tags": "npm run build:server && node scripts/verify-tags.mjs",
+    "release:prepare": "node scripts/release-prepare.mjs",
+    "release:tag": "node scripts/release-tag.mjs",
     "benchmark": "npm run build && node scripts/benchmark.mjs",
     "benchmark:scan": "npm run build:server && node scripts/scan-benchmark.mjs",
     "benchmark:startup": "npm run build && node scripts/startup-benchmark.mjs",

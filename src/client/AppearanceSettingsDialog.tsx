@@ -7,6 +7,7 @@ import {
   type BackupRetention,
   type RecoveryStatus,
 } from "../shared/recovery-settings";
+import { browserBuildInfo } from "./build-info";
 import "./desktop";
 import { Modal } from "./Modal";
 
@@ -69,6 +70,7 @@ export function AppearanceSettingsDialog({
   const [scanBusy, setScanBusy] = useState(false);
   const [recovery, setRecovery] = useState<RecoveryStatus | null>(null);
   const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [appInfo, setAppInfo] = useState(browserBuildInfo);
   const [error, setError] = useState("");
   const desktop = window.harborPlayerDesktop;
   useEffect(() => {
@@ -76,6 +78,13 @@ export function AppearanceSettingsDialog({
       .then(setRecovery)
       .catch(() => {});
   }, []);
+  useEffect(() => {
+    if (!desktop) return;
+    void desktop
+      .getAppInfo()
+      .then(({ version, commit }) => setAppInfo({ version, commit }))
+      .catch(() => {});
+  }, [desktop]);
   const save = async (next: AppearanceSettings) => {
     onChange(next);
     try {
@@ -146,7 +155,7 @@ export function AppearanceSettingsDialog({
     }
   };
   return (
-    <Modal title="Настройки" subtitle="Внешний вид" onClose={onClose}>
+    <Modal title="Настройки" onClose={onClose}>
       <section className="appearance-settings" aria-label="Внешний вид">
         <div className="appearance-section">
           <h3>Акцентный цвет</h3>
@@ -317,6 +326,9 @@ export function AppearanceSettingsDialog({
             )}
           </div>
         </div>
+        <footer className="appearance-build-info">
+          Версия {appInfo.version} ({appInfo.commit})
+        </footer>
       </section>
     </Modal>
   );
