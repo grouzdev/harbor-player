@@ -14,11 +14,26 @@
   margin: -3px 0 0;
 }
 .appearance-build-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
   padding-top: 12px;
   border-top: 1px solid #ffffff14;
   color: var(--muted);
   font-size: var(--type-caption);
   text-align: center;
+}
+.appearance-build-info .icon-button {
+  margin: -7px 0;
+}
+.is-spinning {
+  animation: appearance-spin 0.8s linear infinite;
+}
+@keyframes appearance-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .appearance-choice-row,
 .accent-picker,

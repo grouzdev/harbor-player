@@ -1,6 +1,32 @@
 import { expect, test } from "@playwright/test";
 import path from "node:path";
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    let checkForUpdatesCalls = 0;
+    Object.assign(window, {
+      harborPlayerDesktop: {
+        getAppInfo: async () => ({
+          version: "0.2.1-beta.6",
+          commit: "abcdef0",
+          portable: false,
+        }),
+        getUpdateState: async () => ({ status: "idle" }),
+        checkForUpdates: async () => {
+          checkForUpdatesCalls += 1;
+        },
+        downloadUpdate: async () => {},
+        installUpdate: async () => {},
+        chooseImageFile: async () => null,
+        chooseLibraryDirectory: async () => null,
+        reportClientReady: async () => {},
+        subscribeUpdateState: () => () => {},
+      },
+      getCheckForUpdatesCalls: () => checkForUpdatesCalls,
+    });
+  });
+});
+
 test("keeps the dark theme and persists appearance settings", async ({
   page,
 }) => {
@@ -12,8 +38,24 @@ test("keeps the dark theme and persists appearance settings", async ({
   const dialog = page.getByRole("dialog", { name: /Настройки/ });
   await expect(dialog.getByRole("radiogroup", { name: "Тема" })).toHaveCount(0);
   await expect(
-    dialog.getByText(/^Версия \d+\.\d+\.\d+(?:-[a-z0-9.-]+)? \([0-9a-f]{7}\)$/),
+    dialog.getByText(/^Версия 0\.2\.1-beta\.6 \(abcdef0\)$/),
   ).toBeVisible();
+  const checkForUpdates = dialog.getByRole("button", {
+    name: "Проверить обновления",
+  });
+  await expect(checkForUpdates).toBeVisible();
+  await checkForUpdates.click();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          window as typeof window & {
+            getCheckForUpdatesCalls: () => number;
+          }
+        ).getCheckForUpdatesCalls(),
+      ),
+    )
+    .toBe(1);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await dialog.getByRole("button", { name: "Выбрать цвет #79b9d4" }).click();
   await expect(page.locator("html")).toHaveCSS("--accent", "#79b9d4");

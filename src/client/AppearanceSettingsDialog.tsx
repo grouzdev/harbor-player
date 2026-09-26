@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ImagePlus, MonitorCog, Trash2 } from "lucide-react";
+import { ImagePlus, MonitorCog, RefreshCw, Trash2 } from "lucide-react";
 import type { AppearanceSettings } from "./appearance";
 import { autoScanIntervals, type ScanSettings } from "../shared/scan-settings";
 import { api } from "./api";
@@ -71,6 +71,7 @@ export function AppearanceSettingsDialog({
   const [recovery, setRecovery] = useState<RecoveryStatus | null>(null);
   const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [appInfo, setAppInfo] = useState(browserBuildInfo);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [error, setError] = useState("");
   const desktop = window.harborPlayerDesktop;
   useEffect(() => {
@@ -152,6 +153,17 @@ export function AppearanceSettingsDialog({
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setRecoveryBusy(false);
+    }
+  };
+  const checkForUpdates = async () => {
+    if (!desktop) return;
+    setCheckingUpdates(true);
+    try {
+      await desktop.checkForUpdates();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setCheckingUpdates(false);
     }
   };
   return (
@@ -327,7 +339,24 @@ export function AppearanceSettingsDialog({
           </div>
         </div>
         <footer className="appearance-build-info">
-          Версия {appInfo.version} ({appInfo.commit})
+          <span>
+            Версия {appInfo.version} ({appInfo.commit})
+          </span>
+          {desktop && (
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Проверить обновления"
+              title="Проверить обновления"
+              disabled={checkingUpdates}
+              onClick={() => void checkForUpdates()}
+            >
+              <RefreshCw
+                size={15}
+                className={checkingUpdates ? "is-spinning" : undefined}
+              />
+            </button>
+          )}
         </footer>
       </section>
     </Modal>
