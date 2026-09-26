@@ -19,10 +19,12 @@ if (git("status", "--porcelain"))
 if (git("tag", "--list", `v${version}`))
   throw new Error(`Тег v${version} уже существует`);
 
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+const npmCli = process.env.npm_execpath;
+if (!npmCli)
+  throw new Error("Запускайте подготовку релиза через npm run release:prepare");
 execFileSync(
-  npm,
-  ["version", version, "--no-git-tag-version", "--ignore-scripts"],
+  process.execPath,
+  [npmCli, "version", version, "--no-git-tag-version", "--ignore-scripts"],
   {
     cwd: process.cwd(),
     stdio: "inherit",
