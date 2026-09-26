@@ -19,7 +19,7 @@
     "dev": "npm run build:server && concurrently -k \"tsc -p tsconfig.server.json --watch --preserveWatchOutput\" \"cross-env HARBOR_PLAYER_DEV=1 node --watch dist/server/index.js --no-open\" \"vite --host 127.0.0.1\"",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.desktop.json && tsc --noEmit -p tsconfig.scripts.json",
     "test": "npm run build:server && vitest run",
-    "test:e2e": "npm run build && playwright test",
+    "test:e2e": "npm run build && playwright test --project=chrome && playwright test --project=edge",
     "desktop:prepare": "install-electron",
     "desktop:start": "npm run desktop:prepare && npm run build && electron .",
     "desktop:pack": "npm run desktop:prepare && npm run build && electron-builder --win --x64 --dir",

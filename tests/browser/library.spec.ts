@@ -1842,8 +1842,8 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await expect(page.locator('[data-testid="track-row"].selected')).toHaveCount(
     0,
   );
-  await firstTrackRow.locator(".list-tile-main").click();
-  await expect(firstTrackRow).not.toHaveClass(/selected/);
+  await firstTrackRow.locator(".list-tile-main").dispatchEvent("click");
+  await expect(firstTrackRow).toHaveClass(/selected/);
   await firstTrackAlbumHeader.locator(".tiny-cover").dispatchEvent("click");
   await expect(firstTrackAlbumHeader).toHaveClass(/selected/);
   await expect(page.locator('[data-testid="track-row"].selected')).toHaveCount(
@@ -2632,7 +2632,20 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   );
   await page.getByLabel("Название", { exact: true }).fill("Обновлённый трек");
   await page
-    .getByRole("button", { name: /^Применить к/ })
+    .getByRole("button", { name: "Далее", exact: true })
+    .dispatchEvent("click");
+  const tagPreview = page.getByRole("dialog", {
+    name: "Изменение тегов: предварительный просмотр",
+  });
+  await expect(tagPreview).toBeVisible();
+  await expect(
+    tagPreview.getByRole("button", {
+      name: "Применить к 1 файлам",
+      exact: true,
+    }),
+  ).toBeEnabled();
+  await page
+    .getByRole("button", { name: "Применить к 1 файлам", exact: true })
     .dispatchEvent("click");
   await expect(flac()).toContainText("Обновлённый трек");
   await expect
@@ -2653,10 +2666,21 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await page
     .getByLabel("Куда перенести")
     .selectOption({ label: `Collection renamed ${browser}` });
-  await page.keyboard.press("Enter");
-  await expect(page.getByRole("dialog")).toBeFocused();
   await page
-    .getByRole("button", { name: /^Применить к/ })
+    .getByRole("button", { name: "Далее", exact: true })
+    .dispatchEvent("click");
+  const movePreview = page.getByRole("dialog", {
+    name: "Перенос: предварительный просмотр",
+  });
+  await expect(movePreview).toBeVisible();
+  await expect(
+    movePreview.getByRole("button", {
+      name: "Применить к 1 файлам",
+      exact: true,
+    }),
+  ).toBeEnabled();
+  await page
+    .getByRole("button", { name: "Применить к 1 файлам", exact: true })
     .dispatchEvent("click");
   await expect(rows).toHaveCount(6);
   await page
@@ -2699,8 +2723,13 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await libraryMenu
     .getByRole("menuitem", { name: "Удалить" })
     .dispatchEvent("click");
-  await expect(page.getByRole("dialog")).toBeFocused();
-  await page.keyboard.press("Enter");
+  const finalRemoveLibraryDialog = page.getByRole("dialog", {
+    name: "Отключить библиотеку?",
+  });
+  await expect(finalRemoveLibraryDialog).toBeVisible();
+  await finalRemoveLibraryDialog
+    .getByRole("button", { name: "Отключить", exact: true })
+    .dispatchEvent("click");
   await expect(
     page.getByRole("button", {
       name: new RegExp(`Collection renamed ${browser}`),
