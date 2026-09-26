@@ -45,7 +45,9 @@ test("catalog search filters every panel from one result set", async ({
     .fill(path.resolve(".test-data/browser", browser, "search", "Downloads"));
   await page.getByLabel("Название библиотеки").fill(otherName);
   await page.getByRole("button", { name: "Подключить", exact: true }).click();
-  await expect(page.getByTestId("track-row")).toHaveCount(3);
+  await expect(
+    page.getByRole("button", { name: `${otherName} 7`, exact: true }),
+  ).toBeVisible();
   await page.getByLabel("Поиск музыки").fill(otherName);
   await expect(page.getByTestId("track-row")).toHaveCount(7);
   await expect(

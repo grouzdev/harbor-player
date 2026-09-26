@@ -1379,11 +1379,16 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     "top",
   );
   await firstAlbum.hover();
-  const hoveredRatingBox = await savedAlbumRating.boundingBox();
-  const hoveredBookmarkBox = await albumBookmark.boundingBox();
-  expect(hoveredRatingBox).not.toBeNull();
-  expect(hoveredBookmarkBox).not.toBeNull();
-  expect(hoveredBookmarkBox!.y).toBeLessThan(hoveredRatingBox!.y);
+  await expect
+    .poll(async () => {
+      const [hoveredRatingBox, hoveredBookmarkBox] = await Promise.all([
+        savedAlbumRating.boundingBox(),
+        albumBookmark.boundingBox(),
+      ]);
+      if (!hoveredRatingBox || !hoveredBookmarkBox) return null;
+      return hoveredBookmarkBox.y < hoveredRatingBox.y;
+    })
+    .toBe(true);
   await savedAlbumRating.click();
   await page
     .getByRole("dialog", { name: "Изменить оценку" })
