@@ -1,6 +1,6 @@
 {
   "name": "harbor-player",
-  "version": "0.2.0",
+  "version": "0.2.1-beta.1",
   "description": "Desktop music library and player",
   "author": "grouzdev",
   "license": "GPL-3.0-only",
