@@ -112,7 +112,7 @@ function tagBytes(
   return Buffer.concat([head, body, audio]);
 }
 
-/** Replaces only the ID3 front-cover frame and preserves all other ID3 frames. */
+/** Replaces the ID3 front-cover frame; removing a cover clears all APIC images. */
 export async function writeMp3Cover(file: string, cover: CoverPatch | null) {
   const data = await readFile(file);
   const current = header(data);
@@ -122,8 +122,10 @@ export async function writeMp3Cover(file: string, cover: CoverPatch | null) {
     return;
   }
   const audio = data.subarray(HEADER_SIZE + current.size);
-  const frames = parseFrames(data, current).filter(
-    (frame) => apicType(frame, current.version) !== FRONT_COVER,
+  const frames = parseFrames(data, current).filter((frame) =>
+    cover === null
+      ? apicType(frame, current.version) === null
+      : apicType(frame, current.version) !== FRONT_COVER,
   );
   if (cover) frames.push(coverFrame(cover, current.version));
   await writeFile(

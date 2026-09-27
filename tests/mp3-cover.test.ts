@@ -378,7 +378,12 @@ describe("MP3 cover writer", () => {
 
     await writeTags(file, { cover: null });
     const afterRemove = frames(await readFile(file));
-    expect(afterRemove).toEqual(preserved);
+    expect(afterRemove).toEqual(
+      preserved.filter(
+        (entry) => entry.subarray(0, 4).toString("ascii") !== "APIC",
+      ),
+    );
+    expect(await audioDigest(file)).toBe(audio);
   });
 
   it("rejects an unsupported ID3 version without changing the file", async () => {
