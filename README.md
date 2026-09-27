@@ -70,7 +70,7 @@ git push origin main --tags
 
 ## Публикация signed stable
 
-Stable-тег имеет вид `vX.Y.Z` и запускает отдельный защищённый GitHub environment `stable`. Он доступен только после одобрения проекта SignPath Foundation и настройки переменных/секретов из [инструкции signing](docs/signpath-stable-release.md). Для владельца проекта есть [пошаговая инструкция](docs/what-to-do-next.md). В stable assets нет суффикса `unsigned`; Windows показывает издателя `SignPath Foundation`.
+Stable-тег имеет вид `vX.Y.Z` и запускает отдельный защищённый GitHub environment `stable`. Он доступен только после одобрения проекта SignPath Foundation и настройки переменных/секретов. Актуальные следующие шаги собраны в [backlog](docs/next-steps.md). В stable assets нет суффикса `unsigned`; Windows показывает издателя `SignPath Foundation`.
 
 Stable workflow сначала подписывает EXE/DLL в Electron bundle, затем NSIS installer и portable EXE. `latest.yml` создаётся после финальной подписи, поэтому updater получает хэш уже подписанного установщика. Если signing environment не настроен, workflow останавливается до публикации; используйте unsigned beta.
 
@@ -125,7 +125,7 @@ npm run benchmark
 - `src/client` — React, TanStack Query/Virtual, браузерный плеер.
 - `src/server` — Fastify, SQLite, очередь операций, два рабочих потока для тегов и хэширования, ограниченный клиент MusicBrainz/Cover Art Archive.
 - `src/shared/contracts.ts` — типы и схемы API.
-- `docs/ROADMAP.md` — этапы разработки, границы и ограничения.
+- `docs/next-steps.md` — актуальный backlog и условия первого signed stable.
 - `THIRD_PARTY_NOTICES.md` — сведения о стороннем коде.
 
 Поддержка macOS/Linux архитектурно предусмотрена; текущие проверки выполнены на Windows. AcoustID/Chromaprint, сетевой доступ к самой библиотеке и gapless в эту версию не входят. Windows desktop shell выпускается как NSIS installer и portable EXE. Работают beta updater и GitHub Actions release pipeline; stable workflow проверяет наличие signing secrets до сборки. Проверка на чистой VM и первый фактически подписанный stable-дистрибутив ещё не подтверждены.

@@ -1,53 +1,53 @@
 # Code signing policy
 
-## Подпись релизов
+## Release signing
 
-Бесплатная подпись кода предоставляется SignPath.io; сертификат выпущен на
-SignPath Foundation. Подписанными считаются только Windows-артефакты Harbor
-Player, опубликованные в GitHub Releases репозитория
-[`grouzdev/harbor-player`](https://github.com/grouzdev/harbor-player).
+Free code signing is provided by SignPath.io; the certificate is issued to
+SignPath Foundation. Only Harbor Player Windows artifacts published in GitHub
+Releases for the
+[`grouzdev/harbor-player`](https://github.com/grouzdev/harbor-player)
+repository are considered signed releases.
 
-Подписываются только воспроизводимые сборки GitHub Actions из stable-тегов
-`vX.Y.Z`. Запрос подписи требует ручного одобрения и ограничен этим
-репозиторием, его GitHub-hosted runners и утверждёнными конфигурациями
-артефактов.
+Only reproducible GitHub Actions builds from stable `vX.Y.Z` tags are signed.
+Each signing request requires manual approval and is restricted to this
+repository, its GitHub-hosted runners, and approved artifact configurations.
 
-Роли проекта:
+Project roles:
 
-- Автор и committer: владелец репозитория GitHub `grouzdev`.
-- Reviewer: `grouzdev` проверяет изменения от участников без прямого права
-  записи перед слиянием.
-- Approver: `grouzdev` проверяет commit и тег каждого release-запроса и
-  одобряет protected environment `stable` перед подписью.
+- Author and committer: the owner of the `grouzdev` GitHub repository.
+- Reviewer: `grouzdev` reviews changes from contributors without direct write
+  access before merging.
+- Approver: `grouzdev` reviews the commit and tag for every release request
+  and approves the protected `stable` environment before signing.
 
-Все участники с этими правами обязаны использовать многофакторную
-аутентификацию для GitHub и SignPath. Не подписываются сторонние исполняемые
-файлы, закрытые компоненты или артефакты, собранные вне разрешённого workflow.
+All people with these roles must use multi-factor authentication for GitHub and
+SignPath. Third-party executables, closed-source components, and artifacts
+built outside the approved workflow are not signed.
 
-## Конфиденциальность и сеть
+## Privacy and network access
 
-Harbor Player хранит каталог, журнал операций, обложки и recovery локально на
-компьютере пользователя. Приложение не передаёт их в облако.
+Harbor Player stores its catalog, operation log, artwork, and recovery data
+locally on the user's computer. The application does not send them to a cloud
+service.
 
-Установленная desktop-версия запрашивает GitHub Releases через 30 секунд после
-запуска и затем раз в шесть часов, чтобы проверить наличие обновления. Она
-передаёт GitHub обычные данные HTTPS-запроса, включая IP-адрес; загрузка
-установщика начинается только после нажатия пользователем кнопки «Скачать».
-Portable-версия не проверяет обновления в фоне и открывает страницу Releases
-только по явной команде пользователя.
+The installed desktop version checks GitHub Releases for updates 30 seconds
+after startup and then every six hours. It sends GitHub ordinary HTTPS request
+data, including the IP address; installer download starts only after the user
+selects the Download button. The portable version does not check for updates in
+the background and opens the Releases page only on explicit user request.
 
-Поиск MusicBrainz выполняется только после нажатия «Найти»: сервис получает
-введённые пользователем название и исполнителя. После выбора издания приложение
-может запросить его обложку в Cover Art Archive. Результаты кэшируются локально.
-Остальные работа с каталогом, воспроизведение, редактирование и файловые
-операции сети не требуют.
+MusicBrainz search runs only after the user selects Search: the service receives
+the title and artist entered by the user. After a release is selected, the
+application may request its artwork from Cover Art Archive. Results are cached
+locally. All other catalog work, playback, editing, and file operations require
+no network access.
 
-Политики внешних сервисов: [GitHub Privacy Statement](https://docs.github.com/site-policy/privacy-policies/github-privacy-statement),
-[MusicBrainz](https://musicbrainz.org/doc/MusicBrainz_API) и
+Third-party policies: [GitHub Privacy Statement](https://docs.github.com/site-policy/privacy-policies/github-privacy-statement),
+[MusicBrainz](https://musicbrainz.org/doc/MusicBrainz_API), and
 [Cover Art Archive](https://musicbrainz.org/doc/Cover_Art_Archive).
 
-## Изменения в системе и удаление
+## System changes and uninstallation
 
-NSIS installer устанавливает приложение только для текущего пользователя и
-создаёт ярлыки на рабочем столе и в меню «Пуск». Удаление доступно через
-стандартные средства Windows и не удаляет пользовательский каталог данных.
+The NSIS installer installs the application for the current user only and
+creates shortcuts on the desktop and in the Start menu. It can be uninstalled
+through standard Windows controls and does not remove the user's data directory.
