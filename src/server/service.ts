@@ -353,6 +353,11 @@ export class MusicService extends EventEmitter {
         this.scanner.scan(libraryId, job, force, () => this.publish(job)),
     );
   }
+  scanAll(force = false): Job[] {
+    return this.catalog
+      .libraries()
+      .map((library) => this.scan(library.id, force));
+  }
   async safePath(
     file: string,
     destination = false,

@@ -34,12 +34,10 @@ export class AutoScanScheduler {
   }
 
   private scanAll(): void {
-    for (const library of this.service.catalog.libraries()) {
-      try {
-        this.service.scan(library.id);
-      } catch {
-        // Shutdown rejects new jobs; the next start rebuilds the schedule.
-      }
+    try {
+      this.service.scanAll();
+    } catch {
+      // Shutdown rejects new jobs; the next start rebuilds the schedule.
     }
   }
 }

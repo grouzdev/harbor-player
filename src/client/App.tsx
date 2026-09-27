@@ -3209,6 +3209,11 @@ export function App() {
             onChange={updateAppearance}
             scanSettings={scanSettings}
             onScanSettingsChange={setScanSettings}
+            onScanAll={async (force) => {
+              await api<Job[]>("/libraries/scan", { force });
+              refresh();
+            }}
+            scanInProgress={activeJobs.some((job) => job.kind === "scan")}
             onClose={() => setModal(null)}
           />
         </Suspense>

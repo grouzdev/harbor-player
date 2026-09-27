@@ -111,3 +111,51 @@ test("keeps the dark theme and persists appearance settings", async ({
     }),
   ).toHaveAttribute("aria-checked", "true");
 });
+
+test("starts ordinary and full scans from settings", async ({ page }) => {
+  const requests: unknown[] = [];
+  await page.route("**/api/libraries/scan", async (route) => {
+    requests.push(route.request().postDataJSON());
+    await route.fulfill({ contentType: "application/json", body: "[]" });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Открыть настройки" }).click();
+  const dialog = page.getByRole("dialog", { name: /Настройки/ });
+
+  await dialog.getByRole("button", { name: "Быстрое сканирование" }).click();
+  await dialog.getByRole("button", { name: "Полное обновление" }).click();
+
+  await expect
+    .poll(() => requests)
+    .toEqual([{ force: false }, { force: true }]);
+});
+
+test("disables mass scan actions while a scan is active", async ({ page }) => {
+  await page.route("**/api/jobs", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: "active-scan",
+          kind: "scan",
+          label: "Сканирование: Музыка",
+          status: "running",
+          completed: 1,
+          total: 10,
+          errors: [],
+          createdAt: "2026-09-27T12:00:00.000Z",
+        },
+      ]),
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Открыть настройки" }).click();
+  const dialog = page.getByRole("dialog", { name: /Настройки/ });
+
+  await expect(
+    dialog.getByRole("button", { name: "Быстрое сканирование" }),
+  ).toBeDisabled();
+  await expect(
+    dialog.getByRole("button", { name: "Полное обновление" }),
+  ).toBeDisabled();
+});

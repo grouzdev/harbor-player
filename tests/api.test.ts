@@ -121,6 +121,34 @@ describe("HTTP boundary", () => {
       }),
     ).resolves.toMatchObject({ statusCode: 400 });
   });
+  it("starts scans in every library with the requested mode", async () => {
+    const session = await context.app.inject({
+      url: "/api/session",
+      headers: { host: "127.0.0.1:4317" },
+    });
+    const headers = {
+      host: "127.0.0.1:4317",
+      cookie: String(session.headers["set-cookie"]).split(";")[0],
+      "x-csrf-token": session.json().csrf,
+    };
+    const scanAll = vi.spyOn(context.service, "scanAll").mockReturnValue([]);
+
+    const response = await context.app.inject({
+      method: "POST",
+      url: "/api/libraries/scan",
+      headers,
+      payload: { force: true },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([]);
+    expect(scanAll).toHaveBeenCalledWith(true);
+    expect(
+      apiResponseContract("POST", "/api/libraries/scan")?.safeParse(
+        response.json(),
+      ).success,
+    ).toBe(true);
+  });
   it("manages recovery retention and reports the recovery size", async () => {
     const session = await context.app.inject({
       url: "/api/session",

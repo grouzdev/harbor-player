@@ -56,12 +56,16 @@ export function AppearanceSettingsDialog({
   onChange,
   scanSettings,
   onScanSettingsChange,
+  onScanAll,
+  scanInProgress,
   onClose,
 }: {
   settings: AppearanceSettings;
   onChange: (settings: AppearanceSettings) => void;
   scanSettings: ScanSettings;
   onScanSettingsChange: (settings: ScanSettings) => void;
+  onScanAll: (force: boolean) => Promise<void>;
+  scanInProgress: boolean;
   onClose: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -119,6 +123,17 @@ export function AppearanceSettingsDialog({
       onScanSettingsChange(
         await api<ScanSettings>("/scan-settings", { autoScanIntervalMinutes }),
       );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setScanBusy(false);
+    }
+  };
+  const scanAll = async (force: boolean) => {
+    setScanBusy(true);
+    setError("");
+    try {
+      await onScanAll(force);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -295,6 +310,24 @@ export function AppearanceSettingsDialog({
                 {minutes === 0 ? "Только вручную" : `Каждые ${minutes} мин.`}
               </button>
             ))}
+          </div>
+          <div className="appearance-actions">
+            <button
+              type="button"
+              className="button secondary"
+              disabled={scanBusy || scanInProgress}
+              onClick={() => void scanAll(false)}
+            >
+              <RefreshCw size={17} /> Быстрое сканирование
+            </button>
+            <button
+              type="button"
+              className="button secondary"
+              disabled={scanBusy || scanInProgress}
+              onClick={() => void scanAll(true)}
+            >
+              <RefreshCw size={17} /> Полное обновление
+            </button>
           </div>
         </div>
         <div className="appearance-section" aria-label="Резервные копии">

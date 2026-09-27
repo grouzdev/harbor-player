@@ -1,4 +1,12 @@
-import { beforeAll, beforeEach, afterEach, describe, expect, it } from "vitest";
+import {
+  beforeAll,
+  beforeEach,
+  afterEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import {
   mkdtemp,
   mkdir,
@@ -698,6 +706,31 @@ describe("catalog and safe filesystem operations", () => {
     await rename(lib.path + "-offline", lib.path);
     await service.refreshAvailability();
     expect(tracks()).toHaveLength(1);
+  });
+  it("scans every connected library without duplicating active jobs", async () => {
+    const first = await library("First");
+    const second = await library("Second");
+    const scan = vi.spyOn(service.scanner, "scan");
+
+    const jobs = service.scanAll(true);
+    const repeated = service.scanAll(true);
+    await service.idle();
+
+    expect(jobs).toHaveLength(2);
+    expect(repeated.map((job) => job.id)).toEqual(jobs.map((job) => job.id));
+    expect(scan).toHaveBeenCalledTimes(2);
+    expect(scan).toHaveBeenCalledWith(
+      first.id,
+      expect.anything(),
+      true,
+      expect.anything(),
+    );
+    expect(scan).toHaveBeenCalledWith(
+      second.id,
+      expect.anything(),
+      true,
+      expect.anything(),
+    );
   });
   it("retries metadata reads outside a worker when its result is unavailable", async () => {
     const lib = await library("Worker retry", "mp3");

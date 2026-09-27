@@ -337,6 +337,12 @@ export async function createApp(options: {
   app.post("/api/libraries/:id/remove", async (request) =>
     service.removeLibrary(idParam.parse(request.params).id),
   );
+  app.post("/api/libraries/scan", async (request) =>
+    service.scanAll(
+      z.object({ force: z.boolean().default(false) }).parse(request.body || {})
+        .force,
+    ),
+  );
   app.post("/api/libraries/:id/scan", async (request) =>
     service.scan(
       idParam.parse(request.params).id,

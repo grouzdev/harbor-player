@@ -228,6 +228,7 @@ export const apiResponseSchemas = {
   addLibrary: addLibraryResponseSchema,
   library: librarySchema,
   folders: z.array(libraryFolderSchema),
+  scanAll: z.array(jobSchema),
   bookmarks: z.array(bookmarkSchema),
   appearance: appearanceSchema,
   recovery: recoveryStatusSchema,
@@ -290,6 +291,7 @@ export function apiResponseContract(method: string, pathname: string) {
   if (/^\/api\/libraries\/[^/]+\/folders$/.test(pathname))
     return apiResponseSchemas.folders;
   if (/^\/api\/libraries\/[^/]+\/rename$/.test(pathname)) return librarySchema;
+  if (pathname === "/api/libraries/scan") return apiResponseSchemas.scanAll;
   if (/^\/api\/libraries\/[^/]+\/(remove|scan)$/.test(pathname))
     return jobSchema;
   if (pathname === "/api/bookmarks") return apiResponseSchemas.bookmarks;
