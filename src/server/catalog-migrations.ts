@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 
-export const catalogSchemaVersion = 7;
+export const catalogSchemaVersion = 8;
 
 export function runCatalogMigrations(db: Database.Database): void {
   db.exec(`
@@ -10,7 +10,7 @@ export function runCatalogMigrations(db: Database.Database): void {
       title TEXT NOT NULL, artists TEXT NOT NULL, albumTitle TEXT NOT NULL, albumArtists TEXT NOT NULL,
       albumKey TEXT NOT NULL, genres TEXT NOT NULL, year INTEGER, trackNumber INTEGER, discNumber INTEGER,
       duration REAL NOT NULL, format TEXT NOT NULL, size INTEGER NOT NULL, mtimeMs REAL NOT NULL,
-      coverId TEXT, available INTEGER NOT NULL DEFAULT 1, scanId TEXT, UNIQUE(libraryId, relativePath)
+      coverId TEXT, available INTEGER NOT NULL DEFAULT 1, scanId TEXT, firstIndexedAt TEXT, UNIQUE(libraryId, relativePath)
     );
     CREATE INDEX IF NOT EXISTS tracks_album ON tracks(albumKey);
     CREATE INDEX IF NOT EXISTS tracks_order ON tracks(albumTitle COLLATE NOCASE, albumKey, discNumber, trackNumber, relativePath);
@@ -110,4 +110,18 @@ export function runCatalogMigrations(db: Database.Database): void {
       `);
       db.pragma("user_version = 7");
     })();
+  if (version < 8)
+    db.transaction(() => {
+      const columns = new Set(
+        (db.pragma("table_info(tracks)") as { name: string }[]).map(
+          (column) => column.name,
+        ),
+      );
+      if (!columns.has("firstIndexedAt"))
+        db.exec("ALTER TABLE tracks ADD COLUMN firstIndexedAt TEXT");
+      db.pragma("user_version = 8");
+    })();
+  db.exec(
+    "CREATE INDEX IF NOT EXISTS tracks_first_indexed_at ON tracks(firstIndexedAt)",
+  );
 }

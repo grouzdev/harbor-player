@@ -125,7 +125,8 @@ export class Catalog {
       filter.genres.length > 0 ||
       filter.artists.length > 0 ||
       filter.albumIds.length > 0 ||
-      filter.bookmarksOnly;
+      filter.bookmarksOnly ||
+      filter.recentlyAddedOnly;
     const libraryMatch =
       search && !hasManualFilters
         ? "(search_key(l.name) LIKE ? ESCAPE '\\' OR search_key(l.path) LIKE ? ESCAPE '\\')"
@@ -608,6 +609,20 @@ export class Catalog {
           SELECT 1 FROM bookmarks b WHERE b.kind='artist' AND b.id=''
         ))
       )`);
+    }
+    if (filter.recentlyAddedOnly) {
+      const cutoff = new Date(
+        Date.now() - 30 * 24 * 60 * 60 * 1000,
+      ).toISOString();
+      if (personal === "album") {
+        clauses.push(`EXISTS (
+          SELECT 1 FROM tracks recent
+          WHERE recent.albumKey=t.albumKey
+            AND recent.available=1
+            AND recent.firstIndexedAt>=?
+        )`);
+      } else clauses.push("t.firstIndexedAt>=?");
+      args.push(cutoff);
     }
     if (personal === "album") {
       const min = filter.albumRatingMin ?? null;
@@ -1183,8 +1198,9 @@ export class Catalog {
   upsert(track: Track, scanId: string | null = null): void {
     this.db.transaction(() => {
       const previous = this.db
-        .prepare("SELECT albumKey FROM tracks WHERE id=?")
-        .get(track.id) as { albumKey: string } | undefined;
+        .prepare("SELECT albumKey,firstIndexedAt FROM tracks WHERE id=?")
+        .get(track.id) as
+        { albumKey: string; firstIndexedAt: string | null } | undefined;
       if (previous && previous.albumKey !== track.albumKey)
         this.db
           .prepare(
@@ -1197,8 +1213,8 @@ export class Catalog {
           .run(track.albumKey, previous.albumKey);
       this.db
         .prepare(
-          `INSERT INTO tracks (id,libraryId,relativePath,title,artists,albumTitle,albumArtists,albumKey,genres,year,trackNumber,discNumber,duration,format,size,mtimeMs,coverId,available,scanId,missingTagFields,musicBrainzRecordingId,musicBrainzReleaseId,musicBrainzReleaseGroupId)
-        VALUES (@id,@libraryId,@relativePath,@title,@artists,@albumTitle,@albumArtists,@albumKey,@genres,@year,@trackNumber,@discNumber,@duration,@format,@size,@mtimeMs,@coverId,@available,@scanId,@missingTagFields,@musicBrainzRecordingId,@musicBrainzReleaseId,@musicBrainzReleaseGroupId)
+          `INSERT INTO tracks (id,libraryId,relativePath,title,artists,albumTitle,albumArtists,albumKey,genres,year,trackNumber,discNumber,duration,format,size,mtimeMs,coverId,available,scanId,firstIndexedAt,missingTagFields,musicBrainzRecordingId,musicBrainzReleaseId,musicBrainzReleaseGroupId)
+        VALUES (@id,@libraryId,@relativePath,@title,@artists,@albumTitle,@albumArtists,@albumKey,@genres,@year,@trackNumber,@discNumber,@duration,@format,@size,@mtimeMs,@coverId,@available,@scanId,@firstIndexedAt,@missingTagFields,@musicBrainzRecordingId,@musicBrainzReleaseId,@musicBrainzReleaseGroupId)
         ON CONFLICT(id) DO UPDATE SET libraryId=excluded.libraryId, relativePath=excluded.relativePath, title=excluded.title,artists=excluded.artists,albumTitle=excluded.albumTitle,albumArtists=excluded.albumArtists,albumKey=excluded.albumKey,genres=excluded.genres,year=excluded.year,trackNumber=excluded.trackNumber,discNumber=excluded.discNumber,duration=excluded.duration,format=excluded.format,size=excluded.size,mtimeMs=excluded.mtimeMs,coverId=excluded.coverId,available=excluded.available,scanId=excluded.scanId,missingTagFields=excluded.missingTagFields,musicBrainzRecordingId=excluded.musicBrainzRecordingId,musicBrainzReleaseId=excluded.musicBrainzReleaseId,musicBrainzReleaseGroupId=excluded.musicBrainzReleaseGroupId`,
         )
         .run({
@@ -1212,6 +1228,9 @@ export class Catalog {
           musicBrainzReleaseGroupId: track.musicBrainzReleaseGroupId || null,
           available: Number(track.available),
           scanId,
+          firstIndexedAt: previous
+            ? previous.firstIndexedAt
+            : new Date().toISOString(),
         });
       this.db.prepare("DELETE FROM track_genres WHERE trackId=?").run(track.id);
       const insert = this.db.prepare(

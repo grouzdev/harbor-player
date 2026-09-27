@@ -90,6 +90,9 @@ test("catalog filters stay right of search in the requested order", async ({
   const bookmarks = page.getByRole("button", {
     name: "Показать музыку из закладок",
   });
+  const recentlyAdded = page.getByRole("button", {
+    name: "Только недавно добавленные",
+  });
   const unviewed = page.getByRole("button", { name: "Только непросмотренные" });
   const rating = page.getByRole("button", { name: "Фильтр по рейтингу" });
   const history = page.getByRole("button", { name: "Журнал операций" });
@@ -106,6 +109,7 @@ test("catalog filters stay right of search in the requested order", async ({
     filterBox,
     sectionButtonsBox,
     bookmarkBox,
+    recentlyAddedBox,
     unviewedBox,
     ratingBox,
     historyBox,
@@ -118,6 +122,7 @@ test("catalog filters stay right of search in the requested order", async ({
     filters.boundingBox(),
     sectionButtons.boundingBox(),
     bookmarks.boundingBox(),
+    recentlyAdded.boundingBox(),
     unviewed.boundingBox(),
     rating.boundingBox(),
     history.boundingBox(),
@@ -130,6 +135,7 @@ test("catalog filters stay right of search in the requested order", async ({
   expect(filterBox).not.toBeNull();
   expect(sectionButtonsBox).not.toBeNull();
   expect(bookmarkBox).not.toBeNull();
+  expect(recentlyAddedBox).not.toBeNull();
   expect(unviewedBox).not.toBeNull();
   expect(ratingBox).not.toBeNull();
   expect(historyBox).not.toBeNull();
@@ -140,7 +146,8 @@ test("catalog filters stay right of search in the requested order", async ({
   expect(bookmarkBox!.x).toBeGreaterThanOrEqual(
     searchBox!.x + searchBox!.width,
   );
-  expect(bookmarkBox!.x).toBeLessThan(unviewedBox!.x);
+  expect(bookmarkBox!.x).toBeLessThan(recentlyAddedBox!.x);
+  expect(recentlyAddedBox!.x).toBeLessThan(unviewedBox!.x);
   expect(unviewedBox!.x).toBeLessThan(ratingBox!.x);
   expect(ratingBox!.x).toBeLessThan(historyBox!.x);
   expect(historyBox!.x).toBeLessThan(settingsBox!.x);
@@ -164,7 +171,8 @@ test("catalog filters stay right of search in the requested order", async ({
     ).toBeCloseTo(7, 1);
   }
   for (const [left, right] of [
-    [bookmarkBox!, unviewedBox!],
+    [bookmarkBox!, recentlyAddedBox!],
+    [recentlyAddedBox!, unviewedBox!],
     [unviewedBox!, ratingBox!],
     [ratingBox!, historyBox!],
     [historyBox!, settingsBox!],
@@ -184,6 +192,8 @@ test("catalog filters stay right of search in the requested order", async ({
     topbarBox!.x + topbarBox!.width / 2,
     1,
   );
+  await recentlyAdded.click();
+  await expect(recentlyAdded).toHaveAttribute("aria-pressed", "true");
   await bookmarks.click();
   const activeBookmarks = page.getByRole("button", {
     name: "Отключить фильтр закладок",

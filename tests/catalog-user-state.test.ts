@@ -162,7 +162,7 @@ describe("catalog user state", () => {
     ).toEqual({ count: 0 });
   });
 
-  it("creates the v7 table for a v6 database and enforces constraints", () => {
+  it("migrates a v6 database through v8 and enforces state constraints", () => {
     catalog.close();
     const file = path.join(root, "catalog.sqlite");
     const db = new Database(file);
@@ -171,7 +171,7 @@ describe("catalog user state", () => {
     db.close();
     catalog = new Catalog(root);
     const migrated = (catalog as unknown as { db: Database.Database }).db;
-    expect(migrated.pragma("user_version", { simple: true })).toBe(7);
+    expect(migrated.pragma("user_version", { simple: true })).toBe(8);
     expect(() =>
       migrated
         .prepare("INSERT INTO catalog_user_state VALUES ('track','x',6,0)")

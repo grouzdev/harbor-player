@@ -6,7 +6,7 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
-import { Eye, Star, StarOff } from "lucide-react";
+import { Clock3, Eye, Star, StarOff } from "lucide-react";
 import type { CatalogFilter } from "../shared/contracts";
 import { RangeSlider } from "./RangeSlider";
 
@@ -191,6 +191,7 @@ export function CatalogUserFilters({
       withSharedRatingRange(current, nextMinimum, nextMaximum),
     );
   const unviewedOnly = filter.albumViewed === "unviewed";
+  const recentlyAddedOnly = filter.recentlyAddedOnly;
   const ratingFilterActive = minimum !== 0 || maximum !== 5;
   const closeRating = () => {
     setRatingOpen(false);
@@ -198,6 +199,22 @@ export function CatalogUserFilters({
   };
   return (
     <div className="catalog-user-filters" aria-label="Фильтры каталога">
+      <button
+        type="button"
+        className={`icon-button catalog-filter-button ${recentlyAddedOnly ? "active" : ""}`}
+        aria-label="Только недавно добавленные"
+        aria-pressed={recentlyAddedOnly}
+        title="Только добавленные за последние 30 дней"
+        disabled={disabled}
+        onClick={() =>
+          onChange((current) => ({
+            ...current,
+            recentlyAddedOnly: !current.recentlyAddedOnly,
+          }))
+        }
+      >
+        <Clock3 size={19} aria-hidden="true" />
+      </button>
       <button
         type="button"
         className={`icon-button catalog-filter-button ${unviewedOnly ? "active" : ""}`}
