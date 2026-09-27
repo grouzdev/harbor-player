@@ -1510,8 +1510,6 @@ export class MusicService extends EventEmitter {
       const template = this.catalog.pathTemplate(settings.templateId);
       const resolved = this.catalog.playlistTracks(playlistId, 0, 100000);
       const available = resolved.items.filter((item) => item.track.available);
-      job.total = available.length;
-      this.publish(job);
       const oldManifest = this.catalog.playlistSyncManifest(
         playlistId,
         targetPath,
@@ -1526,8 +1524,7 @@ export class MusicService extends EventEmitter {
       for (const { track } of available) {
         const relativePath = renderTrackPath(template, track);
         const key = this.normalizedFileKey(relativePath);
-        if (desired.has(key))
-          throw conflict(`Шаблон создаёт одинаковый путь: ${relativePath}`);
+        if (desired.has(key)) continue;
         desired.set(key, { relativePath, track });
         const destination = path.join(targetPath, relativePath);
         if (!inside(targetPath, destination))
@@ -1535,6 +1532,9 @@ export class MusicService extends EventEmitter {
         if ((await exists(destination)) && !oldByPath.has(key))
           throw conflict(`В папке уже есть чужой файл: ${relativePath}`);
       }
+      const skippedCollisions = available.length - desired.size;
+      job.total = desired.size;
+      this.publish(job);
       const nextManifest = [...oldManifest];
       for (const { relativePath, track } of desired.values()) {
         const source = path.join(
@@ -1628,11 +1628,19 @@ export class MusicService extends EventEmitter {
           nextManifest as Parameters<Catalog["replacePlaylistSyncManifest"]>[2],
         );
       }
+      const warningParts = [
+        resolved.unavailableCount
+          ? `недоступных: ${resolved.unavailableCount}`
+          : null,
+        skippedCollisions
+          ? `из-за совпадений путей: ${skippedCollisions}`
+          : null,
+      ].filter((value): value is string => value !== null);
       this.catalog.updatePlaylistSyncSettings(playlistId, {
-        state: resolved.unavailableCount ? "warning" : "synced",
+        state: warningParts.length ? "warning" : "synced",
         lastSyncedAt: new Date().toISOString(),
-        message: resolved.unavailableCount
-          ? `Синхронизировано, пропущено недоступных: ${resolved.unavailableCount}`
+        message: warningParts.length
+          ? `Синхронизировано, пропущено ${warningParts.join(", ")}`
           : "Синхронизировано",
       });
     } catch (error) {

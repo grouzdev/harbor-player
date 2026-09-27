@@ -100,4 +100,80 @@ describe("playlist folder sync", () => {
     expect(job.status).toBe("error");
     expect(job.errors.join(" ")).toContain("не должна пересекаться");
   });
+
+  it("keeps the first track when the template produces duplicate paths", async () => {
+    const sourceRoot = path.join(root, "music");
+    const firstSource = path.join(sourceRoot, "Disc 1", "01 - Song.mp3");
+    const secondSource = path.join(sourceRoot, "Disc 2", "01 - Song.mp3");
+    await mkdir(path.dirname(firstSource), { recursive: true });
+    await mkdir(path.dirname(secondSource), { recursive: true });
+    await writeFile(firstSource, "first");
+    await writeFile(secondSource, "second");
+    const library = service.catalog.addLibrary("Music", sourceRoot);
+    const sourceStat = await stat(firstSource);
+    const secondSourceStat = await stat(secondSource);
+    const common = {
+      libraryId: library.id,
+      artists: ["Artist"],
+      albumTitle: "Album",
+      albumArtists: ["Artist"],
+      albumKey: "album",
+      rating: null,
+      albumRating: null,
+      albumViewed: false,
+      genres: [],
+      year: null,
+      trackNumber: 1,
+      discNumber: null,
+      duration: 1,
+      format: "mp3",
+      coverId: null,
+      available: true,
+    } satisfies Omit<
+      Track,
+      "id" | "relativePath" | "title" | "size" | "mtimeMs"
+    >;
+    const firstTrack: Track = {
+      ...common,
+      id: "first",
+      relativePath: path.relative(sourceRoot, firstSource),
+      title: "Song",
+      size: sourceStat.size,
+      mtimeMs: sourceStat.mtimeMs,
+    };
+    const secondTrack: Track = {
+      ...common,
+      id: "second",
+      relativePath: path.relative(sourceRoot, secondSource),
+      title: "Song",
+      size: secondSourceStat.size,
+      mtimeMs: secondSourceStat.mtimeMs,
+    };
+    service.catalog.upsert(firstTrack);
+    service.catalog.upsert(secondTrack);
+    const playlist = service.catalog.createPlaylist("Device").playlist;
+    service.catalog.addPlaylistEntries(playlist.id, "track", [
+      firstTrack.id,
+      secondTrack.id,
+    ]);
+    const target = path.join(root, "device");
+    service.updatePlaylistSyncSettings(playlist.id, {
+      targetPath: target,
+      templateId: "default-album-artist",
+      autoSync: false,
+    });
+
+    const job = service.syncPlaylist(playlist.id);
+    await service.idle();
+
+    expect(job.status).toBe("done");
+    expect(job.total).toBe(1);
+    await expect(
+      readFile(path.join(target, "Artist", "Album", "01 - Song.mp3"), "utf8"),
+    ).resolves.toBe("first");
+    expect(service.catalog.playlistSyncSettings(playlist.id)).toMatchObject({
+      state: "warning",
+      message: "Синхронизировано, пропущено из-за совпадений путей: 1",
+    });
+  });
 });
