@@ -1,5 +1,14 @@
 import type { HTMLAttributes, ReactNode, RefObject } from "react";
-import { ChevronRight, Play, Plus, RefreshCw, X } from "lucide-react";
+import {
+  ChevronRight,
+  ListMusic,
+  Play,
+  Plus,
+  RefreshCw,
+  Upload,
+  X,
+} from "lucide-react";
+import type { Playlist } from "../shared/playlists";
 import type {
   CatalogFilter,
   FacetRelevance,
@@ -28,6 +37,11 @@ type LibraryPanelProps = {
   onSelect: (event: React.MouseEvent, key: string) => void;
   onContextMenu: (event: React.MouseEvent, library: Library) => void;
   onAdd: () => void;
+  playlists: Playlist[];
+  activePlaylistId: string | null;
+  onSelectPlaylist: (id: string) => void;
+  onCreatePlaylist: () => void;
+  onImportPlaylist: () => void;
 };
 
 export function LibraryPanel({
@@ -48,6 +62,11 @@ export function LibraryPanel({
   onSelect,
   onContextMenu,
   onAdd,
+  playlists,
+  activePlaylistId,
+  onSelectPlaylist,
+  onCreatePlaylist,
+  onImportPlaylist,
 }: LibraryPanelProps) {
   return (
     <aside className="panel libraries-panel" data-panel-id="libraries">
@@ -66,6 +85,7 @@ export function LibraryPanel({
         ref={listRef}
         {...surfaceProps}
       >
+        <div className="library-section-heading">БИБЛИОТЕКИ</div>
         {libraries.map((library) => {
           const expanded = expandedLibraryIds.has(library.id);
           const selectionKey = librarySelectionKey(library.id);
@@ -114,12 +134,34 @@ export function LibraryPanel({
             </div>
           );
         })}
+        <button className="add-library inline" onClick={onAdd}>
+          <Plus size={16} />
+          Подключить папку
+        </button>
+        <div className="library-section-heading playlist-section-heading">
+          ПЛЕЙЛИСТЫ
+        </div>
+        {playlists.map((playlist) => (
+          <ListTile
+            key={playlist.id}
+            value={playlist.name}
+            prefix={<ListMusic size={14} />}
+            suffix={count(playlist.trackCount)}
+            selected={activePlaylistId === playlist.id}
+            className="playlist-library-tile"
+            onSelect={() => onSelectPlaylist(playlist.id)}
+          />
+        ))}
+        <button className="playlist-action inline" onClick={onCreatePlaylist}>
+          <Plus size={16} />
+          Создать плейлист
+        </button>
+        <button className="playlist-action inline" onClick={onImportPlaylist}>
+          <Upload size={15} />
+          Импортировать
+        </button>
         {marquee}
       </div>
-      <button className="add-library" onClick={onAdd}>
-        <Plus size={16} />
-        Подключить папку
-      </button>
       {activeJobs.length > 0 && (
         <div className="sidebar-bottom">
           {activeJobs.slice(0, 3).map((job) => (

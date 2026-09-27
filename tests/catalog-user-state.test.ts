@@ -171,7 +171,7 @@ describe("catalog user state", () => {
     db.close();
     catalog = new Catalog(root);
     const migrated = (catalog as unknown as { db: Database.Database }).db;
-    expect(migrated.pragma("user_version", { simple: true })).toBe(8);
+    expect(migrated.pragma("user_version", { simple: true })).toBe(9);
     expect(() =>
       migrated
         .prepare("INSERT INTO catalog_user_state VALUES ('track','x',6,0)")

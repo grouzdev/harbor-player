@@ -13,6 +13,14 @@ import {
 } from "./contracts.js";
 import { scanSettingsSchema } from "./scan-settings.js";
 import { recoveryStatusSchema } from "./recovery-settings.js";
+import {
+  pathTemplateSchema,
+  playlistDetailSchema,
+  playlistImportPreviewSchema,
+  playlistSchema,
+  playlistSyncSettingsSchema,
+  playlistTrackPageSchema,
+} from "./playlists.js";
 
 const stringArray = z.array(z.string());
 
@@ -279,6 +287,18 @@ export const apiResponseSchemas = {
   }),
   metadataProposal: metadataProposalSchema,
   operations: z.array(operationSummarySchema),
+  playlists: z.array(playlistSchema),
+  playlist: playlistDetailSchema,
+  playlistTracks: playlistTrackPageSchema,
+  pathTemplates: z.array(pathTemplateSchema),
+  pathTemplate: pathTemplateSchema,
+  playlistSync: playlistSyncSettingsSchema,
+  playlistImportPreview: playlistImportPreviewSchema,
+  playlistExport: z.object({
+    ok: z.literal(true),
+    written: z.number().int().nonnegative(),
+    skipped: z.number().int().nonnegative(),
+  }),
 } as const;
 
 /** Returns the JSON contract for a successful client API response. */
@@ -327,6 +347,35 @@ export function apiResponseContract(method: string, pathname: string) {
   if (pathname === "/api/metadata/musicbrainz/proposal")
     return apiResponseSchemas.metadataProposal;
   if (pathname === "/api/operations") return apiResponseSchemas.operations;
+  if (pathname === "/api/playlists")
+    return method === "GET"
+      ? apiResponseSchemas.playlists
+      : apiResponseSchemas.playlist;
+  if (/^\/api\/playlists\/[^/]+\/tracks$/.test(pathname))
+    return apiResponseSchemas.playlistTracks;
+  if (/^\/api\/playlists\/[^/]+\/sync$/.test(pathname))
+    return method === "GET" ? apiResponseSchemas.playlistSync : z.unknown();
+  if (/^\/api\/playlists\/[^/]+\/sync\/settings$/.test(pathname))
+    return apiResponseSchemas.playlistSync;
+  if (/^\/api\/playlists\/[^/]+\/export$/.test(pathname))
+    return apiResponseSchemas.playlistExport;
+  if (/^\/api\/playlists\/[^/]+\/(entries|reorder)$/.test(pathname))
+    return apiResponseSchemas.playlist;
+  if (/^\/api\/playlists\/[^/]+\/entries\/[^/]+\/(materialize)$/.test(pathname))
+    return apiResponseSchemas.playlist;
+  if (/^\/api\/playlists\/[^/]+\/entries\/[^/]+$/.test(pathname))
+    return apiResponseSchemas.playlist;
+  if (/^\/api\/playlists\/[^/]+$/.test(pathname))
+    return method === "DELETE" ? okSchema : apiResponseSchemas.playlist;
+  if (pathname === "/api/playlist-import/preview")
+    return apiResponseSchemas.playlistImportPreview;
+  if (pathname === "/api/playlist-import") return apiResponseSchemas.playlist;
+  if (pathname === "/api/path-templates")
+    return method === "GET"
+      ? apiResponseSchemas.pathTemplates
+      : apiResponseSchemas.pathTemplate;
+  if (/^\/api\/path-templates\/[^/]+$/.test(pathname))
+    return method === "DELETE" ? okSchema : apiResponseSchemas.pathTemplate;
   if (pathname === "/api/operations/history") return maintenanceResultSchema;
   if (/^\/api\/operations\/[^/]+\/(execute|retry|restore)$/.test(pathname))
     return z.unknown();

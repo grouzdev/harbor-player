@@ -8,6 +8,12 @@ export interface DesktopBridge {
   installUpdate(): Promise<void>;
   chooseImageFile(): Promise<string | null>;
   chooseLibraryDirectory(): Promise<string | null>;
+  choosePlaylistFile(): Promise<string | null>;
+  choosePlaylistDirectory(): Promise<string | null>;
+  choosePlaylistExportFile(
+    name: string,
+    format: "m3u8" | "xspf",
+  ): Promise<string | null>;
   reportClientReady(): Promise<void>;
   subscribeUpdateState(listener: (state: UpdateState) => void): () => void;
   getWindowFullscreen(): Promise<boolean>;

@@ -35,6 +35,20 @@ import { conflict, notFound } from "./http-error.js";
 import { runCatalogMigrations } from "./catalog-migrations.js";
 import { albumIdentityKey } from "./album-identity.js";
 import { normalizedAlbumFolder } from "./album-identity.js";
+import {
+  pathTemplateSchema,
+  playlistSnapshotSchema,
+  type PathTemplate,
+  type Playlist,
+  type PlaylistDetail,
+  type PlaylistEntry,
+  type PlaylistEntryKind,
+  type PlaylistOrderMode,
+  type PlaylistSnapshot,
+  type PlaylistSyncSettings,
+  type PlaylistTrackPage,
+  type ResolvedPlaylistTrack,
+} from "../shared/playlists.js";
 
 type Row = Record<string, any>;
 const checkedFolderPath = (relativePath: string) => {
@@ -72,6 +86,32 @@ const parseStoredJson = (payload: string): unknown => {
   }
 };
 const searchKey = (value: string) => value.normalize("NFC").toLowerCase();
+
+type StoredPlaylistEntry = {
+  id: string;
+  playlistId: string;
+  kind: PlaylistEntryKind;
+  targetId: string;
+  position: number;
+  snapshot: string;
+};
+
+const playlistArtist = (track: Track) =>
+  (track.albumArtists.length ? track.albumArtists : track.artists).join(", ");
+
+const comparePlaylistTracks = (left: Track, right: Track) => {
+  const text = (a: string, b: string) =>
+    a.localeCompare(b, "ru", { sensitivity: "base", numeric: true });
+  return (
+    text(playlistArtist(left), playlistArtist(right)) ||
+    text(left.albumTitle, right.albumTitle) ||
+    (left.discNumber ?? 1) - (right.discNumber ?? 1) ||
+    (left.trackNumber == null ? 1 : 0) - (right.trackNumber == null ? 1 : 0) ||
+    (left.trackNumber ?? 0) - (right.trackNumber ?? 0) ||
+    text(left.title, right.title) ||
+    text(left.relativePath, right.relativePath)
+  );
+};
 
 export class Catalog {
   private readonly db: Database.Database;
@@ -1201,7 +1241,7 @@ export class Catalog {
         .prepare("SELECT albumKey,firstIndexedAt FROM tracks WHERE id=?")
         .get(track.id) as
         { albumKey: string; firstIndexedAt: string | null } | undefined;
-      if (previous && previous.albumKey !== track.albumKey)
+      if (previous && previous.albumKey !== track.albumKey) {
         this.db
           .prepare(
             `
@@ -1211,6 +1251,12 @@ export class Catalog {
           `,
           )
           .run(track.albumKey, previous.albumKey);
+        this.db
+          .prepare(
+            "UPDATE playlist_entries SET targetId=? WHERE kind='album' AND targetId=?",
+          )
+          .run(track.albumKey, previous.albumKey);
+      }
       this.db
         .prepare(
           `INSERT INTO tracks (id,libraryId,relativePath,title,artists,albumTitle,albumArtists,albumKey,genres,year,trackNumber,discNumber,duration,format,size,mtimeMs,coverId,available,scanId,firstIndexedAt,missingTagFields,musicBrainzRecordingId,musicBrainzReleaseId,musicBrainzReleaseGroupId)
@@ -1351,6 +1397,522 @@ export class Catalog {
       .map((r) => jobSchema.safeParse(parseStoredJson(r.payload)))
       .filter((result) => result.success)
       .map((result) => result.data);
+  }
+  private storedPlaylist(id: string): Row {
+    const row = this.db
+      .prepare("SELECT * FROM playlists WHERE id=?")
+      .get(id) as Row | undefined;
+    if (!row) throw notFound("Плейлист не найден");
+    return row;
+  }
+  private playlistEntryRows(playlistId: string): StoredPlaylistEntry[] {
+    return this.db
+      .prepare(
+        "SELECT * FROM playlist_entries WHERE playlistId=? ORDER BY position,id",
+      )
+      .all(playlistId) as StoredPlaylistEntry[];
+  }
+  private tracksForPlaylistEntry(entry: StoredPlaylistEntry): Track[] {
+    let condition = "t.id=?";
+    if (entry.kind === "album") condition = "t.albumKey=?";
+    else if (entry.kind === "artist")
+      condition = `EXISTS (
+        SELECT 1 FROM track_album_artists a
+        WHERE a.trackId=t.id AND a.artist=?
+      )`;
+    const rows = this.db
+      .prepare(
+        `SELECT t.*, trackState.rating rating, albumState.rating albumRating,
+                coalesce(albumState.viewed,0) albumViewed
+         FROM tracks t
+         LEFT JOIN catalog_user_state trackState ON trackState.kind='track' AND trackState.id=t.id
+         LEFT JOIN catalog_user_state albumState ON albumState.kind='album' AND albumState.id=t.albumKey
+         WHERE ${condition}`,
+      )
+      .all(entry.targetId) as Row[];
+    return rows.map(fromRow).sort(comparePlaylistTracks);
+  }
+  private resolvePlaylistRows(playlistId: string): {
+    tracks: ResolvedPlaylistTrack[];
+    entries: PlaylistEntry[];
+    unavailableCount: number;
+  } {
+    const playlist = this.storedPlaylist(playlistId);
+    const seen = new Set<string>();
+    const tracks: ResolvedPlaylistTrack[] = [];
+    const entries: PlaylistEntry[] = [];
+    let unavailableCount = 0;
+    for (const entry of this.playlistEntryRows(playlistId)) {
+      const raw = this.tracksForPlaylistEntry(entry);
+      let duplicateCount = 0;
+      let entryUnavailable = 0;
+      for (const track of raw) {
+        if (seen.has(track.id)) {
+          duplicateCount++;
+          continue;
+        }
+        seen.add(track.id);
+        if (!track.available) {
+          entryUnavailable++;
+          unavailableCount++;
+        }
+        tracks.push({ position: tracks.length, entryId: entry.id, track });
+      }
+      if (!raw.length) {
+        entryUnavailable = 1;
+        unavailableCount++;
+      }
+      const snapshot = playlistSnapshotSchema.parse(
+        parseStoredJson(entry.snapshot),
+      );
+      entries.push({
+        ...entry,
+        snapshot,
+        resolvedCount: raw.length - duplicateCount,
+        duplicateCount,
+        unavailableCount: entryUnavailable,
+      });
+    }
+    if (playlist.orderMode === "catalog")
+      tracks.sort((left, right) =>
+        comparePlaylistTracks(left.track, right.track),
+      );
+    tracks.forEach((item, position) => (item.position = position));
+    return { tracks, entries, unavailableCount };
+  }
+  private playlistFromRow(row: Row): Playlist {
+    const resolved = this.resolvePlaylistRows(row.id);
+    return {
+      id: row.id,
+      name: row.name,
+      orderMode: row.orderMode,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      entryCount: resolved.entries.length,
+      trackCount: resolved.tracks.length,
+      unavailableCount: resolved.unavailableCount,
+    };
+  }
+  playlists(): Playlist[] {
+    return (
+      this.db
+        .prepare("SELECT * FROM playlists ORDER BY name COLLATE NOCASE,id")
+        .all() as Row[]
+    ).map((row) => this.playlistFromRow(row));
+  }
+  playlist(id: string): PlaylistDetail {
+    const row = this.storedPlaylist(id);
+    const resolved = this.resolvePlaylistRows(id);
+    return { playlist: this.playlistFromRow(row), entries: resolved.entries };
+  }
+  createPlaylist(name: string): PlaylistDetail {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    try {
+      this.db.transaction(() => {
+        this.db
+          .prepare("INSERT INTO playlists VALUES (?,?,?,?,?)")
+          .run(id, name, "manual", now, now);
+        this.db
+          .prepare(
+            `INSERT INTO playlist_sync_settings
+             (playlistId,targetPath,templateId,autoSync,state,lastSyncedAt,message)
+             VALUES (?,NULL,'default-album-artist',0,'idle',NULL,'')`,
+          )
+          .run(id);
+      })();
+    } catch (error) {
+      if (String(error).includes("UNIQUE"))
+        throw conflict("Плейлист с таким названием уже существует");
+      throw error;
+    }
+    return this.playlist(id);
+  }
+  updatePlaylist(
+    id: string,
+    patch: { name?: string; orderMode?: PlaylistOrderMode },
+  ): PlaylistDetail {
+    const current = this.storedPlaylist(id);
+    const name = patch.name ?? current.name;
+    const orderMode = patch.orderMode ?? current.orderMode;
+    try {
+      this.db
+        .prepare(
+          "UPDATE playlists SET name=?,orderMode=?,updatedAt=? WHERE id=?",
+        )
+        .run(name, orderMode, new Date().toISOString(), id);
+    } catch (error) {
+      if (String(error).includes("UNIQUE"))
+        throw conflict("Плейлист с таким названием уже существует");
+      throw error;
+    }
+    return this.playlist(id);
+  }
+  deletePlaylist(id: string): void {
+    this.storedPlaylist(id);
+    this.db.prepare("DELETE FROM playlists WHERE id=?").run(id);
+  }
+  private snapshotForPlaylistEntry(
+    kind: PlaylistEntryKind,
+    targetId: string,
+  ): PlaylistSnapshot {
+    if (kind === "artist")
+      return {
+        title: targetId || "Неизвестный исполнитель",
+        subtitle: "Исполнитель",
+        coverId: null,
+      };
+    const track =
+      kind === "track"
+        ? this.track(targetId)
+        : this.firstAnyAlbumTrack(targetId);
+    if (!track)
+      throw notFound(kind === "track" ? "Трек не найден" : "Альбом не найден");
+    return kind === "track"
+      ? {
+          title: track.title || "Без названия",
+          subtitle: `${playlistArtist(track)} · ${track.albumTitle || "Без альбома"}`,
+          coverId: track.coverId,
+        }
+      : {
+          title: track.albumTitle || "Без альбома",
+          subtitle: playlistArtist(track),
+          coverId: track.coverId,
+        };
+  }
+  private firstAnyAlbumTrack(albumId: string): Track | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT t.*, trackState.rating rating, albumState.rating albumRating,
+                coalesce(albumState.viewed,0) albumViewed
+         FROM tracks t
+         LEFT JOIN catalog_user_state trackState ON trackState.kind='track' AND trackState.id=t.id
+         LEFT JOIN catalog_user_state albumState ON albumState.kind='album' AND albumState.id=t.albumKey
+         WHERE t.albumKey=? ORDER BY coalesce(t.discNumber,0),coalesce(t.trackNumber,0),t.relativePath LIMIT 1`,
+      )
+      .get(albumId) as Row | undefined;
+    return row ? fromRow(row) : undefined;
+  }
+  addPlaylistEntries(
+    playlistId: string,
+    kind: PlaylistEntryKind,
+    targetIds: string[],
+  ): PlaylistDetail {
+    this.storedPlaylist(playlistId);
+    const existing = new Set(
+      this.playlistEntryRows(playlistId)
+        .filter((entry) => entry.kind === kind)
+        .map((entry) => entry.targetId),
+    );
+    const nextTargets = [...new Set(targetIds)].filter(
+      (id) => !existing.has(id),
+    );
+    const snapshots = nextTargets.map((id) => ({
+      id,
+      snapshot: this.snapshotForPlaylistEntry(kind, id),
+    }));
+    const start = this.playlistEntryRows(playlistId).length;
+    this.db.transaction(() => {
+      const insert = this.db.prepare(
+        "INSERT INTO playlist_entries VALUES (?,?,?,?,?,?)",
+      );
+      snapshots.forEach((item, index) =>
+        insert.run(
+          randomUUID(),
+          playlistId,
+          kind,
+          item.id,
+          start + index,
+          JSON.stringify(item.snapshot),
+        ),
+      );
+      this.db
+        .prepare("UPDATE playlists SET updatedAt=? WHERE id=?")
+        .run(new Date().toISOString(), playlistId);
+    })();
+    return this.playlist(playlistId);
+  }
+  removePlaylistEntry(playlistId: string, entryId: string): PlaylistDetail {
+    this.storedPlaylist(playlistId);
+    const result = this.db
+      .prepare("DELETE FROM playlist_entries WHERE playlistId=? AND id=?")
+      .run(playlistId, entryId);
+    if (!result.changes) throw notFound("Элемент плейлиста не найден");
+    this.normalizePlaylistPositions(playlistId);
+    return this.playlist(playlistId);
+  }
+  reorderPlaylistEntries(
+    playlistId: string,
+    entryIds: string[],
+  ): PlaylistDetail {
+    const current = this.playlistEntryRows(playlistId).map((entry) => entry.id);
+    if (
+      current.length !== entryIds.length ||
+      new Set(entryIds).size !== entryIds.length ||
+      current.some((id) => !entryIds.includes(id))
+    )
+      throw conflict("Состав плейлиста изменился. Обновите список.");
+    this.db.transaction(() => {
+      const update = this.db.prepare(
+        "UPDATE playlist_entries SET position=? WHERE playlistId=? AND id=?",
+      );
+      entryIds.forEach((id, position) => update.run(position, playlistId, id));
+      this.db
+        .prepare("UPDATE playlists SET updatedAt=? WHERE id=?")
+        .run(new Date().toISOString(), playlistId);
+    })();
+    return this.playlist(playlistId);
+  }
+  materializePlaylistEntry(
+    playlistId: string,
+    entryId: string,
+  ): PlaylistDetail {
+    const rows = this.playlistEntryRows(playlistId);
+    const entry = rows.find((item) => item.id === entryId);
+    if (!entry) throw notFound("Элемент плейлиста не найден");
+    if (entry.kind === "track") return this.playlist(playlistId);
+    const effective = this.resolvePlaylistRows(playlistId).tracks.filter(
+      (item) => item.entryId === entryId,
+    );
+    this.db.transaction(() => {
+      this.db.prepare("DELETE FROM playlist_entries WHERE id=?").run(entryId);
+      const shift = effective.length - 1;
+      if (shift)
+        this.db
+          .prepare(
+            "UPDATE playlist_entries SET position=position+? WHERE playlistId=? AND position>?",
+          )
+          .run(shift, playlistId, entry.position);
+      const insert = this.db.prepare(
+        "INSERT INTO playlist_entries VALUES (?,?,?,?,?,?)",
+      );
+      effective.forEach((item, index) =>
+        insert.run(
+          randomUUID(),
+          playlistId,
+          "track",
+          item.track.id,
+          entry.position + index,
+          JSON.stringify(this.snapshotForPlaylistEntry("track", item.track.id)),
+        ),
+      );
+      this.db
+        .prepare("UPDATE playlists SET updatedAt=? WHERE id=?")
+        .run(new Date().toISOString(), playlistId);
+    })();
+    this.normalizePlaylistPositions(playlistId);
+    return this.playlist(playlistId);
+  }
+  private normalizePlaylistPositions(playlistId: string): void {
+    const ids = this.playlistEntryRows(playlistId).map((entry) => entry.id);
+    this.db.transaction(() => {
+      const update = this.db.prepare(
+        "UPDATE playlist_entries SET position=? WHERE id=?",
+      );
+      ids.forEach((id, index) => update.run(index, id));
+      this.db
+        .prepare("UPDATE playlists SET updatedAt=? WHERE id=?")
+        .run(new Date().toISOString(), playlistId);
+    })();
+  }
+  playlistTracks(
+    playlistId: string,
+    offset = 0,
+    limit = 200,
+  ): PlaylistTrackPage {
+    const resolved = this.resolvePlaylistRows(playlistId);
+    return {
+      items: resolved.tracks.slice(offset, offset + limit),
+      total: resolved.tracks.length,
+      offset,
+      unavailableCount: resolved.unavailableCount,
+      totalDuration: resolved.tracks.reduce(
+        (sum, item) => sum + item.track.duration,
+        0,
+      ),
+    };
+  }
+  playlistTrackIds(playlistId: string): string[] {
+    return this.resolvePlaylistRows(playlistId)
+      .tracks.filter((item) => item.track.available)
+      .map((item) => item.track.id);
+  }
+  knownTracks(): Track[] {
+    const rows = this.db
+      .prepare(
+        `SELECT t.*, trackState.rating rating, albumState.rating albumRating,
+                coalesce(albumState.viewed,0) albumViewed
+         FROM tracks t
+         LEFT JOIN catalog_user_state trackState ON trackState.kind='track' AND trackState.id=t.id
+         LEFT JOIN catalog_user_state albumState ON albumState.kind='album' AND albumState.id=t.albumKey`,
+      )
+      .all() as Row[];
+    return rows.map(fromRow);
+  }
+  pathTemplates(): PathTemplate[] {
+    return (
+      this.db
+        .prepare("SELECT * FROM path_templates ORDER BY name COLLATE NOCASE,id")
+        .all() as Row[]
+    ).map((row) =>
+      pathTemplateSchema.parse({
+        id: row.id,
+        name: row.name,
+        ...(parseStoredJson(row.payload) as object),
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      }),
+    );
+  }
+  pathTemplate(id: string): PathTemplate {
+    const template = this.pathTemplates().find((item) => item.id === id);
+    if (!template) throw notFound("Шаблон путей не найден");
+    return template;
+  }
+  savePathTemplate(
+    value: Omit<PathTemplate, "id" | "createdAt" | "updatedAt"> & {
+      id?: string;
+    },
+  ): PathTemplate {
+    const current = value.id
+      ? this.pathTemplates().find((item) => item.id === value.id)
+      : undefined;
+    const id = current?.id || randomUUID();
+    const now = new Date().toISOString();
+    const payload = JSON.stringify({
+      directories: value.directories,
+      fileName: value.fileName,
+    });
+    try {
+      this.db
+        .prepare(
+          `INSERT INTO path_templates(id,name,payload,createdAt,updatedAt) VALUES (?,?,?,?,?)
+           ON CONFLICT(id) DO UPDATE SET name=excluded.name,payload=excluded.payload,updatedAt=excluded.updatedAt`,
+        )
+        .run(id, value.name, payload, current?.createdAt || now, now);
+    } catch (error) {
+      if (String(error).includes("UNIQUE"))
+        throw conflict("Шаблон с таким названием уже существует");
+      throw error;
+    }
+    return this.pathTemplate(id);
+  }
+  deletePathTemplate(id: string): void {
+    if (id === "default-album-artist")
+      throw conflict("Шаблон по умолчанию нельзя удалить");
+    const used = this.db
+      .prepare(
+        "SELECT 1 FROM playlist_sync_settings WHERE templateId=? LIMIT 1",
+      )
+      .get(id);
+    if (used) throw conflict("Шаблон используется плейлистом");
+    if (
+      !this.db.prepare("DELETE FROM path_templates WHERE id=?").run(id).changes
+    )
+      throw notFound("Шаблон путей не найден");
+  }
+  playlistSyncSettings(playlistId: string): PlaylistSyncSettings {
+    this.storedPlaylist(playlistId);
+    const row = this.db
+      .prepare("SELECT * FROM playlist_sync_settings WHERE playlistId=?")
+      .get(playlistId) as Row;
+    return {
+      playlistId,
+      targetPath: row.targetPath || null,
+      templateId: row.templateId,
+      autoSync: Boolean(row.autoSync),
+      state: row.state,
+      lastSyncedAt: row.lastSyncedAt || null,
+      message: row.message,
+    };
+  }
+  updatePlaylistSyncSettings(
+    playlistId: string,
+    patch: Partial<
+      Pick<
+        PlaylistSyncSettings,
+        | "targetPath"
+        | "templateId"
+        | "autoSync"
+        | "state"
+        | "lastSyncedAt"
+        | "message"
+      >
+    >,
+  ): PlaylistSyncSettings {
+    const current = this.playlistSyncSettings(playlistId);
+    const next = { ...current, ...patch };
+    this.pathTemplate(next.templateId);
+    this.db
+      .prepare(
+        `UPDATE playlist_sync_settings SET targetPath=?,templateId=?,autoSync=?,state=?,lastSyncedAt=?,message=?
+         WHERE playlistId=?`,
+      )
+      .run(
+        next.targetPath,
+        next.templateId,
+        Number(next.autoSync),
+        next.state,
+        next.lastSyncedAt,
+        next.message,
+        playlistId,
+      );
+    return this.playlistSyncSettings(playlistId);
+  }
+  playlistSyncManifest(playlistId: string, targetPath: string): Row[] {
+    return this.db
+      .prepare(
+        "SELECT * FROM playlist_sync_files WHERE playlistId=? AND targetPath=? ORDER BY relativePath",
+      )
+      .all(playlistId, targetPath) as Row[];
+  }
+  playlistSyncManifests(playlistId: string): Row[] {
+    return this.db
+      .prepare(
+        "SELECT * FROM playlist_sync_files WHERE playlistId=? ORDER BY targetPath,relativePath",
+      )
+      .all(playlistId) as Row[];
+  }
+  autoSyncPlaylistIds(): string[] {
+    return (
+      this.db
+        .prepare(
+          "SELECT playlistId FROM playlist_sync_settings WHERE autoSync=1 AND targetPath IS NOT NULL",
+        )
+        .all() as { playlistId: string }[]
+    ).map((row) => row.playlistId);
+  }
+  replacePlaylistSyncManifest(
+    playlistId: string,
+    targetPath: string,
+    files: Array<{
+      relativePath: string;
+      trackId: string;
+      sourceSize: number;
+      sourceMtimeMs: number;
+      sourceHash: string;
+    }>,
+  ): void {
+    this.db.transaction(() => {
+      this.db
+        .prepare(
+          "DELETE FROM playlist_sync_files WHERE playlistId=? AND targetPath=?",
+        )
+        .run(playlistId, targetPath);
+      const insert = this.db.prepare(
+        "INSERT INTO playlist_sync_files VALUES (?,?,?,?,?,?,?)",
+      );
+      for (const file of files)
+        insert.run(
+          playlistId,
+          targetPath,
+          file.relativePath,
+          file.trackId,
+          file.sourceSize,
+          file.sourceMtimeMs,
+          file.sourceHash,
+        );
+    })();
   }
   close(): void {
     this.db.close();

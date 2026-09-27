@@ -55,7 +55,7 @@ describe("recently added catalog filter", () => {
 
     catalog = new Catalog(root);
     const db = (catalog as unknown as { db: Database.Database }).db;
-    expect(db.pragma("user_version", { simple: true })).toBe(8);
+    expect(db.pragma("user_version", { simple: true })).toBe(9);
     expect(
       (db.pragma("table_info(tracks)") as { name: string }[]).map(
         (column) => column.name,

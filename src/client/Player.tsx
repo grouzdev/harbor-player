@@ -101,7 +101,8 @@ export function usePlayer(notify: (message: string) => void) {
   const loadQueue = async (
     body:
       | { filter: CatalogFilter; startId?: string }
-      | { albumId: string; startId?: string },
+      | { albumId: string; startId?: string }
+      | { playlistId: string; startId?: string },
   ) => {
     const sequence = ++transition.current;
     try {
@@ -126,6 +127,8 @@ export function usePlayer(notify: (message: string) => void) {
     loadQueue({ filter, startId });
   const startAlbum = (albumId: string, startId?: string) =>
     loadQueue({ albumId, startId });
+  const startPlaylist = (playlistId: string, startId?: string) =>
+    loadQueue({ playlistId, startId });
   const step = async (direction: number, ended = false) => {
     if (!queue) return;
     if (direction < 0 && position > 3) {
@@ -287,6 +290,7 @@ export function usePlayer(notify: (message: string) => void) {
     start,
     startFilter,
     startAlbum,
+    startPlaylist,
     toggle,
     step,
     setVolume,

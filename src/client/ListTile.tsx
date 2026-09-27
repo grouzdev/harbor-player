@@ -1,4 +1,4 @@
-import type { CSSProperties, MouseEvent, ReactNode } from "react";
+import type { CSSProperties, DragEvent, MouseEvent, ReactNode } from "react";
 
 type ListTileProps = {
   value: string;
@@ -22,6 +22,8 @@ type ListTileProps = {
   onSelect: (event: MouseEvent<HTMLButtonElement>) => void;
   onDoubleClick?: () => void;
   onContextMenu?: (event: MouseEvent<HTMLDivElement>) => void;
+  draggable?: boolean;
+  onDragStart?: (event: DragEvent<HTMLDivElement>) => void;
 };
 
 export function ListTile({
@@ -46,6 +48,8 @@ export function ListTile({
   onSelect,
   onDoubleClick,
   onContextMenu,
+  draggable,
+  onDragStart,
 }: ListTileProps) {
   return (
     <div
@@ -55,6 +59,8 @@ export function ListTile({
       data-format={dataFormat}
       data-selection-key={selectionKey}
       onContextMenu={onContextMenu}
+      draggable={draggable}
+      onDragStart={onDragStart}
     >
       {startAction}
       <button

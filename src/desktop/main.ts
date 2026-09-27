@@ -612,6 +612,41 @@ async function bootstrap() {
         });
         return result.canceled ? null : result.filePaths[0] || null;
       });
+      ipcMain.handle("desktop:choose-playlist-file", async (event) => {
+        requireDesktopSender(event);
+        const result = await dialog.showOpenDialog(mainWindow!, {
+          title: "Импортировать плейлист",
+          properties: ["openFile"],
+          filters: [
+            { name: "Плейлисты", extensions: ["m3u", "m3u8", "xspf", "pls"] },
+          ],
+        });
+        return result.canceled ? null : result.filePaths[0] || null;
+      });
+      ipcMain.handle("desktop:choose-playlist-directory", async (event) => {
+        requireDesktopSender(event);
+        const result = await dialog.showOpenDialog(mainWindow!, {
+          title: "Выберите папку сборки",
+          properties: ["openDirectory", "createDirectory"],
+        });
+        return result.canceled ? null : result.filePaths[0] || null;
+      });
+      ipcMain.handle(
+        "desktop:choose-playlist-export-file",
+        async (event, name: string, format: "m3u8" | "xspf") => {
+          requireDesktopSender(event);
+          const result = await dialog.showSaveDialog(mainWindow!, {
+            title: "Экспортировать плейлист",
+            defaultPath: `${name}.${format}`,
+            filters: [
+              format === "m3u8"
+                ? { name: "M3U8", extensions: ["m3u8"] }
+                : { name: "XSPF", extensions: ["xspf"] },
+            ],
+          });
+          return result.canceled ? null : result.filePath || null;
+        },
+      );
       ipcMain.handle("desktop:report-client-ready", async (event) => {
         requireDesktopSender(event);
         await reportStartupBenchmark();

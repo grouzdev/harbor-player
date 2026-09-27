@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 
-export const catalogSchemaVersion = 8;
+export const catalogSchemaVersion = 9;
 
 export function runCatalogMigrations(db: Database.Database): void {
   db.exec(`
@@ -31,6 +31,32 @@ export function runCatalogMigrations(db: Database.Database): void {
       viewed INTEGER NOT NULL DEFAULT 0 CHECK(viewed IN (0,1) AND (kind='album' OR viewed=0)),
       PRIMARY KEY(kind,id),
       CHECK(rating IS NOT NULL OR viewed=1)
+    );
+    CREATE TABLE IF NOT EXISTS playlists (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      orderMode TEXT NOT NULL CHECK(orderMode IN ('manual','catalog')),
+      createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS playlist_entries (
+      id TEXT PRIMARY KEY, playlistId TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK(kind IN ('artist','album','track')), targetId TEXT NOT NULL,
+      position INTEGER NOT NULL, snapshot TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS playlist_entries_order ON playlist_entries(playlistId,position,id);
+    CREATE TABLE IF NOT EXISTS path_templates (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      payload TEXT NOT NULL, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS playlist_sync_settings (
+      playlistId TEXT PRIMARY KEY REFERENCES playlists(id) ON DELETE CASCADE,
+      targetPath TEXT, templateId TEXT NOT NULL REFERENCES path_templates(id), autoSync INTEGER NOT NULL DEFAULT 0,
+      state TEXT NOT NULL DEFAULT 'idle', lastSyncedAt TEXT, message TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS playlist_sync_files (
+      playlistId TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+      targetPath TEXT NOT NULL, relativePath TEXT NOT NULL, trackId TEXT NOT NULL,
+      sourceSize INTEGER NOT NULL, sourceMtimeMs REAL NOT NULL, sourceHash TEXT NOT NULL,
+      PRIMARY KEY(playlistId,targetPath,relativePath)
     );
   `);
   const version = db.pragma("user_version", { simple: true }) as number;
@@ -120,6 +146,48 @@ export function runCatalogMigrations(db: Database.Database): void {
       if (!columns.has("firstIndexedAt"))
         db.exec("ALTER TABLE tracks ADD COLUMN firstIndexedAt TEXT");
       db.pragma("user_version = 8");
+    })();
+  if (version < 9)
+    db.transaction(() => {
+      const now = new Date().toISOString();
+      const payload = JSON.stringify({
+        directories: [
+          [
+            {
+              kind: "field",
+              field: "albumArtist",
+              fallback: "Неизвестный исполнитель",
+              prefix: "",
+              suffix: "",
+              pad: 0,
+            },
+          ],
+          [
+            {
+              kind: "field",
+              field: "album",
+              fallback: "Без альбома",
+              prefix: "",
+              suffix: "",
+              pad: 0,
+            },
+          ],
+        ],
+        fileName: [
+          {
+            kind: "field",
+            field: "originalName",
+            fallback: "трек",
+            prefix: "",
+            suffix: "",
+            pad: 0,
+          },
+        ],
+      });
+      db.prepare(
+        "INSERT OR IGNORE INTO path_templates(id,name,payload,createdAt,updatedAt) VALUES (?,?,?,?,?)",
+      ).run("default-album-artist", "Исполнитель / Альбом", payload, now, now);
+      db.pragma("user_version = 9");
     })();
   db.exec(
     "CREATE INDEX IF NOT EXISTS tracks_first_indexed_at ON tracks(firstIndexedAt)",

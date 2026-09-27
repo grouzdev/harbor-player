@@ -163,7 +163,7 @@ test("catalog filters stay right of search in the requested order", async ({
       leftButtons.nth(index).boundingBox(),
     ),
   );
-  expect(leftButtonBoxes).toHaveLength(5);
+  expect(leftButtonBoxes).toHaveLength(6);
   expect(leftButtonBoxes.every((box) => box !== null)).toBe(true);
   for (let index = 1; index < leftButtonBoxes.length; index += 1) {
     expect(

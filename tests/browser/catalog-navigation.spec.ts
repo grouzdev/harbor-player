@@ -94,6 +94,16 @@ async function catalog(
   const summaries: unknown[] = [];
   const mergeContexts: unknown[] = [];
   const mergePreviews: unknown[] = [];
+  const playlist = {
+    id: "road-trip",
+    name: "В дорогу",
+    orderMode: "manual" as const,
+    createdAt: "2026-09-27T00:00:00.000Z",
+    updatedAt: "2026-09-27T00:00:00.000Z",
+    entryCount: 1,
+    trackCount: 3,
+    unavailableCount: 0,
+  };
   let delayed = "";
   let releaseDelay: (() => void) | undefined;
   const matches = (filter: CatalogFilter) =>
@@ -145,7 +155,43 @@ async function catalog(
         });
       }
     }
-    if (endpoint === "libraries")
+    if (endpoint === "playlists") body = [playlist];
+    else if (endpoint === "playlists/road-trip")
+      body = {
+        playlist,
+        entries: [
+          {
+            id: "road-trip-album",
+            playlistId: playlist.id,
+            kind: "album",
+            targetId: "Queen-0",
+            position: 0,
+            snapshot: {
+              title: "Queen album 000",
+              subtitle: "Queen",
+              coverId: null,
+            },
+            resolvedCount: 3,
+            duplicateCount: 0,
+            unavailableCount: 0,
+          },
+        ],
+      };
+    else if (endpoint === "playlists/road-trip/tracks")
+      body = {
+        items: tracks
+          .filter((track) => track.albumKey === "Queen-0")
+          .map((track, position) => ({
+            position,
+            entryId: "road-trip-album",
+            track,
+          })),
+        total: 3,
+        offset: 0,
+        unavailableCount: 0,
+        totalDuration: 540,
+      };
+    else if (endpoint === "libraries")
       body = ["rock", "jazz"]
         .filter((id) => rows.some((track) => track.libraryId === id))
         .map((id) => ({
@@ -341,6 +387,25 @@ test("catalog names use one primary style", async ({ page }) => {
       .filter({ hasText: "Queen" })
       .first(),
   ).toHaveCSS("font-size", "14px");
+});
+
+test("playlists live in the libraries panel and open a permanent composition panel", async ({
+  page,
+}) => {
+  await catalog(page);
+
+  const libraries = page.locator(".libraries-panel");
+  await expect(libraries.getByText("ПЛЕЙЛИСТЫ", { exact: true })).toBeVisible();
+  await libraries.getByText("В дорогу", { exact: true }).click();
+
+  const panel = page.locator(".playlist-panel");
+  await expect(panel).toBeVisible();
+  await expect(panel.getByRole("heading", { name: "В дорогу" })).toBeVisible();
+  await expect(
+    panel.getByText("Queen album 000", { exact: true }),
+  ).toBeVisible();
+  await panel.getByRole("button", { name: "Порядок" }).click();
+  await expect(panel.getByText("Queen song 0", { exact: true })).toBeVisible();
 });
 
 test("artist and album selection cascades to lower-priority panels", async ({

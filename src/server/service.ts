@@ -56,6 +56,14 @@ import {
   readRecoverySettings,
   writeRecoverySettings,
 } from "./recovery-settings.js";
+import type {
+  PlaylistEntryInput,
+  PlaylistExportFormat,
+  PlaylistImportPreview,
+  PlaylistSyncSettings,
+} from "../shared/playlists.js";
+import { parsePlaylistFile, writePlaylistFile } from "./playlist-formats.js";
+import { renderTrackPath } from "./playlist-paths.js";
 
 interface JournalItem extends OperationItem {
   producedHash?: string;
@@ -98,6 +106,7 @@ export class MusicService extends EventEmitter {
   private closePromise?: Promise<void>;
   private recoverySettings: RecoverySettings = { backupRetention: "none" };
   private recoveryTimer?: NodeJS.Timeout;
+  private playlistSyncTimers = new Map<string, NodeJS.Timeout>();
   capabilities: Capabilities = { writableFormats: [], verificationDate: null };
   closeStreams: (trackIds: string[]) => Promise<void> = async () => {};
   constructor(
@@ -146,6 +155,8 @@ export class MusicService extends EventEmitter {
       () => void this.maintainRecovery(),
       60 * 60 * 1000,
     );
+    for (const playlistId of this.catalog.autoSyncPlaylistIds())
+      this.schedulePlaylistSync(playlistId);
     try {
       const report = JSON.parse(
         await readFile(
@@ -334,6 +345,9 @@ export class MusicService extends EventEmitter {
       }
       this.publish(job);
       this.publishEvent({ type: "catalog" });
+      if (job.kind !== "playlist-sync")
+        for (const playlistId of this.catalog.autoSyncPlaylistIds())
+          this.schedulePlaylistSync(playlistId);
     });
     return job;
   }
@@ -1281,6 +1295,398 @@ export class MusicService extends EventEmitter {
       }
     }
   }
+  addPlaylistEntries(playlistId: string, input: PlaylistEntryInput) {
+    const targetIds =
+      input.kind === "track"
+        ? this.catalog.selected(input.selection).map((track) => track.id)
+        : input.ids;
+    const result = this.catalog.addPlaylistEntries(
+      playlistId,
+      input.kind,
+      targetIds,
+    );
+    this.schedulePlaylistSync(playlistId);
+    return result;
+  }
+  private normalizedFileKey(file: string) {
+    const resolved = path.resolve(file);
+    return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+  }
+  async previewPlaylistImport(file: string): Promise<PlaylistImportPreview> {
+    if (!path.isAbsolute(file))
+      throw badRequest("Укажите абсолютный путь к плейлисту");
+    const references = await parsePlaylistFile(file);
+    const byPath = new Map<string, string>();
+    for (const track of this.catalog.knownTracks()) {
+      const library = this.catalog.library(track.libraryId);
+      byPath.set(
+        this.normalizedFileKey(path.join(library.path, track.relativePath)),
+        track.id,
+      );
+    }
+    const matchedTrackIds: string[] = [];
+    const matched = new Set<string>();
+    const unmatched: string[] = [];
+    for (const reference of references) {
+      if (
+        /^[a-z][a-z0-9+.-]*:/i.test(reference) &&
+        !path.isAbsolute(reference)
+      ) {
+        unmatched.push(reference);
+        continue;
+      }
+      const id = byPath.get(this.normalizedFileKey(reference));
+      if (!id) unmatched.push(reference);
+      else if (!matched.has(id)) {
+        matched.add(id);
+        matchedTrackIds.push(id);
+      }
+    }
+    return {
+      path: file,
+      suggestedName: path.basename(file, path.extname(file)),
+      matchedTrackIds,
+      unmatched: unmatched.slice(0, 1000),
+    };
+  }
+  async importPlaylist(file: string, name?: string) {
+    const preview = await this.previewPlaylistImport(file);
+    if (!preview.matchedTrackIds.length)
+      throw conflict("В плейлисте не найдено треков из подключённых библиотек");
+    const created = this.catalog.createPlaylist(
+      (name || preview.suggestedName).trim(),
+    );
+    return this.catalog.addPlaylistEntries(
+      created.playlist.id,
+      "track",
+      preview.matchedTrackIds,
+    );
+  }
+  async exportPlaylist(
+    playlistId: string,
+    options: {
+      format: PlaylistExportFormat;
+      destination: string;
+      source: "libraries" | "sync";
+    },
+  ) {
+    if (!path.isAbsolute(options.destination))
+      throw badRequest("Укажите абсолютный путь файла экспорта");
+    const detail = this.catalog.playlist(playlistId);
+    const resolved = this.catalog.playlistTracks(playlistId, 0, 100000).items;
+    let items: Array<{ track: Track; file: string; relative: boolean }> = [];
+    if (options.source === "libraries") {
+      items = resolved
+        .filter((item) => item.track.available)
+        .map(({ track }) => ({
+          track,
+          file: path.join(
+            this.catalog.library(track.libraryId).path,
+            track.relativePath,
+          ),
+          relative: false,
+        }));
+    } else {
+      const settings = this.catalog.playlistSyncSettings(playlistId);
+      if (!settings.targetPath)
+        throw conflict("Сначала настройте и выполните сборку папки");
+      if (!inside(settings.targetPath, options.destination))
+        throw conflict("Файл для копий нужно сохранить внутри папки сборки");
+      const manifest = this.catalog.playlistSyncManifest(
+        playlistId,
+        settings.targetPath,
+      );
+      const paths = new Map(
+        manifest.map((row) => [
+          row.trackId as string,
+          row.relativePath as string,
+        ]),
+      );
+      items = resolved.flatMap(({ track }) => {
+        const relativePath = paths.get(track.id);
+        return relativePath
+          ? [
+              {
+                track,
+                file: path.relative(
+                  path.dirname(options.destination),
+                  path.join(settings.targetPath!, relativePath),
+                ),
+                relative: true,
+              },
+            ]
+          : [];
+      });
+    }
+    await mkdir(path.dirname(options.destination), { recursive: true });
+    await writeFile(
+      options.destination,
+      writePlaylistFile(options.format, detail.playlist.name, items),
+      "utf8",
+    );
+    return {
+      ok: true,
+      written: items.length,
+      skipped: resolved.length - items.length,
+    };
+  }
+  private async validateSyncRoot(targetPath: string) {
+    if (!path.isAbsolute(targetPath))
+      throw badRequest("Укажите абсолютный путь папки сборки");
+    const target = path.resolve(targetPath);
+    for (const library of this.catalog.libraries())
+      if (inside(library.path, target) || inside(target, library.path))
+        throw conflict(
+          "Папка сборки не должна пересекаться с музыкальной библиотекой",
+        );
+    const parsed = path.parse(target);
+    let cursor = parsed.root;
+    for (const component of path
+      .relative(parsed.root, target)
+      .split(path.sep)
+      .filter(Boolean)) {
+      cursor = path.join(cursor, component);
+      try {
+        if ((await lstat(cursor)).isSymbolicLink())
+          throw conflict(
+            "Символические ссылки в пути сборки не поддерживаются",
+          );
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") break;
+        throw error;
+      }
+    }
+    return target;
+  }
+  schedulePlaylistSync(playlistId: string) {
+    const current = this.playlistSyncTimers.get(playlistId);
+    if (current) clearTimeout(current);
+    const timer = setTimeout(() => {
+      this.playlistSyncTimers.delete(playlistId);
+      try {
+        const settings = this.catalog.playlistSyncSettings(playlistId);
+        if (settings.autoSync && settings.targetPath)
+          this.syncPlaylist(playlistId);
+      } catch {
+        // The playlist may have been deleted before the debounce elapsed.
+      }
+    }, 1000);
+    this.playlistSyncTimers.set(playlistId, timer);
+    try {
+      this.catalog.updatePlaylistSyncSettings(playlistId, {
+        state: "pending",
+        message: "Ожидает сборки",
+      });
+    } catch {
+      clearTimeout(timer);
+      this.playlistSyncTimers.delete(playlistId);
+    }
+  }
+  syncPlaylist(playlistId: string): Job {
+    const settings = this.catalog.playlistSyncSettings(playlistId);
+    if (!settings.targetPath) throw conflict("Выберите папку сборки");
+    const label = `Сборка плейлиста: ${this.catalog.playlist(playlistId).playlist.name}`;
+    const existing = this.catalog
+      .jobs()
+      .find(
+        (job) =>
+          job.kind === "playlist-sync" &&
+          job.label === label &&
+          ["queued", "running"].includes(job.status),
+      );
+    if (existing) return existing;
+    return this.enqueue("playlist-sync", label, async (job) =>
+      this.runPlaylistSync(playlistId, job),
+    );
+  }
+  private async runPlaylistSync(playlistId: string, job: Job) {
+    const settings = this.catalog.updatePlaylistSyncSettings(playlistId, {
+      state: "syncing",
+      message: "Сборка…",
+    });
+    try {
+      const targetPath = await this.validateSyncRoot(settings.targetPath!);
+      await mkdir(targetPath, { recursive: true });
+      const template = this.catalog.pathTemplate(settings.templateId);
+      const resolved = this.catalog.playlistTracks(playlistId, 0, 100000);
+      const available = resolved.items.filter((item) => item.track.available);
+      job.total = available.length;
+      this.publish(job);
+      const oldManifest = this.catalog.playlistSyncManifest(
+        playlistId,
+        targetPath,
+      );
+      const oldByPath = new Map(
+        oldManifest.map((row) => [
+          this.normalizedFileKey(row.relativePath as string),
+          row,
+        ]),
+      );
+      const desired = new Map<string, { relativePath: string; track: Track }>();
+      for (const { track } of available) {
+        const relativePath = renderTrackPath(template, track);
+        const key = this.normalizedFileKey(relativePath);
+        if (desired.has(key))
+          throw conflict(`Шаблон создаёт одинаковый путь: ${relativePath}`);
+        desired.set(key, { relativePath, track });
+        const destination = path.join(targetPath, relativePath);
+        if (!inside(targetPath, destination))
+          throw conflict("Шаблон создаёт путь вне папки сборки");
+        if ((await exists(destination)) && !oldByPath.has(key))
+          throw conflict(`В папке уже есть чужой файл: ${relativePath}`);
+      }
+      const nextManifest = [...oldManifest];
+      for (const { relativePath, track } of desired.values()) {
+        const source = path.join(
+          this.catalog.library(track.libraryId).path,
+          track.relativePath,
+        );
+        const destination = path.join(targetPath, relativePath);
+        const sourceInfo = await this.fingerprint(source, "source");
+        const key = this.normalizedFileKey(relativePath);
+        const previous = oldByPath.get(key);
+        const unchanged =
+          previous &&
+          previous.trackId === track.id &&
+          previous.sourceSize === sourceInfo.size &&
+          previous.sourceMtimeMs === sourceInfo.mtimeMs &&
+          (await exists(destination));
+        if (!unchanged) {
+          if (previous && (await exists(destination))) {
+            const currentHash = (await this.fingerprint(destination)).hash;
+            if (currentHash !== previous.sourceHash)
+              throw conflict(
+                `Управляемая копия была изменена вне Harbor: ${relativePath}`,
+              );
+          }
+          await mkdir(path.dirname(destination), { recursive: true });
+          const stage = path.join(
+            path.dirname(destination),
+            `.harbor-player-sync-${randomUUID()}${path.extname(destination)}`,
+          );
+          await copyFile(source, stage, constants.COPYFILE_EXCL);
+          if (
+            (await this.fingerprint(stage, "stage")).hash !== sourceInfo.hash
+          ) {
+            await unlink(stage).catch(() => {});
+            throw new Error(`Не удалось проверить копию: ${relativePath}`);
+          }
+          if (await exists(destination)) await unlink(destination);
+          await rename(stage, destination);
+        }
+        const row = {
+          relativePath,
+          trackId: track.id,
+          sourceSize: sourceInfo.size,
+          sourceMtimeMs: sourceInfo.mtimeMs,
+          sourceHash: sourceInfo.hash,
+        };
+        const index = nextManifest.findIndex(
+          (item) => this.normalizedFileKey(item.relativePath as string) === key,
+        );
+        if (index >= 0) nextManifest[index] = row;
+        else nextManifest.push(row);
+        this.catalog.replacePlaylistSyncManifest(
+          playlistId,
+          targetPath,
+          nextManifest as Parameters<Catalog["replacePlaylistSyncManifest"]>[2],
+        );
+        job.completed++;
+        this.publish(job);
+      }
+      for (const previous of oldManifest) {
+        const key = this.normalizedFileKey(previous.relativePath as string);
+        if (desired.has(key)) continue;
+        const destination = path.join(
+          targetPath,
+          previous.relativePath as string,
+        );
+        if (await exists(destination)) {
+          const currentHash = (await this.fingerprint(destination)).hash;
+          if (currentHash !== previous.sourceHash)
+            throw conflict(
+              `Управляемая копия была изменена вне Harbor: ${previous.relativePath}`,
+            );
+          await unlink(destination);
+          let directory = path.dirname(destination);
+          while (directory !== targetPath && inside(targetPath, directory)) {
+            try {
+              await rmdir(directory);
+            } catch {
+              break;
+            }
+            directory = path.dirname(directory);
+          }
+        }
+        const index = nextManifest.findIndex(
+          (item) => this.normalizedFileKey(item.relativePath as string) === key,
+        );
+        if (index >= 0) nextManifest.splice(index, 1);
+        this.catalog.replacePlaylistSyncManifest(
+          playlistId,
+          targetPath,
+          nextManifest as Parameters<Catalog["replacePlaylistSyncManifest"]>[2],
+        );
+      }
+      this.catalog.updatePlaylistSyncSettings(playlistId, {
+        state: resolved.unavailableCount ? "warning" : "synced",
+        lastSyncedAt: new Date().toISOString(),
+        message: resolved.unavailableCount
+          ? `Синхронизировано, пропущено недоступных: ${resolved.unavailableCount}`
+          : "Синхронизировано",
+      });
+    } catch (error) {
+      this.catalog.updatePlaylistSyncSettings(playlistId, {
+        state: "error",
+        message: errorMessage(error),
+      });
+      throw error;
+    }
+  }
+  async updatePlaylistSyncSettings(
+    playlistId: string,
+    patch: Pick<
+      PlaylistSyncSettings,
+      "targetPath" | "templateId" | "autoSync"
+    > & { cleanupOld?: boolean },
+  ) {
+    const previous = this.catalog.playlistSyncSettings(playlistId);
+    if (
+      patch.cleanupOld &&
+      previous.targetPath &&
+      previous.targetPath !== patch.targetPath
+    )
+      await this.cleanupPlaylistCopies(playlistId, previous.targetPath);
+    const settings = this.catalog.updatePlaylistSyncSettings(playlistId, {
+      targetPath: patch.targetPath,
+      templateId: patch.templateId,
+      autoSync: patch.autoSync,
+      state: "pending",
+      message: "Ожидает сборки",
+    });
+    if (settings.autoSync && settings.targetPath)
+      this.schedulePlaylistSync(playlistId);
+    return settings;
+  }
+  async cleanupPlaylistCopies(playlistId: string, onlyTargetPath?: string) {
+    const manifests = this.catalog
+      .playlistSyncManifests(playlistId)
+      .filter((item) => !onlyTargetPath || item.targetPath === onlyTargetPath);
+    for (const item of manifests) {
+      const targetPath = item.targetPath as string;
+      const file = path.join(targetPath, item.relativePath as string);
+      if (!inside(targetPath, file) || !(await exists(file))) continue;
+      const current = await this.fingerprint(file);
+      if (current.hash === item.sourceHash) await unlink(file);
+    }
+  }
+  async deletePlaylist(playlistId: string, cleanup: boolean) {
+    if (cleanup) await this.cleanupPlaylistCopies(playlistId);
+    this.catalog.deletePlaylist(playlistId);
+    const timer = this.playlistSyncTimers.get(playlistId);
+    if (timer) clearTimeout(timer);
+    this.playlistSyncTimers.delete(playlistId);
+  }
   async idle() {
     await this.pending;
   }
@@ -1299,6 +1705,8 @@ export class MusicService extends EventEmitter {
   }
   async close() {
     if (this.recoveryTimer) clearInterval(this.recoveryTimer);
+    for (const timer of this.playlistSyncTimers.values()) clearTimeout(timer);
+    this.playlistSyncTimers.clear();
     this.beginShutdown();
     if (!this.closePromise)
       this.closePromise = (async () => {

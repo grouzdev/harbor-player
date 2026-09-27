@@ -232,7 +232,7 @@ export type OperationPreview = z.infer<typeof operationPreviewSchema>;
 export const jobSchema = z
   .object({
     id: z.string(),
-    kind: z.enum(["scan", "operation", "library"]),
+    kind: z.enum(["scan", "operation", "library", "playlist-sync"]),
     label: z.string(),
     status: z.enum(["queued", "running", "done", "error"]),
     completed: z.number().int().nonnegative(),

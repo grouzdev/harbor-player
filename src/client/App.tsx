@@ -132,6 +132,12 @@ import {
 } from "./CatalogVirtualViews";
 import { useAppShellLayout } from "./useAppShellLayout";
 import { useCatalogScrollTargets } from "./useCatalogScrollTargets";
+import { PlaylistPanel } from "./PlaylistPanel";
+import type {
+  Playlist,
+  PlaylistDetail,
+  PlaylistImportPreview,
+} from "../shared/playlists";
 
 const AppearanceSettingsDialog = lazy(() =>
   import("./AppearanceSettingsDialog").then((module) => ({
@@ -180,7 +186,8 @@ type DroppedCover = {
   cover: { data: string; mime: "image/jpeg" | "image/png" };
 };
 
-type PanelId = "libraries" | "genres" | "artists" | "albums" | "tracks";
+type PanelId =
+  "libraries" | "genres" | "artists" | "albums" | "tracks" | "playlists";
 type PanelVisibility = Record<PanelId, boolean>;
 
 const panelVisibilityStorageKey = "harbor-player-panel-visibility-v1";
@@ -283,6 +290,7 @@ const defaultPanelVisibility: PanelVisibility = {
   artists: true,
   albums: true,
   tracks: true,
+  playlists: false,
 };
 const panelDefinitions = [
   {
@@ -325,6 +333,14 @@ const panelDefinitions = [
     minimumWidth: 180,
     group: "catalog",
   },
+  {
+    id: "playlists",
+    label: "Плейлист",
+    Icon: ListMusic,
+    weightIndex: 5,
+    minimumWidth: 300,
+    group: "catalog",
+  },
 ] as const;
 
 function readPanelVisibility(): PanelVisibility {
@@ -339,7 +355,7 @@ function readPanelVisibility(): PanelVisibility {
     return Object.fromEntries(
       panelDefinitions.map(({ id }) => [
         id,
-        typeof value[id] === "boolean" ? value[id] : true,
+        typeof value[id] === "boolean" ? value[id] : defaultPanelVisibility[id],
       ]),
     ) as PanelVisibility;
   } catch {
@@ -588,6 +604,7 @@ export function App() {
   const [droppedCover, setDroppedCover] = useState<DroppedCover | null>(null);
   const [toast, setToast] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
   const [pendingBookmarkKeys, setPendingBookmarkKeys] = useState<Set<string>>(
     new Set(),
   );
@@ -953,7 +970,7 @@ export function App() {
       } else if (id === "albums") {
         setSelectedAlbums([]);
         setFilter((current) => ({ ...current, albumIds: [] }));
-      } else {
+      } else if (id === "tracks") {
         setSelected(new Set());
         setSelectedAlbumId(null);
       }
@@ -975,17 +992,19 @@ export function App() {
         readMigratedStorageValue(
           "harbor-player-panel-weights-v1",
           "mml-panel-weights-v1",
-        ) || "[1.05,0.9,1,1.45,1.6]",
+        ) || "[1.05,0.9,1,1.45,1.6,1.8]",
       );
       return Array.isArray(weights) &&
-        weights.length === 5 &&
+        weights.length === 6 &&
         weights.every(
           (n: unknown) => typeof n === "number" && Number.isFinite(n) && n > 0,
         )
         ? weights
-        : [1.05, 0.9, 1, 1.45, 1.6];
+        : Array.isArray(weights) && weights.length === 5
+          ? [...weights, 1.8]
+          : [1.05, 0.9, 1, 1.45, 1.6, 1.8];
     } catch {
-      return [1.05, 0.9, 1, 1.45, 1.6];
+      return [1.05, 0.9, 1, 1.45, 1.6, 1.8];
     }
   });
   const [rowWeights, setRowWeights] = useState<number[]>(() => {
@@ -1064,6 +1083,10 @@ export function App() {
           "facet-relevance",
           "selection-summary",
           "bookmarks",
+          "playlists",
+          "playlist",
+          "playlist-tracks",
+          "playlist-sync",
         ].includes(String(q.queryKey[0])),
     });
   }, [queryClient]);
@@ -1288,6 +1311,33 @@ export function App() {
                 },
               ]
             : []),
+          ...(activePlaylistId
+            ? [
+                {
+                  label: `Добавить в активный плейлист${suffix}`,
+                  icon: <ListMusic size={16} />,
+                  onSelect: async () => {
+                    try {
+                      await api(
+                        `/playlists/${activePlaylistId}/entries`,
+                        kind === "track"
+                          ? { kind: "track", selection: { trackIds: ids } }
+                          : { kind, ids },
+                      );
+                      await queryClient.invalidateQueries({
+                        predicate: (query) =>
+                          ["playlists", "playlist", "playlist-tracks"].includes(
+                            String(query.queryKey[0]),
+                          ),
+                      });
+                      notify("Добавлено в плейлист");
+                    } catch (error) {
+                      notify((error as Error).message);
+                    }
+                  },
+                },
+              ]
+            : []),
           {
             label: bookmarkPending
               ? "Сохраняем закладку…"
@@ -1473,6 +1523,7 @@ export function App() {
     },
     [
       bookmarkKeys,
+      activePlaylistId,
       bookmarks.isError,
       bookmarks.isPending,
       bookmarksUnavailable,
@@ -1743,6 +1794,19 @@ export function App() {
     queryFn: () => api<Library[]>(catalogUrl("libraries", libraryFilter)),
     enabled: ready && !searchPending,
   });
+  const playlists = useQuery({
+    queryKey: ["playlists"],
+    queryFn: () => api<Playlist[]>("/playlists"),
+    enabled: ready,
+  });
+  useEffect(() => {
+    if (
+      activePlaylistId &&
+      playlists.data &&
+      !playlists.data.some((playlist) => playlist.id === activePlaylistId)
+    )
+      setActivePlaylistId(null);
+  }, [activePlaylistId, playlists.data]);
   const folderKey = (libraryId: string, relativePath: string | null) =>
     `${libraryId}\u0000${relativePath || ""}`;
   const folderParent = (relativePath: string) => {
@@ -2197,6 +2261,125 @@ export function App() {
     : { filter };
   const activeJobs =
     jobs.data?.filter((j) => ["queued", "running"].includes(j.status)) || [];
+  const refreshPlaylists = useCallback(async () => {
+    await queryClient.invalidateQueries({
+      predicate: (query) =>
+        ["playlists", "playlist", "playlist-tracks", "playlist-sync"].includes(
+          String(query.queryKey[0]),
+        ),
+    });
+  }, [queryClient]);
+  const selectPlaylist = useCallback(
+    (id: string) => {
+      setActivePlaylistId(id);
+      setPanelVisible("playlists", true);
+    },
+    [setPanelVisible],
+  );
+  const createPlaylist = useCallback(async () => {
+    const name = window.prompt("Название плейлиста", "Новый плейлист")?.trim();
+    if (!name) return;
+    try {
+      const created = await api<PlaylistDetail>("/playlists", { name });
+      await refreshPlaylists();
+      selectPlaylist(created.playlist.id);
+    } catch (error) {
+      notify((error as Error).message);
+    }
+  }, [notify, refreshPlaylists, selectPlaylist]);
+  const importPlaylist = useCallback(async () => {
+    let file = await window.harborPlayerDesktop?.choosePlaylistFile();
+    if (!file)
+      file = window.prompt("Абсолютный путь к файлу плейлиста") || undefined;
+    if (!file) return;
+    try {
+      const preview = await api<PlaylistImportPreview>(
+        "/playlist-import/preview",
+        {
+          path: file,
+        },
+      );
+      if (
+        preview.unmatched.length &&
+        !window.confirm(
+          `Не найдено файлов: ${preview.unmatched.length}. Импортировать ${preview.matchedTrackIds.length} найденных треков?`,
+        )
+      )
+        return;
+      const created = await api<PlaylistDetail>("/playlist-import", {
+        path: file,
+        name: preview.suggestedName,
+      });
+      await refreshPlaylists();
+      selectPlaylist(created.playlist.id);
+    } catch (error) {
+      notify((error as Error).message);
+    }
+  }, [notify, refreshPlaylists, selectPlaylist]);
+  const renamePlaylist = useCallback(
+    async (playlist: Playlist) => {
+      const name = window.prompt("Новое название", playlist.name)?.trim();
+      if (!name || name === playlist.name) return;
+      try {
+        await api(`/playlists/${playlist.id}`, { name });
+        await refreshPlaylists();
+      } catch (error) {
+        notify((error as Error).message);
+      }
+    },
+    [notify, refreshPlaylists],
+  );
+  const deletePlaylist = useCallback(
+    async (playlist: Playlist) => {
+      if (!window.confirm(`Удалить плейлист «${playlist.name}»?`)) return;
+      const cleanup = window.confirm(
+        "Удалить также копии, созданные Harbor?\n\n«Отмена» оставит файлы на месте.",
+      );
+      try {
+        await api(
+          `/playlists/${playlist.id}?cleanup=${cleanup}`,
+          undefined,
+          "DELETE",
+        );
+        setActivePlaylistId(null);
+        await refreshPlaylists();
+      } catch (error) {
+        notify((error as Error).message);
+      }
+    },
+    [notify, refreshPlaylists],
+  );
+  const addCurrentSelectionToPlaylist = useCallback(async () => {
+    if (!activePlaylistId) {
+      notify("Сначала выберите плейлист");
+      return;
+    }
+    let body: unknown;
+    if (selected.size)
+      body = { kind: "track", selection: { trackIds: [...selected] } };
+    else if (selectedAlbums.length)
+      body = { kind: "album", ids: selectedAlbums };
+    else if (selectedArtists.length)
+      body = { kind: "artist", ids: selectedArtists };
+    else {
+      notify("Выберите исполнителя, альбом или трек");
+      return;
+    }
+    try {
+      await api(`/playlists/${activePlaylistId}/entries`, body);
+      await refreshPlaylists();
+      notify("Добавлено в плейлист");
+    } catch (error) {
+      notify((error as Error).message);
+    }
+  }, [
+    activePlaylistId,
+    notify,
+    refreshPlaylists,
+    selected,
+    selectedAlbums,
+    selectedArtists,
+  ]);
   const showPreview = (p: OperationPreview) => {
     setModal(null);
     setModalSelection(null);
@@ -2755,6 +2938,11 @@ export function App() {
               onSelect={(event, key) => selectLocation(event, key)}
               onContextMenu={showLibraryMenu}
               onAdd={() => setModal("add")}
+              playlists={playlists.data || []}
+              activePlaylistId={activePlaylistId}
+              onSelectPlaylist={selectPlaylist}
+              onCreatePlaylist={() => void createPlaylist()}
+              onImportPlaylist={() => void importPlaylist()}
             />
           )}
           {panelVisibility.libraries && renderPanelResizer("libraries")}
@@ -2836,6 +3024,9 @@ export function App() {
               pendingBookmarkKeys={pendingBookmarkKeys}
               onBookmarkChange={changeBookmark}
               currentArtists={currentPlayerArtists}
+              playlistDragEnabled={Boolean(
+                activePlaylistId && panelVisibility.playlists,
+              )}
               scrollTarget={
                 artistScrollTarget?.filterKey === filterKey
                   ? artistScrollTarget
@@ -2901,6 +3092,9 @@ export function App() {
               pendingBookmarkKeys={pendingBookmarkKeys}
               onBookmarkChange={changeBookmark}
               pendingUserStateKeys={pendingUserStateKeys}
+              playlistDragEnabled={Boolean(
+                activePlaylistId && panelVisibility.playlists,
+              )}
               onUserStateChange={changeUserState}
               scrollTarget={
                 albumScrollTarget?.filterKey === filterKey
@@ -3023,6 +3217,9 @@ export function App() {
                   setExpandedFolderKeys(new Set());
                   setFilter({ ...emptyFilter, bookmarksOnly: true });
                 }}
+                playlistDragEnabled={Boolean(
+                  activePlaylistId && panelVisibility.playlists,
+                )}
                 scrollTarget={
                   trackScrollTarget?.filterKey === filterKey
                     ? trackScrollTarget
@@ -3031,6 +3228,17 @@ export function App() {
               />
             )}
           </section>
+          {panelVisibility.tracks && renderPanelResizer("tracks")}
+          {panelVisibility.playlists && (
+            <PlaylistPanel
+              playlistId={activePlaylistId}
+              onAddSelection={addCurrentSelectionToPlaylist}
+              onPlay={(id, startId) => void player.startPlaylist(id, startId)}
+              onRename={(playlist) => void renamePlaylist(playlist)}
+              onDelete={(playlist) => void deletePlaylist(playlist)}
+              notify={notify}
+            />
+          )}
         </div>
       </main>
       {coverMode && player.queue?.track && (

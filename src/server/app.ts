@@ -32,6 +32,12 @@ import { readScanSettings } from "./scan-settings.js";
 import { scanSettingsSchema } from "../shared/scan-settings.js";
 import { recoverySettingsSchema } from "../shared/recovery-settings.js";
 import {
+  pathTemplatePatternSchema,
+  playlistEntryInputSchema,
+  playlistExportFormatSchema,
+  playlistOrderModeSchema,
+} from "../shared/playlists.js";
+import {
   appearanceBackgroundPath,
   clearAppearanceBackground,
   importAppearanceBackground,
@@ -590,6 +596,152 @@ export async function createApp(options: {
     });
   });
   app.get("/api/jobs", async () => service.catalog.jobs());
+  app.get("/api/playlists", async () => service.catalog.playlists());
+  app.post("/api/playlists", async (request) => {
+    const { name } = z
+      .object({ name: z.string().trim().min(1).max(100) })
+      .strict()
+      .parse(request.body);
+    return service.catalog.createPlaylist(name);
+  });
+  app.get("/api/playlists/:id", async (request) =>
+    service.catalog.playlist(idParam.parse(request.params).id),
+  );
+  app.post("/api/playlists/:id", async (request) => {
+    const id = idParam.parse(request.params).id;
+    const body = z
+      .object({
+        name: z.string().trim().min(1).max(100).optional(),
+        orderMode: playlistOrderModeSchema.optional(),
+      })
+      .strict()
+      .parse(request.body);
+    const result = service.catalog.updatePlaylist(id, body);
+    service.schedulePlaylistSync(id);
+    return result;
+  });
+  app.delete("/api/playlists/:id", async (request) => {
+    const id = idParam.parse(request.params).id;
+    const { cleanup } = z
+      .object({ cleanup: z.coerce.boolean().default(false) })
+      .parse(request.query);
+    await service.deletePlaylist(id, cleanup);
+    return { ok: true as const };
+  });
+  app.post("/api/playlists/:id/entries", async (request) =>
+    service.addPlaylistEntries(
+      idParam.parse(request.params).id,
+      playlistEntryInputSchema.parse(request.body),
+    ),
+  );
+  app.delete("/api/playlists/:id/entries/:entryId", async (request) => {
+    const { id, entryId } = z
+      .object({
+        id: z.string().min(1).max(100),
+        entryId: z.string().min(1).max(100),
+      })
+      .parse(request.params);
+    const result = service.catalog.removePlaylistEntry(id, entryId);
+    service.schedulePlaylistSync(id);
+    return result;
+  });
+  app.post("/api/playlists/:id/reorder", async (request) => {
+    const id = idParam.parse(request.params).id;
+    const { entryIds } = z
+      .object({ entryIds: z.array(z.string().min(1).max(100)).max(100000) })
+      .strict()
+      .parse(request.body);
+    const result = service.catalog.reorderPlaylistEntries(id, entryIds);
+    service.schedulePlaylistSync(id);
+    return result;
+  });
+  app.post(
+    "/api/playlists/:id/entries/:entryId/materialize",
+    async (request) => {
+      const { id, entryId } = z
+        .object({
+          id: z.string().min(1).max(100),
+          entryId: z.string().min(1).max(100),
+        })
+        .parse(request.params);
+      const result = service.catalog.materializePlaylistEntry(id, entryId);
+      service.schedulePlaylistSync(id);
+      return result;
+    },
+  );
+  app.get("/api/playlists/:id/tracks", async (request) => {
+    const id = idParam.parse(request.params).id;
+    const query = pageSchema.omit({ filter: true }).parse(request.query);
+    return service.catalog.playlistTracks(id, query.offset, query.limit);
+  });
+  app.get("/api/playlists/:id/sync", async (request) =>
+    service.catalog.playlistSyncSettings(idParam.parse(request.params).id),
+  );
+  app.post("/api/playlists/:id/sync/settings", async (request) => {
+    const id = idParam.parse(request.params).id;
+    const body = z
+      .object({
+        targetPath: z.string().max(32000).nullable(),
+        templateId: z.string().min(1).max(100),
+        autoSync: z.boolean(),
+        cleanupOld: z.boolean().optional(),
+      })
+      .strict()
+      .parse(request.body);
+    return service.updatePlaylistSyncSettings(id, body);
+  });
+  app.post("/api/playlists/:id/sync", async (request) =>
+    service.syncPlaylist(idParam.parse(request.params).id),
+  );
+  app.post("/api/playlists/:id/export", async (request) => {
+    const id = idParam.parse(request.params).id;
+    const body = z
+      .object({
+        format: playlistExportFormatSchema,
+        destination: z.string().min(1).max(32000),
+        source: z.enum(["libraries", "sync"]),
+      })
+      .strict()
+      .parse(request.body);
+    return service.exportPlaylist(id, body);
+  });
+  app.post("/api/playlist-import/preview", async (request) => {
+    const { path: file } = z
+      .object({ path: z.string().min(1).max(32000) })
+      .strict()
+      .parse(request.body);
+    return service.previewPlaylistImport(file);
+  });
+  app.post("/api/playlist-import", async (request) => {
+    const body = z
+      .object({
+        path: z.string().min(1).max(32000),
+        name: z.string().trim().min(1).max(100).optional(),
+      })
+      .strict()
+      .parse(request.body);
+    return service.importPlaylist(body.path, body.name);
+  });
+  app.get("/api/path-templates", async () => service.catalog.pathTemplates());
+  app.post("/api/path-templates", async (request) => {
+    const body = z
+      .object({
+        id: z.string().min(1).max(100).optional(),
+        name: z.string().trim().min(1).max(100),
+        directories: z.array(pathTemplatePatternSchema).min(1).max(8),
+        fileName: pathTemplatePatternSchema,
+      })
+      .strict()
+      .parse(request.body);
+    const saved = service.catalog.savePathTemplate(body);
+    for (const playlistId of service.catalog.autoSyncPlaylistIds())
+      service.schedulePlaylistSync(playlistId);
+    return saved;
+  });
+  app.delete("/api/path-templates/:id", async (request) => {
+    service.catalog.deletePathTemplate(idParam.parse(request.params).id);
+    return { ok: true as const };
+  });
   app.post("/api/selection-summary", async (request) => {
     const selection = selectionSchema.parse(request.body);
     const tracks = service.catalog.selected(selection);
@@ -764,22 +916,31 @@ export async function createApp(options: {
       .union([
         z.object({ filter: filterSchema, startId: z.string().optional() }),
         z.object({ albumId: z.string(), startId: z.string().optional() }),
+        z.object({ playlistId: z.string(), startId: z.string().optional() }),
       ])
       .parse(request.body);
     const result =
-      "albumId" in body
-        ? service.catalog.trackIdResult({
-            ...emptyFilter,
-            albumIds: [body.albumId],
-          })
-        : service.catalog.trackIdResult(body.filter);
+      "playlistId" in body
+        ? {
+            trackIds: service.catalog.playlistTrackIds(body.playlistId),
+            total: service.catalog.playlistTrackIds(body.playlistId).length,
+            truncated: false,
+          }
+        : "albumId" in body
+          ? service.catalog.trackIdResult({
+              ...emptyFilter,
+              albumIds: [body.albumId],
+            })
+          : service.catalog.trackIdResult(body.filter);
     const { trackIds: ids } = result;
     const position = body.startId ? ids.indexOf(body.startId) : 0;
     if (position < 0 || !ids.length)
       throw conflict(
         "albumId" in body
           ? "В альбоме нет доступных треков"
-          : "Трек больше не входит в результат",
+          : "playlistId" in body
+            ? "В плейлисте нет доступных треков"
+            : "Трек больше не входит в результат",
       );
     const id = randomUUID();
     service.catalog.saveQueue(id, new Date().toISOString(), ids);

@@ -124,6 +124,7 @@ export function ArtistList({
   onBookmarkChange,
   currentArtists,
   scrollTarget,
+  playlistDragEnabled = false,
 }: {
   items: { name: string; count: number }[];
   total: number;
@@ -140,6 +141,7 @@ export function ArtistList({
   pendingBookmarkKeys: Set<string>;
   onBookmarkChange: BookmarkChange;
   currentArtists: ReadonlySet<string>;
+  playlistDragEnabled?: boolean;
   scrollTarget: {
     artist: string;
     requestId: number;
@@ -264,6 +266,15 @@ export function ArtistList({
                 current ? <Play size={13} fill="currentColor" /> : undefined
               }
               selectionKey={item.name}
+              draggable={playlistDragEnabled}
+              onDragStart={(event) => {
+                if (!selected.includes(item.name))
+                  onSelectionChange([item.name]);
+                event.dataTransfer.setData(
+                  "application/x-harbor-catalog-selection",
+                  "artist",
+                );
+              }}
               value={label}
               suffix={count(item.count)}
               onSelect={(event) => {
@@ -341,6 +352,7 @@ export function AlbumGrid({
   onUserStateChange,
   pendingUserStateKeys,
   scrollTarget,
+  playlistDragEnabled = false,
 }: {
   albums: Album[];
   total: number;
@@ -361,6 +373,7 @@ export function AlbumGrid({
   onBookmarkChange: BookmarkChange;
   onUserStateChange: UserStateChange;
   pendingUserStateKeys: Set<string>;
+  playlistDragEnabled?: boolean;
   scrollTarget: {
     album: string;
     requestId: number;
@@ -546,6 +559,15 @@ export function AlbumGrid({
                         key={album.id}
                         className={`album-card ${highlighted.has(album.id) ? "selected" : ""} ${currentAlbumId === album.id ? "playing" : ""}`}
                         data-selection-key={album.id}
+                        draggable={playlistDragEnabled}
+                        onDragStart={(event) => {
+                          if (!selected.includes(album.id))
+                            onSelectionChange([album.id]);
+                          event.dataTransfer.setData(
+                            "application/x-harbor-catalog-selection",
+                            "album",
+                          );
+                        }}
                         title={`${album.title || "Без альбома"} · ${album.artists.join(", ")}`}
                         onContextMenu={(event) => {
                           const selectedIds = resolveContextSelection(
@@ -757,6 +779,7 @@ export function TrackList({
   onDisableBookmarks,
   onResetBookmarkFilters,
   scrollTarget,
+  playlistDragEnabled = false,
 }: {
   tracks: Track[];
   total: number;
@@ -780,6 +803,7 @@ export function TrackList({
   hasOtherFilters: boolean;
   onDisableBookmarks: () => void;
   onResetBookmarkFilters: () => void;
+  playlistDragEnabled?: boolean;
   scrollTarget: { track: string; requestId: number; filterKey: string } | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -1043,6 +1067,14 @@ export function TrackList({
                 prefix={track.trackNumber ?? undefined}
                 value={track.title}
                 suffix={duration(track.duration)}
+                draggable={playlistDragEnabled}
+                onDragStart={(event) => {
+                  if (!selected.has(track.id)) onSelectionChange([track.id]);
+                  event.dataTransfer.setData(
+                    "application/x-harbor-catalog-selection",
+                    "track",
+                  );
+                }}
                 style={{
                   position: "absolute",
                   width: "100%",

@@ -20,22 +20,21 @@ afterEach(async () => {
 
 describe("automatic scan scheduler", () => {
   it("runs immediately, reschedules, and fully disables automatic scans", async () => {
-    const scan = vi.fn();
+    const scanAll = vi.fn();
     const service = {
       dataDir: root,
-      catalog: { libraries: () => [{ id: "library" }] },
-      scan,
+      scanAll,
     } as unknown as MusicService;
     const scheduler = new AutoScanScheduler(service);
 
     await scheduler.update({ autoScanIntervalMinutes: 5 });
-    expect(scan).toHaveBeenCalledTimes(1);
+    expect(scanAll).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
-    expect(scan).toHaveBeenCalledTimes(2);
+    expect(scanAll).toHaveBeenCalledTimes(2);
 
     await scheduler.update({ autoScanIntervalMinutes: 0 });
     await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
-    expect(scan).toHaveBeenCalledTimes(2);
+    expect(scanAll).toHaveBeenCalledTimes(2);
     scheduler.stop();
   });
 });

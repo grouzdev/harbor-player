@@ -21,6 +21,20 @@ contextBridge.exposeInMainWorld("harborPlayerDesktop", {
     ipcRenderer.invoke("desktop:choose-library-directory") as Promise<
       string | null
     >,
+  choosePlaylistFile: () =>
+    ipcRenderer.invoke("desktop:choose-playlist-file") as Promise<
+      string | null
+    >,
+  choosePlaylistDirectory: () =>
+    ipcRenderer.invoke("desktop:choose-playlist-directory") as Promise<
+      string | null
+    >,
+  choosePlaylistExportFile: (name: string, format: "m3u8" | "xspf") =>
+    ipcRenderer.invoke(
+      "desktop:choose-playlist-export-file",
+      name,
+      format,
+    ) as Promise<string | null>,
   reportClientReady: () => ipcRenderer.invoke("desktop:report-client-ready"),
   getWindowFullscreen: () =>
     ipcRenderer.invoke("desktop:get-window-fullscreen") as Promise<boolean>,
