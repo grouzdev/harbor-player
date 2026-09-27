@@ -295,6 +295,14 @@ const defaultPanelVisibility: PanelVisibility = {
 };
 const panelDefinitions = [
   {
+    id: "playlists",
+    label: "Плейлист",
+    Icon: ListMusic,
+    weightIndex: 5,
+    minimumWidth: 300,
+    group: "facets",
+  },
+  {
     id: "libraries",
     label: "Библиотеки",
     Icon: FolderOpen,
@@ -332,14 +340,6 @@ const panelDefinitions = [
     Icon: Music,
     weightIndex: 4,
     minimumWidth: 180,
-    group: "catalog",
-  },
-  {
-    id: "playlists",
-    label: "Плейлист",
-    Icon: ListMusic,
-    weightIndex: 5,
-    minimumWidth: 300,
     group: "catalog",
   },
 ] as const;
@@ -2905,6 +2905,17 @@ export function App() {
         <div
           className={`workspace-row workspace-facets ${visibleFacetPanelIds.length ? "" : "workspace-row-hidden"}`}
         >
+          {panelVisibility.playlists && (
+            <PlaylistPanel
+              playlistId={activePlaylistId}
+              onAddSelection={addCurrentSelectionToPlaylist}
+              onPlay={(id, startId) => void player.startPlaylist(id, startId)}
+              onRename={(playlist) => void renamePlaylist(playlist)}
+              onDelete={(playlist) => void deletePlaylist(playlist)}
+              notify={notify}
+            />
+          )}
+          {panelVisibility.playlists && renderPanelResizer("playlists")}
           {panelVisibility.libraries && (
             <LibraryPanel
               libraries={libraries.data || []}
@@ -3230,16 +3241,6 @@ export function App() {
             )}
           </section>
           {panelVisibility.tracks && renderPanelResizer("tracks")}
-          {panelVisibility.playlists && (
-            <PlaylistPanel
-              playlistId={activePlaylistId}
-              onAddSelection={addCurrentSelectionToPlaylist}
-              onPlay={(id, startId) => void player.startPlaylist(id, startId)}
-              onRename={(playlist) => void renamePlaylist(playlist)}
-              onDelete={(playlist) => void deletePlaylist(playlist)}
-              notify={notify}
-            />
-          )}
         </div>
       </main>
       {coverMode && player.queue?.track && (

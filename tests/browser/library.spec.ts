@@ -788,6 +788,27 @@ test("panel visibility controls reshape and persist the catalog", async ({
   );
 });
 
+test("playlist panel and its visibility button are first", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto("/");
+
+  const controls = page.locator(".panel-visibility-controls button");
+  await expect(controls.first()).toHaveAccessibleName(
+    "Показать панель «Плейлист»",
+  );
+  await controls.first().click();
+
+  const positions = await page.locator(".panel:visible").evaluateAll((panels) =>
+    panels.map((panel) => ({
+      id: panel.getAttribute("data-panel-id"),
+      x: panel.getBoundingClientRect().x,
+    })),
+  );
+  const playlist = positions.find(({ id }) => id === "playlists");
+  expect(playlist).toBeDefined();
+  expect(playlist!.x).toBe(Math.min(...positions.map(({ x }) => x)));
+});
+
 test("a single visible panel fills the workspace width", async ({ page }) => {
   const panels = [
     ["Библиотеки", ".libraries-panel"],
