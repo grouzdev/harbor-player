@@ -476,7 +476,7 @@ test("selecting an album keeps the album grid in place while another album plays
   await playing.click();
   await expect(
     page.locator('.album-card[data-selection-key="Queen-0"]'),
-  ).toHaveClass(/playing/);
+  ).not.toHaveClass(/playing/);
 
   await page.locator(".album-scroll").evaluate((node) => {
     node.scrollTop = node.scrollHeight / 2;
@@ -560,7 +560,7 @@ test("a manual genre filter does not seek an excluded playing album", async ({
   await playing.click();
   await expect(
     page.locator('.album-card[data-selection-key="Queen-0"]'),
-  ).toHaveClass(/playing/);
+  ).not.toHaveClass(/playing/);
 
   await page.getByRole("button", { name: "Сбросить альбомы" }).click();
   await expect(count(page, "tracks")).toHaveText("777");

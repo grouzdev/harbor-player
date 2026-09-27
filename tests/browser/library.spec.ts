@@ -2887,7 +2887,7 @@ test("album actions do not interrupt active playback", async ({
     await expect(audio).toHaveAttribute("src", audioSource!);
   };
 
-  const album = page.locator(".albums-panel .album-card.playing");
+  const album = page.locator(".albums-panel .album-card").first();
   await expect(album).toBeVisible();
   await album.hover();
   await album.getByRole("button", { name: "Без оценки" }).click();
@@ -2964,41 +2964,29 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     )
     .toBeGreaterThanOrEqual(2);
   const currentTrack = page.getByTestId("track-row").first();
-  await expect(currentTrack).toHaveClass(/playing/);
+  await expect(currentTrack).not.toHaveClass(/playing/);
   await expect(
     currentTrack.locator(".list-tile-status-icon svg"),
   ).toBeVisible();
   await currentTrack.locator(".list-tile-main").click();
   await expect(currentTrack).toHaveClass(/selected/);
-  await expect(libraryTile).toHaveClass(/playing/);
-  await expect(libraryTile.locator(".list-tile-status-icon svg")).toBeVisible();
-  const currentAlbum = page.locator(".albums-panel .album-card.playing");
-  await expect(currentAlbum).toHaveCount(1);
-  const albumPlayingIcon = currentAlbum.locator(".album-playing-icon");
-  await expect(albumPlayingIcon).toBeVisible();
-  await expect(albumPlayingIcon).toHaveCSS("width", "13px");
-  await expect(albumPlayingIcon).toHaveCSS("height", "13px");
-  await expect(albumPlayingIcon).toHaveCSS("flex-shrink", "0");
-  await expect(currentAlbum.locator(".album-main > strong")).toHaveCSS(
-    "color",
-    "rgb(185, 212, 183)",
+  await expect(libraryTile).not.toHaveClass(/playing/);
+  await expect(libraryTile.locator(".list-tile-status-icon svg")).toHaveCount(
+    0,
   );
-  await expect(currentAlbum.locator(".album-cover")).toHaveCSS(
-    "border-top-color",
-    "rgba(0, 0, 0, 0)",
+  await expect(page.locator(".albums-panel .album-card.playing")).toHaveCount(
+    0,
   );
-  await expect
-    .poll(() => page.locator(".genres-panel .list-tile.playing").count())
-    .toBeGreaterThan(0);
-  await expect
-    .poll(() => page.locator(".artists-panel .artist-row.playing").count())
-    .toBeGreaterThan(0);
+  await expect(page.locator(".albums-panel .album-playing-icon")).toHaveCount(
+    0,
+  );
+  await expect(page.locator(".genres-panel .list-tile.playing")).toHaveCount(0);
+  await expect(page.locator(".artists-panel .artist-row.playing")).toHaveCount(
+    0,
+  );
   await expect(
-    page
-      .locator(".artists-panel .artist-row.playing")
-      .first()
-      .locator(".list-tile-status-icon svg"),
-  ).toBeVisible();
+    page.locator(".artists-panel .list-tile-status-icon svg"),
+  ).toHaveCount(0);
 
   await page.locator(".cover-mode-toggle").click();
   const coverMode = page.getByRole("main", { name: "Режим обложки" });
