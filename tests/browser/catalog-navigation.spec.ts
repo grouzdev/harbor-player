@@ -402,6 +402,12 @@ test("playlists live in the libraries panel and open a permanent composition pan
   await expect(panel).toBeVisible();
   await expect(panel.getByRole("heading", { name: "В дорогу" })).toBeVisible();
   await expect(
+    panel.locator(".playlist-heading-actions .icon-button"),
+  ).toHaveCount(5);
+  await expect(
+    panel.getByRole("group", { name: "Представление плейлиста" }),
+  ).toHaveClass(/appearance-segmented-control/);
+  await expect(
     panel.getByText("Queen album 000", { exact: true }),
   ).toBeVisible();
   await panel.getByRole("button", { name: "Порядок" }).click();

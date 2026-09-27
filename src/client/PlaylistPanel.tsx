@@ -473,11 +473,14 @@ export function PlaylistPanel({
   };
   if (!playlistId)
     return (
-      <section className="panel playlist-panel" data-panel-id="playlists">
+      <section
+        className="panel tracks-panel playlist-panel"
+        data-panel-id="playlists"
+      >
         <div className="panel-heading">
           <h2>Плейлист</h2>
         </div>
-        <div className="playlist-empty">
+        <div className="empty-small track-empty playlist-empty">
           <ListMusic size={28} />
           <p>Выберите или создайте плейлист</p>
         </div>
@@ -485,7 +488,10 @@ export function PlaylistPanel({
     );
   const playlist = detail.data?.playlist;
   return (
-    <section className="panel playlist-panel" data-panel-id="playlists">
+    <section
+      className="panel tracks-panel playlist-panel"
+      data-panel-id="playlists"
+    >
       <div className="panel-heading playlist-heading">
         <h2>{playlist?.name || "Плейлист"}</h2>
         <div className="playlist-heading-actions">
@@ -536,18 +542,18 @@ export function PlaylistPanel({
       </div>
       <div className="playlist-toolbar">
         <div
-          className="segmented compact"
+          className="appearance-segmented-control playlist-view-control"
           role="group"
           aria-label="Представление плейлиста"
         >
           <button
-            className={view === "composition" ? "active" : ""}
+            className={`appearance-segment ${view === "composition" ? "selected" : ""}`}
             onClick={() => setView("composition")}
           >
             Состав
           </button>
           <button
-            className={view === "order" ? "active" : ""}
+            className={`appearance-segment ${view === "order" ? "selected" : ""}`}
             onClick={() => setView("order")}
           >
             Порядок
@@ -568,7 +574,7 @@ export function PlaylistPanel({
         </select>
       </div>
       <div
-        className="playlist-drop-target"
+        className="all-albums playlist-drop-target"
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           if (
@@ -583,7 +589,7 @@ export function PlaylistPanel({
       </div>
       <div className="playlist-content">
         {detail.isFetching && !detail.data ? (
-          <div className="playlist-loading">
+          <div className="empty-small track-empty playlist-loading">
             <RefreshCw className="spinning" size={18} /> Загрузка…
           </div>
         ) : view === "composition" ? (
@@ -627,11 +633,12 @@ export function PlaylistPanel({
                     </button>
                     {entry.snapshot.coverId ? (
                       <img
+                        className="tiny-cover"
                         src={`/api/covers/${entry.snapshot.coverId}`}
                         alt=""
                       />
                     ) : (
-                      <span className="playlist-entry-placeholder">
+                      <span className="tiny-cover playlist-entry-placeholder">
                         <ListMusic size={16} />
                       </span>
                     )}
@@ -694,7 +701,7 @@ export function PlaylistPanel({
               );
             })
           ) : (
-            <div className="playlist-empty">
+            <div className="empty-small track-empty playlist-empty">
               <ListMusic size={28} />
               <p>Добавьте музыку из каталога</p>
             </div>
