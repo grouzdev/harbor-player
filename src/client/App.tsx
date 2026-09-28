@@ -1330,17 +1330,70 @@ export function App() {
     },
     [notify, queryClient],
   );
+  const createPlaylistForEntries = useCallback(
+    async (body: unknown) => {
+      const usedNames = new Set(
+        playlists.data?.map((playlist) => playlist.name),
+      );
+      let number = 1;
+      while (true) {
+        const name = number === 1 ? "Новый" : `Новый (${number})`;
+        if (usedNames.has(name)) {
+          number++;
+          continue;
+        }
+        let created: PlaylistDetail;
+        try {
+          created = await api<PlaylistDetail>("/playlists", { name });
+        } catch (error) {
+          if (
+            (error as Error).message ===
+            "Плейлист с таким названием уже существует"
+          ) {
+            usedNames.add(name);
+            number++;
+            continue;
+          }
+          notify((error as Error).message);
+          return;
+        }
+        try {
+          await api(`/playlists/${created.playlist.id}/entries`, body);
+        } catch (error) {
+          notify((error as Error).message);
+          return;
+        }
+        await queryClient.invalidateQueries({
+          predicate: (query) =>
+            ["playlists", "playlist", "playlist-tracks"].includes(
+              String(query.queryKey[0]),
+            ),
+        });
+        setActivePlaylistId(created.playlist.id);
+        setPanelVisible("playlists", true);
+        notify("Добавлено в плейлист");
+        return;
+      }
+    },
+    [notify, playlists.data, queryClient, setPanelVisible],
+  );
   const playlistMenuItem = useCallback(
     (body: unknown, suffix = "") => ({
       label: `Добавить в плейлист${suffix}`,
       icon: <ListMusic size={16} />,
-      disabled: !playlists.data?.length,
-      submenu: playlists.data?.map((playlist) => ({
-        label: playlist.name,
-        onSelect: () => addToPlaylist(playlist.id, body),
-      })),
+      submenu: [
+        {
+          label: "Создать новый",
+          icon: <Plus size={16} />,
+          onSelect: () => createPlaylistForEntries(body),
+        },
+        ...(playlists.data || []).map((playlist) => ({
+          label: playlist.name,
+          onSelect: () => addToPlaylist(playlist.id, body),
+        })),
+      ],
     }),
-    [addToPlaylist, playlists.data],
+    [addToPlaylist, createPlaylistForEntries, playlists.data],
   );
   const showCatalogMenu = useCallback(
     (

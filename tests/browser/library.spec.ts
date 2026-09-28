@@ -1065,8 +1065,35 @@ test("library root can be added to any playlist", async ({ page }, info) => {
   await expect(addToPlaylist).toBeVisible();
   await addToPlaylist.hover();
   await expect(page.getByRole("menuitem", { name: playlistName })).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Создать новый", exact: true }),
+  ).toBeVisible();
   await page.getByRole("menuitem", { name: playlistName }).click();
   await expect(page.getByText("Добавлено в плейлист")).toBeVisible();
+
+  for (const name of ["Новый", "Новый (2)", "Новый (3)"]) {
+    await page
+      .getByRole("button", { name: new RegExp(libraryName) })
+      .first()
+      .click({ button: "right" });
+    await page
+      .getByRole("menu")
+      .first()
+      .getByRole("menuitem", { name: "Добавить в плейлист" })
+      .hover();
+    await page
+      .getByRole("menuitem", { name: "Создать новый", exact: true })
+      .click();
+    await expect(page.getByText("Добавлено в плейлист")).toBeVisible();
+    await expect(
+      page.locator(".playlist-library-tile").filter({ hasText: name }),
+    ).toHaveClass(/selected/);
+    await expect(
+      page
+        .locator(".playlist-panel")
+        .getByRole("heading", { name, exact: true }),
+    ).toBeVisible();
+  }
 
   await page
     .getByRole("button", { name: new RegExp(libraryName) })
