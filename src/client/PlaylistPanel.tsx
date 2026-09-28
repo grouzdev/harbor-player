@@ -3,9 +3,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
   ChevronRight,
+  CircleUserRound,
+  Disc3,
   Download,
-  GripVertical,
+  Drama,
+  FolderOpen,
   ListMusic,
+  Music,
   Pencil,
   Play,
   Plus,
@@ -486,6 +490,13 @@ export function PlaylistPanel({
       </section>
     );
   const playlist = detail.data?.playlist;
+  const entryIcons = {
+    track: Music,
+    album: Disc3,
+    artist: CircleUserRound,
+    genre: Drama,
+    folder: FolderOpen,
+  } as const;
   return (
     <section
       className="panel tracks-panel playlist-panel"
@@ -555,8 +566,9 @@ export function PlaylistPanel({
             <RefreshCw className="spinning" size={18} /> Загрузка…
           </div>
         ) : detail.data?.entries.length ? (
-          detail.data.entries.map((entry, index) => {
+          detail.data.entries.map((entry) => {
             const isExpanded = expanded.has(entry.id);
+            const EntryIcon = entryIcons[entry.kind];
             const nested =
               tracks.data?.items.filter((item) => item.entryId === entry.id) ||
               [];
@@ -591,8 +603,6 @@ export function PlaylistPanel({
                   }}
                 >
                   <div className="playlist-entry-main">
-                    <GripVertical size={15} className="playlist-drag-handle" />
-                    <span className="playlist-position">{index + 1}</span>
                     <button
                       className="playlist-expand"
                       aria-label={isExpanded ? "Свернуть" : "Развернуть"}
@@ -622,9 +632,17 @@ export function PlaylistPanel({
                         <ListMusic size={16} />
                       </span>
                     )}
-                    <span className="playlist-entry-copy">
-                      <strong>{entry.snapshot.title}</strong>
+                    <EntryIcon
+                      className="playlist-entry-kind"
+                      size={16}
+                      aria-hidden
+                    />
+                    <span
+                      className="playlist-entry-copy"
+                      title={entry.snapshot.subtitle}
+                    >
                       <small>{entry.snapshot.subtitle}</small>
+                      <strong>{entry.snapshot.title}</strong>
                     </span>
                     <span className="playlist-entry-count">
                       {count(entry.resolvedCount)}

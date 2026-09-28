@@ -54,6 +54,64 @@ afterEach(async () => {
 });
 
 describe("playlists", () => {
+  it("creates descriptive snapshots for every playlist entry kind", () => {
+    const library = catalog.addLibrary("Library", path.join(root, "music"));
+    catalog.upsert(
+      makeTrack("song", library.id, {
+        relativePath: path.join("Artist", "Album", "song.flac"),
+        title: "Song",
+        albumTitle: "Album",
+        albumKey: "album",
+        artists: ["Artist"],
+        albumArtists: ["Artist"],
+        genres: ["Rock", "Electronic"],
+        coverId: "album-cover.jpg",
+      }),
+    );
+    const playlist = catalog.createPlaylist("Descriptions");
+    const folder = catalog.playlistFolderTargetId(
+      library.id,
+      path.join("Artist", "Album"),
+    );
+
+    const detail = catalog.addPlaylistEntries(playlist.playlist.id, "track", [
+      "song",
+    ]);
+    catalog.addPlaylistEntries(playlist.playlist.id, "album", ["album"]);
+    catalog.addPlaylistEntries(playlist.playlist.id, "artist", ["Artist"]);
+    catalog.addPlaylistEntries(playlist.playlist.id, "genre", ["Rock"]);
+    const completed = catalog.addPlaylistEntries(
+      playlist.playlist.id,
+      "folder",
+      [folder],
+    );
+
+    expect(detail.entries[0].snapshot).toEqual({
+      title: "Song",
+      subtitle: "Artist",
+      coverId: "album-cover.jpg",
+    });
+    expect(completed.entries.map((entry) => entry.snapshot)).toEqual([
+      { title: "Song", subtitle: "Artist", coverId: "album-cover.jpg" },
+      { title: "Album", subtitle: "Artist", coverId: "album-cover.jpg" },
+      {
+        title: "Artist",
+        subtitle: "Electronic · Rock",
+        coverId: "album-cover.jpg",
+      },
+      {
+        title: "Rock",
+        subtitle: path.join(root, "music", "Artist", "Album"),
+        coverId: "album-cover.jpg",
+      },
+      {
+        title: "Album",
+        subtitle: path.join(root, "music", "Artist", "Album"),
+        coverId: "album-cover.jpg",
+      },
+    ]);
+  });
+
   it("keeps live genre blocks, removes overlaps by first occurrence and reorders blocks", () => {
     const library = catalog.addLibrary("Library", path.join(root, "music"));
     catalog.upsert(makeTrack("one", library.id, { trackNumber: 1 }));
@@ -146,7 +204,10 @@ describe("playlists", () => {
 
     expect(initial.entries[0]).toMatchObject({
       kind: "folder",
-      snapshot: { title: "Selected", subtitle: "Library" },
+      snapshot: {
+        title: "Selected",
+        subtitle: path.join(root, "music", "Selected"),
+      },
     });
     expect(
       catalog
@@ -182,7 +243,7 @@ describe("playlists", () => {
     ]);
     expect(initial.entries[0]).toMatchObject({
       kind: "folder",
-      snapshot: { title: "Library", subtitle: "Library" },
+      snapshot: { title: "Library", subtitle: path.join(root, "music") },
     });
     expect(catalog.playlistTracks(created.playlist.id).items).toHaveLength(1);
 

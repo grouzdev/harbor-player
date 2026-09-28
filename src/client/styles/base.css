@@ -2976,6 +2976,7 @@ body {
 }
 .playlist-entry {
   border-bottom: 1px solid var(--line);
+  cursor: grab;
 }
 .playlist-drop-indicator {
   height: 2px;
@@ -2996,16 +2997,9 @@ body {
   place-items: center;
   color: var(--muted);
 }
-.playlist-drag-handle {
+.playlist-entry-kind {
   flex: 0 0 auto;
   color: var(--muted);
-  cursor: grab;
-}
-.playlist-position {
-  width: 20px;
-  color: var(--muted);
-  text-align: right;
-  font-variant-numeric: tabular-nums;
 }
 .playlist-expand {
   width: 22px;
@@ -3028,7 +3022,7 @@ body {
 }
 .playlist-entry-copy strong {
   font-size: var(--type-caption);
-  font-weight: 400;
+  font-weight: 600;
 }
 .playlist-entry-copy small,
 .playlist-entry-count {

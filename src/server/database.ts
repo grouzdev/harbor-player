@@ -1669,6 +1669,47 @@ export class Catalog {
     this.storedPlaylist(id);
     this.db.prepare("DELETE FROM playlists WHERE id=?").run(id);
   }
+  private firstPlaylistAlbumCover(filter: CatalogFilter): string | null {
+    return this.albums(filter, 0, 1).items[0]?.coverId ?? null;
+  }
+  private playlistGenres(filter: CatalogFilter): string[] {
+    const { sql, args } = this.where(filter);
+    return (
+      this.db
+        .prepare(
+          `SELECT DISTINCT g.genre
+           FROM track_genres g
+           JOIN tracks t ON t.id=g.trackId
+           JOIN libraries l ON l.id=t.libraryId
+           WHERE ${sql} AND g.genre<>''
+           ORDER BY g.genre COLLATE NOCASE`,
+        )
+        .all(...args) as { genre: string }[]
+    ).map((row) => row.genre);
+  }
+  private playlistFolderPaths(filter: CatalogFilter): string[] {
+    const { sql, args } = this.where(filter);
+    const libraryPaths = new Map(
+      this.libraries().map((library) => [library.id, library.path]),
+    );
+    const folders = new Set(
+      (
+        this.db
+          .prepare(
+            `SELECT DISTINCT t.libraryId, t.relativePath
+             FROM tracks t JOIN libraries l ON l.id=t.libraryId
+             WHERE ${sql}`,
+          )
+          .all(...args) as { libraryId: string; relativePath: string }[]
+      ).map((track) => {
+        const libraryPath = libraryPaths.get(track.libraryId);
+        return path.join(libraryPath || "", path.dirname(track.relativePath));
+      }),
+    );
+    return [...folders].sort((left, right) =>
+      left.localeCompare(right, "ru", { sensitivity: "base", numeric: true }),
+    );
+  }
   private snapshotForPlaylistEntry(
     kind: PlaylistEntryKind,
     targetId: string,
@@ -1679,26 +1720,34 @@ export class Catalog {
       const relativePath = checkedFolderPath(folder.relativePath);
       if (!this.hasFolder(folder.libraryId, relativePath))
         throw notFound("Папка не найдена");
+      const library = this.library(folder.libraryId);
+      const filter = {
+        ...emptyFilter,
+        folders: [{ libraryId: folder.libraryId, relativePath }],
+      };
       return {
-        title: relativePath
-          ? path.basename(relativePath)
-          : this.library(folder.libraryId).name,
-        subtitle: this.library(folder.libraryId).name,
-        coverId: null,
+        title: relativePath ? path.basename(relativePath) : library.name,
+        subtitle: path.join(library.path, relativePath),
+        coverId: this.firstPlaylistAlbumCover(filter),
       };
     }
-    if (kind === "genre")
+    if (kind === "genre") {
+      const filter = { ...emptyFilter, genres: [targetId] };
       return {
         title: targetId || "Без жанра",
-        subtitle: "Жанр",
-        coverId: null,
+        subtitle:
+          this.playlistFolderPaths(filter).join(" · ") || "Нет доступных папок",
+        coverId: this.firstPlaylistAlbumCover(filter),
       };
-    if (kind === "artist")
+    }
+    if (kind === "artist") {
+      const filter = { ...emptyFilter, artists: [targetId] };
       return {
         title: targetId || "Неизвестный исполнитель",
-        subtitle: "Исполнитель",
-        coverId: null,
+        subtitle: this.playlistGenres(filter).join(" · ") || "Без жанра",
+        coverId: this.firstPlaylistAlbumCover(filter),
       };
+    }
     const track =
       kind === "track"
         ? this.track(targetId)
@@ -1708,7 +1757,7 @@ export class Catalog {
     return kind === "track"
       ? {
           title: track.title || "Без названия",
-          subtitle: `${playlistArtist(track)} · ${track.albumTitle || "Без альбома"}`,
+          subtitle: playlistArtist(track),
           coverId: track.coverId,
         }
       : {
