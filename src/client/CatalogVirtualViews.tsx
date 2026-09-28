@@ -7,7 +7,12 @@ import {
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Bookmark as BookmarkIcon, Disc3, Play, Search } from "lucide-react";
-import type { Album, BookmarkKind, Track } from "../shared/contracts";
+import type {
+  Album,
+  BookmarkKind,
+  FacetRelevance,
+  Track,
+} from "../shared/contracts";
 import {
   albumArtistGroupKey,
   artistGroupKey,
@@ -124,6 +129,8 @@ export function ArtistList({
   pendingBookmarkKeys,
   onBookmarkChange,
   currentArtists,
+  facetRelevance,
+  hasFacetRelevance,
   scrollTarget,
   playlistDragEnabled = false,
 }: {
@@ -142,6 +149,8 @@ export function ArtistList({
   pendingBookmarkKeys: Set<string>;
   onBookmarkChange: BookmarkChange;
   currentArtists: ReadonlySet<string>;
+  facetRelevance?: FacetRelevance;
+  hasFacetRelevance: boolean;
   playlistDragEnabled?: boolean;
   scrollTarget: {
     artist: string;
@@ -254,6 +263,11 @@ export function ArtistList({
             : item.name;
           const checked = highlighted.has(item.name);
           const current = currentArtists.has(item.name);
+          const related =
+            hasFacetRelevance &&
+            facetRelevance?.artists.includes(item.name) &&
+            !checked &&
+            !(showPlayingTrackIndicators && current);
           return (
             <ListTile
               key={item.name}
@@ -262,7 +276,7 @@ export function ArtistList({
               selected={checked}
               current={showPlayingTrackIndicators && current}
               playing={showPlayingTrackIndicators && current}
-              related={selected.includes(item.name) && !current}
+              related={related}
               statusIcon={
                 showPlayingTrackIndicators && current ? (
                   <Play size={13} fill="currentColor" />
@@ -333,6 +347,7 @@ export function AlbumGrid({
   selected,
   currentAlbumId,
   onSelectionChange,
+  onSelectionFocus,
   onNavigate,
   onMore,
   loading,
@@ -355,6 +370,7 @@ export function AlbumGrid({
   selected: string[];
   currentAlbumId: string | null;
   onSelectionChange: (ids: string[]) => void;
+  onSelectionFocus?: (id: string, ids: string[], artist: string | null) => void;
   onNavigate: (id: string) => void;
   onMore: () => void;
   loading: boolean;
@@ -380,6 +396,8 @@ export function AlbumGrid({
     scrollRef: ref,
     selectedKeys: selected,
     onChange: onSelectionChange,
+    onFocus: (id, ids) =>
+      onSelectionFocus?.(id, ids, albumById.get(id)?.artists[0] || null),
   });
   const highlighted = selection.previewKeys || new Set(selected);
   const groupByArtists = shouldGroupAlbums(averageGroupSize || 0);

@@ -265,6 +265,7 @@ export const apiResponseSchemas = {
   facetRelevance: z.object({
     libraryIds: stringArray,
     genres: stringArray,
+    artists: stringArray,
     folders: z.array(
       z.object({ libraryId: z.string(), relativePath: z.string() }),
     ),

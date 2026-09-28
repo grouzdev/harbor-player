@@ -103,14 +103,17 @@ export function usePanelSelection({
   scrollRef,
   selectedKeys,
   onChange,
+  onFocus,
 }: {
   scrollRef: RefObject<HTMLDivElement | null>;
   selectedKeys: readonly string[];
   onChange: (keys: string[]) => void;
+  onFocus?: (key: string, keys: string[]) => void;
 }) {
   const anchorRef = useRef<string | null>(null);
   const selectedRef = useRef(selectedKeys);
   const onChangeRef = useRef(onChange);
+  const onFocusRef = useRef(onFocus);
   const gestureRef = useRef<{
     pointerId: number;
     startClient: Point;
@@ -129,6 +132,7 @@ export function usePanelSelection({
 
   selectedRef.current = selectedKeys;
   onChangeRef.current = onChange;
+  onFocusRef.current = onFocus;
 
   const collectGeometry = useCallback(() => {
     const scroll = scrollRef.current;
@@ -347,6 +351,7 @@ export function usePanelSelection({
         { ctrl: event.ctrlKey || event.metaKey, shift: event.shiftKey },
       );
       anchorRef.current = result.anchor;
+      onFocusRef.current?.(targetKey, result.keys);
       onChangeRef.current(result.keys);
     },
     [scrollRef],

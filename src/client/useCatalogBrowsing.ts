@@ -112,8 +112,12 @@ export function useCatalogBrowsing() {
   >(null);
   const [navigationEpoch, setNavigationEpoch] = useState(0);
   const panelPositions = useCallback(
-    (anchors: Partial<Record<CatalogPanelId, string>> = {}) =>
+    (
+      anchors: Partial<Record<CatalogPanelId, string>> = {},
+      skipped: readonly CatalogPanelId[] = [],
+    ) =>
       panelIds.flatMap((id) => {
+        if (skipped.includes(id as CatalogPanelId)) return [];
         const node = panelSurface(id);
         return node
           ? [
@@ -319,8 +323,9 @@ export function useCatalogBrowsing() {
     (
       update: () => void,
       anchors: Partial<Record<CatalogPanelId, string>> = {},
+      skipped: readonly CatalogPanelId[] = [],
     ) => {
-      restorePositions.current = panelPositions(anchors);
+      restorePositions.current = panelPositions(anchors, skipped);
       update();
       setNavigationEpoch((value) => value + 1);
     },

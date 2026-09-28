@@ -1372,8 +1372,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await expect(collectionTile.locator(".list-tile-related-marker")).toHaveCount(
     0,
   );
-  await expect(artistRow).toHaveClass(/related/);
-  await expect(artistRow.locator(".list-tile-related-marker")).toBeVisible();
+  await expect(artistRow).not.toHaveClass(/related/);
 
   const firstAlbum = page.getByTitle("Тестовый альбом · Исполнитель альбома", {
     exact: true,

@@ -135,6 +135,20 @@ async function catalog(
             .toLowerCase()
             .includes(filter.search.toLowerCase())),
     );
+  const relevanceRows = (
+    filter: CatalogFilter,
+    sources: { genres?: boolean; artists?: boolean; albums?: boolean },
+  ) =>
+    tracks.filter(
+      (track) =>
+        (sources.genres &&
+          filter.genres.some((genre) => track.genres.includes(genre))) ||
+        (sources.artists &&
+          filter.artists.some((artist) =>
+            track.albumArtists.includes(artist),
+          )) ||
+        (sources.albums && filter.albumIds.includes(track.albumKey)),
+    );
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
     const endpoint = url.pathname.slice(5);
@@ -281,11 +295,26 @@ async function catalog(
         albumIds: filter.albumIds,
       };
     else if (endpoint === "facet-relevance")
-      body = {
-        libraryIds: [...new Set(rows.map((track) => track.libraryId))],
-        genres: [...new Set(rows.flatMap((track) => track.genres))],
-        folders: [],
-      };
+      body = (() => {
+        const libraryRows = relevanceRows(filter, {
+          genres: true,
+          artists: true,
+          albums: true,
+        });
+        const genreRows = relevanceRows(filter, {
+          artists: true,
+          albums: true,
+        });
+        const artistRows = relevanceRows(filter, { albums: true });
+        return {
+          libraryIds: [...new Set(libraryRows.map((track) => track.libraryId))],
+          genres: [...new Set(genreRows.flatMap((track) => track.genres))],
+          artists: [
+            ...new Set(artistRows.flatMap((track) => track.albumArtists)),
+          ],
+          folders: [],
+        };
+      })();
     else if (endpoint === "bookmarks")
       body = [{ kind: "artist", id: "Queen", createdAt: "2026-01-01" }];
     else if (endpoint === "artist-folders")
@@ -630,6 +659,32 @@ test("facet and playlist rows launch only on double click", async ({
   await playlist.dblclick();
   await expectQueueCount(5);
   expect(lastQueue()).toMatchObject({ playlistId: "road-trip" });
+});
+
+test("clearing a genre filter keeps the last selected album in view", async ({
+  page,
+}) => {
+  await catalog(page);
+  await page
+    .locator(".genres-panel .list-tile-main")
+    .filter({ hasText: "Rock" })
+    .click();
+  await expect(page.locator(".artists-panel .artist-row.related")).toHaveCount(
+    0,
+  );
+
+  const selected = page.locator('.album-card[data-selection-key="Queen-0"]');
+  await selected.locator(".album-main").click();
+  await expect(selected).toHaveClass(/selected/);
+  await expect(selected).toBeInViewport();
+  await expect(artist(page, "Queen")).toHaveClass(/related/);
+
+  await page.getByRole("button", { name: "Сбросить жанры" }).click();
+  await expect(selected).toHaveClass(/selected/);
+  await expect(selected).toBeInViewport();
+  await expect(artist(page, "Queen")).toBeInViewport();
+  await expect(artist(page, "Queen")).not.toHaveClass(/selected/);
+  await expect(artist(page, "Queen")).toHaveClass(/related/);
 });
 
 test("a manual genre filter does not seek an excluded playing album", async ({

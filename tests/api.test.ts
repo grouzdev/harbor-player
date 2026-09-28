@@ -572,6 +572,7 @@ describe("HTTP boundary", () => {
     expect(response.json()).toEqual({
       libraryIds: [first.id, second.id].sort(),
       genres: ["", "Rock"],
+      artists: ["Artist B"],
       folders: [],
     });
   });

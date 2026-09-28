@@ -558,7 +558,7 @@ describe("catalog and safe filesystem operations", () => {
     ).toEqual([]);
     expect(catalog.tracks({ ...emptyFilter, search: "%" }).total).toBe(0);
   });
-  it("finds libraries, folders and genres related to selected facets", () => {
+  it("finds context only in the upstream direction", () => {
     const catalog = service.catalog;
     const first = catalog.addLibrary("First", path.join(root, "First"));
     const second = catalog.addLibrary("Second", path.join(root, "Second"));
@@ -608,7 +608,8 @@ describe("catalog and safe filesystem operations", () => {
       }),
     ).toEqual({
       libraryIds: [first.id, second.id].sort(),
-      genres: ["", "Jazz", "Rock"],
+      genres: ["", "Rock"],
+      artists: ["Artist B"],
       folders: [
         { libraryId: first.id, relativePath: "Artist" },
         { libraryId: first.id, relativePath: path.join("Artist", "Album") },

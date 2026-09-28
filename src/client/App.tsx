@@ -615,6 +615,10 @@ export function App() {
   const [pendingUserStateKeys, setPendingUserStateKeys] = useState<Set<string>>(
     new Set(),
   );
+  const [selectedAlbumFocus, setSelectedAlbumFocus] = useState<{
+    id: string;
+    artist: string | null;
+  } | null>(null);
   const pendingUserStateKeysRef = useRef(new Set<string>());
   const [ratingDialog, setRatingDialog] = useState<{
     kind: "album" | "track";
@@ -647,6 +651,34 @@ export function App() {
     requestAlbumScroll,
     requestTrackScroll,
   } = useCatalogScrollTargets(filterKey);
+  const preserveSelectedAlbumVisibility = useCallback(
+    (next: CatalogFilter) => {
+      const albumId =
+        selectedAlbumFocus && selectedAlbums.includes(selectedAlbumFocus.id)
+          ? selectedAlbumFocus.id
+          : selectedAlbums.at(-1) || null;
+      const artist =
+        albumId && selectedAlbumFocus?.id === albumId
+          ? selectedAlbumFocus.artist
+          : null;
+      const targetFilterKey = `${navigationEpoch + 1}:${JSON.stringify(next)}`;
+      preservePanelPositions(() => setFilter(next), {}, [
+        ...(artist ? ["artists" as const] : []),
+        ...(albumId ? ["albums" as const] : []),
+      ]);
+      if (artist) requestArtistScroll(artist, targetFilterKey);
+      if (albumId) requestAlbumScroll(albumId, targetFilterKey);
+    },
+    [
+      navigationEpoch,
+      preservePanelPositions,
+      requestArtistScroll,
+      requestAlbumScroll,
+      selectedAlbumFocus,
+      selectedAlbums,
+      setFilter,
+    ],
+  );
   const updateAppearance = useCallback((next: AppearanceSettings) => {
     const normalized = normalizeAppearance(next);
     appearanceTouchedRef.current = true;
@@ -1962,7 +1994,7 @@ export function App() {
     ],
   );
   const applyAlbumSelection = useCallback(
-    (albumIds: string[]) => {
+    (albumIds: string[], focusedAlbumId?: string) => {
       if (isSearching) {
         setSelectedAlbums(albumIds);
         return;
@@ -1971,6 +2003,15 @@ export function App() {
       // higher-priority facets keep the same query, so restoring their context
       // would unnecessarily move them to the currently playing album.
       setSelectedAlbums(albumIds);
+      setSelectedAlbumFocus((current) => {
+        if (focusedAlbumId && albumIds.includes(focusedAlbumId))
+          return current?.id === focusedAlbumId
+            ? current
+            : { id: focusedAlbumId, artist: null };
+        if (current && albumIds.includes(current.id)) return current;
+        const id = albumIds.at(-1);
+        return id ? { id, artist: null } : null;
+      });
       setFilter((current) => ({ ...current, albumIds }));
     },
     [isSearching, setFilter, setSelectedAlbums],
@@ -2938,13 +2979,11 @@ export function App() {
               marquee={librarySelection.marquee}
               renderFolderLevel={renderFolderLevel}
               onReset={() =>
-                preservePanelPositions(() =>
-                  setFilter((f) => ({
-                    ...f,
-                    libraryIds: [],
-                    folders: [],
-                  })),
-                )
+                preserveSelectedAlbumVisibility({
+                  ...filter,
+                  libraryIds: [],
+                  folders: [],
+                })
               }
               onToggleExpanded={(libraryId) =>
                 setExpandedLibraryIds((current) => {
@@ -2987,9 +3026,7 @@ export function App() {
               surfaceProps={genreSelection.surfaceProps}
               marquee={genreSelection.marquee}
               onReset={() =>
-                preservePanelPositions(() =>
-                  setFilter((f) => ({ ...f, genres: [] })),
-                )
+                preserveSelectedAlbumVisibility({ ...filter, genres: [] })
               }
               onSelect={(event, genre) => {
                 if (isSearching) {
@@ -3022,10 +3059,8 @@ export function App() {
                 active={filter.artists.length > 0}
                 resetLabel="Сбросить исполнителей"
                 onReset={() => {
-                  preservePanelPositions(() => {
-                    setSelectedArtists([]);
-                    setFilter((f) => ({ ...f, artists: [] }));
-                  });
+                  preserveSelectedAlbumVisibility({ ...filter, artists: [] });
+                  setSelectedArtists([]);
                 }}
               />
             </div>
@@ -3056,6 +3091,8 @@ export function App() {
               pendingBookmarkKeys={pendingBookmarkKeys}
               onBookmarkChange={changeBookmark}
               currentArtists={currentPlayerArtists}
+              facetRelevance={facetRelevance.data}
+              hasFacetRelevance={hasFacetRelevance}
               playlistDragEnabled={Boolean(
                 activePlaylistId && panelVisibility.playlists,
               )}
@@ -3103,6 +3140,11 @@ export function App() {
               selected={selectedAlbums}
               currentAlbumId={currentPlayerTrack?.albumKey ?? null}
               onSelectionChange={applyAlbumSelection}
+              onSelectionFocus={(albumId, albumIds, artist) =>
+                setSelectedAlbumFocus(
+                  albumIds.includes(albumId) ? { id: albumId, artist } : null,
+                )
+              }
               onNavigate={(albumId) =>
                 void navigateCatalog({ albumIds: [albumId] }, "track")
               }

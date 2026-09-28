@@ -854,60 +854,91 @@ export class Catalog {
     };
   }
   facetRelevance(filter: CatalogFilter): FacetRelevance {
-    const clauses = ["t.available=1", "l.available=1"];
-    const args: string[] = [];
-    const relations: string[] = [];
-    const artists = filter.artists.filter((artist) => artist !== "");
-    if (artists.length) {
-      relations.push(
-        `t.id IN (SELECT trackId FROM track_album_artists WHERE artist IN (${artists.map(() => "?").join(",")}))`,
-      );
-      args.push(...artists);
-    }
-    if (filter.artists.includes(""))
-      relations.push("t.albumArtists='[]' AND t.artists='[]'");
-    if (filter.albumIds.length) {
-      relations.push(
-        `t.albumKey IN (${filter.albumIds.map(() => "?").join(",")})`,
-      );
-      args.push(...filter.albumIds);
-    }
-    if (filter.genres.length) {
-      const genres = filter.genres.filter((genre) => genre !== "");
-      const parts: string[] = [];
-      if (genres.length) {
-        parts.push(
-          `t.id IN (SELECT trackId FROM track_genres WHERE genre IN (${genres.map(() => "?").join(",")}))`,
+    const relation = ({
+      genres,
+      artists,
+      albumIds,
+    }: Pick<CatalogFilter, "genres" | "artists" | "albumIds">) => {
+      const args: string[] = [];
+      const relations: string[] = [];
+      const namedArtists = artists.filter((artist) => artist !== "");
+      if (namedArtists.length) {
+        relations.push(
+          `t.id IN (SELECT trackId FROM track_album_artists WHERE artist IN (${namedArtists.map(() => "?").join(",")}))`,
         );
-        args.push(...genres);
+        args.push(...namedArtists);
       }
-      if (filter.genres.includes("")) parts.push("t.genres='[]'");
-      relations.push(`(${parts.join(" OR ")})`);
-    }
-    if (!relations.length) return { libraryIds: [], genres: [], folders: [] };
-    clauses.push(`(${relations.join(" OR ")})`);
-    const sql = clauses.join(" AND ");
+      if (artists.includes(""))
+        relations.push("t.albumArtists='[]' AND t.artists='[]'");
+      if (albumIds.length) {
+        relations.push(`t.albumKey IN (${albumIds.map(() => "?").join(",")})`);
+        args.push(...albumIds);
+      }
+      if (genres.length) {
+        const namedGenres = genres.filter((genre) => genre !== "");
+        const parts: string[] = [];
+        if (namedGenres.length) {
+          parts.push(
+            `t.id IN (SELECT trackId FROM track_genres WHERE genre IN (${namedGenres.map(() => "?").join(",")}))`,
+          );
+          args.push(...namedGenres);
+        }
+        if (genres.includes("")) parts.push("t.genres='[]'");
+        relations.push(`(${parts.join(" OR ")})`);
+      }
+      return relations.length
+        ? {
+            sql: `t.available=1 AND l.available=1 AND (${relations.join(" OR ")})`,
+            args,
+          }
+        : null;
+    };
+    const libraryRelation = relation(filter);
+    const genreRelation = relation({
+      genres: [],
+      artists: filter.artists,
+      albumIds: filter.albumIds,
+    });
+    const artistRelation = relation({
+      genres: [],
+      artists: [],
+      albumIds: filter.albumIds,
+    });
     return {
-      libraryIds: (
-        this.db
-          .prepare(
-            `SELECT DISTINCT t.libraryId id FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${sql} ORDER BY id`,
-          )
-          .all(...args) as { id: string }[]
-      ).map((row) => row.id),
-      genres: (
-        this.db
-          .prepare(
-            `SELECT DISTINCT coalesce(g.genre,'') name FROM tracks t JOIN libraries l ON l.id=t.libraryId LEFT JOIN track_genres g ON g.trackId=t.id WHERE ${sql} ORDER BY name COLLATE NOCASE`,
-          )
-          .all(...args) as { name: string }[]
-      ).map((row) => row.name),
-      folders: this.db
-        .prepare(
-          `WITH RECURSIVE folders(libraryId, relativePath) AS (
+      libraryIds: libraryRelation
+        ? (
+            this.db
+              .prepare(
+                `SELECT DISTINCT t.libraryId id FROM tracks t JOIN libraries l ON l.id=t.libraryId WHERE ${libraryRelation.sql} ORDER BY id`,
+              )
+              .all(...libraryRelation.args) as { id: string }[]
+          ).map((row) => row.id)
+        : [],
+      genres: genreRelation
+        ? (
+            this.db
+              .prepare(
+                `SELECT DISTINCT coalesce(g.genre,'') name FROM tracks t JOIN libraries l ON l.id=t.libraryId LEFT JOIN track_genres g ON g.trackId=t.id WHERE ${genreRelation.sql} ORDER BY name COLLATE NOCASE`,
+              )
+              .all(...genreRelation.args) as { name: string }[]
+          ).map((row) => row.name)
+        : [],
+      artists: artistRelation
+        ? (
+            this.db
+              .prepare(
+                `SELECT DISTINCT a.artist name FROM tracks t JOIN libraries l ON l.id=t.libraryId JOIN track_album_artists a ON a.trackId=t.id WHERE ${artistRelation.sql} ORDER BY name COLLATE NOCASE`,
+              )
+              .all(...artistRelation.args) as { name: string }[]
+          ).map((row) => row.name)
+        : [],
+      folders: libraryRelation
+        ? (this.db
+            .prepare(
+              `WITH RECURSIVE folders(libraryId, relativePath) AS (
              SELECT t.libraryId, folder_parent(t.relativePath)
              FROM tracks t JOIN libraries l ON l.id=t.libraryId
-             WHERE ${sql}
+             WHERE ${libraryRelation.sql}
              UNION
              SELECT libraryId, folder_parent(relativePath)
              FROM folders
@@ -917,8 +948,12 @@ export class Catalog {
            FROM folders
            WHERE relativePath IS NOT NULL
            ORDER BY libraryId, relativePath`,
-        )
-        .all(...args) as { libraryId: string; relativePath: string }[],
+            )
+            .all(...libraryRelation.args) as {
+            libraryId: string;
+            relativePath: string;
+          }[])
+        : [],
     };
   }
   genres(filter: CatalogFilter): { name: string; count: number }[] {

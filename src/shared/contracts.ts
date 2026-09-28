@@ -117,6 +117,7 @@ export interface ArtistPage extends Page<{ name: string; count: number }> {
 export interface FacetRelevance {
   libraryIds: string[];
   genres: string[];
+  artists: string[];
   folders: { libraryId: string; relativePath: string }[];
 }
 export interface FilterValidity {
