@@ -45,7 +45,6 @@ import {
   Eye,
   EyeOff,
   Star,
-  SquareLibrary,
   Tag,
   Trash2,
   X,
@@ -816,7 +815,7 @@ export function App() {
       const target = event.target as Element;
       if (
         target.closest(
-          "button, input, select, a, .search, .local-status, [data-window-control]",
+          "button, input, select, a, .search, [data-window-control]",
         )
       )
         return;
@@ -931,7 +930,7 @@ export function App() {
       if (
         !isWebFullscreen ||
         target.closest(
-          "button, input, select, a, .search, .local-status, [data-window-control]",
+          "button, input, select, a, .search, [data-window-control]",
         )
       )
         return;
@@ -2887,28 +2886,51 @@ export function App() {
         onDoubleClick={toggleFullscreenWindowSize}
       >
         {!coverMode && (
-          <div
-            className="panel-visibility-controls"
-            role="group"
-            aria-label="Видимость панелей каталога"
-          >
-            {panelDefinitions.map(({ id, label, Icon }) => {
-              const visible = panelVisibility[id];
-              const action = visible ? "Скрыть" : "Показать";
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  className={`icon-button panel-visibility-button ${visible ? "is-active" : "is-hidden"}`}
-                  aria-label={`${action} панель «${label}»`}
-                  aria-pressed={visible}
-                  title={`${action} панель «${label}»`}
-                  onClick={() => togglePanelVisibility(id)}
-                >
-                  <Icon size={19} />
-                </button>
-              );
-            })}
+          <div className="catalog-actions">
+            <button
+              className={`icon-button bookmarks-button ${filter.bookmarksOnly ? "active" : ""} ${bookmarks.isError ? "error" : ""}`}
+              aria-label={
+                bookmarks.isError
+                  ? "Не удалось загрузить закладки. Повторить"
+                  : filter.bookmarksOnly
+                    ? "Отключить фильтр закладок"
+                    : "Показать музыку из закладок"
+              }
+              aria-pressed={filter.bookmarksOnly}
+              title={
+                bookmarks.isError
+                  ? "Не удалось загрузить закладки. Нажмите, чтобы повторить"
+                  : filter.bookmarksOnly
+                    ? "Отключить фильтр закладок"
+                    : "Показать музыку из закладок"
+              }
+              disabled={
+                isSearching ||
+                bookmarks.isFetching ||
+                pendingBookmarkKeys.size > 0
+              }
+              onClick={() => {
+                if (bookmarks.isError) {
+                  void bookmarks.refetch();
+                  return;
+                }
+                setFilter((current) => ({
+                  ...current,
+                  bookmarksOnly: !current.bookmarksOnly,
+                }));
+              }}
+            >
+              {bookmarks.isFetching || pendingBookmarkKeys.size > 0 ? (
+                <RefreshCw size={18} className="spinning" />
+              ) : (
+                <BookmarkIcon size={19} fill="none" />
+              )}
+            </button>
+            <CatalogUserFilters
+              filter={filter}
+              disabled={isSearching}
+              onChange={setFilter}
+            />
           </div>
         )}
         {coverMode ? (
@@ -2960,54 +2982,15 @@ export function App() {
             )}
           </label>
         )}
-        {!coverMode && (
-          <div className="catalog-actions">
-            <button
-              className={`icon-button bookmarks-button ${filter.bookmarksOnly ? "active" : ""} ${bookmarks.isError ? "error" : ""}`}
-              aria-label={
-                bookmarks.isError
-                  ? "Не удалось загрузить закладки. Повторить"
-                  : filter.bookmarksOnly
-                    ? "Отключить фильтр закладок"
-                    : "Показать музыку из закладок"
-              }
-              aria-pressed={filter.bookmarksOnly}
-              title={
-                bookmarks.isError
-                  ? "Не удалось загрузить закладки. Нажмите, чтобы повторить"
-                  : filter.bookmarksOnly
-                    ? "Отключить фильтр закладок"
-                    : "Показать музыку из закладок"
-              }
-              disabled={
-                isSearching ||
-                bookmarks.isFetching ||
-                pendingBookmarkKeys.size > 0
-              }
-              onClick={() => {
-                if (bookmarks.isError) {
-                  void bookmarks.refetch();
-                  return;
-                }
-                setFilter((current) => ({
-                  ...current,
-                  bookmarksOnly: !current.bookmarksOnly,
-                }));
-              }}
-            >
-              {bookmarks.isFetching || pendingBookmarkKeys.size > 0 ? (
-                <RefreshCw size={18} className="spinning" />
-              ) : (
-                <BookmarkIcon size={19} fill="none" />
-              )}
-            </button>
-            <CatalogUserFilters
-              filter={filter}
-              disabled={isSearching}
-              onChange={setFilter}
-            />
-          </div>
-        )}
+        <button
+          type="button"
+          className="icon-button settings-button"
+          aria-label="Открыть настройки"
+          title="Настройки"
+          onClick={() => setModal("settings")}
+        >
+          <Settings size={20} />
+        </button>
         {!coverMode && (
           <button
             className="icon-button history-button"
@@ -3018,18 +3001,34 @@ export function App() {
             <History size={21} />
           </button>
         )}
+        {!coverMode && (
+          <div
+            className="panel-visibility-controls"
+            role="group"
+            aria-label="Видимость панелей каталога"
+          >
+            {panelDefinitions.map(({ id, label, Icon }) => {
+              const visible = panelVisibility[id];
+              const action = visible ? "Скрыть" : "Показать";
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  className={`icon-button panel-visibility-button ${visible ? "is-active" : "is-hidden"}`}
+                  aria-label={`${action} панель «${label}»`}
+                  aria-pressed={visible}
+                  title={`${action} панель «${label}»`}
+                  onClick={() => togglePanelVisibility(id)}
+                >
+                  <Icon size={19} />
+                </button>
+              );
+            })}
+          </div>
+        )}
         <button
           type="button"
-          className="icon-button settings-button"
-          aria-label="Открыть настройки"
-          title="Настройки"
-          onClick={() => setModal("settings")}
-        >
-          <Settings size={20} />
-        </button>
-        <button
-          type="button"
-          className="icon-button cover-mode-toggle"
+          className={`icon-button cover-mode-toggle panel-visibility-button ${coverMode ? "is-active" : "is-hidden"}`}
           aria-label={
             coverMode ? "Вернуться в каталог" : "Открыть режим обложки"
           }
@@ -3042,7 +3041,7 @@ export function App() {
             setCoverMode((current) => !current);
           }}
         >
-          {coverMode ? <SquareLibrary size={21} /> : <DiscAlbum size={21} />}
+          <DiscAlbum size={21} />
         </button>
         <button
           type="button"
@@ -3062,10 +3061,6 @@ export function App() {
         >
           {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
         </button>
-        <div className="local-status">
-          <span />
-          На этом компьютере
-        </div>
       </header>
       <main
         ref={workspaceRef}

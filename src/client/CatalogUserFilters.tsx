@@ -201,22 +201,6 @@ export function CatalogUserFilters({
     <div className="catalog-user-filters" aria-label="Фильтры каталога">
       <button
         type="button"
-        className={`icon-button catalog-filter-button ${recentlyAddedOnly ? "active" : ""}`}
-        aria-label="Только недавно добавленные"
-        aria-pressed={recentlyAddedOnly}
-        title="Только добавленные за последние 30 дней"
-        disabled={disabled}
-        onClick={() =>
-          onChange((current) => ({
-            ...current,
-            recentlyAddedOnly: !current.recentlyAddedOnly,
-          }))
-        }
-      >
-        <Clock3 size={19} aria-hidden="true" />
-      </button>
-      <button
-        type="button"
         className={`icon-button catalog-filter-button ${unviewedOnly ? "active" : ""}`}
         aria-label="Только непросмотренные"
         aria-pressed={unviewedOnly}
@@ -243,6 +227,22 @@ export function CatalogUserFilters({
         onClick={() => setRatingOpen((open) => !open)}
       >
         <Star size={19} aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        className={`icon-button catalog-filter-button ${recentlyAddedOnly ? "active" : ""}`}
+        aria-label="Только недавно добавленные"
+        aria-pressed={recentlyAddedOnly}
+        title="Только добавленные за последние 30 дней"
+        disabled={disabled}
+        onClick={() =>
+          onChange((current) => ({
+            ...current,
+            recentlyAddedOnly: !current.recentlyAddedOnly,
+          }))
+        }
+      >
+        <Clock3 size={19} aria-hidden="true" />
       </button>
       {ratingOpen && (
         <RatingFilterPopover

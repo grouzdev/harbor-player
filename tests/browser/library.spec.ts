@@ -79,7 +79,7 @@ test("icon buttons keep their geometry on hover", async ({ page }) => {
   expect(after!.height).toBeCloseTo(before!.height, 5);
 });
 
-test("catalog filters stay right of search in the requested order", async ({
+test("topbar groups catalog controls in the requested order", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -143,15 +143,18 @@ test("catalog filters stay right of search in the requested order", async ({
   expect(coverModeBox).not.toBeNull();
   expect(fullscreenBox).not.toBeNull();
   expect(topbarBox).not.toBeNull();
-  expect(bookmarkBox!.x).toBeGreaterThanOrEqual(
-    searchBox!.x + searchBox!.width,
+  expect(bookmarkBox!.x + bookmarkBox!.width).toBeLessThanOrEqual(
+    searchBox!.x,
   );
-  expect(bookmarkBox!.x).toBeLessThan(recentlyAddedBox!.x);
-  expect(recentlyAddedBox!.x).toBeLessThan(unviewedBox!.x);
+  expect(bookmarkBox!.x).toBeLessThan(unviewedBox!.x);
   expect(unviewedBox!.x).toBeLessThan(ratingBox!.x);
-  expect(ratingBox!.x).toBeLessThan(historyBox!.x);
-  expect(historyBox!.x).toBeLessThan(settingsBox!.x);
-  expect(settingsBox!.x).toBeLessThan(coverModeBox!.x);
+  expect(ratingBox!.x).toBeLessThan(recentlyAddedBox!.x);
+  expect(searchBox!.x + searchBox!.width).toBeLessThanOrEqual(
+    settingsBox!.x,
+  );
+  expect(settingsBox!.x).toBeLessThan(historyBox!.x);
+  expect(historyBox!.x).toBeLessThan(sectionButtonsBox!.x);
+  expect(sectionButtonsBox!.x).toBeLessThan(coverModeBox!.x);
   expect(coverModeBox!.x).toBeLessThan(fullscreenBox!.x);
   const buttonGap = (
     left: { x: number; width: number },
@@ -171,23 +174,18 @@ test("catalog filters stay right of search in the requested order", async ({
     ).toBeCloseTo(7, 1);
   }
   for (const [left, right] of [
-    [bookmarkBox!, recentlyAddedBox!],
-    [recentlyAddedBox!, unviewedBox!],
+    [bookmarkBox!, unviewedBox!],
     [unviewedBox!, ratingBox!],
-    [ratingBox!, historyBox!],
-    [historyBox!, settingsBox!],
-    [settingsBox!, coverModeBox!],
+    [ratingBox!, recentlyAddedBox!],
+    [settingsBox!, historyBox!],
+    [historyBox!, sectionButtonsBox!],
+    [sectionButtonsBox!, coverModeBox!],
     [coverModeBox!, fullscreenBox!],
   ]) {
     expect(buttonGap(left, right)).toBeCloseTo(7, 1);
   }
   expect(filterBox!.x).toBeGreaterThanOrEqual(bookmarkBox!.x);
-  expect(filterBox!.x + filterBox!.width).toBeGreaterThanOrEqual(
-    ratingBox!.x + ratingBox!.width,
-  );
-  expect(sectionButtonsBox!.x + sectionButtonsBox!.width).toBeLessThan(
-    searchBox!.x,
-  );
+  expect(filterBox!.x + filterBox!.width).toBeLessThanOrEqual(searchBox!.x);
   expect(searchBox!.x + searchBox!.width / 2).toBeCloseTo(
     topbarBox!.x + topbarBox!.width / 2,
     1,
