@@ -657,15 +657,6 @@ export function AlbumGrid({
                           className="album-main"
                           aria-pressed={selected.includes(album.id)}
                           onClick={(event) => {
-                            if (
-                              !event.ctrlKey &&
-                              !event.metaKey &&
-                              !event.shiftKey &&
-                              selected.includes(album.id)
-                            ) {
-                              onPlay(album.id);
-                              return;
-                            }
                             selection.selectFromClick(
                               event,
                               album.id,
@@ -678,6 +669,7 @@ export function AlbumGrid({
                             )
                               onNavigate(album.id);
                           }}
+                          onDoubleClick={() => onPlay(album.id)}
                         >
                           <div
                             className={`album-cover ${dropTarget === album.id ? "drop-target" : ""}`}

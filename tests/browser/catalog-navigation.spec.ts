@@ -473,7 +473,7 @@ test("selecting an album keeps the album grid in place while another album plays
     '.album-card[data-selection-key="Queen-0"] .album-main',
   );
   await playing.click();
-  await playing.click();
+  await playing.dblclick();
   await expect(
     page.locator('.album-card[data-selection-key="Queen-0"]'),
   ).not.toHaveClass(/playing/);
@@ -557,7 +557,7 @@ test("a manual genre filter does not seek an excluded playing album", async ({
     '.album-card[data-selection-key="Queen-0"] .album-main',
   );
   await playing.click();
-  await playing.click();
+  await playing.dblclick();
   await expect(
     page.locator('.album-card[data-selection-key="Queen-0"]'),
   ).not.toHaveClass(/playing/);
