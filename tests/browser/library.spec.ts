@@ -809,6 +809,40 @@ test("playlist panel and its visibility button are first", async ({ page }) => {
   expect(playlist!.x).toBe(Math.min(...positions.map(({ x }) => x)));
 });
 
+test("portrait workspace places the playlist before albums without reordering topbar controls", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1000, height: 1200 });
+  await page.goto("/");
+
+  const controls = page.locator(".panel-visibility-controls button");
+  await expect(controls.first()).toHaveAccessibleName(
+    "Показать панель «Плейлист»",
+  );
+  await controls.first().click();
+
+  const layout = await page.locator(".workspace").evaluate((workspace) => {
+    const rect = (selector: string) => {
+      const box = workspace
+        .querySelector<HTMLElement>(selector)!
+        .getBoundingClientRect();
+      return { left: box.left, top: box.top };
+    };
+    return {
+      playlist: rect(".playlist-panel"),
+      albums: rect(".albums-panel"),
+      libraries: rect(".libraries-panel"),
+    };
+  });
+
+  expect(layout.playlist.top).toBeCloseTo(layout.albums.top, 1);
+  expect(layout.playlist.left).toBeLessThan(layout.albums.left);
+  expect(layout.playlist.top).toBeGreaterThan(layout.libraries.top);
+  await expect(controls.first()).toHaveAccessibleName(
+    "Скрыть панель «Плейлист»",
+  );
+});
+
 test("a single visible panel fills the workspace width", async ({ page }) => {
   const panels = [
     ["Библиотеки", ".libraries-panel"],

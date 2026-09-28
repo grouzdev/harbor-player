@@ -1060,20 +1060,34 @@ export function App() {
   const visiblePanelIds = panelDefinitions
     .filter(({ id }) => panelVisibility[id])
     .map(({ id }) => id);
-  const visibleFacetPanelIds = panelDefinitions
-    .filter(({ id, group }) => group === "facets" && panelVisibility[id])
-    .map(({ id }) => id);
-  const visibleCatalogPanelIds = panelDefinitions
-    .filter(({ id, group }) => group === "catalog" && panelVisibility[id])
-    .map(({ id }) => id);
   const portraitWorkspaceLayout = usesPortraitWorkspaceLayout(
     isPortraitLayout,
     appShellWidth,
     visiblePanelIds.length,
   );
+  const visibleFacetPanelIds = panelDefinitions
+    .filter(
+      ({ id, group }) =>
+        group === "facets" &&
+        panelVisibility[id] &&
+        (!portraitWorkspaceLayout || id !== "playlists"),
+    )
+    .map(({ id }) => id);
+  const visibleCatalogPanelIds = panelDefinitions
+    .filter(
+      ({ id, group }) =>
+        panelVisibility[id] &&
+        (group === "catalog" ||
+          (portraitWorkspaceLayout && id === "playlists")),
+    )
+    .map(({ id }) => id);
+  const workspacePanelIds = [
+    ...visibleFacetPanelIds,
+    ...visibleCatalogPanelIds,
+  ];
   const nextVisiblePanel = (id: PanelId) => {
-    const index = visiblePanelIds.indexOf(id);
-    return index >= 0 ? visiblePanelIds[index + 1] : undefined;
+    const index = workspacePanelIds.indexOf(id);
+    return index >= 0 ? workspacePanelIds[index + 1] : undefined;
   };
   const pendingRefresh = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
@@ -2696,7 +2710,9 @@ export function App() {
     if (!rightId) return null;
     const leftPanel = getPanelDefinition(leftId);
     const rightPanel = getPanelDefinition(rightId);
-    const crossesPortraitRows = leftPanel.group !== rightPanel.group;
+    const crossesPortraitRows =
+      visibleFacetPanelIds.includes(leftId) !==
+      visibleFacetPanelIds.includes(rightId);
     return (
       <div
         className={`resizer ${crossesPortraitRows ? "cross-row-resizer" : ""}`}
@@ -2953,7 +2969,7 @@ export function App() {
         <div
           className={`workspace-row workspace-facets ${visibleFacetPanelIds.length ? "" : "workspace-row-hidden"}`}
         >
-          {panelVisibility.playlists && (
+          {panelVisibility.playlists && !portraitWorkspaceLayout && (
             <PlaylistPanel
               playlistId={activePlaylistId}
               onAddSelection={addCurrentSelectionToPlaylist}
@@ -2963,7 +2979,9 @@ export function App() {
               notify={notify}
             />
           )}
-          {panelVisibility.playlists && renderPanelResizer("playlists")}
+          {panelVisibility.playlists &&
+            !portraitWorkspaceLayout &&
+            renderPanelResizer("playlists")}
           {panelVisibility.libraries && (
             <LibraryPanel
               libraries={libraries.data || []}
@@ -3114,6 +3132,19 @@ export function App() {
         <div
           className={`workspace-row workspace-catalog ${visibleCatalogPanelIds.length ? "" : "workspace-row-hidden"}`}
         >
+          {panelVisibility.playlists && portraitWorkspaceLayout && (
+            <PlaylistPanel
+              playlistId={activePlaylistId}
+              onAddSelection={addCurrentSelectionToPlaylist}
+              onPlay={(id, startId) => void player.startPlaylist(id, startId)}
+              onRename={(playlist) => void renamePlaylist(playlist)}
+              onDelete={(playlist) => void deletePlaylist(playlist)}
+              notify={notify}
+            />
+          )}
+          {panelVisibility.playlists &&
+            portraitWorkspaceLayout &&
+            renderPanelResizer("playlists")}
           <section
             className={`panel albums-panel ${panelVisibility.albums ? "" : "panel-hidden"}`}
             data-panel-id="albums"
