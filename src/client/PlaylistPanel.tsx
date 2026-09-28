@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
   ChevronRight,
-  Copy,
   Download,
   GripVertical,
   ListMusic,
@@ -417,16 +416,16 @@ export function PlaylistPanel({
   notify,
 }: {
   playlistId: string | null;
-  onAddSelection: () => Promise<void>;
+  onAddSelection: (beforeEntryId?: string) => Promise<void>;
   onPlay: (id: string, startId?: string) => void;
   onRename: (playlist: PlaylistDetail["playlist"]) => void;
   onDelete: (playlist: PlaylistDetail["playlist"]) => void;
   notify: (message: string) => void;
 }) {
   const queryClient = useQueryClient();
-  const [view, setView] = useState<"composition" | "order">("composition");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [dragged, setDragged] = useState<string | null>(null);
+  const [dropBefore, setDropBefore] = useState<string | null>(null);
   const [syncOpen, setSyncOpen] = useState(false);
   const detail = useQuery({
     queryKey: ["playlist", playlistId],
@@ -468,7 +467,7 @@ export function PlaylistPanel({
     const to = ids.indexOf(beforeId);
     if (from < 0 || to < 0 || from === to) return;
     ids.splice(from, 1);
-    ids.splice(to, 0, entryId);
+    ids.splice(from < to ? to - 1 : to, 0, entryId);
     await mutate(`/playlists/${playlistId}/reorder`, { entryIds: ids });
   };
   if (!playlistId)
@@ -491,6 +490,16 @@ export function PlaylistPanel({
     <section
       className="panel tracks-panel playlist-panel"
       data-panel-id="playlists"
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        if (
+          !dragged &&
+          event.dataTransfer.types.includes(
+            "application/x-harbor-catalog-selection",
+          )
+        )
+          void onAddSelection();
+      }}
     >
       <div className="panel-heading playlist-heading">
         <h2>{playlist?.name || "Плейлист"}</h2>
@@ -540,75 +549,46 @@ export function PlaylistPanel({
           </button>
         </div>
       </div>
-      <div className="playlist-toolbar">
-        <div
-          className="appearance-segmented-control playlist-view-control"
-          role="group"
-          aria-label="Представление плейлиста"
-        >
-          <button
-            className={`appearance-segment ${view === "composition" ? "selected" : ""}`}
-            onClick={() => setView("composition")}
-          >
-            Состав
-          </button>
-          <button
-            className={`appearance-segment ${view === "order" ? "selected" : ""}`}
-            onClick={() => setView("order")}
-          >
-            Порядок
-          </button>
-        </div>
-        <select
-          aria-label="Порядок плейлиста"
-          value={playlist?.orderMode || "manual"}
-          disabled={!playlist}
-          onChange={(event) =>
-            void mutate(`/playlists/${playlistId}`, {
-              orderMode: event.target.value,
-            })
-          }
-        >
-          <option value="manual">Вручную</option>
-          <option value="catalog">Исполнитель / альбом</option>
-        </select>
-      </div>
-      <div
-        className="all-albums playlist-drop-target"
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          if (
-            event.dataTransfer.types.includes(
-              "application/x-harbor-catalog-selection",
-            )
-          )
-            void onAddSelection();
-        }}
-      >
-        Перетащите сюда треки, альбомы или исполнителей
-      </div>
       <div className="playlist-content">
         {detail.isFetching && !detail.data ? (
           <div className="empty-small track-empty playlist-loading">
             <RefreshCw className="spinning" size={18} /> Загрузка…
           </div>
-        ) : view === "composition" ? (
-          detail.data?.entries.length ? (
-            detail.data.entries.map((entry, index) => {
-              const isExpanded = expanded.has(entry.id);
-              const nested =
-                tracks.data?.items.filter(
-                  (item) => item.entryId === entry.id,
-                ) || [];
-              return (
+        ) : detail.data?.entries.length ? (
+          detail.data.entries.map((entry, index) => {
+            const isExpanded = expanded.has(entry.id);
+            const nested =
+              tracks.data?.items.filter((item) => item.entryId === entry.id) ||
+              [];
+            return (
+              <div key={entry.id}>
+                {dropBefore === entry.id && (
+                  <div className="playlist-drop-indicator" />
+                )}
                 <div
                   className="playlist-entry"
-                  key={entry.id}
-                  draggable={playlist?.orderMode === "manual"}
+                  draggable
                   onDragStart={() => setDragged(entry.id)}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={() => dragged && void reorder(dragged, entry.id)}
-                  onDragEnd={() => setDragged(null)}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setDropBefore(entry.id);
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setDropBefore(null);
+                    if (dragged) void reorder(dragged, entry.id);
+                    else if (
+                      event.dataTransfer.types.includes(
+                        "application/x-harbor-catalog-selection",
+                      )
+                    )
+                      void onAddSelection(entry.id);
+                  }}
+                  onDragEnd={() => {
+                    setDragged(null);
+                    setDropBefore(null);
+                  }}
                 >
                   <div className="playlist-entry-main">
                     <GripVertical size={15} className="playlist-drag-handle" />
@@ -659,20 +639,6 @@ export function PlaylistPanel({
                     )}
                     <button
                       className="icon-button"
-                      aria-label="Действия элемента"
-                      title="Развернуть в треки"
-                      disabled={entry.kind === "track"}
-                      onClick={() =>
-                        void mutate(
-                          `/playlists/${playlistId}/entries/${entry.id}/materialize`,
-                          {},
-                        )
-                      }
-                    >
-                      <Copy size={14} />
-                    </button>
-                    <button
-                      className="icon-button"
                       aria-label="Удалить из плейлиста"
                       onClick={() =>
                         void mutate(
@@ -698,36 +664,13 @@ export function PlaylistPanel({
                       </button>
                     ))}
                 </div>
-              );
-            })
-          ) : (
-            <div className="empty-small track-empty playlist-empty">
-              <ListMusic size={28} />
-              <p>Добавьте музыку из каталога</p>
-            </div>
-          )
+              </div>
+            );
+          })
         ) : (
-          <div className="playlist-track-order">
-            {(tracks.data?.items || []).map((item) => (
-              <button
-                key={item.track.id}
-                className={!item.track.available ? "offline" : ""}
-                onDoubleClick={() => onPlay(playlistId, item.track.id)}
-              >
-                <span>{item.position + 1}</span>
-                <span>
-                  <strong>{item.track.title}</strong>
-                  <small>
-                    {(item.track.artists.length
-                      ? item.track.artists
-                      : item.track.albumArtists
-                    ).join(", ")}{" "}
-                    · {item.track.albumTitle}
-                  </small>
-                </span>
-                <small>{duration(item.track.duration)}</small>
-              </button>
-            ))}
+          <div className="empty-small track-empty playlist-empty">
+            <ListMusic size={28} />
+            <p>Добавьте музыку из каталога</p>
           </div>
         )}
       </div>

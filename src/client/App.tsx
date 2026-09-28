@@ -2405,37 +2405,48 @@ export function App() {
     },
     [notify, refreshPlaylists],
   );
-  const addCurrentSelectionToPlaylist = useCallback(async () => {
-    if (!activePlaylistId) {
-      notify("Сначала выберите плейлист");
-      return;
-    }
-    let body: unknown;
-    if (selected.size)
-      body = { kind: "track", selection: { trackIds: [...selected] } };
-    else if (selectedAlbums.length)
-      body = { kind: "album", ids: selectedAlbums };
-    else if (selectedArtists.length)
-      body = { kind: "artist", ids: selectedArtists };
-    else {
-      notify("Выберите исполнителя, альбом или трек");
-      return;
-    }
-    try {
-      await api(`/playlists/${activePlaylistId}/entries`, body);
-      await refreshPlaylists();
-      notify("Добавлено в плейлист");
-    } catch (error) {
-      notify((error as Error).message);
-    }
-  }, [
-    activePlaylistId,
-    notify,
-    refreshPlaylists,
-    selected,
-    selectedAlbums,
-    selectedArtists,
-  ]);
+  const addCurrentSelectionToPlaylist = useCallback(
+    async (beforeEntryId?: string) => {
+      if (!activePlaylistId) {
+        notify("Сначала выберите плейлист");
+        return;
+      }
+      const bodies: unknown[] = [];
+      if (filter.genres.length)
+        bodies.push({ kind: "genre", ids: filter.genres, beforeEntryId });
+      if (selectedArtists.length)
+        bodies.push({ kind: "artist", ids: selectedArtists, beforeEntryId });
+      if (selectedAlbums.length)
+        bodies.push({ kind: "album", ids: selectedAlbums, beforeEntryId });
+      if (selected.size)
+        bodies.push({
+          kind: "track",
+          selection: { trackIds: [...selected] },
+          beforeEntryId,
+        });
+      if (!bodies.length) {
+        notify("Выберите исполнителя, альбом или трек");
+        return;
+      }
+      try {
+        for (const body of bodies)
+          await api(`/playlists/${activePlaylistId}/entries`, body);
+        await refreshPlaylists();
+        notify("Добавлено в плейлист");
+      } catch (error) {
+        notify((error as Error).message);
+      }
+    },
+    [
+      activePlaylistId,
+      notify,
+      refreshPlaylists,
+      selected,
+      selectedAlbums,
+      selectedArtists,
+      filter.genres,
+    ],
+  );
   const showPreview = (p: OperationPreview) => {
     setModal(null);
     setModalSelection(null);
@@ -3043,6 +3054,13 @@ export function App() {
               listRef={genreListRef}
               surfaceProps={genreSelection.surfaceProps}
               marquee={genreSelection.marquee}
+              playlistDragEnabled={Boolean(
+                activePlaylistId && panelVisibility.playlists,
+              )}
+              onGenreDragStart={(genre) => {
+                if (!filter.genres.includes(genre))
+                  setFilter((current) => ({ ...current, genres: [genre] }));
+              }}
               onReset={() =>
                 preserveSelectedAlbumVisibility({ ...filter, genres: [] })
               }

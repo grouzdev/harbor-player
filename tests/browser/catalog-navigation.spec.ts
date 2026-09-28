@@ -102,7 +102,6 @@ async function catalog(
   const playlist = {
     id: "road-trip",
     name: "В дорогу",
-    orderMode: "manual" as const,
     createdAt: "2026-09-27T00:00:00.000Z",
     updatedAt: "2026-09-27T00:00:00.000Z",
     entryCount: 1,
@@ -449,13 +448,8 @@ test("playlists live in the libraries panel and open a permanent composition pan
     panel.locator(".playlist-heading-actions .icon-button"),
   ).toHaveCount(5);
   await expect(
-    panel.getByRole("group", { name: "Представление плейлиста" }),
-  ).toHaveClass(/appearance-segmented-control/);
-  await expect(
     panel.getByText("Queen album 000", { exact: true }),
   ).toBeVisible();
-  await panel.getByRole("button", { name: "Порядок" }).click();
-  await expect(panel.getByText("Queen song 0", { exact: true })).toBeVisible();
 });
 
 test("artist and album selection cascades to lower-priority panels", async ({

@@ -222,6 +222,8 @@ type GenrePanelProps = {
   onSelect: (event: React.MouseEvent, genre: string) => void;
   onPlay: (genre: string) => void;
   onContextMenu: (event: React.MouseEvent, genre: string) => void;
+  playlistDragEnabled?: boolean;
+  onGenreDragStart: (genre: string) => void;
 };
 
 export function GenrePanel({
@@ -238,6 +240,8 @@ export function GenrePanel({
   onSelect,
   onPlay,
   onContextMenu,
+  playlistDragEnabled = false,
+  onGenreDragStart,
 }: GenrePanelProps) {
   return (
     <section className="panel genres-panel" data-panel-id="genres">
@@ -273,6 +277,14 @@ export function GenrePanel({
               }
               selected={highlightedGenres.has(genre.name)}
               selectionKey={genre.name}
+              draggable={playlistDragEnabled}
+              onDragStart={(event) => {
+                onGenreDragStart(genre.name);
+                event.dataTransfer.setData(
+                  "application/x-harbor-catalog-selection",
+                  "genre",
+                );
+              }}
               value={label}
               suffix={count(genre.count)}
               onSelect={(event) => onSelect(event, genre.name)}

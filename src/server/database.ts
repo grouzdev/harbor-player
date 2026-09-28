@@ -43,7 +43,6 @@ import {
   type PlaylistDetail,
   type PlaylistEntry,
   type PlaylistEntryKind,
-  type PlaylistOrderMode,
   type PlaylistSnapshot,
   type PlaylistSyncSettings,
   type PlaylistTrackPage,
@@ -115,6 +114,7 @@ const comparePlaylistTracks = (left: Track, right: Track) => {
 
 export class Catalog {
   private readonly db: Database.Database;
+  private hasLegacyPlaylistOrderColumn = false;
   constructor(readonly dataDir: string) {
     mkdirSync(dataDir, { recursive: true });
     this.db = new Database(path.join(dataDir, "catalog.sqlite"));
@@ -154,6 +154,10 @@ export class Catalog {
     this.db.pragma("foreign_keys = ON");
     this.db.pragma("busy_timeout = 5000");
     runCatalogMigrations(this.db);
+    this.hasLegacyPlaylistOrderColumn = (
+      this.db.pragma("table_info(playlists)") as { name: string }[]
+    ).some((column) => column.name === "orderMode");
+    this.materializeLegacyCatalogPlaylists();
     this.clearExpiredHttpCache();
   }
   libraries(filter: CatalogFilter = emptyFilter): Library[] {
@@ -1455,6 +1459,11 @@ export class Catalog {
         SELECT 1 FROM track_album_artists a
         WHERE a.trackId=t.id AND a.artist=?
       )`;
+    else if (entry.kind === "genre")
+      condition = `EXISTS (
+        SELECT 1 FROM track_genres g
+        WHERE g.trackId=t.id AND g.genre=?
+      )`;
     const rows = this.db
       .prepare(
         `SELECT t.*, trackState.rating rating, albumState.rating albumRating,
@@ -1467,7 +1476,10 @@ export class Catalog {
       .all(entry.targetId) as Row[];
     return rows.map(fromRow).sort(comparePlaylistTracks);
   }
-  private resolvePlaylistRows(playlistId: string): {
+  private resolvePlaylistRows(
+    playlistId: string,
+    catalogOrder = false,
+  ): {
     tracks: ResolvedPlaylistTrack[];
     entries: PlaylistEntry[];
     unavailableCount: number;
@@ -1508,19 +1520,59 @@ export class Catalog {
         unavailableCount: entryUnavailable,
       });
     }
-    if (playlist.orderMode === "catalog")
+    if (catalogOrder)
       tracks.sort((left, right) =>
         comparePlaylistTracks(left.track, right.track),
       );
     tracks.forEach((item, position) => (item.position = position));
     return { tracks, entries, unavailableCount };
   }
+  private materializeLegacyCatalogPlaylists(): void {
+    const columns = new Set(
+      (this.db.pragma("table_info(playlists)") as { name: string }[]).map(
+        (column) => column.name,
+      ),
+    );
+    if (!columns.has("orderMode")) return;
+    const ids = (
+      this.db
+        .prepare("SELECT id FROM playlists WHERE orderMode='catalog'")
+        .all() as Row[]
+    ).map((row) => row.id as string);
+    for (const id of ids) {
+      const tracks = this.resolvePlaylistRows(id, true).tracks;
+      this.db.transaction(() => {
+        this.db
+          .prepare("DELETE FROM playlist_entries WHERE playlistId=?")
+          .run(id);
+        const insert = this.db.prepare(
+          "INSERT INTO playlist_entries VALUES (?,?,?,?,?,?)",
+        );
+        tracks.forEach((item, position) =>
+          insert.run(
+            randomUUID(),
+            id,
+            "track",
+            item.track.id,
+            position,
+            JSON.stringify(
+              this.snapshotForPlaylistEntry("track", item.track.id),
+            ),
+          ),
+        );
+        this.db
+          .prepare(
+            "UPDATE playlists SET orderMode='manual',updatedAt=? WHERE id=?",
+          )
+          .run(new Date().toISOString(), id);
+      })();
+    }
+  }
   private playlistFromRow(row: Row): Playlist {
     const resolved = this.resolvePlaylistRows(row.id);
     return {
       id: row.id,
       name: row.name,
-      orderMode: row.orderMode,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       entryCount: resolved.entries.length,
@@ -1545,9 +1597,16 @@ export class Catalog {
     const now = new Date().toISOString();
     try {
       this.db.transaction(() => {
+        const statement = this.hasLegacyPlaylistOrderColumn
+          ? "INSERT INTO playlists(id,name,orderMode,createdAt,updatedAt) VALUES (?,?,?,?,?)"
+          : "INSERT INTO playlists(id,name,createdAt,updatedAt) VALUES (?,?,?,?)";
         this.db
-          .prepare("INSERT INTO playlists VALUES (?,?,?,?,?)")
-          .run(id, name, "manual", now, now);
+          .prepare(statement)
+          .run(
+            ...(this.hasLegacyPlaylistOrderColumn
+              ? [id, name, "manual", now, now]
+              : [id, name, now, now]),
+          );
         this.db
           .prepare(
             `INSERT INTO playlist_sync_settings
@@ -1563,19 +1622,13 @@ export class Catalog {
     }
     return this.playlist(id);
   }
-  updatePlaylist(
-    id: string,
-    patch: { name?: string; orderMode?: PlaylistOrderMode },
-  ): PlaylistDetail {
+  updatePlaylist(id: string, patch: { name?: string }): PlaylistDetail {
     const current = this.storedPlaylist(id);
     const name = patch.name ?? current.name;
-    const orderMode = patch.orderMode ?? current.orderMode;
     try {
       this.db
-        .prepare(
-          "UPDATE playlists SET name=?,orderMode=?,updatedAt=? WHERE id=?",
-        )
-        .run(name, orderMode, new Date().toISOString(), id);
+        .prepare("UPDATE playlists SET name=?,updatedAt=? WHERE id=?")
+        .run(name, new Date().toISOString(), id);
     } catch (error) {
       if (String(error).includes("UNIQUE"))
         throw conflict("Плейлист с таким названием уже существует");
@@ -1591,6 +1644,12 @@ export class Catalog {
     kind: PlaylistEntryKind,
     targetId: string,
   ): PlaylistSnapshot {
+    if (kind === "genre")
+      return {
+        title: targetId || "Без жанра",
+        subtitle: "Жанр",
+        coverId: null,
+      };
     if (kind === "artist")
       return {
         title: targetId || "Неизвестный исполнитель",
@@ -1632,6 +1691,7 @@ export class Catalog {
     playlistId: string,
     kind: PlaylistEntryKind,
     targetIds: string[],
+    beforeEntryId?: string,
   ): PlaylistDetail {
     this.storedPlaylist(playlistId);
     const existing = new Set(
@@ -1646,8 +1706,18 @@ export class Catalog {
       id,
       snapshot: this.snapshotForPlaylistEntry(kind, id),
     }));
-    const start = this.playlistEntryRows(playlistId).length;
+    const rows = this.playlistEntryRows(playlistId);
+    const start = beforeEntryId
+      ? rows.findIndex((entry) => entry.id === beforeEntryId)
+      : rows.length;
+    if (start < 0)
+      throw conflict("Состав плейлиста изменился. Обновите список.");
     this.db.transaction(() => {
+      this.db
+        .prepare(
+          "UPDATE playlist_entries SET position=position+? WHERE playlistId=? AND position>=?",
+        )
+        .run(snapshots.length, playlistId, start);
       const insert = this.db.prepare(
         "INSERT INTO playlist_entries VALUES (?,?,?,?,?,?)",
       );
@@ -1696,46 +1766,6 @@ export class Catalog {
         .prepare("UPDATE playlists SET updatedAt=? WHERE id=?")
         .run(new Date().toISOString(), playlistId);
     })();
-    return this.playlist(playlistId);
-  }
-  materializePlaylistEntry(
-    playlistId: string,
-    entryId: string,
-  ): PlaylistDetail {
-    const rows = this.playlistEntryRows(playlistId);
-    const entry = rows.find((item) => item.id === entryId);
-    if (!entry) throw notFound("Элемент плейлиста не найден");
-    if (entry.kind === "track") return this.playlist(playlistId);
-    const effective = this.resolvePlaylistRows(playlistId).tracks.filter(
-      (item) => item.entryId === entryId,
-    );
-    this.db.transaction(() => {
-      this.db.prepare("DELETE FROM playlist_entries WHERE id=?").run(entryId);
-      const shift = effective.length - 1;
-      if (shift)
-        this.db
-          .prepare(
-            "UPDATE playlist_entries SET position=position+? WHERE playlistId=? AND position>?",
-          )
-          .run(shift, playlistId, entry.position);
-      const insert = this.db.prepare(
-        "INSERT INTO playlist_entries VALUES (?,?,?,?,?,?)",
-      );
-      effective.forEach((item, index) =>
-        insert.run(
-          randomUUID(),
-          playlistId,
-          "track",
-          item.track.id,
-          entry.position + index,
-          JSON.stringify(this.snapshotForPlaylistEntry("track", item.track.id)),
-        ),
-      );
-      this.db
-        .prepare("UPDATE playlists SET updatedAt=? WHERE id=?")
-        .run(new Date().toISOString(), playlistId);
-    })();
-    this.normalizePlaylistPositions(playlistId);
     return this.playlist(playlistId);
   }
   private normalizePlaylistPositions(playlistId: string): void {

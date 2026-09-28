@@ -362,8 +362,6 @@ export function apiResponseContract(method: string, pathname: string) {
     return apiResponseSchemas.playlistExport;
   if (/^\/api\/playlists\/[^/]+\/(entries|reorder)$/.test(pathname))
     return apiResponseSchemas.playlist;
-  if (/^\/api\/playlists\/[^/]+\/entries\/[^/]+\/(materialize)$/.test(pathname))
-    return apiResponseSchemas.playlist;
   if (/^\/api\/playlists\/[^/]+\/entries\/[^/]+$/.test(pathname))
     return apiResponseSchemas.playlist;
   if (/^\/api\/playlists\/[^/]+$/.test(pathname))

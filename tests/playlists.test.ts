@@ -53,12 +53,18 @@ afterEach(async () => {
 });
 
 describe("playlists", () => {
-  it("keeps live blocks, removes overlaps by first occurrence and materializes", () => {
+  it("keeps live genre blocks, removes overlaps by first occurrence and reorders blocks", () => {
     const library = catalog.addLibrary("Library", path.join(root, "music"));
     catalog.upsert(makeTrack("one", library.id, { trackNumber: 1 }));
     catalog.upsert(makeTrack("two", library.id, { trackNumber: 2 }));
     const created = catalog.createPlaylist("В плеер");
-    catalog.addPlaylistEntries(created.playlist.id, "artist", ["Artist"]);
+    catalog.addPlaylistEntries(created.playlist.id, "genre", ["Rock"]);
+    catalog.upsert(
+      makeTrack("one", library.id, { trackNumber: 1, genres: ["Rock"] }),
+    );
+    catalog.upsert(
+      makeTrack("two", library.id, { trackNumber: 2, genres: ["Rock"] }),
+    );
     const detail = catalog.addPlaylistEntries(created.playlist.id, "album", [
       "album",
     ]);
@@ -74,19 +80,17 @@ describe("playlists", () => {
       [0, 2],
     ]);
 
-    const materialized = catalog.materializePlaylistEntry(
-      created.playlist.id,
+    const reordered = catalog.reorderPlaylistEntries(created.playlist.id, [
+      detail.entries[1].id,
       detail.entries[0].id,
-    );
-    expect(materialized.entries.map((entry) => entry.kind)).toEqual([
-      "track",
-      "track",
-      "album",
     ]);
-    expect(materialized.playlist.trackCount).toBe(2);
+    expect(reordered.entries.map((entry) => entry.kind)).toEqual([
+      "album",
+      "genre",
+    ]);
   });
 
-  it("uses artist, album, disc and track for catalog order without year", () => {
+  it("keeps the manually added order", () => {
     const library = catalog.addLibrary("Library", path.join(root, "music"));
     catalog.upsert(
       makeTrack("late-year", library.id, {
@@ -104,18 +108,16 @@ describe("playlists", () => {
         trackNumber: 1,
       }),
     );
-    const created = catalog.createPlaylist("Каталоговый");
+    const created = catalog.createPlaylist("Ручной");
     catalog.addPlaylistEntries(created.playlist.id, "track", [
       "late-year",
       "early-year",
     ]);
-    catalog.updatePlaylist(created.playlist.id, { orderMode: "catalog" });
-
     expect(
       catalog
         .playlistTracks(created.playlist.id)
         .items.map((item) => item.track.id),
-    ).toEqual(["early-year", "late-year"]);
+    ).toEqual(["late-year", "early-year"]);
   });
 
   it("retains unavailable entries and reports them", () => {

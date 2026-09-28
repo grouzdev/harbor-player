@@ -1304,6 +1304,7 @@ export class MusicService extends EventEmitter {
       playlistId,
       input.kind,
       targetIds,
+      input.beforeEntryId,
     );
     this.schedulePlaylistSync(playlistId);
     return result;

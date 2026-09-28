@@ -2956,6 +2956,13 @@ body {
 .playlist-entry {
   border-bottom: 1px solid var(--line);
 }
+.playlist-drop-indicator {
+  height: 2px;
+  margin: -1px 8px -1px;
+  background: var(--accent);
+  position: relative;
+  z-index: 1;
+}
 .playlist-entry-main {
   min-height: 52px;
   display: flex;

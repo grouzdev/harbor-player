@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 
-export const catalogSchemaVersion = 9;
+export const catalogSchemaVersion = 10;
 
 export function runCatalogMigrations(db: Database.Database): void {
   db.exec(`
@@ -34,12 +34,11 @@ export function runCatalogMigrations(db: Database.Database): void {
     );
     CREATE TABLE IF NOT EXISTS playlists (
       id TEXT PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE UNIQUE,
-      orderMode TEXT NOT NULL CHECK(orderMode IN ('manual','catalog')),
       createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS playlist_entries (
       id TEXT PRIMARY KEY, playlistId TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
-      kind TEXT NOT NULL CHECK(kind IN ('artist','album','track')), targetId TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK(kind IN ('genre','artist','album','track')), targetId TEXT NOT NULL,
       position INTEGER NOT NULL, snapshot TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS playlist_entries_order ON playlist_entries(playlistId,position,id);
@@ -188,6 +187,21 @@ export function runCatalogMigrations(db: Database.Database): void {
         "INSERT OR IGNORE INTO path_templates(id,name,payload,createdAt,updatedAt) VALUES (?,?,?,?,?)",
       ).run("default-album-artist", "Исполнитель / Альбом", payload, now, now);
       db.pragma("user_version = 9");
+    })();
+  if (version < 10)
+    db.transaction(() => {
+      db.exec(`
+        CREATE TABLE playlist_entries_next (
+          id TEXT PRIMARY KEY, playlistId TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+          kind TEXT NOT NULL CHECK(kind IN ('genre','artist','album','track')), targetId TEXT NOT NULL,
+          position INTEGER NOT NULL, snapshot TEXT NOT NULL
+        );
+        INSERT INTO playlist_entries_next SELECT id,playlistId,kind,targetId,position,snapshot FROM playlist_entries;
+        DROP TABLE playlist_entries;
+        ALTER TABLE playlist_entries_next RENAME TO playlist_entries;
+        CREATE INDEX playlist_entries_order ON playlist_entries(playlistId,position,id);
+      `);
+      db.pragma("user_version = 10");
     })();
   db.exec(
     "CREATE INDEX IF NOT EXISTS tracks_first_indexed_at ON tracks(firstIndexedAt)",

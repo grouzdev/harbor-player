@@ -1,10 +1,13 @@
 import { z } from "zod";
 import { selectionSchema, type Track } from "./contracts.js";
 
-export const playlistEntryKindSchema = z.enum(["artist", "album", "track"]);
+export const playlistEntryKindSchema = z.enum([
+  "genre",
+  "artist",
+  "album",
+  "track",
+]);
 export type PlaylistEntryKind = z.infer<typeof playlistEntryKindSchema>;
-export const playlistOrderModeSchema = z.enum(["manual", "catalog"]);
-export type PlaylistOrderMode = z.infer<typeof playlistOrderModeSchema>;
 
 export const playlistSnapshotSchema = z
   .object({
@@ -19,7 +22,6 @@ export const playlistSchema = z
   .object({
     id: z.string(),
     name: z.string(),
-    orderMode: playlistOrderModeSchema,
     createdAt: z.string(),
     updatedAt: z.string(),
     entryCount: z.number().int().nonnegative(),
@@ -72,17 +74,32 @@ export type PlaylistTrackPage = z.infer<typeof playlistTrackPageSchema>;
 export const playlistEntryInputSchema = z.discriminatedUnion("kind", [
   z
     .object({
+      kind: z.literal("genre"),
+      ids: z.array(z.string()).min(1).max(500),
+      beforeEntryId: z.string().optional(),
+    })
+    .strict(),
+  z
+    .object({
       kind: z.literal("artist"),
       ids: z.array(z.string()).min(1).max(500),
+      beforeEntryId: z.string().optional(),
     })
     .strict(),
   z
     .object({
       kind: z.literal("album"),
       ids: z.array(z.string()).min(1).max(10000),
+      beforeEntryId: z.string().optional(),
     })
     .strict(),
-  z.object({ kind: z.literal("track"), selection: selectionSchema }).strict(),
+  z
+    .object({
+      kind: z.literal("track"),
+      selection: selectionSchema,
+      beforeEntryId: z.string().optional(),
+    })
+    .strict(),
 ]);
 export type PlaylistEntryInput = z.infer<typeof playlistEntryInputSchema>;
 

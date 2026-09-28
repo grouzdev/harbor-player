@@ -35,7 +35,6 @@ import {
   pathTemplatePatternSchema,
   playlistEntryInputSchema,
   playlistExportFormatSchema,
-  playlistOrderModeSchema,
 } from "../shared/playlists.js";
 import {
   appearanceBackgroundPath,
@@ -612,7 +611,6 @@ export async function createApp(options: {
     const body = z
       .object({
         name: z.string().trim().min(1).max(100).optional(),
-        orderMode: playlistOrderModeSchema.optional(),
       })
       .strict()
       .parse(request.body);
@@ -655,20 +653,6 @@ export async function createApp(options: {
     service.schedulePlaylistSync(id);
     return result;
   });
-  app.post(
-    "/api/playlists/:id/entries/:entryId/materialize",
-    async (request) => {
-      const { id, entryId } = z
-        .object({
-          id: z.string().min(1).max(100),
-          entryId: z.string().min(1).max(100),
-        })
-        .parse(request.params);
-      const result = service.catalog.materializePlaylistEntry(id, entryId);
-      service.schedulePlaylistSync(id);
-      return result;
-    },
-  );
   app.get("/api/playlists/:id/tracks", async (request) => {
     const id = idParam.parse(request.params).id;
     const query = pageSchema.omit({ filter: true }).parse(request.query);
