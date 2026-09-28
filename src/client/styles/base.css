@@ -2354,6 +2354,11 @@ body {
   color: #253a2d;
   box-shadow: none;
 }
+.bookmarks-button.active,
+.catalog-filter-button.active {
+  gap: 6px;
+  white-space: nowrap;
+}
 .bookmarks-button.error {
   color: #e19a8c;
   background: #8d463d16;
@@ -3165,9 +3170,6 @@ body {
   }
   .panel-visibility-button {
     padding: 5px;
-  }
-  .bookmarks-button span {
-    display: none;
   }
   .bookmarks-button {
     padding-left: 7px;

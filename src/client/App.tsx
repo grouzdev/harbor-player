@@ -2925,6 +2925,7 @@ export function App() {
               ) : (
                 <BookmarkIcon size={19} fill="none" />
               )}
+              {filter.bookmarksOnly && <span>Закладки</span>}
             </button>
             <CatalogUserFilters
               filter={filter}

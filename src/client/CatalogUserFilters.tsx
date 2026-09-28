@@ -12,6 +12,12 @@ import { RangeSlider } from "./RangeSlider";
 
 export type RatingRange = readonly [minimum: number, maximum: number];
 
+export function ratingFilterLabel(minimum: number, maximum: number): string {
+  return minimum === 0 && maximum === 0
+    ? "Без рейтинга"
+    : `Рейтинг ${minimum}—${maximum}`;
+}
+
 export function ratingRangeFromFilter(filter: CatalogFilter): RatingRange {
   const { albumRatingMin, albumRatingMax, albumUnrated } = filter;
   if (!albumUnrated && albumRatingMin === null && albumRatingMax === null)
@@ -193,6 +199,7 @@ export function CatalogUserFilters({
   const unviewedOnly = filter.albumViewed === "unviewed";
   const recentlyAddedOnly = filter.recentlyAddedOnly;
   const ratingFilterActive = minimum !== 0 || maximum !== 5;
+  const activeRatingLabel = ratingFilterLabel(minimum, maximum);
   const closeRating = () => {
     setRatingOpen(false);
     requestAnimationFrame(() => ratingTrigger.current?.focus());
@@ -215,6 +222,7 @@ export function CatalogUserFilters({
         }
       >
         <Eye size={19} aria-hidden="true" />
+        {unviewedOnly && <span>Непросмотрено</span>}
       </button>
       <button
         ref={ratingTrigger}
@@ -227,6 +235,7 @@ export function CatalogUserFilters({
         onClick={() => setRatingOpen((open) => !open)}
       >
         <Star size={19} aria-hidden="true" />
+        {ratingFilterActive && <span>{activeRatingLabel}</span>}
       </button>
       <button
         type="button"
@@ -243,6 +252,7 @@ export function CatalogUserFilters({
         }
       >
         <Clock3 size={19} aria-hidden="true" />
+        {recentlyAddedOnly && <span>Недавние</span>}
       </button>
       {ratingOpen && (
         <RatingFilterPopover

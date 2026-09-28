@@ -192,11 +192,21 @@ test("topbar groups catalog controls in the requested order", async ({
   );
   await recentlyAdded.click();
   await expect(recentlyAdded).toHaveAttribute("aria-pressed", "true");
+  await expect(recentlyAdded).toHaveText("Недавние");
+  const activeRecentlyAddedBox = await recentlyAdded.boundingBox();
+  expect(activeRecentlyAddedBox).not.toBeNull();
+  expect(activeRecentlyAddedBox!.width).toBeGreaterThan(
+    recentlyAddedBox!.width,
+  );
   await bookmarks.click();
   const activeBookmarks = page.getByRole("button", {
     name: "Отключить фильтр закладок",
   });
   await expect(activeBookmarks).toHaveAttribute("aria-pressed", "true");
+  await expect(activeBookmarks).toHaveText("Закладки");
+  const activeBookmarksBox = await activeBookmarks.boundingBox();
+  expect(activeBookmarksBox).not.toBeNull();
+  expect(activeBookmarksBox!.width).toBeGreaterThan(bookmarkBox!.width);
   const activeColors = await activeBookmarks.evaluate((node) => {
     const accent = getComputedStyle(document.documentElement)
       .getPropertyValue("--accent")
@@ -217,6 +227,32 @@ test("topbar groups catalog controls in the requested order", async ({
     "rgb(37, 58, 45)",
   );
   await expect(activeBookmarks.locator("svg")).toHaveAttribute("fill", "none");
+});
+
+test("active catalog filters show their current labels", async ({ page }) => {
+  await page.goto("/");
+  const rating = page.getByRole("button", { name: "Фильтр по рейтингу" });
+  const inactiveRatingBox = await rating.boundingBox();
+  expect(inactiveRatingBox).not.toBeNull();
+  await rating.click();
+  const minimumRating = page.getByLabel("Минимальная оценка");
+  const maximumRating = page.getByLabel("Максимальная оценка");
+  await minimumRating.fill("3");
+  await maximumRating.fill("4");
+  await expect(rating).toHaveText("Рейтинг 3—4");
+  const activeRatingBox = await rating.boundingBox();
+  expect(activeRatingBox).not.toBeNull();
+  expect(activeRatingBox!.width).toBeGreaterThan(inactiveRatingBox!.width);
+  await minimumRating.fill("0");
+  await maximumRating.fill("0");
+  await expect(rating).toHaveText("Без рейтинга");
+  await page.keyboard.press("Escape");
+
+  const unviewed = page.getByRole("button", {
+    name: "Только непросмотренные",
+  });
+  await unviewed.click();
+  await expect(unviewed).toHaveText("Непросмотрено");
 });
 
 test("fullscreen button changes the application shell", async ({ page }) => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { emptyFilter } from "../src/shared/contracts";
 import {
+  ratingFilterLabel,
   ratingRangeFromFilter,
   withSharedRatingRange,
 } from "../src/client/CatalogUserFilters";
@@ -36,4 +37,15 @@ describe("catalog user filters", () => {
       ratingRangeFromFilter(withSharedRatingRange(emptyFilter, -2, 9)),
     ).toEqual([0, 5]);
   });
+
+  it.each([
+    [0, 0, "Без рейтинга"],
+    [0, 3, "Рейтинг 0—3"],
+    [3, 4, "Рейтинг 3—4"],
+  ] as const)(
+    "formats %i–%i active rating label",
+    (minimum, maximum, label) => {
+      expect(ratingFilterLabel(minimum, maximum)).toBe(label);
+    },
+  );
 });
