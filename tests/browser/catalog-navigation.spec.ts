@@ -94,6 +94,11 @@ async function catalog(
   const summaries: unknown[] = [];
   const mergeContexts: unknown[] = [];
   const mergePreviews: unknown[] = [];
+  const queueRequests: {
+    albumId?: string;
+    filter?: CatalogFilter;
+    playlistId?: string;
+  }[] = [];
   const playlist = {
     id: "road-trip",
     name: "В дорогу",
@@ -251,11 +256,20 @@ async function catalog(
     else if (endpoint === "queue") {
       const request = route.request().postDataJSON() as {
         albumId?: string;
+        filter?: CatalogFilter;
+        playlistId?: string;
       };
-      const track = tracks.find((item) => item.albumKey === request.albumId);
+      queueRequests.push(request);
+      const track = request.albumId
+        ? tracks.find((item) => item.albumKey === request.albumId)
+        : request.playlistId
+          ? tracks.find((item) => item.albumKey === "Queen-0")
+          : request.filter
+            ? matches(request.filter)[0]
+            : undefined;
       if (!track) return route.fallback();
       body = {
-        id: `queue-${request.albumId}`,
+        id: `queue-${request.albumId || request.playlistId || track.id}`,
         position: 0,
         total: 3,
         track,
@@ -341,6 +355,7 @@ async function catalog(
     summaries,
     mergeContexts,
     mergePreviews,
+    queueRequests,
     delay: (query: string) => {
       delayed = query;
     },
@@ -547,6 +562,74 @@ test("selecting an album keeps the album grid in place while another album plays
         .evaluate((node) => Math.round(node.scrollTop)),
     )
     .toBe(Math.round(beforeReset));
+});
+
+test("facet and playlist rows launch only on double click", async ({
+  page,
+}) => {
+  const data = await catalog(page);
+  const expectQueueCount = (count: number) =>
+    expect.poll(() => data.queueRequests.length).toBe(count);
+  const lastQueue = () => data.queueRequests.at(-1);
+
+  const queen = artist(page, "Queen").locator(".list-tile-main");
+  await queen.click();
+  expect(data.queueRequests).toHaveLength(0);
+  await queen.dblclick();
+  await expectQueueCount(1);
+  expect(lastQueue()?.filter?.artists).toEqual(["Queen"]);
+
+  const rock = page
+    .locator('.genres-panel [data-selection-key="Rock"] .list-tile-main')
+    .first();
+  await rock.click();
+  expect(data.queueRequests).toHaveLength(1);
+  await rock.dblclick();
+  await expectQueueCount(2);
+  expect(lastQueue()?.filter?.genres).toEqual(["Rock"]);
+
+  const library = page
+    .locator(
+      '.libraries-panel [data-selection-key="library:rock"] .list-tile-main',
+    )
+    .first();
+  await library.click();
+  expect(data.queueRequests).toHaveLength(2);
+  await library.dblclick();
+  await expectQueueCount(3);
+  expect(lastQueue()?.filter).toMatchObject({
+    libraryIds: ["rock"],
+    folders: [],
+  });
+
+  await page
+    .locator(
+      '.libraries-panel [data-selection-key="library:rock"] .tree-toggle',
+    )
+    .click();
+  const folderTile = page.locator(".library-folder-tile").first();
+  const folderKey = await folderTile.getAttribute("data-selection-key");
+  expect(folderKey).toMatch(/^folder:/);
+  const [folderLibraryId, folderPath] = JSON.parse(
+    folderKey!.slice("folder:".length),
+  ) as [string, string];
+  const folder = folderTile.locator(".list-tile-main");
+  await expect(folder).toBeVisible();
+  await folder.click();
+  expect(data.queueRequests).toHaveLength(3);
+  await folder.dblclick();
+  await expectQueueCount(4);
+  expect(lastQueue()?.filter).toMatchObject({
+    libraryIds: [],
+    folders: [{ libraryId: folderLibraryId, relativePath: folderPath }],
+  });
+
+  const playlist = page.locator(".playlist-library-tile .list-tile-main");
+  await playlist.click();
+  expect(data.queueRequests).toHaveLength(4);
+  await playlist.dblclick();
+  await expectQueueCount(5);
+  expect(lastQueue()).toMatchObject({ playlistId: "road-trip" });
 });
 
 test("a manual genre filter does not seek an excluded playing album", async ({

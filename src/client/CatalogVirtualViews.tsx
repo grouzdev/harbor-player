@@ -281,15 +281,6 @@ export function ArtistList({
               value={label}
               suffix={count(item.count)}
               onSelect={(event) => {
-                if (
-                  !event.ctrlKey &&
-                  !event.metaKey &&
-                  !event.shiftKey &&
-                  selected.includes(item.name)
-                ) {
-                  onPlayArtist(item.name);
-                  return;
-                }
                 selection.selectFromClick(
                   event,
                   item.name,
@@ -298,6 +289,7 @@ export function ArtistList({
                 if (!event.ctrlKey && !event.metaKey && !event.shiftKey)
                   onNavigate(item.name);
               }}
+              onDoubleClick={() => onPlayArtist(item.name)}
               onContextMenu={(event) => {
                 const selectedIds = resolveContextSelection(
                   selected,

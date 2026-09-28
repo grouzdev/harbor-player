@@ -2612,6 +2612,13 @@ export function App() {
             suffix={count(folder.trackCount)}
             style={{ "--folder-depth": depth + 1 } as CSSProperties}
             onSelect={(event) => selectLocation(event, selectionKey)}
+            onDoubleClick={() =>
+              void player.startFilter({
+                ...filter,
+                libraryIds: [],
+                folders: [{ libraryId, relativePath: folder.relativePath }],
+              })
+            }
             onContextMenu={(event) => showFolderMenu(event, libraryId, folder)}
           />
           {expanded &&
@@ -2948,11 +2955,21 @@ export function App() {
                 })
               }
               onSelect={(event, key) => selectLocation(event, key)}
+              onPlayLibrary={(libraryId) =>
+                void player.startFilter({
+                  ...filter,
+                  libraryIds: [libraryId],
+                  folders: [],
+                })
+              }
               onContextMenu={showLibraryMenu}
               onAdd={() => setModal("add")}
               playlists={playlists.data || []}
               activePlaylistId={activePlaylistId}
               onSelectPlaylist={selectPlaylist}
+              onPlayPlaylist={(playlistId) =>
+                void player.startPlaylist(playlistId)
+              }
               onCreatePlaylist={() => void createPlaylist()}
               onImportPlaylist={() => void importPlaylist()}
             />
@@ -2986,6 +3003,9 @@ export function App() {
                   genres.data?.map((item) => item.name) || [],
                 );
               }}
+              onPlay={(genre) =>
+                void player.startFilter({ ...filter, genres: [genre] })
+              }
               onContextMenu={showGenreMenu}
             />
           )}

@@ -36,11 +36,13 @@ type LibraryPanelProps = {
   onReset: () => void;
   onToggleExpanded: (libraryId: string) => void;
   onSelect: (event: React.MouseEvent, key: string) => void;
+  onPlayLibrary: (libraryId: string) => void;
   onContextMenu: (event: React.MouseEvent, library: Library) => void;
   onAdd: () => void;
   playlists: Playlist[];
   activePlaylistId: string | null;
   onSelectPlaylist: (id: string) => void;
+  onPlayPlaylist: (id: string) => void;
   onCreatePlaylist: () => void;
   onImportPlaylist: () => void;
 };
@@ -61,11 +63,13 @@ export function LibraryPanel({
   onReset,
   onToggleExpanded,
   onSelect,
+  onPlayLibrary,
   onContextMenu,
   onAdd,
   playlists,
   activePlaylistId,
   onSelectPlaylist,
+  onPlayPlaylist,
   onCreatePlaylist,
   onImportPlaylist,
 }: LibraryPanelProps) {
@@ -132,6 +136,9 @@ export function LibraryPanel({
                 }
                 suffix={count(library.trackCount)}
                 onSelect={(event) => onSelect(event, selectionKey)}
+                onDoubleClick={() => {
+                  if (library.trackCount) onPlayLibrary(library.id);
+                }}
                 onContextMenu={(event) => onContextMenu(event, library)}
               />
               {expanded && renderFolderLevel(library.id)}
@@ -154,6 +161,9 @@ export function LibraryPanel({
             selected={activePlaylistId === playlist.id}
             className="playlist-library-tile"
             onSelect={() => onSelectPlaylist(playlist.id)}
+            onDoubleClick={() => {
+              if (playlist.trackCount) onPlayPlaylist(playlist.id);
+            }}
           />
         ))}
         <button className="playlist-action inline" onClick={onCreatePlaylist}>
@@ -211,6 +221,7 @@ type GenrePanelProps = {
   marquee: ReactNode;
   onReset: () => void;
   onSelect: (event: React.MouseEvent, genre: string) => void;
+  onPlay: (genre: string) => void;
   onContextMenu: (event: React.MouseEvent, genre: string) => void;
 };
 
@@ -226,6 +237,7 @@ export function GenrePanel({
   marquee,
   onReset,
   onSelect,
+  onPlay,
   onContextMenu,
 }: GenrePanelProps) {
   return (
@@ -267,6 +279,7 @@ export function GenrePanel({
               value={label}
               suffix={count(genre.count)}
               onSelect={(event) => onSelect(event, genre.name)}
+              onDoubleClick={() => onPlay(genre.name)}
               onContextMenu={(event) => onContextMenu(event, genre.name)}
             />
           );
