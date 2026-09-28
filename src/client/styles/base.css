@@ -2311,26 +2311,36 @@ body {
 .panel-visibility-button {
   color: #a6ada6;
   transition:
-    color 0.15s,
-    opacity 0.15s,
-    filter 0.15s;
+    color 180ms ease-out,
+    opacity 160ms ease-out,
+    filter 180ms ease-out;
 }
 .panel-visibility-button.is-active {
   color: var(--accent);
   filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 72%, transparent));
 }
-.panel-visibility-button.is-active:hover:not(:disabled) {
+.topbar .panel-visibility-button:hover:not(:disabled) {
   border-color: transparent;
   background: transparent;
   box-shadow: none;
+}
+.panel-visibility-button.is-active:hover:not(:disabled),
+.panel-visibility-button.is-active:focus-visible {
+  color: color-mix(in srgb, var(--accent) 88%, #fff);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 82%, transparent));
 }
 .panel-visibility-button.is-hidden {
   color: #626861;
   opacity: 0.55;
 }
-.panel-visibility-button.is-hidden:hover,
+.panel-visibility-button.is-hidden:hover:not(:disabled),
 .panel-visibility-button.is-hidden:focus-visible {
-  opacity: 1;
+  color: #a6ada6;
+  opacity: 0.92;
+  filter: drop-shadow(0 0 2px #a6ada655);
+}
+.panel-visibility-button.is-active:active:not(:disabled) {
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--accent) 66%, transparent));
 }
 .search {
   position: absolute;

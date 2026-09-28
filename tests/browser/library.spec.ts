@@ -696,12 +696,20 @@ test("panel visibility controls reshape and persist the catalog", async ({
   });
 
   await expect(genresVisibilityButton).toHaveClass(/is-active/);
+  await genresVisibilityButton.hover();
+  await expect(genresVisibilityButton).toHaveCSS("background-image", "none");
 
   await genresVisibilityButton.click();
   await expect(page.locator(".genres-panel")).toBeHidden();
-  await expect(
-    page.getByRole("button", { name: "Показать панель «Жанры»" }),
-  ).not.toHaveClass(/is-active/);
+  const hiddenGenresVisibilityButton = page.getByRole("button", {
+    name: "Показать панель «Жанры»",
+  });
+  await expect(hiddenGenresVisibilityButton).not.toHaveClass(/is-active/);
+  await hiddenGenresVisibilityButton.hover();
+  await expect(hiddenGenresVisibilityButton).toHaveCSS(
+    "background-image",
+    "none",
+  );
   await page.mouse.move(500, 500);
   await expect(
     page.getByRole("button", { name: "Показать панель «Жанры»" }),
