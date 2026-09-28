@@ -1267,6 +1267,23 @@ body.selection-dragging * {
   background: transparent;
   color: #738088;
 }
+.context-menu-submenu-wrap {
+  position: relative;
+}
+.context-menu-arrow {
+  margin-left: auto;
+  font-size: 18px;
+  line-height: 12px;
+}
+.context-menu-submenu {
+  position: absolute;
+  left: calc(100% + 4px);
+  top: -5px;
+}
+.context-menu-submenu-left {
+  left: auto;
+  right: calc(100% + 4px);
+}
 .modal {
   background: transparent;
   border: 0;

@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 
-export const catalogSchemaVersion = 10;
+export const catalogSchemaVersion = 11;
 
 export function runCatalogMigrations(db: Database.Database): void {
   db.exec(`
@@ -38,7 +38,7 @@ export function runCatalogMigrations(db: Database.Database): void {
     );
     CREATE TABLE IF NOT EXISTS playlist_entries (
       id TEXT PRIMARY KEY, playlistId TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
-      kind TEXT NOT NULL CHECK(kind IN ('genre','artist','album','track')), targetId TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK(kind IN ('genre','artist','album','track','folder')), targetId TEXT NOT NULL,
       position INTEGER NOT NULL, snapshot TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS playlist_entries_order ON playlist_entries(playlistId,position,id);
@@ -202,6 +202,21 @@ export function runCatalogMigrations(db: Database.Database): void {
         CREATE INDEX playlist_entries_order ON playlist_entries(playlistId,position,id);
       `);
       db.pragma("user_version = 10");
+    })();
+  if (version < 11)
+    db.transaction(() => {
+      db.exec(`
+        CREATE TABLE playlist_entries_next (
+          id TEXT PRIMARY KEY, playlistId TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+          kind TEXT NOT NULL CHECK(kind IN ('genre','artist','album','track','folder')), targetId TEXT NOT NULL,
+          position INTEGER NOT NULL, snapshot TEXT NOT NULL
+        );
+        INSERT INTO playlist_entries_next SELECT id,playlistId,kind,targetId,position,snapshot FROM playlist_entries;
+        DROP TABLE playlist_entries;
+        ALTER TABLE playlist_entries_next RENAME TO playlist_entries;
+        CREATE INDEX playlist_entries_order ON playlist_entries(playlistId,position,id);
+      `);
+      db.pragma("user_version = 11");
     })();
   db.exec(
     "CREATE INDEX IF NOT EXISTS tracks_first_indexed_at ON tracks(firstIndexedAt)",

@@ -31,7 +31,7 @@ import {
   artistSortKey,
   compareArtistNames,
 } from "../shared/artist-grouping.js";
-import { conflict, notFound } from "./http-error.js";
+import { badRequest, conflict, notFound } from "./http-error.js";
 import { runCatalogMigrations } from "./catalog-migrations.js";
 import { albumIdentityKey } from "./album-identity.js";
 import { normalizedAlbumFolder } from "./album-identity.js";
@@ -53,11 +53,11 @@ type Row = Record<string, any>;
 const checkedFolderPath = (relativePath: string) => {
   if (
     path.isAbsolute(relativePath) ||
-    relativePath === "." ||
-    path.normalize(relativePath) !== relativePath ||
+    (relativePath !== "" &&
+      (relativePath === "." || path.normalize(relativePath) !== relativePath)) ||
     relativePath.split(path.sep).includes("..")
   )
-    throw new Error("Некорректный путь папки");
+    throw badRequest("Некорректный путь папки");
   return relativePath;
 };
 const fromRow = (r: Row): Track =>
@@ -83,6 +83,17 @@ const parseStoredJson = (payload: string): unknown => {
   } catch {
     return undefined;
   }
+};
+const parsePlaylistFolderTarget = (targetId: string) => {
+  const value = parseStoredJson(targetId);
+  if (
+    !Array.isArray(value) ||
+    value.length !== 2 ||
+    typeof value[0] !== "string" ||
+    typeof value[1] !== "string"
+  )
+    return undefined;
+  return { libraryId: value[0], relativePath: value[1] };
 };
 const searchKey = (value: string) => value.normalize("NFC").toLowerCase();
 
@@ -285,6 +296,10 @@ export class Catalog {
     );
   }
   hasFolder(libraryId: string, relativePath: string): boolean {
+    if (relativePath === "") {
+      this.library(libraryId);
+      return true;
+    }
     const parent = path.dirname(checkedFolderPath(relativePath));
     return this.folders(libraryId, parent === "." ? null : parent).some(
       (folder) => folder.relativePath === relativePath,
@@ -1453,6 +1468,7 @@ export class Catalog {
   }
   private tracksForPlaylistEntry(entry: StoredPlaylistEntry): Track[] {
     let condition = "t.id=?";
+    let args: any[] = [entry.targetId];
     if (entry.kind === "album") condition = "t.albumKey=?";
     else if (entry.kind === "artist")
       condition = `EXISTS (
@@ -1464,6 +1480,19 @@ export class Catalog {
         SELECT 1 FROM track_genres g
         WHERE g.trackId=t.id AND g.genre=?
       )`;
+    else if (entry.kind === "folder") {
+      const folder = parsePlaylistFolderTarget(entry.targetId);
+      if (!folder) return [];
+      const relativePath = checkedFolderPath(folder.relativePath);
+      if (!relativePath) {
+        condition = "t.libraryId=?";
+        args = [folder.libraryId];
+      } else {
+        const prefix = `${relativePath}${path.sep}`;
+        condition = "t.libraryId=? AND substr(t.relativePath,1,?)=?";
+        args = [folder.libraryId, prefix.length, prefix];
+      }
+    }
     const rows = this.db
       .prepare(
         `SELECT t.*, trackState.rating rating, albumState.rating albumRating,
@@ -1473,7 +1502,7 @@ export class Catalog {
          LEFT JOIN catalog_user_state albumState ON albumState.kind='album' AND albumState.id=t.albumKey
          WHERE ${condition}`,
       )
-      .all(entry.targetId) as Row[];
+      .all(...args) as Row[];
     return rows.map(fromRow).sort(comparePlaylistTracks);
   }
   private resolvePlaylistRows(
@@ -1644,6 +1673,20 @@ export class Catalog {
     kind: PlaylistEntryKind,
     targetId: string,
   ): PlaylistSnapshot {
+    if (kind === "folder") {
+      const folder = parsePlaylistFolderTarget(targetId);
+      if (!folder) throw notFound("Папка не найдена");
+      const relativePath = checkedFolderPath(folder.relativePath);
+      if (!this.hasFolder(folder.libraryId, relativePath))
+        throw notFound("Папка не найдена");
+      return {
+        title: relativePath
+          ? path.basename(relativePath)
+          : this.library(folder.libraryId).name,
+        subtitle: this.library(folder.libraryId).name,
+        coverId: null,
+      };
+    }
     if (kind === "genre")
       return {
         title: targetId || "Без жанра",
@@ -1686,6 +1729,12 @@ export class Catalog {
       )
       .get(albumId) as Row | undefined;
     return row ? fromRow(row) : undefined;
+  }
+  playlistFolderTargetId(libraryId: string, relativePath: string): string {
+    const checkedPath = checkedFolderPath(relativePath);
+    if (!this.hasFolder(libraryId, checkedPath))
+      throw notFound("Папка не найдена");
+    return JSON.stringify([libraryId, checkedPath]);
   }
   addPlaylistEntries(
     playlistId: string,

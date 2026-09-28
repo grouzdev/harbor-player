@@ -1299,7 +1299,14 @@ export class MusicService extends EventEmitter {
     const targetIds =
       input.kind === "track"
         ? this.catalog.selected(input.selection).map((track) => track.id)
-        : input.ids;
+        : input.kind === "folder"
+          ? input.folders.map((folder) =>
+              this.catalog.playlistFolderTargetId(
+                folder.libraryId,
+                folder.relativePath,
+              ),
+            )
+          : input.ids;
     const result = this.catalog.addPlaylistEntries(
       playlistId,
       input.kind,

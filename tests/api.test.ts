@@ -1274,4 +1274,43 @@ describe("Explorer endpoint", () => {
       options: { stdio: "ignore" },
     });
   });
+  it("adds library roots as live folder playlist entries and rejects invalid targets", async () => {
+    const library = context.service.catalog.addLibrary("Library", root);
+    const playlist = context.service.catalog.createPlaylist("Roots");
+    const session = await context.app.inject({
+      url: "/api/session",
+      headers: { host: "127.0.0.1:4317" },
+    });
+    const headers = {
+      host: "127.0.0.1:4317",
+      cookie: String(session.headers["set-cookie"]).split(";")[0],
+      "x-csrf-token": session.json().csrf,
+    };
+    const added = await context.app.inject({
+      method: "POST",
+      url: `/api/playlists/${playlist.playlist.id}/entries`,
+      headers,
+      payload: {
+        kind: "folder",
+        folders: [{ libraryId: library.id, relativePath: "" }],
+      },
+    });
+    expect(added.statusCode).toBe(200);
+    expect(added.json().entries[0]).toMatchObject({
+      kind: "folder",
+      snapshot: { title: "Library" },
+    });
+    for (const [folders, statusCode] of [
+      [[{ libraryId: "missing", relativePath: "" }], 404],
+      [[{ libraryId: library.id, relativePath: "../outside" }], 400],
+    ] as const) {
+      const rejected = await context.app.inject({
+        method: "POST",
+        url: `/api/playlists/${playlist.playlist.id}/entries`,
+        headers,
+        payload: { kind: "folder", folders },
+      });
+      expect(rejected.statusCode).toBe(statusCode);
+    }
+  });
 });

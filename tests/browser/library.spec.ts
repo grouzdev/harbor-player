@@ -1018,6 +1018,58 @@ test("player prioritizes the current track over progress in a narrow window", as
   ).toBeGreaterThan(layouts[1].seekRangeWidth);
 });
 
+test("library root can be added to any playlist", async ({ page }, info) => {
+  const browser = info.project.name;
+  const libraryName = `Root menu ${browser}`;
+  const playlistName = `Root playlist ${browser}`;
+  const source = path.resolve(
+    ".test-data/browser",
+    browser,
+    "file-operations",
+    "Downloads",
+  );
+  await page.goto("/");
+  await page.locator(".add-library").click();
+  await page.getByLabel("Путь к папке", { exact: true }).fill(source);
+  await page.getByLabel("Название библиотеки").fill(libraryName);
+  await page.getByRole("button", { name: "Подключить", exact: true }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+
+  const playlistDialog = page.waitForEvent("dialog");
+  await Promise.all([
+    playlistDialog.then((dialog) => dialog.accept(playlistName)),
+    page.getByRole("button", { name: "Создать плейлист" }).click(),
+  ]);
+  await expect(page.getByRole("button", { name: playlistName })).toBeVisible();
+
+  await page
+    .getByRole("button", { name: new RegExp(libraryName) })
+    .first()
+    .click({ button: "right" });
+  const menu = page.getByRole("menu").first();
+  const addToPlaylist = menu.getByRole("menuitem", {
+    name: "Добавить в плейлист",
+  });
+  await expect(addToPlaylist).toBeVisible();
+  await addToPlaylist.hover();
+  await expect(page.getByRole("menuitem", { name: playlistName })).toBeVisible();
+  await page.getByRole("menuitem", { name: playlistName }).click();
+  await expect(page.getByText("Добавлено в плейлист")).toBeVisible();
+
+  await page
+    .getByRole("button", { name: new RegExp(libraryName) })
+    .first()
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Удалить" }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Отключить", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: new RegExp(libraryName) }),
+  ).toHaveCount(0);
+});
+
 test("local library: readable UI, playback, tags, move and permanent delete", async ({
   page,
 }, info) => {

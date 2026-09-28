@@ -1308,6 +1308,40 @@ export function App() {
     },
     [notify, player, queryClient],
   );
+  const playlists = useQuery({
+    queryKey: ["playlists"],
+    queryFn: () => api<Playlist[]>("/playlists"),
+    enabled: ready,
+  });
+  const addToPlaylist = useCallback(
+    async (playlistId: string, body: unknown) => {
+      try {
+        await api(`/playlists/${playlistId}/entries`, body);
+        await queryClient.invalidateQueries({
+          predicate: (query) =>
+            ["playlists", "playlist", "playlist-tracks"].includes(
+              String(query.queryKey[0]),
+            ),
+        });
+        notify("Добавлено в плейлист");
+      } catch (error) {
+        notify((error as Error).message);
+      }
+    },
+    [notify, queryClient],
+  );
+  const playlistMenuItem = useCallback(
+    (body: unknown, suffix = "") => ({
+      label: `Добавить в плейлист${suffix}`,
+      icon: <ListMusic size={16} />,
+      disabled: !playlists.data?.length,
+      submenu: playlists.data?.map((playlist) => ({
+        label: playlist.name,
+        onSelect: () => addToPlaylist(playlist.id, body),
+      })),
+    }),
+    [addToPlaylist, playlists.data],
+  );
   const showCatalogMenu = useCallback(
     (
       event: React.MouseEvent,
@@ -1358,33 +1392,12 @@ export function App() {
                 },
               ]
             : []),
-          ...(activePlaylistId
-            ? [
-                {
-                  label: `Добавить в активный плейлист${suffix}`,
-                  icon: <ListMusic size={16} />,
-                  onSelect: async () => {
-                    try {
-                      await api(
-                        `/playlists/${activePlaylistId}/entries`,
-                        kind === "track"
-                          ? { kind: "track", selection: { trackIds: ids } }
-                          : { kind, ids },
-                      );
-                      await queryClient.invalidateQueries({
-                        predicate: (query) =>
-                          ["playlists", "playlist", "playlist-tracks"].includes(
-                            String(query.queryKey[0]),
-                          ),
-                      });
-                      notify("Добавлено в плейлист");
-                    } catch (error) {
-                      notify((error as Error).message);
-                    }
-                  },
-                },
-              ]
-            : []),
+          playlistMenuItem(
+            kind === "track"
+              ? { kind: "track", selection: { trackIds: ids } }
+              : { kind, ids },
+            suffix,
+          ),
           {
             label: bookmarkPending
               ? "Сохраняем закладку…"
@@ -1570,7 +1583,6 @@ export function App() {
     },
     [
       bookmarkKeys,
-      activePlaylistId,
       bookmarks.isError,
       bookmarks.isPending,
       bookmarksUnavailable,
@@ -1582,6 +1594,7 @@ export function App() {
       notify,
       pendingBookmarkKeys,
       pendingUserStateKeys,
+      playlistMenuItem,
       queryClient,
     ],
   );
@@ -1598,6 +1611,7 @@ export function App() {
         x: event.clientX,
         y: event.clientY,
         items: [
+          playlistMenuItem({ kind: "genre", ids: genres }, suffix),
           {
             label: `Редактировать теги${suffix}`,
             icon: <Tag size={16} />,
@@ -1609,15 +1623,33 @@ export function App() {
         ],
       });
     },
-    [filter, preservePanelPositions, setFilter],
+    [filter, playlistMenuItem, preservePanelPositions, setFilter],
   );
   const showLibraryMenu = useCallback(
     (event: React.MouseEvent, library: Library) => {
       event.preventDefault();
+      const libraryIds = filter.libraryIds.includes(library.id)
+        ? filter.libraryIds
+        : [library.id];
+      if (!filter.libraryIds.includes(library.id))
+        preservePanelPositions(() =>
+          setFilter((current) => ({ ...current, libraryIds, folders: [] })),
+        );
+      const suffix = libraryIds.length > 1 ? ` (${libraryIds.length})` : "";
       setContextMenu({
         x: event.clientX,
         y: event.clientY,
         items: [
+          playlistMenuItem(
+            {
+              kind: "folder",
+              folders: libraryIds.map((libraryId) => ({
+                libraryId,
+                relativePath: "",
+              })),
+            },
+            suffix,
+          ),
           {
             label: "Открыть в проводнике",
             icon: <FolderOpen size={16} />,
@@ -1663,15 +1695,35 @@ export function App() {
         ],
       });
     },
-    [notify, refresh],
+    [
+      filter.libraryIds,
+      notify,
+      playlistMenuItem,
+      preservePanelPositions,
+      refresh,
+      setFilter,
+    ],
   );
   const showFolderMenu = useCallback(
     (event: React.MouseEvent, libraryId: string, folder: LibraryFolder) => {
       event.preventDefault();
+      const folders = filter.folders.some(
+        (item) =>
+          item.libraryId === libraryId &&
+          item.relativePath === folder.relativePath,
+      )
+        ? filter.folders
+        : [{ libraryId, relativePath: folder.relativePath }];
+      if (folders !== filter.folders)
+        preservePanelPositions(() =>
+          setFilter((current) => ({ ...current, folders })),
+        );
+      const suffix = folders.length > 1 ? ` (${folders.length})` : "";
       setContextMenu({
         x: event.clientX,
         y: event.clientY,
         items: [
+          playlistMenuItem({ kind: "folder", folders }, suffix),
           {
             label: "Открыть в проводнике",
             icon: <FolderOpen size={16} />,
@@ -1702,7 +1754,13 @@ export function App() {
         ],
       });
     },
-    [notify],
+    [
+      filter.folders,
+      notify,
+      playlistMenuItem,
+      preservePanelPositions,
+      setFilter,
+    ],
   );
   const scheduleRefresh = useCallback(
     (immediate = false) => {
@@ -1840,11 +1898,6 @@ export function App() {
     queryKey: ["libraries", libraryFilter],
     queryFn: () => api<Library[]>(catalogUrl("libraries", libraryFilter)),
     enabled: ready && !searchPending,
-  });
-  const playlists = useQuery({
-    queryKey: ["playlists"],
-    queryFn: () => api<Playlist[]>("/playlists"),
-    enabled: ready,
   });
   useEffect(() => {
     if (

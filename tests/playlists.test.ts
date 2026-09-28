@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import Database from "better-sqlite3";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Catalog } from "../dist/server/database.js";
@@ -118,6 +119,116 @@ describe("playlists", () => {
         .playlistTracks(created.playlist.id)
         .items.map((item) => item.track.id),
     ).toEqual(["late-year", "early-year"]);
+  });
+
+  it("keeps folder entries live, recursive and unique within a playlist", () => {
+    const library = catalog.addLibrary("Library", path.join(root, "music"));
+    catalog.upsert(
+      makeTrack("root", library.id, {
+        relativePath: path.join("Selected", "root.flac"),
+      }),
+    );
+    catalog.upsert(
+      makeTrack("nested", library.id, {
+        relativePath: path.join("Selected", "Nested", "nested.flac"),
+      }),
+    );
+    catalog.upsert(
+      makeTrack("other", library.id, {
+        relativePath: path.join("Other", "other.flac"),
+      }),
+    );
+    const created = catalog.createPlaylist("Папка");
+    const target = catalog.playlistFolderTargetId(library.id, "Selected");
+    const initial = catalog.addPlaylistEntries(created.playlist.id, "folder", [
+      target,
+    ]);
+
+    expect(initial.entries[0]).toMatchObject({
+      kind: "folder",
+      snapshot: { title: "Selected", subtitle: "Library" },
+    });
+    expect(
+      catalog
+        .playlistTracks(created.playlist.id)
+        .items.map((item) => item.track.id),
+    ).toEqual(["nested", "root"]);
+
+    catalog.upsert(
+      makeTrack("later", library.id, {
+        relativePath: path.join("Selected", "Later", "later.flac"),
+      }),
+    );
+    expect(catalog.playlist(created.playlist.id).playlist.trackCount).toBe(3);
+
+    const repeated = catalog.addPlaylistEntries(created.playlist.id, "folder", [
+      target,
+    ]);
+    expect(repeated.entries).toHaveLength(1);
+  });
+
+  it("keeps a library root entry live", () => {
+    const library = catalog.addLibrary("Library", path.join(root, "music"));
+    catalog.upsert(
+      makeTrack("root-track", library.id, {
+        relativePath: path.join("Artist", "root.flac"),
+      }),
+    );
+    const created = catalog.createPlaylist("Корень");
+    const target = catalog.playlistFolderTargetId(library.id, "");
+
+    const initial = catalog.addPlaylistEntries(created.playlist.id, "folder", [
+      target,
+    ]);
+    expect(initial.entries[0]).toMatchObject({
+      kind: "folder",
+      snapshot: { title: "Library", subtitle: "Library" },
+    });
+    expect(catalog.playlistTracks(created.playlist.id).items).toHaveLength(1);
+
+    catalog.upsert(
+      makeTrack("new-track", library.id, {
+        relativePath: path.join("Later", "new.flac"),
+      }),
+    );
+    expect(catalog.playlist(created.playlist.id).playlist.trackCount).toBe(2);
+    expect(
+      catalog.addPlaylistEntries(created.playlist.id, "folder", [target]).entries,
+    ).toHaveLength(1);
+  });
+
+  it("preserves existing playlist entries during the folder migration", () => {
+    const library = catalog.addLibrary("Library", path.join(root, "music"));
+    catalog.upsert(makeTrack("one", library.id));
+    const created = catalog.createPlaylist("Legacy");
+    catalog.addPlaylistEntries(created.playlist.id, "track", ["one"]);
+    catalog.close();
+
+    const db = new Database(path.join(root, "catalog.sqlite"));
+    db.exec(`
+      CREATE TABLE playlist_entries_legacy (
+        id TEXT PRIMARY KEY, playlistId TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK(kind IN ('genre','artist','album','track')), targetId TEXT NOT NULL,
+        position INTEGER NOT NULL, snapshot TEXT NOT NULL
+      );
+      INSERT INTO playlist_entries_legacy SELECT id,playlistId,kind,targetId,position,snapshot FROM playlist_entries;
+      DROP TABLE playlist_entries;
+      ALTER TABLE playlist_entries_legacy RENAME TO playlist_entries;
+      CREATE INDEX playlist_entries_order ON playlist_entries(playlistId,position,id);
+    `);
+    db.pragma("user_version = 10");
+    db.close();
+
+    catalog = new Catalog(root);
+    expect(
+      catalog.playlist(created.playlist.id).entries.map((entry) => entry.kind),
+    ).toEqual(["track"]);
+    expect(
+      (catalog as unknown as { db: Database.Database }).db.pragma(
+        "user_version",
+        { simple: true },
+      ),
+    ).toBe(11);
   });
 
   it("retains unavailable entries and reports them", () => {

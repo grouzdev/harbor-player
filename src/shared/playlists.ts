@@ -6,6 +6,7 @@ export const playlistEntryKindSchema = z.enum([
   "artist",
   "album",
   "track",
+  "folder",
 ]);
 export type PlaylistEntryKind = z.infer<typeof playlistEntryKindSchema>;
 
@@ -97,6 +98,23 @@ export const playlistEntryInputSchema = z.discriminatedUnion("kind", [
     .object({
       kind: z.literal("track"),
       selection: selectionSchema,
+      beforeEntryId: z.string().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("folder"),
+      folders: z
+        .array(
+          z
+            .object({
+              libraryId: z.string().min(1).max(100),
+              relativePath: z.string().max(32000),
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(100),
       beforeEntryId: z.string().optional(),
     })
     .strict(),
