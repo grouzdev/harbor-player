@@ -1040,7 +1040,19 @@ test("library root can be added to any playlist", async ({ page }, info) => {
     playlistDialog.then((dialog) => dialog.accept(playlistName)),
     page.getByRole("button", { name: "Создать плейлист" }).click(),
   ]);
-  await expect(page.getByRole("button", { name: playlistName })).toBeVisible();
+  const playlistTile = page
+    .getByRole("button", { name: playlistName })
+    .locator("..");
+  await expect(playlistTile).toBeVisible();
+  await playlistTile.locator(".list-tile-main").click();
+  await expect(playlistTile).toHaveClass(/selected/);
+  await expect(playlistTile.locator(".list-tile-main")).toHaveCSS(
+    "background-color",
+    "rgba(139, 174, 153, 0.106)",
+  );
+  const playlistMarker = playlistTile.locator(".list-tile-related-marker");
+  await expect(playlistMarker).toBeVisible();
+  await expect(playlistMarker).toHaveCSS("background-color", "rgb(185, 212, 183)");
 
   await page
     .getByRole("button", { name: new RegExp(libraryName) })

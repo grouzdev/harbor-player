@@ -2924,6 +2924,10 @@ body {
   display: grid;
   place-items: center;
 }
+.playlist-library-tile.selected .list-tile-related-marker {
+  background: #b9d4b7;
+  box-shadow: 0 0 6px #b9d4b7a6;
+}
 .playlist-heading h2 {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3889,6 +3893,20 @@ select {
 .list-tile.selected .list-tile-prefix,
 .list-tile.selected .list-tile-suffix {
   color: #b2b681;
+}
+
+.playlist-library-tile.selected .list-tile-main {
+  background: #8bae991b;
+  box-shadow:
+    0 1px #00000066 inset,
+    0 -1px #b9d4b71f inset,
+    0 0 6px #00000024 inset;
+  color: #c5ddc4;
+}
+
+.playlist-library-tile.selected .list-tile-prefix,
+.playlist-library-tile.selected .list-tile-suffix {
+  color: #b9d4b7;
 }
 
 .all-albums {
