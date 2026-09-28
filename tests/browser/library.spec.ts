@@ -691,9 +691,17 @@ test("panel visibility controls reshape and persist the catalog", async ({
 }) => {
   await page.goto("/");
   const workspace = page.locator(".workspace");
+  const genresVisibilityButton = page.getByRole("button", {
+    name: "Скрыть панель «Жанры»",
+  });
 
-  await page.getByRole("button", { name: "Скрыть панель «Жанры»" }).click();
+  await expect(genresVisibilityButton).toHaveClass(/is-active/);
+
+  await genresVisibilityButton.click();
   await expect(page.locator(".genres-panel")).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: "Показать панель «Жанры»" }),
+  ).not.toHaveClass(/is-active/);
   await page.mouse.move(500, 500);
   await expect(
     page.getByRole("button", { name: "Показать панель «Жанры»" }),

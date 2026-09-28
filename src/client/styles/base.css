@@ -2313,7 +2313,16 @@ body {
   transition:
     color 0.15s,
     opacity 0.15s,
-    background 0.15s;
+    filter 0.15s;
+}
+.panel-visibility-button.is-active {
+  color: var(--accent);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 72%, transparent));
+}
+.panel-visibility-button.is-active:hover:not(:disabled) {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
 }
 .panel-visibility-button.is-hidden {
   color: #626861;

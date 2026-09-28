@@ -2899,7 +2899,7 @@ export function App() {
                 <button
                   key={id}
                   type="button"
-                  className={`icon-button panel-visibility-button ${visible ? "" : "is-hidden"}`}
+                  className={`icon-button panel-visibility-button ${visible ? "is-active" : "is-hidden"}`}
                   aria-label={`${action} панель «${label}»`}
                   aria-pressed={visible}
                   title={`${action} панель «${label}»`}
