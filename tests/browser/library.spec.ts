@@ -2967,25 +2967,48 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   await expect(
     currentTrack.locator(".list-tile-status-icon svg"),
   ).toBeVisible();
+  const currentTrackTextColor = await currentTrack
+    .locator(".list-tile-label")
+    .evaluate((element) => getComputedStyle(element).color);
+  await expect(currentTrack.locator(".list-tile-status-icon")).toHaveCSS(
+    "color",
+    currentTrackTextColor,
+  );
   await currentTrack.locator(".list-tile-main").click();
   await expect(currentTrack).toHaveClass(/selected/);
-  await expect(libraryTile).not.toHaveClass(/playing/);
-  await expect(libraryTile.locator(".list-tile-status-icon svg")).toHaveCount(
-    0,
+  await expect(currentTrack.locator(".list-tile-status-icon")).toHaveCSS(
+    "color",
+    await currentTrack
+      .locator(".list-tile-label")
+      .evaluate((element) => getComputedStyle(element).color),
   );
+  await expect(libraryTile).not.toHaveClass(/playing/);
+  await expect(libraryTile.locator(".list-tile-status-icon svg")).toBeVisible();
   await expect(page.locator(".albums-panel .album-card.playing")).toHaveCount(
     0,
   );
-  await expect(page.locator(".albums-panel .album-playing-icon")).toHaveCount(
-    0,
+  const albumPlayingIcon = page.locator(".albums-panel .album-playing-icon");
+  await expect(albumPlayingIcon).toBeVisible();
+  await expect(albumPlayingIcon).toHaveCSS(
+    "color",
+    await albumPlayingIcon.evaluate(
+      (element) => getComputedStyle(element.parentElement!).color,
+    ),
   );
   await expect(page.locator(".genres-panel .list-tile.playing")).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.locator(".genres-panel .list-tile-status-icon svg").count(),
+    )
+    .toBeGreaterThan(0);
   await expect(page.locator(".artists-panel .artist-row.playing")).toHaveCount(
     0,
   );
-  await expect(
-    page.locator(".artists-panel .list-tile-status-icon svg"),
-  ).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.locator(".artists-panel .list-tile-status-icon svg").count(),
+    )
+    .toBeGreaterThan(0);
 
   await page.locator(".cover-mode-toggle").click();
   const coverMode = page.getByRole("main", { name: "Режим обложки" });

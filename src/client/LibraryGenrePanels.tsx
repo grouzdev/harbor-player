@@ -106,7 +106,6 @@ export function LibraryPanel({
                   showPlayingTrackIndicators && currentLibraryId === library.id
                 }
                 statusIcon={
-                  showPlayingTrackIndicators &&
                   currentLibraryId === library.id ? (
                     <Play size={13} fill="currentColor" />
                   ) : undefined
@@ -270,9 +269,7 @@ export function GenrePanel({
               }
               playing={showPlayingTrackIndicators && playing}
               statusIcon={
-                showPlayingTrackIndicators && playing ? (
-                  <Play size={13} fill="currentColor" />
-                ) : undefined
+                playing ? <Play size={13} fill="currentColor" /> : undefined
               }
               selected={highlightedGenres.has(genre.name)}
               selectionKey={genre.name}

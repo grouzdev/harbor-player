@@ -278,9 +278,7 @@ export function ArtistList({
               playing={showPlayingTrackIndicators && current}
               related={related}
               statusIcon={
-                showPlayingTrackIndicators && current ? (
-                  <Play size={13} fill="currentColor" />
-                ) : undefined
+                current ? <Play size={13} fill="currentColor" /> : undefined
               }
               selectionKey={item.name}
               draggable={playlistDragEnabled}
@@ -733,15 +731,14 @@ export function AlbumGrid({
                                 aria-hidden="true"
                               />
                             )}
-                            {showPlayingTrackIndicators &&
-                              currentAlbumId === album.id && (
-                                <Play
-                                  className="album-playing-icon"
-                                  size={13}
-                                  fill="currentColor"
-                                  aria-hidden="true"
-                                />
-                              )}
+                            {currentAlbumId === album.id && (
+                              <Play
+                                className="album-playing-icon"
+                                size={13}
+                                fill="currentColor"
+                                aria-hidden="true"
+                              />
+                            )}
                             <span>{album.title || "Без альбома"}</span>
                           </strong>
                           <span className="album-details">
