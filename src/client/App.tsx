@@ -2178,7 +2178,20 @@ export function App() {
         if (filterKeyRef.current !== navigationFilterKey) return;
         if (trackIds.length) {
           if (target === "artist") {
-            requestArtistScroll(value);
+            const artistSelectionChanged = !sameStringArray(
+              filter.artists,
+              artists,
+            );
+            applyArtistSelection(artists);
+            requestArtistScroll(
+              value,
+              isSearching || !artistSelectionChanged
+                ? filterKey
+                : `${navigationEpoch + 1}:${JSON.stringify({
+                    ...filter,
+                    artists,
+                  })}`,
+            );
             return;
           }
           const [artistResult, trackResult] = await Promise.all([
@@ -2217,8 +2230,10 @@ export function App() {
     },
     [
       albumFilter,
+      applyArtistSelection,
       artistFilter,
       filter,
+      isSearching,
       requestAlbumScroll,
       requestArtistScroll,
       requestTrackScroll,
