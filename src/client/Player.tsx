@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  Music2,
   Pause,
   Play,
   Repeat,
@@ -11,6 +10,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
+import { CoverPlaceholder } from "./CoverPlaceholder";
 import type { CatalogFilter, Track } from "../shared/contracts";
 import { api, duration } from "./api";
 import { readMigratedStorageValue } from "./storage";
@@ -345,7 +345,7 @@ export function Player({
           {track?.coverId ? (
             <img src={`/api/covers/${track.coverId}`} alt="" />
           ) : (
-            <Music2 size={22} />
+            <CoverPlaceholder />
           )}
         </button>
         <div className="now-copy">

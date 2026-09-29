@@ -13,6 +13,7 @@ import type {
   FacetRelevance,
   Track,
 } from "../shared/contracts";
+import { CoverPlaceholder } from "./CoverPlaceholder";
 import {
   albumArtistGroupKey,
   artistGroupKey,
@@ -978,7 +979,7 @@ export function TrackList({
                   {track.coverId ? (
                     <img src={`/api/covers/${track.coverId}`} alt="" />
                   ) : (
-                    <Disc3 size={20} />
+                    <CoverPlaceholder />
                   )}
                 </div>
                 <div>

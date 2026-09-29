@@ -705,8 +705,8 @@ body.selection-dragging * {
   inset: 0;
   background: linear-gradient(
     145deg,
-    hsl(var(--cover-hue) 17% 37%),
-    hsl(var(--cover-hue) 20% 15%)
+    hsl(var(--cover-hue, 180) 17% 37%),
+    hsl(var(--cover-hue, 180) 20% 15%)
   );
 }
 .album-track-count {
@@ -825,6 +825,7 @@ body.selection-dragging * {
 .tiny-cover {
   width: 40px;
   height: 40px;
+  position: relative;
   background: #ffffff06;
   color: #839488;
   border-radius: 4px;
@@ -999,6 +1000,7 @@ body.selection-dragging * {
 .now-cover {
   width: 52px;
   height: 52px;
+  position: relative;
   display: grid;
   place-items: center;
   background: #28352f;
@@ -3050,7 +3052,6 @@ body {
   width: 100%;
   min-height: 34px;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   padding: 6px 16px 6px 72px;
@@ -3058,11 +3059,16 @@ body {
   text-align: left;
   font-size: var(--type-caption);
 }
+.playlist-nested-track {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.playlist-track-order > button {
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+}
 .playlist-nested-track:hover,
 .playlist-track-order > button:hover {
   background: #ffffff04;
 }
-.playlist-nested-track > span:first-child,
 .playlist-track-order > button > span:first-child {
   color: var(--muted);
   font-variant-numeric: tabular-nums;

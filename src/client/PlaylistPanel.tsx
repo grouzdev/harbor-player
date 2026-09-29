@@ -27,6 +27,7 @@ import type {
   PlaylistTrackPage,
 } from "../shared/playlists";
 import { api, count, duration } from "./api";
+import { CoverPlaceholder } from "./CoverPlaceholder";
 import { Modal } from "./Modal";
 
 const templateFieldLabels: Record<PathTemplateField, string> = {
@@ -629,7 +630,7 @@ export function PlaylistPanel({
                       />
                     ) : (
                       <span className="tiny-cover playlist-entry-placeholder">
-                        <ListMusic size={16} />
+                        <CoverPlaceholder />
                       </span>
                     )}
                     <EntryIcon
@@ -676,7 +677,6 @@ export function PlaylistPanel({
                         className={`playlist-nested-track ${item.track.available ? "" : "offline"}`}
                         onDoubleClick={() => onPlay(playlistId, item.track.id)}
                       >
-                        <span>{item.position + 1}</span>
                         <strong>{item.track.title}</strong>
                         <small>{duration(item.track.duration)}</small>
                       </button>

@@ -31,7 +31,7 @@ import {
   artistSortKey,
   compareArtistNames,
 } from "../shared/artist-grouping.js";
-import { badRequest, conflict, notFound } from "./http-error.js";
+import { HttpError, badRequest, conflict, notFound } from "./http-error.js";
 import { runCatalogMigrations } from "./catalog-migrations.js";
 import { albumIdentityKey } from "./album-identity.js";
 import { normalizedAlbumFolder } from "./album-identity.js";
@@ -1538,9 +1538,16 @@ export class Catalog {
         entryUnavailable = 1;
         unavailableCount++;
       }
-      const snapshot = playlistSnapshotSchema.parse(
+      const storedSnapshot = playlistSnapshotSchema.parse(
         parseStoredJson(entry.snapshot),
       );
+      let snapshot = storedSnapshot;
+      try {
+        snapshot = this.snapshotForPlaylistEntry(entry.kind, entry.targetId);
+      } catch (error) {
+        if (!(error instanceof HttpError) || error.statusCode !== 404)
+          throw error;
+      }
       entries.push({
         ...entry,
         snapshot,

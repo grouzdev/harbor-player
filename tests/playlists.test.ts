@@ -112,6 +112,72 @@ describe("playlists", () => {
     ]);
   });
 
+  it("refreshes playlist entry tiles from the current catalog", () => {
+    const library = catalog.addLibrary("Library", path.join(root, "music"));
+    catalog.upsert(
+      makeTrack("song", library.id, {
+        relativePath: path.join("Artist", "Album", "song.flac"),
+        title: "Original song",
+        albumTitle: "Original album",
+        albumKey: "album",
+        artists: ["Artist"],
+        albumArtists: ["Artist"],
+        genres: ["Rock"],
+      }),
+    );
+    const playlist = catalog.createPlaylist("Live tiles");
+    const folder = catalog.playlistFolderTargetId(
+      library.id,
+      path.join("Artist", "Album"),
+    );
+    catalog.addPlaylistEntries(playlist.playlist.id, "track", ["song"]);
+    catalog.addPlaylistEntries(playlist.playlist.id, "album", ["album"]);
+    catalog.addPlaylistEntries(playlist.playlist.id, "artist", ["Artist"]);
+    catalog.addPlaylistEntries(playlist.playlist.id, "genre", ["Rock"]);
+    catalog.addPlaylistEntries(playlist.playlist.id, "folder", [folder]);
+
+    catalog.upsert(
+      makeTrack("song", library.id, {
+        relativePath: path.join("Artist", "Album", "song.flac"),
+        title: "Current song",
+        albumTitle: "Current album",
+        albumKey: "album",
+        artists: ["Artist"],
+        albumArtists: ["Artist"],
+        genres: ["Electronic"],
+        coverId: "current-cover.jpg",
+      }),
+    );
+
+    expect(
+      catalog
+        .playlist(playlist.playlist.id)
+        .entries.map((entry) => entry.snapshot),
+    ).toEqual([
+      {
+        title: "Current song",
+        subtitle: "Artist",
+        coverId: "current-cover.jpg",
+      },
+      {
+        title: "Current album",
+        subtitle: "Artist",
+        coverId: "current-cover.jpg",
+      },
+      {
+        title: "Artist",
+        subtitle: "Electronic",
+        coverId: "current-cover.jpg",
+      },
+      { title: "Rock", subtitle: "Нет доступных папок", coverId: null },
+      {
+        title: "Album",
+        subtitle: path.join(root, "music", "Artist", "Album"),
+        coverId: "current-cover.jpg",
+      },
+    ]);
+  });
+
   it("keeps live genre blocks, removes overlaps by first occurrence and reorders blocks", () => {
     const library = catalog.addLibrary("Library", path.join(root, "music"));
     catalog.upsert(makeTrack("one", library.id, { trackNumber: 1 }));
