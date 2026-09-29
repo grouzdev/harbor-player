@@ -371,6 +371,74 @@ describe("playlists", () => {
     expect(catalog.playlistTrackIds(created.playlist.id)).toEqual([]);
   });
 
+  it("keeps dynamic entries live when their tracks become unavailable", () => {
+    const library = catalog.addLibrary("Library", path.join(root, "music"));
+    catalog.upsert(
+      makeTrack("album-track", library.id, {
+        albumKey: "live-album",
+        albumTitle: "Live album",
+      }),
+    );
+    catalog.upsert(
+      makeTrack("artist-track", library.id, {
+        albumKey: "artist-album",
+        artists: ["Live artist"],
+        albumArtists: ["Live artist"],
+      }),
+    );
+    catalog.upsert(
+      makeTrack("genre-track", library.id, {
+        albumKey: "genre-album",
+        genres: ["Live genre"],
+      }),
+    );
+    catalog.upsert(
+      makeTrack("folder-track", library.id, {
+        albumKey: "folder-album",
+        relativePath: path.join("Selected", "folder-track.flac"),
+      }),
+    );
+    const folder = catalog.playlistFolderTargetId(library.id, "Selected");
+    const created = catalog.createPlaylist("Живой");
+    catalog.addPlaylistEntries(created.playlist.id, "album", ["live-album"]);
+    catalog.addPlaylistEntries(created.playlist.id, "artist", ["Live artist"]);
+    catalog.addPlaylistEntries(created.playlist.id, "genre", ["Live genre"]);
+    catalog.addPlaylistEntries(created.playlist.id, "folder", [folder]);
+
+    ["album-track", "artist-track", "genre-track", "folder-track"].forEach(
+      (id) => catalog.markTrackUnavailable(id),
+    );
+
+    const detail = catalog.playlist(created.playlist.id);
+    expect(detail.playlist).toMatchObject({
+      trackCount: 0,
+      unavailableCount: 0,
+    });
+    expect(detail.entries).toHaveLength(4);
+    expect(
+      detail.entries.map((entry) => ({
+        resolvedCount: entry.resolvedCount,
+        unavailableCount: entry.unavailableCount,
+      })),
+    ).toEqual([
+      { resolvedCount: 0, unavailableCount: 0 },
+      { resolvedCount: 0, unavailableCount: 0 },
+      { resolvedCount: 0, unavailableCount: 0 },
+      { resolvedCount: 0, unavailableCount: 0 },
+    ]);
+    expect(catalog.playlistTracks(created.playlist.id).items).toEqual([]);
+    expect(catalog.playlistTrackIds(created.playlist.id)).toEqual([]);
+
+    catalog.upsert(
+      makeTrack("artist-returned", library.id, {
+        albumKey: "artist-returned-album",
+        artists: ["Live artist"],
+        albumArtists: ["Live artist"],
+      }),
+    );
+    expect(catalog.playlist(created.playlist.id).playlist.trackCount).toBe(1);
+  });
+
   it("renders safe reusable paths and reads/writes common formats", async () => {
     const library = catalog.addLibrary("Library", path.join(root, "music"));
     const track = makeTrack("one", library.id, {

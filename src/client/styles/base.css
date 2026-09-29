@@ -3033,11 +3033,19 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.playlist-entry-copy strong {
+.playlist-entry-copy strong,
+.playlist-nested-track strong {
+  color: var(--catalog-primary-text);
   font-size: var(--type-caption);
-  font-weight: 600;
+  font-weight: 400;
 }
 .playlist-entry-copy small,
+.playlist-nested-track small {
+  color: #75858e;
+  font-size: var(--type-caption);
+  font-weight: 400;
+  line-height: 21px;
+}
 .playlist-entry-count {
   color: var(--muted);
   font-size: var(--type-caption);
@@ -3072,7 +3080,6 @@ body {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-.playlist-nested-track small,
 .playlist-track-order small {
   color: var(--muted);
 }

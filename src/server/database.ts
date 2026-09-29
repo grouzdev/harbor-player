@@ -1467,6 +1467,7 @@ export class Catalog {
       .all(playlistId) as StoredPlaylistEntry[];
   }
   private tracksForPlaylistEntry(entry: StoredPlaylistEntry): Track[] {
+    const dynamic = entry.kind !== "track";
     let condition = "t.id=?";
     let args: any[] = [entry.targetId];
     if (entry.kind === "album") condition = "t.albumKey=?";
@@ -1496,11 +1497,13 @@ export class Catalog {
     const rows = this.db
       .prepare(
         `SELECT t.*, trackState.rating rating, albumState.rating albumRating,
+                CASE WHEN t.available=1 AND l.available=1 THEN 1 ELSE 0 END available,
                 coalesce(albumState.viewed,0) albumViewed
-         FROM tracks t
-         LEFT JOIN catalog_user_state trackState ON trackState.kind='track' AND trackState.id=t.id
-         LEFT JOIN catalog_user_state albumState ON albumState.kind='album' AND albumState.id=t.albumKey
-         WHERE ${condition}`,
+          FROM tracks t
+          JOIN libraries l ON l.id=t.libraryId
+          LEFT JOIN catalog_user_state trackState ON trackState.kind='track' AND trackState.id=t.id
+          LEFT JOIN catalog_user_state albumState ON albumState.kind='album' AND albumState.id=t.albumKey
+          WHERE ${condition}${dynamic ? " AND t.available=1 AND l.available=1" : ""}`,
       )
       .all(...args) as Row[];
     return rows.map(fromRow).sort(comparePlaylistTracks);
@@ -1527,7 +1530,7 @@ export class Catalog {
         }
         tracks.push({ position: tracks.length, entryId: entry.id, track });
       }
-      if (!raw.length) {
+      if (entry.kind === "track" && !raw.length) {
         entryUnavailable = 1;
         unavailableCount++;
       }
