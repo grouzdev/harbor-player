@@ -334,6 +334,7 @@ export function useCatalogBrowsing() {
 
   return {
     filter,
+    savedFilter,
     setFilter,
     replaceFilter,
     search,

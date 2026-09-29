@@ -1,3 +1,4 @@
+import { addCatalogFilter } from "./catalog-filter-helpers";
 import { test, expect, type Page as PlaywrightPage } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -82,191 +83,98 @@ test("icon buttons keep their geometry on hover", async ({ page }) => {
 test("topbar groups catalog controls in the requested order", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto("/");
-  const search = page.locator(".search");
-  const filters = page.locator(".catalog-user-filters");
-  const sectionButtons = page.locator(".panel-visibility-controls");
-  const bookmarks = page.getByRole("button", {
-    name: "Показать музыку из закладок",
+  const search = page.locator(".catalog-search");
+  const add = page.getByRole("button", {
+    name: "Добавить фильтр",
+    exact: true,
   });
-  const recentlyAdded = page.getByRole("button", {
-    name: "Только недавно добавленные",
-  });
-  const unviewed = page.getByRole("button", { name: "Только непросмотренные" });
-  const rating = page.getByRole("button", { name: "Фильтр по рейтингу" });
-  const history = page.getByRole("button", { name: "Журнал операций" });
-  const topbar = page.locator(".topbar");
-  const settings = topbar.getByRole("button", { name: "Открыть настройки" });
-  const coverMode = topbar.getByRole("button", {
-    name: "Открыть режим обложки",
-  });
-  const fullscreen = topbar.getByRole("button", {
-    name: "Развернуть окно на весь экран",
-  });
-  const [
-    searchBox,
-    filterBox,
-    sectionButtonsBox,
-    bookmarkBox,
-    recentlyAddedBox,
-    unviewedBox,
-    ratingBox,
-    historyBox,
-    settingsBox,
-    coverModeBox,
-    fullscreenBox,
-    topbarBox,
-  ] = await Promise.all([
-    search.boundingBox(),
-    filters.boundingBox(),
-    sectionButtons.boundingBox(),
-    bookmarks.boundingBox(),
-    recentlyAdded.boundingBox(),
-    unviewed.boundingBox(),
-    rating.boundingBox(),
-    history.boundingBox(),
-    settings.boundingBox(),
-    coverMode.boundingBox(),
-    fullscreen.boundingBox(),
-    topbar.boundingBox(),
+  await expect(search).toHaveClass(/is-collapsed/);
+  await expect(page.locator(".catalog-filter-chip")).toHaveCount(0);
+  const searchBox = (await search.boundingBox())!;
+  const addBox = (await add.boundingBox())!;
+  expect(searchBox.width).toBe(36);
+  expect(addBox.width).toBe(36);
+  expect(addBox.x - searchBox.x - searchBox.width).toBeCloseTo(7, 1);
+  const rightControls = [
+    page.getByRole("button", { name: "Открыть настройки", exact: true }),
+    page.getByRole("button", { name: "Журнал операций", exact: true }),
+    page.locator(".panel-visibility-controls"),
+    page
+      .locator(".topbar")
+      .getByRole("button", { name: "Открыть режим обложки", exact: true }),
+    page.getByRole("button", {
+      name: "Развернуть окно на весь экран",
+      exact: true,
+    }),
+  ];
+  const boxes = await Promise.all(
+    rightControls.map((node) => node.boundingBox()),
+  );
+  for (let i = 1; i < boxes.length; i++) {
+    expect(boxes[i]!.x - boxes[i - 1]!.x - boxes[i - 1]!.width).toBeCloseTo(
+      7,
+      1,
+    );
+  }
+  await addCatalogFilter(page, "Недавние");
+  await addCatalogFilter(page, "Закладки");
+  await addCatalogFilter(page, "Не просмотрено");
+  await expect(page.locator(".catalog-filter-chip")).toHaveText([
+    "Недавние",
+    "Закладки",
+    "Не просмотрено",
   ]);
-  expect(searchBox).not.toBeNull();
-  expect(filterBox).not.toBeNull();
-  expect(sectionButtonsBox).not.toBeNull();
-  expect(bookmarkBox).not.toBeNull();
-  expect(recentlyAddedBox).not.toBeNull();
-  expect(unviewedBox).not.toBeNull();
-  expect(ratingBox).not.toBeNull();
-  expect(historyBox).not.toBeNull();
-  expect(settingsBox).not.toBeNull();
-  expect(coverModeBox).not.toBeNull();
-  expect(fullscreenBox).not.toBeNull();
-  expect(topbarBox).not.toBeNull();
-  expect(bookmarkBox!.x + bookmarkBox!.width).toBeLessThanOrEqual(searchBox!.x);
-  expect(bookmarkBox!.x).toBeLessThan(unviewedBox!.x);
-  expect(unviewedBox!.x).toBeLessThan(ratingBox!.x);
-  expect(ratingBox!.x).toBeLessThan(recentlyAddedBox!.x);
-  expect(searchBox!.x + searchBox!.width).toBeLessThanOrEqual(settingsBox!.x);
-  expect(settingsBox!.x).toBeLessThan(historyBox!.x);
-  expect(historyBox!.x).toBeLessThan(sectionButtonsBox!.x);
-  expect(sectionButtonsBox!.x).toBeLessThan(coverModeBox!.x);
-  expect(coverModeBox!.x).toBeLessThan(fullscreenBox!.x);
-  const buttonGap = (
-    left: { x: number; width: number },
-    right: { x: number },
-  ) => right.x - (left.x + left.width);
-  const leftButtons = sectionButtons.locator("button");
-  const leftButtonBoxes = await Promise.all(
-    Array.from({ length: await leftButtons.count() }, (_, index) =>
-      leftButtons.nth(index).boundingBox(),
-    ),
-  );
-  expect(leftButtonBoxes).toHaveLength(1);
-  expect(leftButtonBoxes.every((box) => box !== null)).toBe(true);
-  await expect(leftButtons.first()).toHaveAccessibleName(
-    "Показать панель «Плейлист»",
-  );
-  for (let index = 1; index < leftButtonBoxes.length; index += 1) {
-    expect(
-      buttonGap(leftButtonBoxes[index - 1]!, leftButtonBoxes[index]!),
-    ).toBeCloseTo(7, 1);
-  }
-  for (const [left, right] of [
-    [bookmarkBox!, unviewedBox!],
-    [unviewedBox!, ratingBox!],
-    [ratingBox!, recentlyAddedBox!],
-    [settingsBox!, historyBox!],
-    [historyBox!, sectionButtonsBox!],
-    [sectionButtonsBox!, coverModeBox!],
-    [coverModeBox!, fullscreenBox!],
-  ]) {
-    expect(buttonGap(left, right)).toBeCloseTo(7, 1);
-  }
-  expect(filterBox!.x).toBeGreaterThanOrEqual(bookmarkBox!.x);
-  expect(filterBox!.x + filterBox!.width).toBeLessThanOrEqual(searchBox!.x);
-  expect(searchBox!.x + searchBox!.width / 2).toBeCloseTo(
-    topbarBox!.x + topbarBox!.width / 2,
-    1,
-  );
+  expect((await rightControls[0].boundingBox())!.x).toBe(boxes[0]!.x);
   await page
     .locator(".genres-panel")
     .getByRole("button", { name: "Закрыть панель «Жанры»" })
     .click();
-  await expect(leftButtons).toHaveCount(2);
-  expect(
-    await leftButtons.evaluateAll((buttons) =>
-      buttons.map((button) => button.getAttribute("aria-label")),
-    ),
-  ).toEqual(["Показать панель «Плейлист»", "Показать панель «Жанры»"]);
+  await expect(page.locator(".panel-visibility-controls button")).toHaveCount(
+    2,
+  );
   await page
     .locator(".topbar")
     .getByRole("button", { name: "Показать панель «Жанры»" })
     .click();
-  await expect(leftButtons).toHaveCount(1);
-  await recentlyAdded.click();
-  await expect(recentlyAdded).toHaveAttribute("aria-pressed", "true");
-  await expect(recentlyAdded).toHaveText("Недавние");
-  const activeRecentlyAddedBox = await recentlyAdded.boundingBox();
-  expect(activeRecentlyAddedBox).not.toBeNull();
-  expect(activeRecentlyAddedBox!.width).toBeGreaterThan(
-    recentlyAddedBox!.width,
+  await expect(page.locator(".panel-visibility-controls button")).toHaveCount(
+    1,
   );
-  await bookmarks.click();
-  const activeBookmarks = page.getByRole("button", {
-    name: "Отключить фильтр закладок",
-  });
-  await expect(activeBookmarks).toHaveAttribute("aria-pressed", "true");
-  await expect(activeBookmarks).toHaveText("Закладки");
-  const activeBookmarksBox = await activeBookmarks.boundingBox();
-  expect(activeBookmarksBox).not.toBeNull();
-  expect(activeBookmarksBox!.width).toBeGreaterThan(bookmarkBox!.width);
-  const activeColors = await activeBookmarks.evaluate((node) => {
-    const accent = getComputedStyle(document.documentElement)
-      .getPropertyValue("--accent")
-      .trim();
-    const probe = document.createElement("span");
-    probe.style.color = accent;
-    document.body.append(probe);
-    const resolvedAccent = getComputedStyle(probe).color;
-    probe.remove();
-    return {
-      background: getComputedStyle(node).backgroundColor,
-      accent: resolvedAccent,
-    };
-  });
-  expect(activeColors.background).toBe(activeColors.accent);
-  await expect(activeBookmarks.locator("svg")).toHaveCSS(
-    "color",
-    "rgb(37, 58, 45)",
-  );
-  await expect(activeBookmarks.locator("svg")).toHaveAttribute("fill", "none");
 });
 
 test("active catalog filters show their current labels", async ({ page }) => {
   await page.goto("/");
-  const rating = page.getByRole("button", { name: "Фильтр по рейтингу" });
-  const inactiveRatingBox = await rating.boundingBox();
-  expect(inactiveRatingBox).not.toBeNull();
+  await addCatalogFilter(page, "Рейтинг");
+  const minimum = page.getByLabel("Минимальная оценка");
+  const maximum = page.getByLabel("Максимальная оценка");
+  await minimum.fill("3");
+  await maximum.fill("4");
+  await expect(
+    page.locator('.catalog-filter-chip[data-filter="rating"]'),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Применить рейтинг" }).click();
+  const rating = page.getByRole("button", { name: "Редактировать рейтинг" });
+  await expect(rating).toHaveText("Рейтинг: от 3 до 4");
   await rating.click();
-  const minimumRating = page.getByLabel("Минимальная оценка");
-  const maximumRating = page.getByLabel("Максимальная оценка");
-  await minimumRating.fill("3");
-  await maximumRating.fill("4");
-  await expect(rating).toHaveText("Рейтинг 3—4");
-  const activeRatingBox = await rating.boundingBox();
-  expect(activeRatingBox).not.toBeNull();
-  expect(activeRatingBox!.width).toBeGreaterThan(inactiveRatingBox!.width);
-  await minimumRating.fill("0");
-  await maximumRating.fill("0");
+  await minimum.fill("0");
+  await maximum.fill("0");
+  await page
+    .getByRole("button", { name: "Отменить изменение рейтинга" })
+    .click();
+  await expect(rating).toHaveText("Рейтинг: от 3 до 4");
+  await rating.click();
+  await minimum.fill("0");
+  await maximum.fill("0");
+  await page.getByRole("button", { name: "Применить рейтинг" }).click();
   await expect(rating).toHaveText("Без рейтинга");
-  await page.keyboard.press("Escape");
-
-  const unviewed = page.getByRole("button", {
-    name: "Только непросмотренные",
-  });
-  await unviewed.click();
-  await expect(unviewed).toHaveText("Непросмотрено");
+  await rating.click();
+  await maximum.fill("5");
+  await page.getByRole("button", { name: "Применить рейтинг" }).click();
+  await expect(rating).toHaveText("Рейтинг: от 0 до 5");
+  await addCatalogFilter(page, "Не просмотрено");
+  await expect(page.locator('[data-filter="unviewed"]')).toHaveText(
+    "Не просмотрено",
+  );
 });
 
 test("fullscreen button changes the application shell", async ({ page }) => {
@@ -1170,7 +1078,9 @@ test("library root can be added to any playlist", async ({ page }, info) => {
     .getByRole("button", { name: new RegExp(libraryName) })
     .first()
     .click({ button: "right" });
-  const menu = page.getByRole("menu").first();
+  const menu = page
+    .getByRole("menu", { name: "Контекстное меню", exact: true })
+    .first();
   const addToPlaylist = menu.getByRole("menuitem", {
     name: "Добавить в плейлист",
   });
@@ -1291,12 +1201,9 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   expect(volumeStyles.backgroundImage).toContain("linear-gradient");
   expect(volumeStyles.backgroundSize).toBe("100% 5px");
   expect(volumeStyles.borderRadius).toBe("999px");
-  const visualRatingFilter = page.getByRole("button", {
-    name: "Фильтр по рейтингу",
-  });
-  await visualRatingFilter.click();
+  await addCatalogFilter(page, "Рейтинг");
   const ratingStyles = await page
-    .locator(".catalog-rating-range-track")
+    .locator(".catalog-filter-slider")
     .evaluate((shell) => {
       const styles = getComputedStyle(shell);
       const minimumThumb = shell.querySelector<HTMLElement>(
@@ -1313,7 +1220,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
       };
     });
   expect(ratingStyles.height).toBe(rangeStyles.height);
-  expect(ratingStyles.width).toBe("154px");
+  expect(ratingStyles.width).toBe("220px");
   expect(ratingStyles.backgroundImage).toBe(rangeStyles.backgroundImage);
   expect(ratingStyles.backgroundSize).toBe(rangeStyles.backgroundSize);
   expect(ratingStyles.borderRadius).toBe(rangeStyles.borderRadius);
@@ -1408,7 +1315,10 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     .getByRole("button", { name: new RegExp(`Collection ${browser}`) })
     .first();
   await collection.click({ button: "right" });
-  const libraryMenu = page.getByRole("menu");
+  const libraryMenu = page.getByRole("menu", {
+    name: "Контекстное меню",
+    exact: true,
+  });
   await expect(
     libraryMenu.getByRole("menuitem", { name: "Обновить" }),
   ).toBeVisible();
@@ -1819,7 +1729,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     ".track-row-actions .rating-control",
   );
   await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
-  await page.getByLabel("Поиск музыки").hover();
+  await page.locator(".catalog-search").hover();
   await expect(trackRatingControl).toHaveCSS("opacity", "0");
   await expect(trackBookmark).toHaveCSS("opacity", "0");
   await unratedTrackRating.focus();
@@ -1861,7 +1771,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   const savedTrackRating = firstTrackRow.getByRole("button", {
     name: "Оценка 5 из 5",
   });
-  await page.getByLabel("Поиск музыки").hover();
+  await page.locator(".catalog-search").hover();
   await expect(trackRatingControl).toHaveCSS("opacity", "1");
   await trackBookmark.click();
   await expect(firstTrackRow).not.toHaveClass(/selected/);
@@ -1875,19 +1785,14 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await removeTrackBookmark.press("Enter");
   await expect(firstTrackRow).not.toHaveClass(/selected/);
   await page.setViewportSize({ width: 1600, height: 1000 });
-  const ratingFilter = page.getByRole("button", {
-    name: "Фильтр по рейтингу",
-  });
-  await expect(ratingFilter).toHaveAttribute("aria-expanded", "false");
-  await ratingFilter.click();
-  await expect(ratingFilter).toHaveAttribute("aria-expanded", "true");
+  await addCatalogFilter(page, "Рейтинг");
   const minimumRating = page.getByLabel("Минимальная оценка");
   const maximumRating = page.getByLabel("Максимальная оценка");
   await expect(minimumRating).toHaveValue("0");
   await expect(maximumRating).toHaveValue("5");
   const minimumThumb = page.locator(".range-slider-thumb--minimum");
   const maximumThumb = page.locator(".range-slider-thumb--maximum");
-  const ratingRange = page.locator(".catalog-rating-range-track");
+  const ratingRange = page.locator(".catalog-filter-slider");
   await ratingRange.hover({ position: { x: 77, y: 9 } });
   await expect(ratingRange).toHaveClass(/is-hovered/);
   await expect
@@ -1901,36 +1806,19 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await maximumRating.fill("4");
   await expect(minimumRating).toHaveValue("3");
   await expect(maximumRating).toHaveValue("4");
-  await expect(ratingFilter).toHaveClass(/active/);
-  await page
-    .getByRole("button", { name: "Установить минимальную оценку 0" })
-    .click();
-  await expect(minimumRating).toHaveValue("0");
-  await page
-    .getByRole("button", { name: "Установить максимальную оценку 5" })
-    .click();
-  await expect(maximumRating).toHaveValue("5");
   await minimumRating.fill("0");
   await maximumRating.fill("5");
-  await page.locator(".catalog-rating-range-track").click({
-    position: { x: 92, y: 9 },
+  await page.locator(".catalog-filter-slider").click({
+    position: { x: 132, y: 9 },
   });
   await expect(maximumRating).toHaveValue("3");
   await maximumRating.fill("5");
   const sliderBox = await ratingRange.boundingBox();
-  const rightRatingValueBox = await page
-    .locator(".catalog-rating-range-value")
-    .last()
-    .boundingBox();
   const minimumThumbBox = await minimumThumb.boundingBox();
   const maximumThumbBox = await maximumThumb.boundingBox();
   expect(sliderBox).not.toBeNull();
-  expect(rightRatingValueBox).not.toBeNull();
   expect(minimumThumbBox).not.toBeNull();
   expect(maximumThumbBox).not.toBeNull();
-  expect(
-    rightRatingValueBox!.x - (sliderBox!.x + sliderBox!.width),
-  ).toBeGreaterThanOrEqual(8);
   await page.mouse.move(
     minimumThumbBox!.x + minimumThumbBox!.width / 2,
     minimumThumbBox!.y + minimumThumbBox!.height / 2,
@@ -1956,17 +1844,15 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await minimumRating.fill("0");
   await maximumRating.fill("5");
   await page.keyboard.press("Escape");
-  await expect(ratingFilter).toHaveAttribute("aria-expanded", "false");
-  const unviewedFilter = page.getByRole("button", {
-    name: "Только непросмотренные",
-  });
-  await expect(unviewedFilter.locator(".lucide-eye")).toHaveCount(1);
-  await unviewedFilter.click();
-  await expect(unviewedFilter).toHaveAttribute("aria-pressed", "true");
-  await expect(unviewedFilter).toHaveClass(/active/);
+  await expect(page.locator(".catalog-filter-editor")).toHaveCount(0);
+  await addCatalogFilter(page, "Не просмотрено");
+  await expect(
+    page.locator('[data-filter="unviewed"] .lucide-eye'),
+  ).toHaveCount(1);
   await expect(firstAlbum).toHaveCount(0);
-  await unviewedFilter.click();
-  await expect(unviewedFilter).toHaveAttribute("aria-pressed", "false");
+  await page
+    .getByRole("button", { name: "Удалить фильтр «Не просмотрено»" })
+    .click();
   await expect(firstAlbum).toBeVisible();
   await expect(
     page
@@ -2390,19 +2276,13 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   ).toBeVisible();
   await page.keyboard.press("Escape");
 
-  const bookmarkToggle = page.getByRole("button", {
-    name: "Показать музыку из закладок",
-  });
-  await expect(bookmarkToggle.locator("span")).toHaveCount(0);
-  await expect(bookmarkToggle).toHaveAttribute(
-    "aria-label",
-    "Показать музыку из закладок",
-  );
-  await bookmarkToggle.dispatchEvent("click");
+  await addCatalogFilter(page, "Закладки");
   const activeBookmarkToggle = page.getByRole("button", {
-    name: "Отключить фильтр закладок",
+    name: "Удалить фильтр «Закладки»",
   });
-  await expect(activeBookmarkToggle).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('[data-filter="bookmarks"]')).toHaveText(
+    "Закладки",
+  );
   await expect(page.getByTestId("track-row")).toHaveCount(inheritedTrackCount);
   await expect(page.locator(".album-card")).toHaveCount(1);
   await expect(
@@ -2415,10 +2295,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await page
     .getByRole("menuitem", { name: "Удалить из закладок" })
     .dispatchEvent("click");
-  await expect(bookmarkToggle).toBeEnabled();
-  await page
-    .getByRole("button", { name: "Показать музыку из закладок" })
-    .dispatchEvent("click");
+  await addCatalogFilter(page, "Закладки");
   await expect(page.getByTestId("track-row")).toHaveCount(0);
   await expect(
     page.getByText(/В закладках (пока пусто|ничего не найдено)/),
@@ -2486,9 +2363,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     return { gap: buttonRect.left - suffixRect.right };
   });
   expect(savedArtistBookmarkGeometry.gap).toBeCloseTo(0, 1);
-  await page
-    .getByRole("button", { name: "Показать музыку из закладок" })
-    .dispatchEvent("click");
+  await addCatalogFilter(page, "Закладки");
   await expect(page.locator(".album-card")).toHaveCount(1);
   await expect(
     page
@@ -2501,7 +2376,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
       .getByRole("button", { name: /Добавить трек .* в закладки/ }),
   ).toHaveCount(inheritedTrackCount);
   await page
-    .getByRole("button", { name: "Отключить фильтр закладок" })
+    .getByRole("button", { name: "Удалить фильтр «Закладки»" })
     .dispatchEvent("click");
   await removeArtistBookmark.dispatchEvent("click");
 
@@ -2550,17 +2425,15 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await page.getByLabel("Поиск музыки").fill("Несуществующая композиция");
   await expect(page.getByTestId("track-row")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Показать музыку из закладок" }),
+    page.getByRole("button", { name: "Добавить фильтр", exact: true }),
   ).toBeDisabled();
   await page
     .getByRole("button", { name: "Очистить поиск" })
     .dispatchEvent("click");
   await expect(
-    page.getByRole("button", { name: "Показать музыку из закладок" }),
+    page.getByRole("button", { name: "Добавить фильтр", exact: true }),
   ).toBeEnabled();
-  await page
-    .getByRole("button", { name: "Показать музыку из закладок" })
-    .dispatchEvent("click");
+  await addCatalogFilter(page, "Закладки");
   await expect(page.getByLabel("Поиск музыки")).toHaveValue("");
   await expect(page.getByTestId("track-row")).toHaveCount(1);
   await persistedTrackBookmark.dispatchEvent("click");
@@ -2693,7 +2566,9 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
     ),
   );
-  await expect(page.getByRole("menu")).not.toBeVisible();
+  await expect(
+    page.getByRole("menu", { name: "Контекстное меню", exact: true }),
+  ).not.toBeVisible();
   await firstAlbum.dispatchEvent("contextmenu", { clientX: 300, clientY: 300 });
   await page
     .getByRole("menuitem", { name: "Редактировать теги" })
@@ -2831,18 +2706,24 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await page
     .getByRole("menuitem", { name: "Открыть в проводнике" })
     .dispatchEvent("click");
-  await expect(page.getByRole("menu")).not.toBeVisible();
+  await expect(
+    page.getByRole("menu", { name: "Контекстное меню", exact: true }),
+  ).not.toBeVisible();
 
   await page.screenshot({ path: `.test-data/library-${browser}.png` });
   const rows = page.getByTestId("track-row");
   await rows
     .first()
     .dispatchEvent("contextmenu", { clientX: 900, clientY: 400 });
-  await expect(page.getByRole("menu")).toBeVisible();
+  await expect(
+    page.getByRole("menu", { name: "Контекстное меню", exact: true }),
+  ).toBeVisible();
   await page
     .getByRole("menuitem", { name: "Открыть в проводнике" })
     .dispatchEvent("click");
-  await expect(page.getByRole("menu")).not.toBeVisible();
+  await expect(
+    page.getByRole("menu", { name: "Контекстное меню", exact: true }),
+  ).not.toBeVisible();
   expect(explorerRequests.map((request) => request.kind)).toEqual([
     "album",
     "track",
@@ -3268,7 +3149,7 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   await expect(page.locator(".topbar")).toBeVisible();
   await expect(page.locator(".player")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Показать музыку из закладок" }),
+    page.getByRole("button", { name: "Добавить фильтр", exact: true }),
   ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Журнал операций" }),

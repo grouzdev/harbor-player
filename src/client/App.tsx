@@ -544,6 +544,7 @@ export function App() {
   });
   const {
     filter,
+    savedFilter,
     setFilter,
     replaceFilter,
     search,
@@ -2886,55 +2887,20 @@ export function App() {
         onDoubleClick={toggleFullscreenWindowSize}
       >
         {!coverMode && (
-          <div className="catalog-actions">
-            <button
-              className={`icon-button bookmarks-button ${filter.bookmarksOnly ? "active" : ""} ${bookmarks.isError ? "error" : ""}`}
-              aria-label={
-                bookmarks.isError
-                  ? "Не удалось загрузить закладки. Повторить"
-                  : filter.bookmarksOnly
-                    ? "Отключить фильтр закладок"
-                    : "Показать музыку из закладок"
-              }
-              aria-pressed={filter.bookmarksOnly}
-              title={
-                bookmarks.isError
-                  ? "Не удалось загрузить закладки. Нажмите, чтобы повторить"
-                  : filter.bookmarksOnly
-                    ? "Отключить фильтр закладок"
-                    : "Показать музыку из закладок"
-              }
-              disabled={
-                isSearching ||
-                bookmarks.isFetching ||
-                pendingBookmarkKeys.size > 0
-              }
-              onClick={() => {
-                if (bookmarks.isError) {
-                  void bookmarks.refetch();
-                  return;
-                }
-                setFilter((current) => ({
-                  ...current,
-                  bookmarksOnly: !current.bookmarksOnly,
-                }));
-              }}
-            >
-              {bookmarks.isFetching || pendingBookmarkKeys.size > 0 ? (
-                <RefreshCw size={18} className="spinning" />
-              ) : (
-                <BookmarkIcon size={19} fill="none" />
-              )}
-              {filter.bookmarksOnly && <span>Закладки</span>}
-            </button>
-            <CatalogUserFilters
-              filter={filter}
-              disabled={isSearching}
-              onChange={setFilter}
-            />
-          </div>
+          <CatalogUserFilters
+            filter={savedFilter}
+            search={search}
+            onSearchChange={setSearch}
+            disabled={isSearching}
+            onChange={setFilter}
+            bookmarksBusy={bookmarks.isFetching || pendingBookmarkKeys.size > 0}
+            bookmarksError={bookmarks.isError}
+            onRetryBookmarks={() => {
+              void bookmarks.refetch();
+            }}
+          />
         )}
-        {coverMode ? (
+        {coverMode && (
           <div className="cover-search">
             <label className="search">
               <Search size={18} />
@@ -2963,25 +2929,6 @@ export function App() {
               />
             )}
           </div>
-        ) : (
-          <label className="search">
-            <Search size={18} />
-            <input
-              aria-label="Поиск музыки"
-              placeholder="Треки, артисты, альбомы"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            {search && (
-              <button
-                className="icon-button"
-                aria-label="Очистить поиск"
-                onClick={() => setSearch("")}
-              >
-                <X size={15} />
-              </button>
-            )}
-          </label>
         )}
         <button
           type="button"

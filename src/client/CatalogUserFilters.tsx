@@ -1,13 +1,17 @@
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type RefObject,
-} from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Clock3, Eye, Star, StarOff } from "lucide-react";
-import type { CatalogFilter } from "../shared/contracts";
+import {
+  Bookmark,
+  Check,
+  Clock3,
+  Eye,
+  Plus,
+  RefreshCw,
+  Search,
+  Star,
+  X,
+} from "lucide-react";
+import { emptyFilter, type CatalogFilter } from "../shared/contracts";
 import { RangeSlider } from "./RangeSlider";
 
 export type RatingRange = readonly [minimum: number, maximum: number];
@@ -15,7 +19,7 @@ export type RatingRange = readonly [minimum: number, maximum: number];
 export function ratingFilterLabel(minimum: number, maximum: number): string {
   return minimum === 0 && maximum === 0
     ? "Без рейтинга"
-    : `Рейтинг ${minimum}—${maximum}`;
+    : `Рейтинг: от ${minimum} до ${maximum}`;
 }
 
 export function ratingRangeFromFilter(filter: CatalogFilter): RatingRange {
@@ -49,221 +53,412 @@ export function withSharedRatingRange(
   };
 }
 
-function RangeValue({
-  value,
-  onClick,
-  label,
-  disabled = false,
-}: {
-  value: number;
-  onClick: () => void;
-  label: string;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      className="catalog-rating-range-value catalog-rating-range-value-button"
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {value === 0 ? (
-        <StarOff size={19} aria-hidden="true" />
-      ) : (
-        <>
-          <span>{value}</span>
-          <Star size={19} aria-hidden="true" />
-        </>
-      )}
-    </button>
-  );
-}
-
-function RatingFilterPopover({
-  anchor,
-  minimum,
-  maximum,
-  disabled,
-  onChange,
-  onClose,
-}: {
-  anchor: RefObject<HTMLButtonElement | null>;
-  minimum: number;
-  maximum: number;
-  disabled: boolean;
-  onChange: (minimum: number, maximum: number) => void;
-  onClose: () => void;
-}) {
-  const popover = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState({ left: 8, top: 8 });
-
-  useLayoutEffect(() => {
-    const target = anchor.current?.getBoundingClientRect();
-    const node = popover.current;
-    if (!target || !node) return;
-    const box = node.getBoundingClientRect();
-    const gap = 6;
-    const margin = 8;
-    const below = target.bottom + gap;
-    const top =
-      below + box.height <= window.innerHeight - margin
-        ? below
-        : Math.max(margin, target.top - box.height - gap);
-    const idealLeft = target.left + target.width / 2 - box.width / 2;
-    const left = Math.max(
-      margin,
-      Math.min(idealLeft, window.innerWidth - box.width - margin),
-    );
-    setPosition({ left, top });
-  }, [anchor]);
-
-  useEffect(() => {
-    const closeForPointer = (event: PointerEvent) => {
-      if (
-        !popover.current?.contains(event.target as Node) &&
-        !anchor.current?.contains(event.target as Node)
-      )
-        onClose();
-    };
-    const closeForKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("pointerdown", closeForPointer, true);
-    document.addEventListener("keydown", closeForKey);
-    window.addEventListener("scroll", onClose, true);
-    window.addEventListener("resize", onClose);
-    return () => {
-      document.removeEventListener("pointerdown", closeForPointer, true);
-      document.removeEventListener("keydown", closeForKey);
-      window.removeEventListener("scroll", onClose, true);
-      window.removeEventListener("resize", onClose);
-    };
-  }, [anchor, onClose]);
-
-  return createPortal(
-    <div
-      ref={popover}
-      className="catalog-rating-filter-popover"
-      role="dialog"
-      aria-label="Фильтр по рейтингу"
-      style={position}
-    >
-      <RangeValue
-        value={minimum}
-        label="Установить минимальную оценку 0"
-        disabled={disabled || minimum === 0}
-        onClick={() => onChange(0, maximum)}
-      />
-      <RangeSlider
-        className="catalog-rating-range-track"
-        variant="double"
-        min={0}
-        max={5}
-        step={1}
-        values={[minimum, maximum]}
-        ariaLabels={["Минимальная оценка", "Максимальная оценка"]}
-        disabled={disabled}
-        onChange={([nextMinimum, nextMaximum]) =>
-          onChange(nextMinimum, nextMaximum)
-        }
-      />
-      <RangeValue
-        value={maximum}
-        label="Установить максимальную оценку 5"
-        disabled={disabled || maximum === 5}
-        onClick={() => onChange(minimum, 5)}
-      />
-    </div>,
-    document.body,
-  );
-}
+const filterDefinitions = [
+  { kind: "bookmarks", label: "Закладки", Icon: Bookmark },
+  { kind: "unviewed", label: "Не просмотрено", Icon: Eye },
+  { kind: "rating", label: "Рейтинг", Icon: Star },
+  { kind: "recent", label: "Недавние", Icon: Clock3 },
+] as const;
+type FilterKind = (typeof filterDefinitions)[number]["kind"];
 
 export function CatalogUserFilters({
   filter,
+  search,
+  onSearchChange,
   disabled = false,
   onChange,
+  bookmarksBusy,
+  bookmarksError,
+  onRetryBookmarks,
 }: {
   filter: CatalogFilter;
+  search: string;
+  onSearchChange: (value: string) => void;
   disabled?: boolean;
   onChange: (update: (current: CatalogFilter) => CatalogFilter) => void;
+  bookmarksBusy: boolean;
+  bookmarksError: boolean;
+  onRetryBookmarks: () => void;
 }) {
+  const [searchFocused, setSearchFocused] = useState(false);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const pointerDown = useRef(false);
+  const collapsed = !search.trim() && !searchFocused;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ left: 8, top: 8 });
+  const [draft, setDraft] = useState<RatingRange | null>(null);
+  const [neutralRating, setNeutralRating] = useState(false);
+  const [order, setOrder] = useState<FilterKind[]>([]);
+  const [previousFilter, setPreviousFilter] = useState(filter);
   const [minimum, maximum] = ratingRangeFromFilter(filter);
-  const [ratingOpen, setRatingOpen] = useState(false);
-  const ratingTrigger = useRef<HTMLButtonElement>(null);
-  const commit = (nextMinimum: number, nextMaximum: number) =>
-    onChange((current) =>
-      withSharedRatingRange(current, nextMinimum, nextMaximum),
-    );
-  const unviewedOnly = filter.albumViewed === "unviewed";
-  const recentlyAddedOnly = filter.recentlyAddedOnly;
-  const ratingFilterActive = minimum !== 0 || maximum !== 5;
-  const activeRatingLabel = ratingFilterLabel(minimum, maximum);
-  const closeRating = () => {
-    setRatingOpen(false);
-    requestAnimationFrame(() => ratingTrigger.current?.focus());
+  const ratingActive = minimum !== 0 || maximum !== 5;
+  const reset = previousFilter !== filter && filter === emptyFilter;
+  const active: Record<FilterKind, boolean> = {
+    bookmarks: filter.bookmarksOnly,
+    unviewed: filter.albumViewed === "unviewed",
+    rating: ratingActive || (neutralRating && !reset),
+    recent: filter.recentlyAddedOnly,
   };
-  return (
-    <div className="catalog-user-filters" aria-label="Фильтры каталога">
-      <button
-        type="button"
-        className={`icon-button catalog-filter-button ${unviewedOnly ? "active" : ""}`}
-        aria-label="Только непросмотренные"
-        aria-pressed={unviewedOnly}
-        title="Только непросмотренные"
-        disabled={disabled}
-        onClick={() =>
-          onChange((current) => ({
-            ...current,
-            albumViewed:
-              current.albumViewed === "unviewed" ? "all" : "unviewed",
-          }))
-        }
-      >
-        <Eye size={19} aria-hidden="true" />
-        {unviewedOnly && <span>Непросмотрено</span>}
-      </button>
-      <button
-        ref={ratingTrigger}
-        type="button"
-        className={`icon-button catalog-filter-button ${ratingFilterActive ? "active" : ""}`}
+  // Reconcile externally changed filters without losing insertion order.
+  const visible = order.filter((kind) => active[kind]);
+  for (const { kind } of filterDefinitions) {
+    if (active[kind] && !visible.includes(kind)) visible.push(kind);
+  }
+  const visibleKey = visible.join();
+  if (visibleKey !== order.join()) setOrder(visible);
+  if (previousFilter !== filter) {
+    setPreviousFilter(filter);
+    if (reset) setNeutralRating(false);
+    if (
+      draft &&
+      (reset ||
+        ratingRangeFromFilter(previousFilter).join() !==
+          [minimum, maximum].join())
+    ) {
+      setDraft(null);
+    }
+  }
+  const addable = filterDefinitions.filter(({ kind }) => !active[kind]);
+
+  useEffect(() => {
+    let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+    const press = () => {
+      pointerDown.current = true;
+    };
+    const release = () => {
+      pointerDown.current = false;
+      // Keep the clicked control in place until pointerup has dispatched click.
+      // Otherwise collapsing an empty search on blur moves the filter away.
+      clearTimeout(releaseTimer);
+      releaseTimer = setTimeout(() => {
+        setSearchFocused(document.activeElement === searchInput.current);
+      }, 0);
+    };
+    document.addEventListener("pointerdown", press, true);
+    document.addEventListener("pointerup", release, true);
+    document.addEventListener("pointercancel", release, true);
+    return () => {
+      clearTimeout(releaseTimer);
+      document.removeEventListener("pointerdown", press, true);
+      document.removeEventListener("pointerup", release, true);
+      document.removeEventListener("pointercancel", release, true);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (disabled) {
+      setMenuOpen(false);
+      setDraft(null);
+    }
+  }, [disabled]);
+
+  useEffect(() => {
+    if (!draft) return;
+    const cancel = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDraft(null);
+    };
+    document.addEventListener("keydown", cancel);
+    return () => document.removeEventListener("keydown", cancel);
+  }, [draft]);
+
+  useLayoutEffect(() => {
+    if (!menuOpen) return;
+    const update = () => {
+      const target = trigger.current?.getBoundingClientRect();
+      const box = menu.current?.getBoundingClientRect();
+      if (!target || !box) return;
+      setPosition({
+        left: Math.max(
+          8,
+          Math.min(target.left, window.innerWidth - box.width - 8),
+        ),
+        top: Math.max(
+          8,
+          Math.min(target.bottom + 4, window.innerHeight - box.height - 8),
+        ),
+      });
+    };
+    update();
+    const close = (event: PointerEvent) => {
+      if (
+        !menu.current?.contains(event.target as Node) &&
+        !trigger.current?.contains(event.target as Node)
+      )
+        setMenuOpen(false);
+    };
+    const key = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        trigger.current?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", close, true);
+    document.addEventListener("keydown", key);
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      document.removeEventListener("pointerdown", close, true);
+      document.removeEventListener("keydown", key);
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [menuOpen, collapsed, bookmarksError, visibleKey]);
+
+  const changeBoolean = (kind: FilterKind, value: boolean) => {
+    onChange((current) => ({
+      ...current,
+      ...(kind === "bookmarks" ? { bookmarksOnly: value } : {}),
+      ...(kind === "unviewed"
+        ? { albumViewed: value ? ("unviewed" as const) : ("all" as const) }
+        : {}),
+      ...(kind === "recent" ? { recentlyAddedOnly: value } : {}),
+    }));
+  };
+  const add = (kind: FilterKind) => {
+    if (kind === "bookmarks" && bookmarksError) {
+      onRetryBookmarks();
+      return;
+    }
+    setMenuOpen(false);
+    if (kind === "rating") setDraft([0, 5]);
+    else {
+      setOrder([...visible, kind]);
+      changeBoolean(kind, true);
+    }
+  };
+  const remove = (kind: FilterKind) => {
+    setOrder(visible.filter((item) => item !== kind));
+    if (kind === "rating") {
+      setNeutralRating(false);
+      setDraft(null);
+      onChange((current) => withSharedRatingRange(current, 0, 5));
+    } else changeBoolean(kind, false);
+  };
+  const renderRatingEditor = () =>
+    draft && (
+      <div
+        className="catalog-filter-editor"
+        role="group"
         aria-label="Фильтр по рейтингу"
-        aria-expanded={ratingOpen}
-        title="Фильтр по рейтингу"
-        disabled={disabled}
-        onClick={() => setRatingOpen((open) => !open)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            setDraft(null);
+          }
+        }}
       >
-        <Star size={19} aria-hidden="true" />
-        {ratingFilterActive && <span>{activeRatingLabel}</span>}
-      </button>
-      <button
-        type="button"
-        className={`icon-button catalog-filter-button ${recentlyAddedOnly ? "active" : ""}`}
-        aria-label="Только недавно добавленные"
-        aria-pressed={recentlyAddedOnly}
-        title="Только добавленные за последние 30 дней"
-        disabled={disabled}
-        onClick={() =>
-          onChange((current) => ({
-            ...current,
-            recentlyAddedOnly: !current.recentlyAddedOnly,
-          }))
-        }
-      >
-        <Clock3 size={19} aria-hidden="true" />
-        {recentlyAddedOnly && <span>Недавние</span>}
-      </button>
-      {ratingOpen && (
-        <RatingFilterPopover
-          anchor={ratingTrigger}
-          minimum={minimum}
-          maximum={maximum}
+        <span>
+          Рейтинг: от {draft[0]} до {draft[1]}
+        </span>
+        <RangeSlider
+          className="catalog-filter-slider"
+          variant="double"
+          min={0}
+          max={5}
+          step={1}
+          values={draft}
+          ariaLabels={["Минимальная оценка", "Максимальная оценка"]}
           disabled={disabled}
-          onChange={commit}
-          onClose={closeRating}
+          onChange={setDraft}
         />
-      )}
+        <button
+          type="button"
+          className="catalog-filter-small-button"
+          aria-label="Применить рейтинг"
+          disabled={disabled}
+          onClick={() => {
+            setNeutralRating(draft[0] === 0 && draft[1] === 5);
+            if (!visible.includes("rating")) setOrder([...visible, "rating"]);
+            onChange((current) =>
+              withSharedRatingRange(current, draft[0], draft[1]),
+            );
+            setDraft(null);
+          }}
+        >
+          <Check size={16} />
+        </button>
+        <button
+          type="button"
+          className="catalog-filter-small-button"
+          aria-label="Отменить изменение рейтинга"
+          onClick={() => setDraft(null)}
+        >
+          <X size={16} />
+        </button>
+      </div>
+    );
+
+  return (
+    <div
+      className="catalog-user-filters"
+      aria-label="Поиск и фильтры каталога"
+      data-window-control
+    >
+      <div
+        className={`catalog-search${collapsed ? " is-collapsed" : " search"}`}
+        title={collapsed ? "Поиск музыки" : undefined}
+      >
+        <input
+          ref={searchInput}
+          aria-label="Поиск музыки"
+          placeholder={collapsed ? "" : "Треки, артисты, альбомы"}
+          value={search}
+          onChange={(event) => onSearchChange(event.target.value)}
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => {
+            if (!pointerDown.current) setSearchFocused(false);
+          }}
+        />
+        {collapsed && (
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Открыть поиск"
+            onClick={() => searchInput.current?.focus()}
+          >
+            <Search size={19} aria-hidden="true" />
+          </button>
+        )}
+        {search.trim() && (
+          <button
+            type="button"
+            className="catalog-filter-small-button"
+            aria-label="Очистить поиск"
+            onClick={() => {
+              onSearchChange("");
+              searchInput.current?.focus();
+            }}
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+      <div className={`catalog-filter-items${disabled ? " is-disabled" : ""}`}>
+        {visible.map((kind) => {
+          if (kind === "rating" && draft)
+            return (
+              <div className="catalog-filter-editor-slot" key={kind}>
+                {renderRatingEditor()}
+              </div>
+            );
+          const { label, Icon } = filterDefinitions.find(
+            (item) => item.kind === kind,
+          )!;
+          const busy = kind === "bookmarks" && bookmarksBusy;
+          const error = kind === "bookmarks" && bookmarksError;
+          const title = error
+            ? "Не удалось загрузить закладки. Нажмите, чтобы повторить"
+            : kind === "recent"
+              ? "Только добавленные за последние 30 дней"
+              : label;
+          const content = (
+            <>
+              {busy ? (
+                <RefreshCw size={16} className="spinning" />
+              ) : (
+                <Icon size={16} />
+              )}
+              <span>
+                {kind === "rating"
+                  ? ratingFilterLabel(minimum, maximum)
+                  : label}
+              </span>
+            </>
+          );
+          return (
+            <div
+              key={kind}
+              className={`catalog-filter-chip${error ? " is-error" : ""}`}
+              data-filter={kind}
+              title={title}
+            >
+              {kind === "rating" || error ? (
+                <button
+                  type="button"
+                  className="catalog-filter-chip-label"
+                  aria-label={
+                    error
+                      ? "Повторить загрузку закладок"
+                      : "Редактировать рейтинг"
+                  }
+                  disabled={disabled || busy || Boolean(draft)}
+                  onClick={() =>
+                    error ? onRetryBookmarks() : setDraft([minimum, maximum])
+                  }
+                >
+                  {content}
+                </button>
+              ) : (
+                <span className="catalog-filter-chip-label">{content}</span>
+              )}
+              <button
+                type="button"
+                className="catalog-filter-small-button"
+                aria-label={`Удалить фильтр «${label}»`}
+                disabled={disabled || busy}
+                onClick={() => remove(kind)}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          );
+        })}
+        {!visible.includes("rating") && renderRatingEditor()}
+        <button
+          ref={trigger}
+          type="button"
+          className="icon-button catalog-filter-add"
+          aria-label="Добавить фильтр"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          disabled={disabled || Boolean(draft) || !addable.length}
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          <Plus size={18} />
+        </button>
+      </div>
+      {menuOpen &&
+        createPortal(
+          <div
+            ref={menu}
+            className="catalog-filter-menu"
+            role="menu"
+            aria-label="Добавить фильтр"
+            style={position}
+          >
+            {addable.map(({ kind, label, Icon }) => (
+              <button
+                type="button"
+                role="menuitem"
+                key={kind}
+                disabled={disabled || (kind === "bookmarks" && bookmarksBusy)}
+                className={
+                  kind === "bookmarks" && bookmarksError
+                    ? "is-error"
+                    : undefined
+                }
+                title={
+                  kind === "recent"
+                    ? "Только добавленные за последние 30 дней"
+                    : undefined
+                }
+                onClick={() => add(kind)}
+              >
+                {kind === "bookmarks" && bookmarksBusy ? (
+                  <RefreshCw size={16} className="spinning" />
+                ) : (
+                  <Icon size={16} />
+                )}
+                {kind === "bookmarks" && bookmarksError
+                  ? "Закладки: повторить загрузку"
+                  : label}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

@@ -40,8 +40,8 @@ describe("catalog user filters", () => {
 
   it.each([
     [0, 0, "Без рейтинга"],
-    [0, 3, "Рейтинг 0—3"],
-    [3, 4, "Рейтинг 3—4"],
+    [0, 3, "Рейтинг: от 0 до 3"],
+    [3, 4, "Рейтинг: от 3 до 4"],
   ] as const)(
     "formats %i–%i active rating label",
     (minimum, maximum, label) => {

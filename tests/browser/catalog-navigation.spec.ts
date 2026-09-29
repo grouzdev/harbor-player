@@ -1,3 +1,4 @@
+import { addCatalogFilter } from "./catalog-filter-helpers";
 import { expect, test, type Page } from "@playwright/test";
 import {
   emptyFilter,
@@ -806,9 +807,7 @@ test("global search restores filters, selection, expanded folders and scroll pos
     .filter({ hasText: "Rock" })
     .click();
   await filterArtist(page, "Queen");
-  await page
-    .getByRole("button", { name: "Показать музыку из закладок", exact: true })
-    .click();
+  await addCatalogFilter(page, "Закладки");
   await page
     .getByRole("button", { name: "Развернуть библиотеку «rock»" })
     .click();
@@ -838,10 +837,11 @@ test("global search restores filters, selection, expanded folders and scroll pos
   await search.fill("Miles");
   await expect(artist(page, "Miles")).toBeVisible();
   await expect(count(page, "tracks")).toHaveText("9");
-  await expect(page.locator(".bookmarks-button")).toBeDisabled();
-  await expect(page.locator(".bookmarks-button")).toHaveAttribute(
-    "aria-pressed",
-    "false",
+  await expect(
+    page.getByRole("button", { name: "Удалить фильтр «Закладки»" }),
+  ).toBeDisabled();
+  await expect(page.locator('[data-filter="bookmarks"]')).toHaveText(
+    "Закладки",
   );
   await expect(page.locator(".facet-reset")).toHaveCount(0);
   await page.screenshot({ path: test.info().outputPath("global-search.png") });
@@ -864,10 +864,9 @@ test("global search restores filters, selection, expanded folders and scroll pos
   await expect(
     page.locator(".genres-panel .panel-selection-chip"),
   ).toContainText("1/1");
-  await expect(page.locator(".bookmarks-button")).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expect(
+    page.getByRole("button", { name: "Удалить фильтр «Закладки»" }),
+  ).toBeEnabled();
   await expect(
     page.getByRole("button", { name: "Свернуть библиотеку «rock»" }),
   ).toBeVisible();
