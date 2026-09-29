@@ -419,6 +419,7 @@ export function PlaylistPanel({
   onRename,
   onDelete,
   notify,
+  onClose,
 }: {
   playlistId: string | null;
   onAddSelection: (beforeEntryId?: string) => Promise<void>;
@@ -426,6 +427,7 @@ export function PlaylistPanel({
   onRename: (playlist: PlaylistDetail["playlist"]) => void;
   onDelete: (playlist: PlaylistDetail["playlist"]) => void;
   notify: (message: string) => void;
+  onClose: () => void;
 }) {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -482,6 +484,15 @@ export function PlaylistPanel({
         data-panel-id="playlists"
       >
         <div className="panel-heading">
+          <button
+            type="button"
+            className="icon-button panel-visibility-button is-active"
+            aria-label="Закрыть панель «Плейлист»"
+            title="Закрыть панель «Плейлист»"
+            onClick={onClose}
+          >
+            <ListMusic size={19} />
+          </button>
           <h2>Плейлист</h2>
         </div>
         <div className="empty-small track-empty playlist-empty">
@@ -514,6 +525,15 @@ export function PlaylistPanel({
       }}
     >
       <div className="panel-heading playlist-heading">
+        <button
+          type="button"
+          className="icon-button panel-visibility-button is-active"
+          aria-label="Закрыть панель «Плейлист»"
+          title="Закрыть панель «Плейлист»"
+          onClick={onClose}
+        >
+          <ListMusic size={19} />
+        </button>
         <h2>{playlist?.name || "Плейлист"}</h2>
         <div className="playlist-heading-actions">
           <button

@@ -2304,9 +2304,16 @@ body {
 }
 .panel-visibility-button.is-active {
   color: var(--accent);
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 72%, transparent));
+  filter: drop-shadow(
+    0 0 4px color-mix(in srgb, var(--accent) 72%, transparent)
+  );
 }
 .topbar .panel-visibility-button:hover:not(:disabled) {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+.panel-heading .panel-visibility-button:hover:not(:disabled) {
   border-color: transparent;
   background: transparent;
   box-shadow: none;
@@ -2314,7 +2321,9 @@ body {
 .panel-visibility-button.is-active:hover:not(:disabled),
 .panel-visibility-button.is-active:focus-visible {
   color: color-mix(in srgb, var(--accent) 88%, #fff);
-  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 82%, transparent));
+  filter: drop-shadow(
+    0 0 6px color-mix(in srgb, var(--accent) 82%, transparent)
+  );
 }
 .panel-visibility-button.is-hidden {
   color: #626861;
@@ -2327,7 +2336,9 @@ body {
   filter: drop-shadow(0 0 2px #a6ada655);
 }
 .panel-visibility-button.is-active:active:not(:disabled) {
-  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--accent) 66%, transparent));
+  filter: drop-shadow(
+    0 0 2px color-mix(in srgb, var(--accent) 66%, transparent)
+  );
 }
 .search {
   position: absolute;

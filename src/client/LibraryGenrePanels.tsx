@@ -1,6 +1,8 @@
 import type { HTMLAttributes, ReactNode, RefObject } from "react";
 import {
   ChevronRight,
+  Drama,
+  FolderOpen,
   ListMusic,
   Play,
   Plus,
@@ -45,6 +47,7 @@ type LibraryPanelProps = {
   onPlayPlaylist: (id: string) => void;
   onCreatePlaylist: () => void;
   onImportPlaylist: () => void;
+  onClose: () => void;
 };
 
 export function LibraryPanel({
@@ -72,10 +75,20 @@ export function LibraryPanel({
   onPlayPlaylist,
   onCreatePlaylist,
   onImportPlaylist,
+  onClose,
 }: LibraryPanelProps) {
   return (
     <aside className="panel libraries-panel" data-panel-id="libraries">
       <div className="panel-heading">
+        <button
+          type="button"
+          className="icon-button panel-visibility-button is-active"
+          aria-label="Закрыть панель «Библиотеки»"
+          title="Закрыть панель «Библиотеки»"
+          onClick={onClose}
+        >
+          <FolderOpen size={19} />
+        </button>
         <h2>Библиотеки</h2>
         <PanelSelectionIndicator
           total={libraries.length}
@@ -224,6 +237,7 @@ type GenrePanelProps = {
   onContextMenu: (event: React.MouseEvent, genre: string) => void;
   playlistDragEnabled?: boolean;
   onGenreDragStart: (genre: string) => void;
+  onClose: () => void;
 };
 
 export function GenrePanel({
@@ -242,10 +256,20 @@ export function GenrePanel({
   onContextMenu,
   playlistDragEnabled = false,
   onGenreDragStart,
+  onClose,
 }: GenrePanelProps) {
   return (
     <section className="panel genres-panel" data-panel-id="genres">
       <div className="panel-heading">
+        <button
+          type="button"
+          className="icon-button panel-visibility-button is-active"
+          aria-label="Закрыть панель «Жанры»"
+          title="Закрыть панель «Жанры»"
+          onClick={onClose}
+        >
+          <Drama size={19} />
+        </button>
         <h2>Жанры</h2>
         <PanelSelectionIndicator
           total={genres.length}

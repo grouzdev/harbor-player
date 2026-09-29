@@ -143,15 +143,11 @@ test("topbar groups catalog controls in the requested order", async ({
   expect(coverModeBox).not.toBeNull();
   expect(fullscreenBox).not.toBeNull();
   expect(topbarBox).not.toBeNull();
-  expect(bookmarkBox!.x + bookmarkBox!.width).toBeLessThanOrEqual(
-    searchBox!.x,
-  );
+  expect(bookmarkBox!.x + bookmarkBox!.width).toBeLessThanOrEqual(searchBox!.x);
   expect(bookmarkBox!.x).toBeLessThan(unviewedBox!.x);
   expect(unviewedBox!.x).toBeLessThan(ratingBox!.x);
   expect(ratingBox!.x).toBeLessThan(recentlyAddedBox!.x);
-  expect(searchBox!.x + searchBox!.width).toBeLessThanOrEqual(
-    settingsBox!.x,
-  );
+  expect(searchBox!.x + searchBox!.width).toBeLessThanOrEqual(settingsBox!.x);
   expect(settingsBox!.x).toBeLessThan(historyBox!.x);
   expect(historyBox!.x).toBeLessThan(sectionButtonsBox!.x);
   expect(sectionButtonsBox!.x).toBeLessThan(coverModeBox!.x);
@@ -166,8 +162,11 @@ test("topbar groups catalog controls in the requested order", async ({
       leftButtons.nth(index).boundingBox(),
     ),
   );
-  expect(leftButtonBoxes).toHaveLength(6);
+  expect(leftButtonBoxes).toHaveLength(1);
   expect(leftButtonBoxes.every((box) => box !== null)).toBe(true);
+  await expect(leftButtons.first()).toHaveAccessibleName(
+    "Показать панель «Плейлист»",
+  );
   for (let index = 1; index < leftButtonBoxes.length; index += 1) {
     expect(
       buttonGap(leftButtonBoxes[index - 1]!, leftButtonBoxes[index]!),
@@ -190,6 +189,21 @@ test("topbar groups catalog controls in the requested order", async ({
     topbarBox!.x + topbarBox!.width / 2,
     1,
   );
+  await page
+    .locator(".genres-panel")
+    .getByRole("button", { name: "Закрыть панель «Жанры»" })
+    .click();
+  await expect(leftButtons).toHaveCount(2);
+  expect(
+    await leftButtons.evaluateAll((buttons) =>
+      buttons.map((button) => button.getAttribute("aria-label")),
+    ),
+  ).toEqual(["Показать панель «Плейлист»", "Показать панель «Жанры»"]);
+  await page
+    .locator(".topbar")
+    .getByRole("button", { name: "Показать панель «Жанры»" })
+    .click();
+  await expect(leftButtons).toHaveCount(1);
   await recentlyAdded.click();
   await expect(recentlyAdded).toHaveAttribute("aria-pressed", "true");
   await expect(recentlyAdded).toHaveText("Недавние");
@@ -725,13 +739,11 @@ test("panel visibility controls reshape and persist the catalog", async ({
 }) => {
   await page.goto("/");
   const workspace = page.locator(".workspace");
-  const genresVisibilityButton = page.getByRole("button", {
-    name: "Скрыть панель «Жанры»",
-  });
+  const genresVisibilityButton = page
+    .locator(".genres-panel")
+    .getByRole("button", { name: "Закрыть панель «Жанры»" });
 
   await expect(genresVisibilityButton).toHaveClass(/is-active/);
-  await genresVisibilityButton.hover();
-  await expect(genresVisibilityButton).toHaveCSS("background-image", "none");
 
   await genresVisibilityButton.click();
   await expect(page.locator(".genres-panel")).toBeHidden();
@@ -774,9 +786,15 @@ test("panel visibility controls reshape and persist the catalog", async ({
     .evaluate((panel) => panel.getBoundingClientRect().width);
   expect(libraryAfter).toBeGreaterThan(libraryBefore);
 
-  for (const label of ["Библиотеки", "Исполнители", "Альбомы", "Треки"]) {
+  for (const [label, selector] of [
+    ["Библиотеки", ".libraries-panel"],
+    ["Исполнители", ".artists-panel"],
+    ["Альбомы", ".albums-panel"],
+    ["Треки", ".tracks-panel"],
+  ] as const) {
     await page
-      .getByRole("button", { name: `Скрыть панель «${label}»` })
+      .locator(selector)
+      .getByRole("button", { name: `Закрыть панель «${label}»` })
       .click();
   }
   await expect(workspace.locator(".panel:visible")).toHaveCount(0);
@@ -789,8 +807,10 @@ test("panel visibility controls reshape and persist the catalog", async ({
   await expect(page.locator(".panel:visible")).toHaveCount(1);
   await expect(page.locator(".albums-panel")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Скрыть панель «Альбомы»" }),
-  ).toHaveAttribute("aria-pressed", "true");
+    page
+      .locator(".albums-panel")
+      .getByRole("button", { name: "Закрыть панель «Альбомы»" }),
+  ).toBeVisible();
 
   await page.setViewportSize({ width: 1000, height: 1200 });
   await expect(
@@ -822,7 +842,8 @@ test("panel visibility controls reshape and persist the catalog", async ({
   expect(twoRowHeights[1]).toBeGreaterThan(0);
 
   await page
-    .getByRole("button", { name: "Скрыть панель «Альбомы»" })
+    .locator(".albums-panel")
+    .getByRole("button", { name: "Закрыть панель «Альбомы»" })
     .dispatchEvent("click");
   await expect(
     page.getByRole("separator", { name: "Высота строк" }),
@@ -836,6 +857,46 @@ test("panel visibility controls reshape and persist the catalog", async ({
     ),
     1,
   );
+});
+
+test("panel headers close their own panels", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto("/");
+
+  await page
+    .locator(".topbar")
+    .getByRole("button", { name: "Показать панель «Плейлист»" })
+    .click();
+
+  const panels = [
+    ["Плейлист", ".playlist-panel"],
+    ["Библиотеки", ".libraries-panel"],
+    ["Жанры", ".genres-panel"],
+    ["Исполнители", ".artists-panel"],
+    ["Альбомы", ".albums-panel"],
+    ["Треки", ".tracks-panel"],
+  ] as const;
+
+  for (const [label, selector] of panels) {
+    const panel = page.locator(selector);
+    const heading = panel.locator(".panel-heading");
+    const closeButton = heading.getByRole("button", {
+      name: `Закрыть панель «${label}»`,
+    });
+
+    await expect(closeButton).toBeVisible();
+    await expect(heading.locator("button").first()).toHaveAttribute(
+      "aria-label",
+      `Закрыть панель «${label}»`,
+    );
+    await closeButton.click();
+    await expect(panel).toBeHidden();
+    await expect(
+      page
+        .locator(".topbar")
+        .getByRole("button", { name: `Показать панель «${label}»` }),
+    ).toBeVisible();
+  }
 });
 
 test("playlist panel and its visibility button are first", async ({ page }) => {
@@ -888,9 +949,7 @@ test("portrait workspace places the playlist before albums without reordering to
   expect(layout.playlist.top).toBeCloseTo(layout.albums.top, 1);
   expect(layout.playlist.left).toBeLessThan(layout.albums.left);
   expect(layout.playlist.top).toBeGreaterThan(layout.libraries.top);
-  await expect(controls.first()).toHaveAccessibleName(
-    "Скрыть панель «Плейлист»",
-  );
+  await expect(page.locator(".panel-visibility-controls")).toHaveCount(0);
 });
 
 test("a single visible panel fills the workspace width", async ({ page }) => {
@@ -1102,7 +1161,10 @@ test("library root can be added to any playlist", async ({ page }, info) => {
   );
   const playlistMarker = playlistTile.locator(".list-tile-related-marker");
   await expect(playlistMarker).toBeVisible();
-  await expect(playlistMarker).toHaveCSS("background-color", "rgb(185, 212, 183)");
+  await expect(playlistMarker).toHaveCSS(
+    "background-color",
+    "rgb(185, 212, 183)",
+  );
 
   await page
     .getByRole("button", { name: new RegExp(libraryName) })
@@ -1114,7 +1176,9 @@ test("library root can be added to any playlist", async ({ page }, info) => {
   });
   await expect(addToPlaylist).toBeVisible();
   await addToPlaylist.hover();
-  await expect(page.getByRole("menuitem", { name: playlistName })).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: playlistName }),
+  ).toBeVisible();
   await expect(
     page.getByRole("menuitem", { name: "Создать новый", exact: true }),
   ).toBeVisible();
@@ -1433,7 +1497,8 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     page.locator(".libraries-panel .list-tile.selected"),
   ).toHaveCount(1);
   await page
-    .getByRole("button", { name: "Скрыть панель «Библиотеки»" })
+    .locator(".libraries-panel")
+    .getByRole("button", { name: "Закрыть панель «Библиотеки»" })
     .click();
   await page
     .getByRole("button", { name: "Показать панель «Библиотеки»" })
@@ -1529,7 +1594,10 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await expect(
     page.locator(".tracks-panel .panel-selection-chip"),
   ).toContainText(/^1\/\d+$/);
-  await page.getByRole("button", { name: "Скрыть панель «Треки»" }).click();
+  await page
+    .locator(".tracks-panel")
+    .getByRole("button", { name: "Закрыть панель «Треки»" })
+    .click();
   await page.getByRole("button", { name: "Показать панель «Треки»" }).click();
   await expect(firstTrackRow).not.toHaveClass(/selected/);
   await artistButton.dispatchEvent("click");
@@ -2856,7 +2924,8 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await artistButton.dispatchEvent("click", { ctrlKey: true });
   await expect(artistRow).not.toHaveClass(/selected/);
   await page
-    .getByRole("button", { name: "Скрыть панель «Альбомы»" })
+    .locator(".albums-panel")
+    .getByRole("button", { name: "Закрыть панель «Альбомы»" })
     .dispatchEvent("click");
   await expect(page.locator(".albums-panel")).toBeHidden();
   await nowPlaying
@@ -2873,7 +2942,8 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   ).toHaveCount(1);
   await expect(rows).toHaveCount(6);
   await page
-    .getByRole("button", { name: "Скрыть панель «Исполнители»" })
+    .locator(".artists-panel")
+    .getByRole("button", { name: "Закрыть панель «Исполнители»" })
     .dispatchEvent("click");
   await expect(page.locator(".artists-panel")).toBeHidden();
   await nowPlaying

@@ -3002,31 +3002,30 @@ export function App() {
             <History size={21} />
           </button>
         )}
-        {!coverMode && (
-          <div
-            className="panel-visibility-controls"
-            role="group"
-            aria-label="Видимость панелей каталога"
-          >
-            {panelDefinitions.map(({ id, label, Icon }) => {
-              const visible = panelVisibility[id];
-              const action = visible ? "Скрыть" : "Показать";
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  className={`icon-button panel-visibility-button ${visible ? "is-active" : "is-hidden"}`}
-                  aria-label={`${action} панель «${label}»`}
-                  aria-pressed={visible}
-                  title={`${action} панель «${label}»`}
-                  onClick={() => togglePanelVisibility(id)}
-                >
-                  <Icon size={19} />
-                </button>
-              );
-            })}
-          </div>
-        )}
+        {!coverMode &&
+          panelDefinitions.some(({ id }) => !panelVisibility[id]) && (
+            <div
+              className="panel-visibility-controls"
+              role="group"
+              aria-label="Видимость панелей каталога"
+            >
+              {panelDefinitions
+                .filter(({ id }) => !panelVisibility[id])
+                .map(({ id, label, Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className="icon-button panel-visibility-button is-hidden"
+                    aria-label={`Показать панель «${label}»`}
+                    aria-pressed={false}
+                    title={`Показать панель «${label}»`}
+                    onClick={() => togglePanelVisibility(id)}
+                  >
+                    <Icon size={19} />
+                  </button>
+                ))}
+            </div>
+          )}
         <button
           type="button"
           className={`icon-button cover-mode-toggle panel-visibility-button ${coverMode ? "is-active" : "is-hidden"}`}
@@ -3105,6 +3104,7 @@ export function App() {
               onRename={(playlist) => void renamePlaylist(playlist)}
               onDelete={(playlist) => void deletePlaylist(playlist)}
               notify={notify}
+              onClose={() => togglePanelVisibility("playlists")}
             />
           )}
           {panelVisibility.playlists &&
@@ -3157,6 +3157,7 @@ export function App() {
               }
               onCreatePlaylist={() => void createPlaylist()}
               onImportPlaylist={() => void importPlaylist()}
+              onClose={() => togglePanelVisibility("libraries")}
             />
           )}
           {panelVisibility.libraries && renderPanelResizer("libraries")}
@@ -3197,6 +3198,7 @@ export function App() {
                 void player.startFilter({ ...filter, genres: [genre] })
               }
               onContextMenu={showGenreMenu}
+              onClose={() => togglePanelVisibility("genres")}
             />
           )}
           {panelVisibility.genres && renderPanelResizer("genres")}
@@ -3205,6 +3207,15 @@ export function App() {
             data-panel-id="artists"
           >
             <div className="panel-heading">
+              <button
+                type="button"
+                className="icon-button panel-visibility-button is-active"
+                aria-label="Закрыть панель «Исполнители»"
+                title="Закрыть панель «Исполнители»"
+                onClick={() => togglePanelVisibility("artists")}
+              >
+                <CircleUserRound size={19} />
+              </button>
               <h2>Исполнители</h2>
               <PanelSelectionIndicator
                 total={artists.data?.pages[0]?.total || 0}
@@ -3275,6 +3286,7 @@ export function App() {
               onRename={(playlist) => void renamePlaylist(playlist)}
               onDelete={(playlist) => void deletePlaylist(playlist)}
               notify={notify}
+              onClose={() => togglePanelVisibility("playlists")}
             />
           )}
           {panelVisibility.playlists &&
@@ -3285,6 +3297,15 @@ export function App() {
             data-panel-id="albums"
           >
             <div className="panel-heading">
+              <button
+                type="button"
+                className="icon-button panel-visibility-button is-active"
+                aria-label="Закрыть панель «Альбомы»"
+                title="Закрыть панель «Альбомы»"
+                onClick={() => togglePanelVisibility("albums")}
+              >
+                <Disc3 size={19} />
+              </button>
               <h2>Альбомы</h2>
               <PanelSelectionIndicator
                 total={albumTotal}
@@ -3349,6 +3370,15 @@ export function App() {
             data-panel-id="tracks"
           >
             <div className="panel-heading tracks-heading">
+              <button
+                type="button"
+                className="icon-button panel-visibility-button is-active"
+                aria-label="Закрыть панель «Треки»"
+                title="Закрыть панель «Треки»"
+                onClick={() => togglePanelVisibility("tracks")}
+              >
+                <Music size={19} />
+              </button>
               <h2>Треки</h2>
               <PanelSelectionIndicator
                 total={total}
