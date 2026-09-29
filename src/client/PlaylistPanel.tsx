@@ -648,14 +648,6 @@ export function PlaylistPanel({
                     <span className="playlist-entry-count">
                       {count(entry.resolvedCount)}
                     </span>
-                    {entry.duplicateCount > 0 && (
-                      <span
-                        className="playlist-entry-warning"
-                        title="Уже включены выше"
-                      >
-                        −{entry.duplicateCount}
-                      </span>
-                    )}
                     <button
                       className="icon-button"
                       aria-label="Удалить из плейлиста"
@@ -674,7 +666,7 @@ export function PlaylistPanel({
                     nested.map((item) => (
                       <button
                         key={item.track.id}
-                        className={`playlist-nested-track ${item.track.available ? "" : "offline"}`}
+                        className="playlist-nested-track"
                         onDoubleClick={() => onPlay(playlistId, item.track.id)}
                       >
                         <strong>{item.track.title}</strong>

@@ -1514,20 +1514,13 @@ export class Catalog {
     unavailableCount: number;
   } {
     const playlist = this.storedPlaylist(playlistId);
-    const seen = new Set<string>();
     const tracks: ResolvedPlaylistTrack[] = [];
     const entries: PlaylistEntry[] = [];
     let unavailableCount = 0;
     for (const entry of this.playlistEntryRows(playlistId)) {
       const raw = this.tracksForPlaylistEntry(entry);
-      let duplicateCount = 0;
       let entryUnavailable = 0;
       for (const track of raw) {
-        if (seen.has(track.id)) {
-          duplicateCount++;
-          continue;
-        }
-        seen.add(track.id);
         if (!track.available) {
           entryUnavailable++;
           unavailableCount++;
@@ -1551,8 +1544,7 @@ export class Catalog {
       entries.push({
         ...entry,
         snapshot,
-        resolvedCount: raw.length - duplicateCount,
-        duplicateCount,
+        resolvedCount: raw.length,
         unavailableCount: entryUnavailable,
       });
     }
@@ -1799,15 +1791,7 @@ export class Catalog {
     beforeEntryId?: string,
   ): PlaylistDetail {
     this.storedPlaylist(playlistId);
-    const existing = new Set(
-      this.playlistEntryRows(playlistId)
-        .filter((entry) => entry.kind === kind)
-        .map((entry) => entry.targetId),
-    );
-    const nextTargets = [...new Set(targetIds)].filter(
-      (id) => !existing.has(id),
-    );
-    const snapshots = nextTargets.map((id) => ({
+    const snapshots = targetIds.map((id) => ({
       id,
       snapshot: this.snapshotForPlaylistEntry(kind, id),
     }));

@@ -3042,7 +3042,6 @@ body {
   color: var(--muted);
   font-size: var(--type-caption);
 }
-.playlist-entry-warning,
 .playlist-statusbar .warning {
   color: #d1a36d;
   font-size: var(--type-caption);
@@ -3088,8 +3087,7 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.playlist-track-order .offline,
-.playlist-nested-track.offline {
+.playlist-track-order .offline {
   opacity: 0.48;
 }
 .playlist-statusbar {

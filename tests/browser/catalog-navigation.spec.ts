@@ -190,7 +190,6 @@ async function catalog(
               coverId: null,
             },
             resolvedCount: 3,
-            duplicateCount: 0,
             unavailableCount: 0,
           },
         ],

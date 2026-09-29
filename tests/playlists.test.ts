@@ -178,7 +178,7 @@ describe("playlists", () => {
     ]);
   });
 
-  it("keeps live genre blocks, removes overlaps by first occurrence and reorders blocks", () => {
+  it("keeps live genre blocks, preserves overlaps and reorders blocks", () => {
     const library = catalog.addLibrary("Library", path.join(root, "music"));
     catalog.upsert(makeTrack("one", library.id, { trackNumber: 1 }));
     catalog.upsert(makeTrack("two", library.id, { trackNumber: 2 }));
@@ -194,16 +194,13 @@ describe("playlists", () => {
       "album",
     ]);
 
-    expect(detail.playlist.trackCount).toBe(2);
+    expect(detail.playlist.trackCount).toBe(4);
+    expect(detail.entries.map((entry) => entry.resolvedCount)).toEqual([2, 2]);
     expect(
-      detail.entries.map((entry) => [
-        entry.resolvedCount,
-        entry.duplicateCount,
-      ]),
-    ).toEqual([
-      [2, 0],
-      [0, 2],
-    ]);
+      catalog
+        .playlistTracks(created.playlist.id)
+        .items.map((item) => item.track.id),
+    ).toEqual(["one", "two", "one", "two"]);
 
     const reordered = catalog.reorderPlaylistEntries(created.playlist.id, [
       detail.entries[1].id,
@@ -245,7 +242,7 @@ describe("playlists", () => {
     ).toEqual(["late-year", "early-year"]);
   });
 
-  it("keeps folder entries live, recursive and unique within a playlist", () => {
+  it("keeps folder entries live, recursive and repeatable within a playlist", () => {
     const library = catalog.addLibrary("Library", path.join(root, "music"));
     catalog.upsert(
       makeTrack("root", library.id, {
@@ -291,7 +288,8 @@ describe("playlists", () => {
     const repeated = catalog.addPlaylistEntries(created.playlist.id, "folder", [
       target,
     ]);
-    expect(repeated.entries).toHaveLength(1);
+    expect(repeated.entries).toHaveLength(2);
+    expect(repeated.playlist.trackCount).toBe(6);
   });
 
   it("keeps a library root entry live", () => {
@@ -321,7 +319,8 @@ describe("playlists", () => {
     expect(catalog.playlist(created.playlist.id).playlist.trackCount).toBe(2);
     expect(
       catalog.addPlaylistEntries(created.playlist.id, "folder", [target]).entries,
-    ).toHaveLength(1);
+    ).toHaveLength(2);
+    expect(catalog.playlist(created.playlist.id).playlist.trackCount).toBe(4);
   });
 
   it("preserves existing playlist entries during the folder migration", () => {

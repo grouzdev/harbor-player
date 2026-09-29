@@ -41,7 +41,6 @@ export const playlistEntrySchema = z
     position: z.number().int().nonnegative(),
     snapshot: playlistSnapshotSchema,
     resolvedCount: z.number().int().nonnegative(),
-    duplicateCount: z.number().int().nonnegative(),
     unavailableCount: z.number().int().nonnegative(),
   })
   .strict();
