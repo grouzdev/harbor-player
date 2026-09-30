@@ -925,7 +925,7 @@ test("a single visible panel fills the workspace width", async ({ page }) => {
   }
 });
 
-test("player prioritizes the current track over progress in a narrow window", async ({
+test("player keeps transport centered in a narrow window", async ({
   page,
 }, info) => {
   await page.goto("/");
@@ -987,9 +987,10 @@ test("player prioritizes the current track over progress in a narrow window", as
         Boolean(element) && getComputedStyle(element).display !== "none";
       const playerRect = player.getBoundingClientRect();
       const transportRect = transport.getBoundingClientRect();
-      const seekRect = seekRange.parentElement!.getBoundingClientRect();
       return {
         playerHeight: player.getBoundingClientRect().height,
+        playerCenter: playerRect.left + playerRect.width / 2,
+        transportCenter: transportRect.left + transportRect.width / 2,
         seekRangeWidth: seekRange.getBoundingClientRect().width,
         modesVisible: displayed(shuffle) && displayed(repeat),
         volumeVisible: displayed(mute) && displayed(volumeRange),
@@ -997,14 +998,16 @@ test("player prioritizes the current track over progress in a narrow window", as
         timesVisible: displayed(time),
         nowPlayingWidth: nowPlaying.getBoundingClientRect().width,
         nowCopyWidth: nowCopy.getBoundingClientRect().width,
-        transportRightGap: playerRect.right - transportRect.right,
-        seekRightGap: playerRect.right - seekRect.right,
         trackVisible: displayed(trackLink),
         artistVisible: displayed(artistLink),
       };
     });
 
     expect(layout.playerHeight, `${width}px player height`).toBe(72);
+    expect(
+      Math.abs(layout.transportCenter - layout.playerCenter),
+      `${width}px transport center`,
+    ).toBeLessThanOrEqual(1);
     expect(layout.modesVisible, `${width}px repeat/shuffle`).toBe(
       expected.modes,
     );
@@ -1012,20 +1015,11 @@ test("player prioritizes the current track over progress in a narrow window", as
     expect(layout.volumeColumnVisible, `${width}px volume column`).toBe(
       expected.volumeColumn,
     );
-    if (!expected.volumeColumn)
-      expect(
-        layout.transportRightGap,
-        `${width}px transport uses the right edge`,
-      ).toBeLessThanOrEqual(20);
     if (!expected.volumeColumn) {
       expect(
-        layout.seekRightGap,
-        `${width}px progress uses the transport edge`,
-      ).toBeLessThanOrEqual(20);
-      expect(
         layout.seekRangeWidth,
-        `${width}px progress uses remaining width`,
-      ).toBeGreaterThan(120);
+        `${width}px progress preserves its minimum width`,
+      ).toBeGreaterThanOrEqual(48);
     }
     expect(layout.timesVisible, `${width}px times`).toBe(expected.times);
     expect(
@@ -1047,9 +1041,9 @@ test("player prioritizes the current track over progress in a narrow window", as
     layouts[1].seekRangeWidth,
   );
   expect(
-    layouts[2].seekRangeWidth,
-    "900px progress reclaims the removed volume column",
-  ).toBeGreaterThan(layouts[1].seekRangeWidth);
+    layouts[1].seekRangeWidth,
+    "1100px progress",
+  ).toBeGreaterThan(layouts[2].seekRangeWidth);
 });
 
 test("library root can be added to any playlist", async ({ page }, info) => {

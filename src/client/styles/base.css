@@ -983,7 +983,8 @@ body.selection-dragging * {
   min-height: 72px;
   display: grid;
   container-type: inline-size;
-  grid-template-columns: minmax(180px, 1fr) minmax(0, 42vw) minmax(0, 1fr);
+  grid-template-columns:
+    minmax(0, 1fr) minmax(0, min(42vw, 680px)) minmax(0, 1fr);
   align-items: center;
   column-gap: clamp(12px, 1.5vw, 24px);
   padding: 0 26px;
@@ -2078,7 +2079,8 @@ body {
 .player {
   height: 72px;
   min-height: 72px;
-  grid-template-columns: minmax(180px, 1fr) minmax(0, 42vw) minmax(0, 1fr);
+  grid-template-columns:
+    minmax(0, 1fr) minmax(0, min(42vw, 680px)) minmax(0, 1fr);
   column-gap: clamp(12px, 1.5vw, 24px);
 }
 .now-cover {
@@ -2199,17 +2201,12 @@ body {
 }
 
 @container (max-width: 980px) {
-  .app-shell .player {
-    grid-template-columns: minmax(220px, 38%) minmax(0, 1fr);
-  }
-
   .volume {
     display: none;
   }
 
   .transport {
     max-width: none;
-    justify-content: flex-start;
   }
 
   .player-volume-control {
