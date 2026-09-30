@@ -216,6 +216,14 @@ export const queueSchema = z.object({
   truncated: z.boolean().optional(),
   track: trackSchema.nullable(),
 });
+export const queueAlbumBlockSchema = z.object({
+  id: z.string(),
+  position: z.number().int().nonnegative(),
+  totalBlocks: z.number().int().positive(),
+  previousPosition: z.number().int().nonnegative().nullable(),
+  nextPosition: z.number().int().nonnegative().nullable(),
+  tracks: z.array(trackSchema),
+});
 export const maintenanceResultSchema = z.object({
   operations: z.number().int().nonnegative(),
   jobs: z.number().int().nonnegative(),
@@ -246,6 +254,7 @@ export const apiResponseSchemas = {
   jobs: z.array(jobSchema),
   operation: operationPreviewSchema,
   queue: queueSchema,
+  queueAlbumBlock: queueAlbumBlockSchema,
   albums: albumPageSchema,
   artists: artistPageSchema,
   albumMergeContext: albumMergeContextSchema,
@@ -381,6 +390,8 @@ export function apiResponseContract(method: string, pathname: string) {
   if (pathname === "/api/operations/preview") return operationPreviewSchema;
   if (/^\/api\/operations\/[^/]+$/.test(pathname))
     return operationPreviewSchema;
+  if (/^\/api\/queue\/[^/]+\/album-block$/.test(pathname))
+    return apiResponseSchemas.queueAlbumBlock;
   if (pathname === "/api/queue" || /^\/api\/queue\/[^/]+$/.test(pathname))
     return queueSchema;
   if (pathname === "/api/explorer") return okSchema;

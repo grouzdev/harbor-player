@@ -3485,6 +3485,7 @@ export function App() {
       {coverMode && player.queue?.track && (
         <CoverMode
           track={player.queue.track}
+          queue={player.queue}
           playing={player.playing}
           onClose={() => setCoverMode(false)}
           onPlayTrack={(track) => player.startAlbum(track.albumKey, track.id)}

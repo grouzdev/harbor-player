@@ -18,6 +18,7 @@ import { apiResponseContract } from "../shared/api-contracts.js";
 import type {
   BookmarkKind,
   CatalogUserStatePatch,
+  Track,
 } from "../shared/contracts.js";
 import { MusicService } from "./service.js";
 import { errorMessage } from "./config.js";
@@ -951,6 +952,68 @@ export async function createApp(options: {
       track: ids[position]
         ? service.catalog.track(ids[position]) || null
         : null,
+    };
+  });
+  app.get("/api/queue/:id/album-block", async (request) => {
+    const id = idParam.parse(request.params).id;
+    const query = z
+      .object({
+        position: z.coerce.number().int().min(0).max(100000).optional(),
+        albumKey: z.string().min(1).optional(),
+        fallbackPosition: z.coerce.number().int().min(0).max(100000).optional(),
+      })
+      .refine(({ position, albumKey }) => position !== undefined || albumKey, {
+        message: "Укажите позицию или альбом",
+      })
+      .parse(request.query);
+    const ids = service.catalog.queueTrackIds(id);
+    if (!ids) throw new Error("Очередь больше недоступна");
+
+    const blocks: { position: number; albumKey: string; tracks: Track[] }[] =
+      [];
+    for (const [position, trackId] of ids.entries()) {
+      const track = service.catalog.track(trackId);
+      if (!track) continue;
+      const previous = blocks.at(-1);
+      if (previous?.albumKey === track.albumKey) previous.tracks.push(track);
+      else blocks.push({ position, albumKey: track.albumKey, tracks: [track] });
+    }
+    if (!blocks.length) throw notFound("В очереди нет доступных треков");
+
+    let blockIndex =
+      query.albumKey === undefined
+        ? blocks.findIndex((block, index) => {
+            const nextPosition = blocks[index + 1]?.position ?? ids.length;
+            return (
+              query.position! >= block.position &&
+              query.position! < nextPosition
+            );
+          })
+        : blocks.findIndex((block) => block.albumKey === query.albumKey);
+    if (blockIndex < 0 && query.fallbackPosition !== undefined)
+      blockIndex = blocks.findIndex((block, index) => {
+        const nextPosition = blocks[index + 1]?.position ?? ids.length;
+        return (
+          query.fallbackPosition! >= block.position &&
+          query.fallbackPosition! < nextPosition
+        );
+      });
+    if (blockIndex < 0) throw notFound("Альбом больше не входит в очередь");
+
+    const block = blocks[blockIndex];
+    return {
+      id,
+      position: block.position,
+      totalBlocks: blocks.length,
+      previousPosition:
+        blocks.length > 1
+          ? blocks[(blockIndex - 1 + blocks.length) % blocks.length].position
+          : null,
+      nextPosition:
+        blocks.length > 1
+          ? blocks[(blockIndex + 1) % blocks.length].position
+          : null,
+      tracks: block.tracks,
     };
   });
   const clientDir = fileURLToPath(new URL("../client", import.meta.url));

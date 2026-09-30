@@ -1122,6 +1122,50 @@ describe("Explorer endpoint", () => {
     expect(fromFilter.json()).toMatchObject({ position: 0, total: 2 });
     expect(fromFilter.json().track.id).toBe("first");
   });
+  it("returns cyclic consecutive album blocks from a queue", async () => {
+    await addTrack("A/01-first.flac", "a-first", "album-a");
+    await addTrack("A/02-second.flac", "a-second", "album-a");
+    await addTrack("B/01-first.flac", "b-first", "album-b");
+    context.service.catalog.saveQueue(
+      "album-blocks",
+      new Date().toISOString(),
+      ["a-first", "a-second", "b-first", "a-first"],
+    );
+    const headers = await sessionHeaders();
+
+    const first = await context.app.inject({
+      url: "/api/queue/album-blocks/album-block?position=1",
+      headers: { host: headers.host, cookie: headers.cookie },
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({
+      position: 0,
+      totalBlocks: 3,
+      previousPosition: 3,
+      nextPosition: 2,
+      tracks: [{ id: "a-first" }, { id: "a-second" }],
+    });
+
+    const repeated = await context.app.inject({
+      url: "/api/queue/album-blocks/album-block?position=3",
+      headers: { host: headers.host, cookie: headers.cookie },
+    });
+    expect(repeated.json()).toMatchObject({
+      position: 3,
+      previousPosition: 2,
+      nextPosition: 0,
+      tracks: [{ id: "a-first" }],
+    });
+
+    const retained = await context.app.inject({
+      url: "/api/queue/album-blocks/album-block?albumKey=missing&fallbackPosition=2",
+      headers: { host: headers.host, cookie: headers.cookie },
+    });
+    expect(retained.json()).toMatchObject({
+      position: 2,
+      tracks: [{ id: "b-first" }],
+    });
+  });
   it("starts a filtered queue with the first track shown in the tracks panel", async () => {
     await addTrack("Old/track.flac", "old", "old-album", 2020);
     await addTrack("New/track.flac", "new", "new-album", 2025);

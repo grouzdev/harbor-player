@@ -187,15 +187,15 @@ test("active catalog filters show their current labels", async ({ page }) => {
   await expect(
     page.locator('.catalog-filter-chip[data-filter="rating"]'),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: "Закрыть изменение рейтинга" }).click();
+  await page
+    .getByRole("button", { name: "Закрыть изменение рейтинга" })
+    .click();
   const rating = page.getByRole("button", { name: "Редактировать рейтинг" });
   await expect(rating).toHaveText("Рейтинг: от 3 до 4");
   await rating.click();
   await minimum.fill("0");
   await maximum.fill("0");
-  await page
-    .getByRole("button", { name: "Закрыть изменение рейтинга" })
-    .click();
+  await page.getByRole("button", { name: "Закрыть изменение рейтинга" }).click();
   await expect(rating).toHaveText("Без рейтинга");
   await rating.click();
   await minimum.fill("0");
@@ -3203,6 +3203,45 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     "width",
     "21px",
   );
+  let firstBlockPosition: number | null = null;
+  let firstBlock: Record<string, any> | null = null;
+  await page.route("**/api/queue/*/album-block?*", async (route) => {
+    const requestedPosition = Number(
+      new URL(route.request().url()).searchParams.get("position"),
+    );
+    if (!firstBlock) {
+      const response = await route.fetch();
+      firstBlock = await response.json();
+      firstBlockPosition = requestedPosition;
+    }
+    const block = firstBlock;
+    const visualBlockPosition = firstBlockPosition === 0 ? 1 : 0;
+    const visualTrack = {
+      ...block.tracks[0],
+      id: "visual-second-album-track",
+      title: "Второй альбом",
+      albumTitle: "Второй альбом",
+    };
+    await route.fulfill({
+      json:
+        requestedPosition === visualBlockPosition
+          ? {
+              ...block,
+              position: visualBlockPosition,
+              previousPosition: firstBlockPosition,
+              nextPosition: firstBlockPosition,
+              totalBlocks: 2,
+              tracks: [visualTrack],
+            }
+          : {
+              ...block,
+              position: firstBlockPosition,
+              previousPosition: visualBlockPosition,
+              nextPosition: visualBlockPosition,
+              totalBlocks: 2,
+            },
+    });
+  });
   await coverModeToggle.click();
   await expect(coverModeToggle).toHaveAttribute("aria-pressed", "true");
   await expect(coverModeToggle.locator(".icon-toggle-thumb svg")).toBeVisible();
@@ -3259,10 +3298,21 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   await expect(
     coverMode.locator(".cover-track-row.current .cover-track-title"),
   ).toHaveText("Первый трек");
+  const audioSource = await page.locator("audio").getAttribute("src");
+  await coverMode.getByRole("button", { name: "Следующий альбом" }).click();
+  await expect(coverMode.getByRole("heading", { level: 1 })).toHaveText(
+    "Второй альбом",
+  );
+  await expect(page.locator("audio")).toHaveAttribute("src", audioSource!);
+  await coverMode.getByRole("button", { name: "Следующий альбом" }).click();
+  await expect(coverMode.getByRole("heading", { level: 1 })).toContainText(
+    "Первый трек",
+  );
+  await page.unroute("**/api/queue/*/album-block?*");
   await page.screenshot({ path: `.test-data/cover-mode-${browser}.png` });
 
-  await coverMode.locator(".cover-track-row").nth(1).click();
-  await expect(coverMode.locator(".cover-track-row").nth(1)).toHaveAttribute(
+  await coverMode.locator(".cover-track-row").first().click();
+  await expect(coverMode.locator(".cover-track-row").first()).toHaveAttribute(
     "aria-current",
     "true",
   );

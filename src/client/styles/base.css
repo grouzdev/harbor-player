@@ -3252,6 +3252,28 @@ html[data-theme="light"] .topbar-brand::after {
   align-items: center;
   gap: clamp(46px, 6vw, 92px);
 }
+.cover-mode-artwork-area {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 14px;
+}
+.cover-album-navigation {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #d4ddd7;
+  background: #ffffff0a;
+  box-shadow: inset 0 0 0 1px #ffffff10;
+}
+.cover-album-navigation:hover,
+.cover-album-navigation:focus-visible {
+  color: #f5f8f4;
+  background: #ffffff16;
+}
 .cover-mode-artwork {
   width: min(100%, calc(100dvh - 245px));
   aspect-ratio: 1;
@@ -3482,6 +3504,10 @@ html[data-theme="light"] .topbar-brand::after {
     width: min(62vw, 380px);
     justify-self: center;
   }
+  .cover-mode-artwork-area {
+    width: min(100%, 500px);
+    justify-self: center;
+  }
   .cover-mode-details {
     width: 100%;
   }
@@ -3503,6 +3529,10 @@ html[data-theme="light"] .topbar-brand::after {
   width: min(62vw, 380px);
   justify-self: center;
 }
+.app-shell.layout--portrait .cover-mode-artwork-area {
+  width: min(100%, 500px);
+  justify-self: center;
+}
 .app-shell.layout--portrait .cover-mode-details {
   width: 100%;
 }
@@ -3518,6 +3548,14 @@ html[data-theme="light"] .topbar-brand::after {
   }
   .cover-mode-artwork {
     width: min(78vw, 340px);
+  }
+  .cover-mode-artwork-area {
+    grid-template-columns: 38px minmax(0, 1fr) 38px;
+    gap: 8px;
+  }
+  .cover-album-navigation {
+    width: 38px;
+    height: 38px;
   }
   .cover-mode-copy h1 {
     font-size: 34px;
