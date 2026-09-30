@@ -498,19 +498,21 @@ function PanelSelectionIndicator({
   resetLabel: string;
   onReset: () => void;
 }) {
-  if (!active) return <span className="panel-count">{count(total)}</span>;
+  const label = active ? `${count(selected)}/${count(total)}` : count(total);
   return (
-    <div className="panel-selection-chip">
-      <span>{`${count(selected)}/${count(total)}`}</span>
-      <button
-        className="icon-button facet-reset"
-        aria-label={resetLabel}
-        title={resetLabel}
-        onClick={onReset}
-      >
-        <X size={15} />
-      </button>
-    </div>
+    <>
+      <span className="panel-count">{label}</span>
+      {active && (
+        <button
+          className="icon-button facet-reset"
+          aria-label={resetLabel}
+          title={resetLabel}
+          onClick={onReset}
+        >
+          <X size={15} />
+        </button>
+      )}
+    </>
   );
 }
 
@@ -3151,10 +3153,12 @@ export function App() {
             className={`panel artists-panel ${panelVisibility.artists ? "" : "panel-hidden"}`}
             data-panel-id="artists"
           >
-            <div className="panel-heading">
+            <div
+              className={`panel-heading ${filter.artists.length ? "" : "panel-heading--idle"}`}
+            >
               <button
                 type="button"
-                className="icon-button panel-visibility-button is-active"
+                className={`icon-button panel-visibility-button ${filter.artists.length ? "is-active" : ""}`}
                 aria-label="Закрыть панель «Исполнители»"
                 title="Закрыть панель «Исполнители»"
                 onClick={() => togglePanelVisibility("artists")}
@@ -3241,10 +3245,12 @@ export function App() {
             className={`panel albums-panel ${panelVisibility.albums ? "" : "panel-hidden"}`}
             data-panel-id="albums"
           >
-            <div className="panel-heading">
+            <div
+              className={`panel-heading ${filter.albumIds.length ? "" : "panel-heading--idle"}`}
+            >
               <button
                 type="button"
-                className="icon-button panel-visibility-button is-active"
+                className={`icon-button panel-visibility-button ${filter.albumIds.length ? "is-active" : ""}`}
                 aria-label="Закрыть панель «Альбомы»"
                 title="Закрыть панель «Альбомы»"
                 onClick={() => togglePanelVisibility("albums")}
@@ -3314,10 +3320,12 @@ export function App() {
             className={`panel tracks-panel ${panelVisibility.tracks ? "" : "panel-hidden"}`}
             data-panel-id="tracks"
           >
-            <div className="panel-heading tracks-heading">
+            <div
+              className={`panel-heading tracks-heading ${selected.size ? "" : "panel-heading--idle"}`}
+            >
               <button
                 type="button"
-                className="icon-button panel-visibility-button is-active"
+                className={`icon-button panel-visibility-button ${selected.size ? "is-active" : ""}`}
                 aria-label="Закрыть панель «Треки»"
                 title="Закрыть панель «Треки»"
                 onClick={() => togglePanelVisibility("tracks")}

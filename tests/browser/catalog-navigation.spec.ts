@@ -432,6 +432,38 @@ test("catalog names use one primary style", async ({ page }) => {
   ).toHaveCSS("font-size", "14px");
 });
 
+test("panel headings reflect selection state without a count chip", async ({
+  page,
+}) => {
+  await catalog(page);
+
+  const artistHeading = page.locator(".artists-panel .panel-heading");
+  const artistTitle = artistHeading.getByRole("heading", {
+    name: "Исполнители",
+  });
+  const artistClose = artistHeading.getByRole("button", {
+    name: "Закрыть панель «Исполнители»",
+  });
+
+  await expect(artistHeading).toHaveClass(/panel-heading--idle/);
+  await expect(artistClose).not.toHaveClass(/is-active/);
+  await expect(artistClose).toHaveCSS("color", "rgb(116, 129, 138)");
+  await expect(artistTitle).toHaveCSS("color", "rgb(116, 129, 138)");
+  await expect(page.locator(".panel-selection-chip")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Сбросить исполнителей" }),
+  ).toHaveCount(0);
+
+  await artist(page, "Zebra").locator(".list-tile-main").click();
+
+  await expect(artistHeading).not.toHaveClass(/panel-heading--idle/);
+  await expect(artistClose).toHaveClass(/is-active/);
+  await expect(artistHeading.locator(".panel-count")).toHaveText("1/4");
+  await expect(
+    page.getByRole("button", { name: "Сбросить исполнителей" }),
+  ).toBeVisible();
+});
+
 test("playlists live in the libraries panel and open a permanent composition panel", async ({
   page,
 }) => {
@@ -492,14 +524,14 @@ test("artist and album selection cascades to lower-priority panels", async ({
   ).toBe(true);
   await filterArtist(page, "Zebra");
   await expect(
-    page.locator(".artists-panel .panel-selection-chip"),
+    page.locator(".artists-panel .panel-count"),
   ).toContainText("2/4");
   await expect(
-    page.locator(".albums-panel .panel-selection-chip"),
+    page.locator(".albums-panel .panel-count"),
   ).toContainText("1/133");
   await page.getByRole("button", { name: "Сбросить исполнителей" }).click();
   await expect(
-    page.locator(".albums-panel .panel-selection-chip"),
+    page.locator(".albums-panel .panel-count"),
   ).toContainText("1/139");
 });
 
@@ -859,10 +891,10 @@ test("global search restores filters, selection, expanded folders and scroll pos
   ).toBeVisible();
   await search.fill("   ");
   await expect(
-    page.locator(".artists-panel .panel-selection-chip"),
+    page.locator(".artists-panel .panel-count"),
   ).toContainText("1/1");
   await expect(
-    page.locator(".genres-panel .panel-selection-chip"),
+    page.locator(".genres-panel .panel-count"),
   ).toContainText("1/1");
   await expect(
     page.getByRole("button", { name: "Удалить фильтр «Закладки»" }),
@@ -872,7 +904,7 @@ test("global search restores filters, selection, expanded folders and scroll pos
   ).toBeVisible();
   await expect(page.locator(".library-folder-tile.selected")).toHaveCount(1);
   await expect(
-    page.locator(".tracks-panel .panel-selection-chip"),
+    page.locator(".tracks-panel .panel-count"),
   ).toContainText("1/3");
   await expect
     .poll(() =>
@@ -968,7 +1000,7 @@ test("clearing a pending search ignores its late response and quick input does n
   await search.fill("zz-quick");
   await search.fill("");
   await expect(
-    page.locator(".artists-panel .panel-selection-chip"),
+    page.locator(".artists-panel .panel-count"),
   ).toContainText("1/4");
   expect(
     data.requests
@@ -1017,7 +1049,7 @@ test("album context filtering supports a union and search album operations stay 
     .getByRole("menuitem", { name: "Фильтровать по выбранному", exact: true })
     .click();
   await expect(
-    page.locator(".albums-panel .panel-selection-chip"),
+    page.locator(".albums-panel .panel-count"),
   ).toContainText("2/136");
   await expect(count(page, "tracks")).toHaveText("6");
   await expect(

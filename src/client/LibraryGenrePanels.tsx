@@ -77,12 +77,16 @@ export function LibraryPanel({
   onImportPlaylist,
   onClose,
 }: LibraryPanelProps) {
+  const selectionActive =
+    filter.libraryIds.length > 0 || filter.folders.length > 0;
   return (
     <aside className="panel libraries-panel" data-panel-id="libraries">
-      <div className="panel-heading">
+      <div
+        className={`panel-heading ${selectionActive ? "" : "panel-heading--idle"}`}
+      >
         <button
           type="button"
-          className="icon-button panel-visibility-button is-active"
+          className={`icon-button panel-visibility-button ${selectionActive ? "is-active" : ""}`}
           aria-label="Закрыть панель «Библиотеки»"
           title="Закрыть панель «Библиотеки»"
           onClick={onClose}
@@ -93,7 +97,7 @@ export function LibraryPanel({
         <PanelSelectionIndicator
           total={libraries.length}
           selected={filter.libraryIds.length}
-          active={filter.libraryIds.length > 0 || filter.folders.length > 0}
+          active={selectionActive}
           resetLabel="Сбросить библиотеки"
           onReset={onReset}
         />
@@ -258,12 +262,15 @@ export function GenrePanel({
   onGenreDragStart,
   onClose,
 }: GenrePanelProps) {
+  const selectionActive = filter.genres.length > 0;
   return (
     <section className="panel genres-panel" data-panel-id="genres">
-      <div className="panel-heading">
+      <div
+        className={`panel-heading ${selectionActive ? "" : "panel-heading--idle"}`}
+      >
         <button
           type="button"
-          className="icon-button panel-visibility-button is-active"
+          className={`icon-button panel-visibility-button ${selectionActive ? "is-active" : ""}`}
           aria-label="Закрыть панель «Жанры»"
           title="Закрыть панель «Жанры»"
           onClick={onClose}
@@ -274,7 +281,7 @@ export function GenrePanel({
         <PanelSelectionIndicator
           total={genres.length}
           selected={filter.genres.length}
-          active={filter.genres.length > 0}
+          active={selectionActive}
           resetLabel="Сбросить жанры"
           onReset={onReset}
         />
@@ -336,18 +343,20 @@ function PanelSelectionIndicator({
   resetLabel: string;
   onReset: () => void;
 }) {
-  if (!active) return <span className="panel-count">{count(total)}</span>;
+  const label = active ? `${count(selected)}/${count(total)}` : count(total);
   return (
-    <div className="panel-selection-chip">
-      <span>{`${count(selected)}/${count(total)}`}</span>
-      <button
-        className="icon-button facet-reset"
-        aria-label={resetLabel}
-        title={resetLabel}
-        onClick={onReset}
-      >
-        <X size={15} />
-      </button>
-    </div>
+    <>
+      <span className="panel-count">{label}</span>
+      {active && (
+        <button
+          className="icon-button facet-reset"
+          aria-label={resetLabel}
+          title={resetLabel}
+          onClick={onReset}
+        >
+          <X size={15} />
+        </button>
+      )}
+    </>
   );
 }
