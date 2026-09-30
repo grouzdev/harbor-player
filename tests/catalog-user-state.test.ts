@@ -89,6 +89,7 @@ describe("catalog user state", () => {
     const library = catalog.addLibrary("Library", path.join(root, "music"));
     catalog.upsert(track("one", "a", library.id));
     catalog.upsert(track("two", "b", library.id));
+    catalog.upsert(track("four", "b", library.id));
     catalog.upsert(track("three", "c", library.id));
     catalog.setUserState("album", ["a"], { rating: 2, viewed: true });
     catalog.setUserState("album", ["b"], { rating: 5 });
@@ -116,9 +117,62 @@ describe("catalog user state", () => {
         .tracks({ ...emptyFilter, trackRatingMin: 4, trackUnrated: true })
         .items.map((x) => x.id)
         .sort(),
-    ).toEqual(["three", "two"]);
-    expect(catalog.albums({ ...emptyFilter, trackRatingMin: 5 }).total).toBe(3);
-    expect(catalog.tracks({ ...emptyFilter, albumRatingMin: 5 }).total).toBe(3);
+    ).toEqual(["four", "three", "two"]);
+    expect(catalog.albums({ ...emptyFilter, trackRatingMin: 5 }).total).toBe(1);
+    expect(catalog.tracks({ ...emptyFilter, albumRatingMin: 5 }).total).toBe(2);
+  });
+
+  it("uses a matching album consistently in every catalog panel", () => {
+    const matchingLibrary = catalog.addLibrary(
+      "Matching library",
+      path.join(root, "matching"),
+    );
+    const otherLibrary = catalog.addLibrary(
+      "Other library",
+      path.join(root, "other"),
+    );
+    const matchingTrack = {
+      ...track("match-one", "matching", matchingLibrary.id),
+      relativePath: path.join("Matched", "match-one.flac"),
+      artists: ["Matching artist"],
+      albumArtists: ["Matching artist"],
+      genres: ["Matching genre"],
+    };
+    catalog.upsert(matchingTrack);
+    catalog.upsert({
+      ...matchingTrack,
+      id: "match-two",
+      relativePath: path.join("Matched", "match-two.flac"),
+    });
+    catalog.upsert({
+      ...track("other", "other", otherLibrary.id),
+      relativePath: path.join("Other", "other.flac"),
+      artists: ["Other artist"],
+      albumArtists: ["Other artist"],
+      genres: ["Other genre"],
+    });
+    catalog.setUserState("track", ["match-one"], { rating: 4 });
+    const filter = { ...emptyFilter, trackRatingMin: 4 };
+
+    expect(catalog.libraries(filter).map((library) => library.id)).toEqual([
+      matchingLibrary.id,
+    ]);
+    expect(catalog.folders(matchingLibrary.id, null, filter)).toMatchObject([
+      { relativePath: "Matched", trackCount: 2 },
+    ]);
+    expect(catalog.genres(filter)).toEqual([
+      { name: "Matching genre", count: 1 },
+    ]);
+    expect(catalog.artists(filter).items).toEqual([
+      { name: "Matching artist", count: 1 },
+    ]);
+    expect(catalog.albums(filter).items.map((album) => album.id)).toEqual([
+      "matching",
+    ]);
+    expect(catalog.tracks(filter).items.map((item) => item.id).sort()).toEqual([
+      "match-one",
+      "match-two",
+    ]);
   });
 
   it("copies album state on an internal album-key change without overwriting the destination", () => {

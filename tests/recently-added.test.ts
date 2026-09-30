@@ -114,7 +114,7 @@ describe("recently added catalog filter", () => {
         .tracks(filter)
         .items.map((item) => item.id)
         .sort(),
-    ).toEqual(["new", "recent"]);
+    ).toEqual(["new", "old", "recent"]);
     expect(
       catalog
         .albums(filter)

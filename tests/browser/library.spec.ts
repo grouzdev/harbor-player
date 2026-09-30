@@ -187,24 +187,24 @@ test("active catalog filters show their current labels", async ({ page }) => {
   await expect(
     page.locator('.catalog-filter-chip[data-filter="rating"]'),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: "Применить рейтинг" }).click();
+  await page.getByRole("button", { name: "Закрыть изменение рейтинга" }).click();
   const rating = page.getByRole("button", { name: "Редактировать рейтинг" });
   await expect(rating).toHaveText("Рейтинг: от 3 до 4");
   await rating.click();
   await minimum.fill("0");
   await maximum.fill("0");
   await page
-    .getByRole("button", { name: "Отменить изменение рейтинга" })
+    .getByRole("button", { name: "Закрыть изменение рейтинга" })
     .click();
-  await expect(rating).toHaveText("Рейтинг: от 3 до 4");
+  await expect(rating).toHaveText("Без рейтинга");
   await rating.click();
   await minimum.fill("0");
   await maximum.fill("0");
-  await page.getByRole("button", { name: "Применить рейтинг" }).click();
+  await page.getByRole("button", { name: "Закрыть изменение рейтинга" }).click();
   await expect(rating).toHaveText("Без рейтинга");
   await rating.click();
   await maximum.fill("5");
-  await page.getByRole("button", { name: "Применить рейтинг" }).click();
+  await page.getByRole("button", { name: "Закрыть изменение рейтинга" }).click();
   await expect(rating).toHaveText("Рейтинг: от 0 до 5");
   await addCatalogFilter(page, "Не просмотрено");
   await expect(page.locator('[data-filter="unviewed"]')).toHaveText(

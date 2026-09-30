@@ -80,7 +80,7 @@ test("filter menu excludes active filters and restores removed filters", async (
   await expect(menu.getByRole("menuitem")).toHaveText(["Рейтинг"]);
   await menu.getByRole("menuitem", { name: "Рейтинг", exact: true }).click();
   await expect(add).toBeDisabled();
-  await page.getByRole("button", { name: "Применить рейтинг" }).click();
+  await page.getByRole("button", { name: "Закрыть изменение рейтинга" }).click();
   await expect(page.locator(".catalog-filter-chip")).toHaveText([
     "Добавлено 1 день назад",
     "Не просмотрено",
@@ -112,7 +112,7 @@ test("filter menu excludes active filters and restores removed filters", async (
   await expect(add).toBeEnabled();
 });
 
-test("rating draft does not change queries until applied and Escape cancels it", async ({
+test("rating filter applies changes immediately", async ({
   page,
 }) => {
   const requests: CatalogFilter[] = [];
@@ -129,25 +129,29 @@ test("rating draft does not change queries until applied and Escape cancels it",
   await expect(page.locator(".catalog-filter-editor")).toContainText(
     "Рейтинг: от 3 до 4",
   );
-  expect(requests.every((filter) => filter.trackRatingMin === null)).toBe(true);
-  await page.keyboard.press("Escape");
-  await expect(page.locator(".catalog-filter-editor")).toHaveCount(0);
-  await addCatalogFilter(page, "Рейтинг");
-  await page.getByLabel("Минимальная оценка").fill("3");
-  await page.getByLabel("Максимальная оценка").fill("4");
-  await page.getByRole("button", { name: "Применить рейтинг" }).click();
   await expect.poll(() => requests.at(-1)?.trackRatingMin).toBe(3);
   expect(requests.at(-1)?.trackRatingMax).toBe(4);
+  await page
+    .getByRole("button", { name: "Закрыть изменение рейтинга" })
+    .click();
+  await expect(page.locator(".catalog-filter-editor")).toHaveCount(0);
   await page.getByRole("button", { name: "Редактировать рейтинг" }).click();
   await page.getByLabel("Минимальная оценка").fill("1");
+  await expect.poll(() => requests.at(-1)?.trackRatingMin).toBe(1);
   await page.keyboard.press("Escape");
   await expect(
     page.getByRole("button", { name: "Редактировать рейтинг" }),
-  ).toHaveText("Рейтинг: от 3 до 4");
-  expect(requests.at(-1)?.trackRatingMin).toBe(3);
+  ).toHaveText("Рейтинг: от 1 до 4");
+  expect(requests.at(-1)?.trackRatingMin).toBe(1);
+  await page.getByRole("button", { name: "Редактировать рейтинг" }).click();
+  await page
+    .getByRole("button", { name: "Удалить фильтр «Рейтинг»" })
+    .first()
+    .click();
+  await expect.poll(() => requests.at(-1)?.trackRatingMin).toBeNull();
 });
 
-test("recent draft uses a discrete period and applies only by confirmation", async ({
+test("recent filter applies its period immediately", async ({
   page,
 }) => {
   const requests: CatalogFilter[] = [];
@@ -169,31 +173,55 @@ test("recent draft uses a discrete period and applies only by confirmation", asy
   await expect(page.locator(".catalog-filter-editor")).toContainText(
     "Добавлено 1 день назад",
   );
+  await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBe(1);
   await period.fill("3");
   await expect(page.locator(".catalog-filter-editor")).toContainText(
     "Добавлено 14 дней назад",
   );
-  expect(requests.every((filter) => filter.recentlyAddedDays === null)).toBe(
-    true,
-  );
-  await page.keyboard.press("Escape");
+  await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBe(14);
+  await page
+    .getByRole("button", {
+      name: "Закрыть изменение периода недавнего добавления",
+    })
+    .click();
   await expect(page.locator(".catalog-filter-editor")).toHaveCount(0);
-  await page
-    .getByRole("button", { name: "Добавить фильтр", exact: true })
-    .click();
-  await page.getByRole("menuitem", { name: "Недавние", exact: true }).click();
-  await period.fill("4");
-  await page
-    .getByRole("button", { name: "Применить период недавнего добавления" })
-    .click();
-  await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBe(30);
+  expect(requests.at(-1)?.recentlyAddedDays).toBe(14);
   const recent = page.getByRole("button", {
     name: "Редактировать период недавнего добавления",
   });
   await recent.click();
-  await period.fill("1");
+  await period.fill("4");
+  await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBe(30);
   await page.keyboard.press("Escape");
+  await expect(page.locator(".catalog-filter-editor")).toHaveCount(0);
   expect(requests.at(-1)?.recentlyAddedDays).toBe(30);
+  await recent.click();
+  await page.getByRole("button", { name: "Удалить фильтр «Недавние»" }).first().click();
+  await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBeNull();
+  await expect(recent).toHaveCount(0);
+});
+
+test("recent filter reaches every catalog panel", async ({ page }) => {
+  const requests = new Map<string, CatalogFilter[]>();
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (!url.searchParams.has("filter")) return;
+    const panel = url.pathname.match(/^\/api\/(libraries|genres|artists|albums|tracks)$/)?.[1];
+    if (!panel) return;
+    const panelRequests = requests.get(panel) || [];
+    panelRequests.push(JSON.parse(url.searchParams.get("filter")!));
+    requests.set(panel, panelRequests);
+  });
+  await page.goto("/");
+  await addCatalogFilter(page, "Недавние");
+  for (const panel of ["libraries", "genres", "artists", "albums", "tracks"])
+    await expect
+      .poll(() =>
+        requests
+          .get(panel)
+          ?.some((filter) => filter.recentlyAddedDays === 1),
+      )
+      .toBe(true);
 });
 
 for (const theme of ["dark", "light"]) {
@@ -203,7 +231,9 @@ for (const theme of ["dark", "light"]) {
     await page.goto("/");
     for (const name of ["Закладки", "Не просмотрено", "Недавние", "Рейтинг"])
       await addCatalogFilter(page, name);
-    await page.getByRole("button", { name: "Применить рейтинг" }).click();
+    await page
+      .getByRole("button", { name: "Закрыть изменение рейтинга" })
+      .click();
     await page.getByRole("button", { name: "Открыть поиск" }).click();
     // The app currently selects dark; exercise the retained light CSS explicitly
     // after startup has finished applying the saved appearance.
@@ -233,7 +263,7 @@ for (const theme of ["dark", "light"]) {
       });
     }
     await page
-      .getByRole("button", { name: "Отменить изменение рейтинга" })
+      .getByRole("button", { name: "Закрыть изменение рейтинга" })
       .click();
     await page
       .getByRole("button", { name: "Удалить фильтр «Рейтинг»" })

@@ -37,36 +37,22 @@ export function filterForCatalogPanel(
   panel: CatalogPanelId,
 ): CatalogFilter {
   if (filter.search.trim()) return filter;
-  const withoutPersonal = {
-    ...filter,
-    albumRatingMin: null,
-    albumRatingMax: null,
-    albumUnrated: false,
-    albumViewed: "all" as const,
-    trackRatingMin: null,
-    trackRatingMax: null,
-    trackUnrated: false,
-  };
-  if (panel === "libraries") return emptyFilter;
-  if (panel === "genres")
-    return { ...withoutPersonal, genres: [], artists: [], albumIds: [] };
-  if (panel === "artists")
-    return { ...withoutPersonal, artists: [], albumIds: [] };
-  if (panel === "albums")
+  if (panel === "libraries")
     return {
       ...filter,
+      libraryIds: [],
+      folders: [],
+      genres: [],
+      artists: [],
       albumIds: [],
-      trackRatingMin: null,
-      trackRatingMax: null,
-      trackUnrated: false,
     };
-  return {
-    ...filter,
-    albumRatingMin: null,
-    albumRatingMax: null,
-    albumUnrated: false,
-    albumViewed: "all",
-  };
+  if (panel === "genres")
+    return { ...filter, genres: [], artists: [], albumIds: [] };
+  if (panel === "artists")
+    return { ...filter, artists: [], albumIds: [] };
+  if (panel === "albums")
+    return { ...filter, albumIds: [] };
+  return filter;
 }
 
 export function effectiveCatalogFilter(

@@ -181,7 +181,14 @@ export class Catalog {
       filter.artists.length > 0 ||
       filter.albumIds.length > 0 ||
       filter.bookmarksOnly ||
-      Boolean(filter.recentlyAddedDays);
+      Boolean(filter.recentlyAddedDays) ||
+      filter.albumRatingMin !== null ||
+      filter.albumRatingMax !== null ||
+      filter.albumUnrated ||
+      filter.albumViewed !== "all" ||
+      filter.trackRatingMin !== null ||
+      filter.trackRatingMax !== null ||
+      filter.trackUnrated;
     const libraryMatch =
       search && !hasManualFilters
         ? "(search_key(l.name) LIKE ? ESCAPE '\\' OR search_key(l.path) LIKE ? ESCAPE '\\')"
@@ -580,10 +587,7 @@ export class Catalog {
       }
     })();
   }
-  where(
-    filter: CatalogFilter,
-    personal: "none" | "album" | "track" = "none",
-  ): { sql: string; args: any[] } {
+  where(filter: CatalogFilter): { sql: string; args: any[] } {
     const clauses = ["t.available=1", "l.available=1"];
     const args: any[] = [];
     const list = (values: string[], column: string) => {
@@ -673,77 +677,81 @@ export class Catalog {
       const cutoff = new Date(
         Date.now() - filter.recentlyAddedDays * 24 * 60 * 60 * 1000,
       ).toISOString();
-      if (personal === "album") {
-        clauses.push(`EXISTS (
-          SELECT 1 FROM tracks recent
-          WHERE recent.albumKey=t.albumKey
-            AND recent.available=1
-            AND recent.firstIndexedAt>=?
-        )`);
-      } else clauses.push("t.firstIndexedAt>=?");
+      clauses.push(`EXISTS (
+        SELECT 1 FROM tracks recent
+        WHERE recent.albumKey=t.albumKey
+          AND recent.available=1
+          AND recent.firstIndexedAt>=?
+      )`);
       args.push(cutoff);
     }
-    if (personal === "album") {
-      const min = filter.albumRatingMin ?? null;
-      const max = filter.albumRatingMax ?? null;
-      const rated = min !== null || max !== null;
-      const ratingParts: string[] = [];
-      if (rated) {
-        const bounds: string[] = [];
-        if (min !== null && min !== undefined) {
-          bounds.push("state.rating>=?");
-          args.push(min);
-        }
-        if (max !== null && max !== undefined) {
-          bounds.push("state.rating<=?");
-          args.push(max);
-        }
-        ratingParts.push(
-          `EXISTS (SELECT 1 FROM catalog_user_state state WHERE state.kind='album' AND state.id=t.albumKey AND state.rating IS NOT NULL AND ${bounds.join(" AND ")})`,
-        );
+    const ratingParts: string[] = [];
+    const albumMin = filter.albumRatingMin ?? null;
+    const albumMax = filter.albumRatingMax ?? null;
+    if (albumMin !== null || albumMax !== null) {
+      const bounds: string[] = [];
+      if (albumMin !== null) {
+        bounds.push("state.rating>=?");
+        args.push(albumMin);
       }
-      if (filter.albumUnrated)
-        ratingParts.push(
-          `NOT EXISTS (SELECT 1 FROM catalog_user_state state WHERE state.kind='album' AND state.id=t.albumKey AND state.rating IS NOT NULL)`,
-        );
-      if (ratingParts.length) clauses.push(`(${ratingParts.join(" OR ")})`);
-      if (filter.albumViewed === "viewed")
-        clauses.push(
-          `EXISTS (SELECT 1 FROM catalog_user_state state WHERE state.kind='album' AND state.id=t.albumKey AND state.viewed=1)`,
-        );
-      else if (filter.albumViewed === "unviewed")
-        clauses.push(
-          `NOT EXISTS (SELECT 1 FROM catalog_user_state state WHERE state.kind='album' AND state.id=t.albumKey AND state.viewed=1)`,
-        );
-    } else if (personal === "track") {
-      const min = filter.trackRatingMin ?? null;
-      const max = filter.trackRatingMax ?? null;
-      const rated = min !== null || max !== null;
-      const ratingParts: string[] = [];
-      if (rated) {
-        const bounds: string[] = [];
-        if (min !== null && min !== undefined) {
-          bounds.push("state.rating>=?");
-          args.push(min);
-        }
-        if (max !== null && max !== undefined) {
-          bounds.push("state.rating<=?");
-          args.push(max);
-        }
-        ratingParts.push(
-          `EXISTS (SELECT 1 FROM catalog_user_state state WHERE state.kind='track' AND state.id=t.id AND ${bounds.join(" AND ")})`,
-        );
+      if (albumMax !== null) {
+        bounds.push("state.rating<=?");
+        args.push(albumMax);
       }
-      if (filter.trackUnrated)
-        ratingParts.push(
-          `NOT EXISTS (SELECT 1 FROM catalog_user_state state WHERE state.kind='track' AND state.id=t.id AND state.rating IS NOT NULL)`,
-        );
-      if (ratingParts.length) clauses.push(`(${ratingParts.join(" OR ")})`);
+      ratingParts.push(
+        `EXISTS (SELECT 1 FROM catalog_user_state state WHERE state.kind='album' AND state.id=t.albumKey AND state.rating IS NOT NULL AND ${bounds.join(" AND ")})`,
+      );
     }
+    const trackMin = filter.trackRatingMin ?? null;
+    const trackMax = filter.trackRatingMax ?? null;
+    if (trackMin !== null || trackMax !== null) {
+      const bounds: string[] = [];
+      if (trackMin !== null) {
+        bounds.push("state.rating>=?");
+        args.push(trackMin);
+      }
+      if (trackMax !== null) {
+        bounds.push("state.rating<=?");
+        args.push(trackMax);
+      }
+      ratingParts.push(`EXISTS (
+        SELECT 1 FROM catalog_user_state state
+        JOIN tracks rated ON rated.id=state.id
+        WHERE state.kind='track'
+          AND rated.albumKey=t.albumKey
+          AND rated.available=1
+          AND state.rating IS NOT NULL
+          AND ${bounds.join(" AND ")}
+      )`);
+    }
+    const unratedParts: string[] = [];
+    if (filter.albumUnrated)
+      unratedParts.push(
+        `NOT EXISTS (SELECT 1 FROM catalog_user_state state WHERE state.kind='album' AND state.id=t.albumKey AND state.rating IS NOT NULL)`,
+      );
+    if (filter.trackUnrated)
+      unratedParts.push(`NOT EXISTS (
+        SELECT 1 FROM catalog_user_state state
+        JOIN tracks rated ON rated.id=state.id
+        WHERE state.kind='track'
+          AND rated.albumKey=t.albumKey
+          AND rated.available=1
+          AND state.rating IS NOT NULL
+      )`);
+    if (unratedParts.length) ratingParts.push(`(${unratedParts.join(" AND ")})`);
+    if (ratingParts.length) clauses.push(`(${ratingParts.join(" OR ")})`);
+    if (filter.albumViewed === "viewed")
+      clauses.push(
+        `EXISTS (SELECT 1 FROM catalog_user_state state WHERE state.kind='album' AND state.id=t.albumKey AND state.viewed=1)`,
+      );
+    else if (filter.albumViewed === "unviewed")
+      clauses.push(
+        `NOT EXISTS (SELECT 1 FROM catalog_user_state state WHERE state.kind='album' AND state.id=t.albumKey AND state.viewed=1)`,
+      );
     return { sql: clauses.join(" AND "), args };
   }
   tracks(filter: CatalogFilter, offset = 0, limit = 200): Page<Track> {
-    const { sql, args } = this.where(filter, "track");
+    const { sql, args } = this.where(filter);
     const total = (
       this.db
         .prepare(
@@ -820,7 +828,7 @@ export class Catalog {
     total: number;
     truncated: boolean;
   } {
-    const { sql, args } = this.where(filter, "track");
+    const { sql, args } = this.where(filter);
     const total = (
       this.db
         .prepare(
@@ -1018,7 +1026,7 @@ export class Catalog {
     ), '')`;
   }
   albums(filter: CatalogFilter, offset = 0, limit = 120): AlbumPage {
-    const { sql, args } = this.where(filter, "album");
+    const { sql, args } = this.where(filter);
     const total = (
       this.db
         .prepare(

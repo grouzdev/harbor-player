@@ -11,10 +11,21 @@ describe("catalog panel filters", () => {
     artists: ["Artist"],
     albumIds: ["album"],
     bookmarksOnly: true,
+    recentlyAddedDays: 7 as const,
+    albumRatingMin: 4,
+    trackRatingMin: 4,
+    albumViewed: "unviewed" as const,
   };
 
-  it("keeps only higher-priority selections for each panel", () => {
-    expect(filterForCatalogPanel(filter, "libraries")).toEqual(emptyFilter);
+  it("keeps user filters while removing each panel's own selections", () => {
+    expect(filterForCatalogPanel(filter, "libraries")).toEqual({
+      ...filter,
+      libraryIds: [],
+      folders: [],
+      genres: [],
+      artists: [],
+      albumIds: [],
+    });
     expect(filterForCatalogPanel(filter, "genres")).toEqual({
       ...filter,
       genres: [],
