@@ -80,6 +80,23 @@ test("icon buttons keep their geometry on hover", async ({ page }) => {
   expect(after!.height).toBeCloseTo(before!.height, 5);
 });
 
+test("topbar keeps the decorative Harbor engraving centered", async ({ page }) => {
+  await page.goto("/");
+
+  const topbar = page.locator(".topbar");
+  const brand = page.locator(".topbar-brand");
+  const topbarBox = (await topbar.boundingBox())!;
+  const brandBox = (await brand.boundingBox())!;
+
+  expect(
+    Math.abs(brandBox.x + brandBox.width / 2 - (topbarBox.x + topbarBox.width / 2)),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(brandBox.y + brandBox.height / 2 - (topbarBox.y + topbarBox.height / 2)),
+  ).toBeLessThanOrEqual(1);
+  await expect(brand).toHaveCSS("pointer-events", "none");
+});
+
 test("topbar groups catalog controls in the requested order", async ({
   page,
 }) => {

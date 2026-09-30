@@ -2886,6 +2886,7 @@ export function App() {
         onPointerDown={beginFullscreenWindowMove}
         onDoubleClick={toggleFullscreenWindowSize}
       >
+        <span className="topbar-brand" aria-hidden="true" />
         {!coverMode && (
           <CatalogUserFilters
             filter={savedFilter}

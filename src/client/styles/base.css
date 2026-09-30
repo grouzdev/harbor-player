@@ -2288,6 +2288,53 @@ body {
 .topbar {
   position: relative;
 }
+.topbar-brand {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 126px;
+  aspect-ratio: 464 / 74;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  background: #b8c1b338;
+  --topbar-brand-mask: url("../../../assets/HARBOR.svg") center / contain no-repeat;
+  -webkit-mask: var(--topbar-brand-mask);
+  mask: var(--topbar-brand-mask);
+}
+.topbar-brand::before,
+.topbar-brand::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  -webkit-mask: var(--topbar-brand-mask);
+  mask: var(--topbar-brand-mask);
+}
+.topbar-brand::before {
+  background: #020302;
+  opacity: 0.24;
+  transform: translateY(1px);
+}
+.topbar-brand::after {
+  background: #f6f5eb;
+  opacity: 0.07;
+  transform: translateY(-1px);
+}
+html[data-theme="light"] .topbar-brand {
+  background: #4d5b5047;
+}
+html[data-theme="light"] .topbar-brand::before {
+  background: #3d4b40;
+  opacity: 0.16;
+}
+html[data-theme="light"] .topbar-brand::after {
+  background: #ffffff;
+  opacity: 0.32;
+}
+@media (max-width: 720px) {
+  .topbar-brand {
+    display: none;
+  }
+}
 .panel-visibility-controls {
   position: relative;
   z-index: 1;
