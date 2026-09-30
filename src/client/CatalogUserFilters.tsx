@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   Bookmark,
@@ -70,6 +76,7 @@ export function CatalogUserFilters({
   bookmarksBusy,
   bookmarksError,
   onRetryBookmarks,
+  trailingControls,
 }: {
   filter: CatalogFilter;
   search: string;
@@ -79,6 +86,7 @@ export function CatalogUserFilters({
   bookmarksBusy: boolean;
   bookmarksError: boolean;
   onRetryBookmarks: () => void;
+  trailingControls?: ReactNode;
 }) {
   const [searchFocused, setSearchFocused] = useState(false);
   const searchInput = useRef<HTMLInputElement>(null);
@@ -419,6 +427,7 @@ export function CatalogUserFilters({
           <Plus size={18} />
         </button>
       </div>
+      {trailingControls}
       {menuOpen &&
         createPortal(
           <div

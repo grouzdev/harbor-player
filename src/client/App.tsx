@@ -2899,6 +2899,31 @@ export function App() {
             onRetryBookmarks={() => {
               void bookmarks.refetch();
             }}
+            trailingControls={
+              panelDefinitions.some(({ id }) => !panelVisibility[id]) && (
+                <div
+                  className="panel-visibility-controls"
+                  role="group"
+                  aria-label="Видимость панелей каталога"
+                >
+                  {panelDefinitions
+                    .filter(({ id }) => !panelVisibility[id])
+                    .map(({ id, label, Icon }) => (
+                      <button
+                        key={id}
+                        type="button"
+                        className="icon-button panel-visibility-button is-hidden"
+                        aria-label={`Показать панель «${label}»`}
+                        aria-pressed={false}
+                        title={`Показать панель «${label}»`}
+                        onClick={() => togglePanelVisibility(id)}
+                      >
+                        <Icon size={19} />
+                      </button>
+                    ))}
+                </div>
+              )
+            }
           />
         )}
         {coverMode && (
@@ -2950,30 +2975,6 @@ export function App() {
             <History size={21} />
           </button>
         )}
-        {!coverMode &&
-          panelDefinitions.some(({ id }) => !panelVisibility[id]) && (
-            <div
-              className="panel-visibility-controls"
-              role="group"
-              aria-label="Видимость панелей каталога"
-            >
-              {panelDefinitions
-                .filter(({ id }) => !panelVisibility[id])
-                .map(({ id, label, Icon }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className="icon-button panel-visibility-button is-hidden"
-                    aria-label={`Показать панель «${label}»`}
-                    aria-pressed={false}
-                    title={`Показать панель «${label}»`}
-                    onClick={() => togglePanelVisibility(id)}
-                  >
-                    <Icon size={19} />
-                  </button>
-                ))}
-            </div>
-          )}
         <button
           type="button"
           className={`icon-button cover-mode-toggle panel-visibility-button ${coverMode ? "is-active" : "is-hidden"}`}

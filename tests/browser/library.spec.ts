@@ -113,10 +113,21 @@ test("topbar groups catalog controls in the requested order", async ({
   expect(searchBox.width).toBe(36);
   expect(addBox.width).toBe(36);
   expect(addBox.x - searchBox.x - searchBox.width).toBeCloseTo(7, 1);
+  const sectionControls = page.locator(".panel-visibility-controls");
+  const firstSectionControl = sectionControls.getByRole("button").first();
+  const [initialAddBox, firstSectionControlBox] = await Promise.all([
+    add.boundingBox(),
+    firstSectionControl.boundingBox(),
+  ]);
+  expect(
+    firstSectionControlBox!.x - initialAddBox!.x - initialAddBox!.width,
+  ).toBeCloseTo(
+    7,
+    1,
+  );
   const rightControls = [
     page.getByRole("button", { name: "Открыть настройки", exact: true }),
     page.getByRole("button", { name: "Журнал операций", exact: true }),
-    page.locator(".panel-visibility-controls"),
     page
       .locator(".topbar")
       .getByRole("button", { name: "Открыть режим обложки", exact: true }),
@@ -142,6 +153,13 @@ test("topbar groups catalog controls in the requested order", async ({
     "Закладки",
     "Не просмотрено",
   ]);
+  const [activeAddBox, activeFirstSectionControlBox] = await Promise.all([
+    add.boundingBox(),
+    firstSectionControl.boundingBox(),
+  ]);
+  expect(
+    activeFirstSectionControlBox!.x - activeAddBox!.x - activeAddBox!.width,
+  ).toBeCloseTo(7, 1);
   expect((await rightControls[0].boundingBox())!.x).toBe(boxes[0]!.x);
   await page
     .locator(".genres-panel")
