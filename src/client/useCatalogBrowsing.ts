@@ -105,6 +105,7 @@ export function useCatalogBrowsing() {
   const restorePositions = useRef<
     NonNullable<typeof snapshot.current>["positions"] | null
   >(null);
+  const pendingSearchTrackSelection = useRef<Set<string> | null>(null);
   const [navigationEpoch, setNavigationEpoch] = useState(0);
   const [searchSelectionRestore, setSearchSelectionRestore] =
     useState<SearchSelectionRestore | null>(null);
@@ -136,6 +137,11 @@ export function useCatalogBrowsing() {
   }, [search]);
 
   useEffect(() => {
+    if (pendingSearchTrackSelection.current) {
+      setSelected(pendingSearchTrackSelection.current);
+      pendingSearchTrackSelection.current = null;
+      return;
+    }
     setSelected(new Set());
   }, [savedFilter]);
 
@@ -202,30 +208,50 @@ export function useCatalogBrowsing() {
         const searchedArtists = saved.searchSelectedArtists;
         const searchedAlbums = saved.searchSelectedAlbums;
         const searchedTracks = saved.searchSelectedTracks;
-        setSelectedArtists(searchedArtists ?? saved.selectedArtists);
-        setSelectedAlbums(searchedAlbums ?? saved.selectedAlbums);
-        setSelected(searchedTracks ?? saved.selected);
-        setSelectedAlbumId(searchedTracks ? null : saved.selectedAlbumId);
-        setExpandedLibraryIds(saved.expandedLibraryIds);
-        setExpandedFolderKeys(saved.expandedFolderKeys);
-        restorePositions.current = saved.positions.filter(
-          (position) =>
-            !(
-              (position.id === "artists" && searchedArtists !== null) ||
-              (position.id === "albums" && searchedAlbums !== null) ||
-              (position.id === "tracks" && searchedTracks !== null)
-            ),
-        );
-        if (
-          searchedArtists !== null ||
-          searchedAlbums !== null ||
-          searchedTracks !== null
-        )
+        const hasSearchedArtists = Boolean(searchedArtists?.length);
+        const hasSearchedAlbums = Boolean(searchedAlbums?.length);
+        const hasSearchFacetSelection = hasSearchedArtists || hasSearchedAlbums;
+        const hasSearchedTracks = Boolean(searchedTracks?.size);
+        if (hasSearchFacetSelection) {
+          pendingSearchTrackSelection.current = searchedTracks
+            ? new Set(searchedTracks)
+            : null;
+          setSavedFilter({
+            ...emptyFilter,
+            artists: searchedArtists || [],
+            albumIds: searchedAlbums || [],
+          });
+          setSelectedArtists(searchedArtists || []);
+          setSelectedAlbums(searchedAlbums || []);
+          setSelected(searchedTracks || new Set());
+          setSelectedAlbumId(null);
+          setExpandedLibraryIds(new Set());
+          setExpandedFolderKeys(new Set());
+          restorePositions.current = null;
+        } else {
+          setSelectedArtists(saved.selectedArtists);
+          setSelectedAlbums(saved.selectedAlbums);
+          setSelected(searchedTracks?.size ? searchedTracks : saved.selected);
+          setSelectedAlbumId(
+            searchedTracks?.size ? null : saved.selectedAlbumId,
+          );
+          setExpandedLibraryIds(saved.expandedLibraryIds);
+          setExpandedFolderKeys(saved.expandedFolderKeys);
+          restorePositions.current = saved.positions.filter(
+            (position) =>
+              !(
+                (position.id === "tracks" && hasSearchedTracks) ||
+                (position.id === "artists" && hasSearchedArtists) ||
+                (position.id === "albums" && hasSearchedAlbums)
+              ),
+          );
+        }
+        if (hasSearchedArtists || hasSearchedAlbums || hasSearchedTracks)
           setSearchSelectionRestore((current) => ({
             requestId: (current?.requestId || 0) + 1,
-            artist: searchedArtists?.at(-1) || null,
-            album: searchedAlbums?.at(-1) || null,
-            track: searchedTracks ? [...searchedTracks].at(-1) || null : null,
+            artist: hasSearchedArtists ? searchedArtists!.at(-1)! : null,
+            album: hasSearchedAlbums ? searchedAlbums!.at(-1)! : null,
+            track: hasSearchedTracks ? [...searchedTracks!].at(-1)! : null,
           }));
         snapshot.current = null;
       } else if (nextSearching && text.trim() !== search.trim()) {

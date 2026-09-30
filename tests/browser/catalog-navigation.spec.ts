@@ -921,11 +921,13 @@ test("clearing global search retains its panel choices and reveals them", async 
   page,
 }) => {
   await catalog(page, { extraRockArtists: 80 });
-  const previousTrack = page.locator(
-    '[data-testid="track-row"][data-selection-key="Bowie-0-0"]',
-  );
-  await previousTrack.locator(".list-tile-main").click();
-  await expect(previousTrack).toHaveClass(/selected/);
+  await page
+    .locator(".libraries-panel .list-tile-main")
+    .filter({ hasText: "jazz" })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Сбросить библиотеки" }),
+  ).toBeVisible();
 
   const targetArtist = "Rock artist 75";
   const targetAlbum = `${targetArtist}-0`;
@@ -959,6 +961,16 @@ test("clearing global search retains its panel choices and reveals them", async 
   await expect(restoredArtist).toHaveClass(/selected/);
   await expect(restoredAlbum).toHaveClass(/selected/);
   await expect(restoredTrack).toHaveClass(/selected/);
+  await expect(
+    page.getByRole("button", { name: "Сбросить исполнителей" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Сбросить альбомы" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Сбросить библиотеки" }),
+  ).toHaveCount(0);
+  await expect(count(page, "tracks")).toHaveText("1/3");
   await expect(restoredArtist).toBeInViewport();
   await expect(restoredAlbum).toBeInViewport();
   await expect(restoredTrack).toBeInViewport();
