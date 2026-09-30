@@ -3227,6 +3227,12 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     .poll(() => coverMode.locator(".cover-track-row").count())
     .toBeGreaterThan(0);
   await expect(coverMode.locator(".cover-track-row.current")).toHaveCount(1);
+  await expect(
+    coverMode.locator(".cover-track-row.current .cover-track-title"),
+  ).toBeVisible();
+  await expect(
+    coverMode.locator(".cover-track-row.current .cover-track-title"),
+  ).toHaveText("Первый трек");
   await page.screenshot({ path: `.test-data/cover-mode-${browser}.png` });
 
   await coverMode.locator(".cover-track-row").nth(1).click();
