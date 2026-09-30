@@ -28,6 +28,12 @@ type PanelPosition = {
   left: number;
   anchorKey?: string;
 };
+type SearchSelectionRestore = {
+  requestId: number;
+  artist: string | null;
+  album: string | null;
+  track: string | null;
+};
 
 export type CatalogPanelId =
   "libraries" | "genres" | "artists" | "albums" | "tracks";
@@ -88,6 +94,9 @@ export function useCatalogBrowsing() {
     selectedAlbums: string[];
     selected: Set<string>;
     selectedAlbumId: string | null;
+    searchSelectedArtists: string[] | null;
+    searchSelectedAlbums: string[] | null;
+    searchSelectedTracks: Set<string> | null;
     expandedLibraryIds: Set<string>;
     expandedFolderKeys: Set<string>;
     positions: PanelPosition[];
@@ -97,6 +106,8 @@ export function useCatalogBrowsing() {
     NonNullable<typeof snapshot.current>["positions"] | null
   >(null);
   const [navigationEpoch, setNavigationEpoch] = useState(0);
+  const [searchSelectionRestore, setSearchSelectionRestore] =
+    useState<SearchSelectionRestore | null>(null);
   const panelPositions = useCallback(
     (
       anchors: Partial<Record<CatalogPanelId, string>> = {},
@@ -155,6 +166,9 @@ export function useCatalogBrowsing() {
           selectedAlbums,
           selected,
           selectedAlbumId,
+          searchSelectedArtists: null,
+          searchSelectedAlbums: null,
+          searchSelectedTracks: null,
           expandedLibraryIds,
           expandedFolderKeys,
           positions: panelPositions(),
@@ -185,19 +199,45 @@ export function useCatalogBrowsing() {
               updatedAt: query.updatedAt,
             });
         }
-        setSelectedArtists(saved.selectedArtists);
-        setSelectedAlbums(saved.selectedAlbums);
-        setSelected(saved.selected);
-        setSelectedAlbumId(saved.selectedAlbumId);
+        const searchedArtists = saved.searchSelectedArtists;
+        const searchedAlbums = saved.searchSelectedAlbums;
+        const searchedTracks = saved.searchSelectedTracks;
+        setSelectedArtists(searchedArtists ?? saved.selectedArtists);
+        setSelectedAlbums(searchedAlbums ?? saved.selectedAlbums);
+        setSelected(searchedTracks ?? saved.selected);
+        setSelectedAlbumId(searchedTracks ? null : saved.selectedAlbumId);
         setExpandedLibraryIds(saved.expandedLibraryIds);
         setExpandedFolderKeys(saved.expandedFolderKeys);
-        restorePositions.current = saved.positions;
+        restorePositions.current = saved.positions.filter(
+          (position) =>
+            !(
+              (position.id === "artists" && searchedArtists !== null) ||
+              (position.id === "albums" && searchedAlbums !== null) ||
+              (position.id === "tracks" && searchedTracks !== null)
+            ),
+        );
+        if (
+          searchedArtists !== null ||
+          searchedAlbums !== null ||
+          searchedTracks !== null
+        )
+          setSearchSelectionRestore((current) => ({
+            requestId: (current?.requestId || 0) + 1,
+            artist: searchedArtists?.at(-1) || null,
+            album: searchedAlbums?.at(-1) || null,
+            track: searchedTracks ? [...searchedTracks].at(-1) || null : null,
+          }));
         snapshot.current = null;
       } else if (nextSearching && text.trim() !== search.trim()) {
         setSelectedArtists([]);
         setSelectedAlbums([]);
         setSelected(new Set());
         setSelectedAlbumId(null);
+        if (snapshot.current) {
+          snapshot.current.searchSelectedArtists = null;
+          snapshot.current.searchSelectedAlbums = null;
+          snapshot.current.searchSelectedTracks = null;
+        }
       }
       if (nextSearching) restorePositions.current = null;
       setNavigationEpoch((value) => value + 1);
@@ -282,6 +322,22 @@ export function useCatalogBrowsing() {
     };
   }, [navigationEpoch, queryClient]);
 
+  const setSearchArtistSelection = useCallback((artists: string[]) => {
+    setSelectedArtists(artists);
+    if (snapshot.current) snapshot.current.searchSelectedArtists = artists;
+  }, []);
+
+  const setSearchAlbumSelection = useCallback((albumIds: string[]) => {
+    setSelectedAlbums(albumIds);
+    if (snapshot.current) snapshot.current.searchSelectedAlbums = albumIds;
+  }, []);
+
+  const setSearchTrackSelection = useCallback((trackIds: Set<string>) => {
+    setSelected(trackIds);
+    if (snapshot.current)
+      snapshot.current.searchSelectedTracks = new Set(trackIds);
+  }, []);
+
   const filterBySelection = useCallback(
     (kind: "artist" | "album", ids: string[]) => {
       snapshot.current = null;
@@ -345,6 +401,10 @@ export function useCatalogBrowsing() {
     searchPending,
     filterBySelection,
     applyPlayerArtistSelection,
+    setSearchArtistSelection,
+    setSearchAlbumSelection,
+    setSearchTrackSelection,
+    searchSelectionRestore,
     navigationEpoch,
     selectedArtists,
     setSelectedArtists,

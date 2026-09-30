@@ -557,6 +557,10 @@ export function App() {
     searchPending,
     filterBySelection,
     applyPlayerArtistSelection,
+    setSearchArtistSelection,
+    setSearchAlbumSelection,
+    setSearchTrackSelection,
+    searchSelectionRestore,
     navigationEpoch,
     selectedArtists,
     setSelectedArtists,
@@ -657,6 +661,28 @@ export function App() {
     requestAlbumScroll,
     requestTrackScroll,
   } = useCatalogScrollTargets(filterKey);
+  const restoredSearchSelectionRequest = useRef(0);
+  useEffect(() => {
+    if (
+      !searchSelectionRestore ||
+      restoredSearchSelectionRequest.current ===
+        searchSelectionRestore.requestId
+    )
+      return;
+    restoredSearchSelectionRequest.current = searchSelectionRestore.requestId;
+    if (searchSelectionRestore.artist)
+      requestArtistScroll(searchSelectionRestore.artist, filterKey);
+    if (searchSelectionRestore.album)
+      requestAlbumScroll(searchSelectionRestore.album, filterKey);
+    if (searchSelectionRestore.track)
+      requestTrackScroll(searchSelectionRestore.track, filterKey);
+  }, [
+    filterKey,
+    requestAlbumScroll,
+    requestArtistScroll,
+    requestTrackScroll,
+    searchSelectionRestore,
+  ]);
   const preserveSelectedAlbumVisibility = useCallback(
     (next: CatalogFilter) => {
       const albumId =
@@ -2102,7 +2128,7 @@ export function App() {
   const applyArtistSelection = useCallback(
     (artists: string[]) => {
       if (isSearching) {
-        setSelectedArtists(artists);
+        setSearchArtistSelection(artists);
         return;
       }
       const next = { ...filter, artists };
@@ -2117,6 +2143,7 @@ export function App() {
       preservePanelPositions,
       setFilter,
       setSelectedArtists,
+      setSearchArtistSelection,
     ],
   );
   const selectPlayerArtists = useCallback(
@@ -2142,7 +2169,7 @@ export function App() {
   const applyAlbumSelection = useCallback(
     (albumIds: string[], focusedAlbumId?: string) => {
       if (isSearching) {
-        setSelectedAlbums(albumIds);
+        setSearchAlbumSelection(albumIds);
         return;
       }
       // Album selection only narrows the tracks panel. The album grid and all
@@ -2160,7 +2187,7 @@ export function App() {
       });
       setFilter((current) => ({ ...current, albumIds }));
     },
-    [isSearching, setFilter, setSelectedAlbums],
+    [isSearching, setFilter, setSearchAlbumSelection, setSelectedAlbums],
   );
   const applyGenreSelection = useCallback(
     (genres: string[]) => {
@@ -3429,7 +3456,8 @@ export function App() {
                 onSelectAlbum={selectCatalogAlbum}
                 onSelectionChange={(ids) => {
                   setSelectedAlbumId(null);
-                  setSelected(new Set(ids));
+                  if (isSearching) setSearchTrackSelection(new Set(ids));
+                  else setSelected(new Set(ids));
                 }}
                 onMore={() => {
                   if (

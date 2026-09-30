@@ -917,6 +917,54 @@ test("global search restores filters, selection, expanded folders and scroll pos
     .toEqual(positions.map(Math.round));
 });
 
+test("clearing global search retains its panel choices and reveals them", async ({
+  page,
+}) => {
+  await catalog(page, { extraRockArtists: 80 });
+  const previousTrack = page.locator(
+    '[data-testid="track-row"][data-selection-key="Bowie-0-0"]',
+  );
+  await previousTrack.locator(".list-tile-main").click();
+  await expect(previousTrack).toHaveClass(/selected/);
+
+  const targetArtist = "Rock artist 75";
+  const targetAlbum = `${targetArtist}-0`;
+  const targetTrack = `${targetArtist}-0`;
+  const search = page.getByLabel("Поиск музыки");
+  await search.fill(targetArtist);
+
+  const artistResult = artist(page, targetArtist);
+  const albumResult = page.locator(
+    `.album-card[data-selection-key="${targetAlbum}"]`,
+  );
+  const trackResult = page.locator(
+    `[data-testid="track-row"][data-selection-key="${targetTrack}"]`,
+  );
+  await expect(artistResult).toBeVisible();
+  await expect(albumResult).toBeVisible();
+  await expect(trackResult).toBeVisible();
+  await artistResult.locator(".list-tile-main").click();
+  await albumResult.locator(".album-main").click();
+  await trackResult.locator(".list-tile-main").click();
+
+  await search.fill("");
+
+  const restoredArtist = artist(page, targetArtist);
+  const restoredAlbum = page.locator(
+    `.album-card[data-selection-key="${targetAlbum}"]`,
+  );
+  const restoredTrack = page.locator(
+    `[data-testid="track-row"][data-selection-key="${targetTrack}"]`,
+  );
+  await expect(restoredArtist).toHaveClass(/selected/);
+  await expect(restoredAlbum).toHaveClass(/selected/);
+  await expect(restoredTrack).toHaveClass(/selected/);
+  await expect(restoredArtist).toBeInViewport();
+  await expect(restoredAlbum).toBeInViewport();
+  await expect(restoredTrack).toBeInViewport();
+  await expect(page.locator(".track-row.selected")).toHaveCount(1);
+});
+
 test("resetting a library filter restores the artist panel scroll position", async ({
   page,
 }) => {
