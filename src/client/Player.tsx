@@ -330,6 +330,7 @@ export function Player({
   return (
     <footer className="player">
       {player.audioElement}
+      <div className="player-layout">
       <div className="now-playing">
         <button
           type="button"
@@ -500,6 +501,7 @@ export function Player({
         >
           <Shuffle size={17} />
         </button>
+      </div>
       </div>
     </footer>
   );

@@ -943,7 +943,7 @@ test("a single visible panel fills the workspace width", async ({ page }) => {
   }
 });
 
-test("player keeps transport centered in a narrow window", async ({
+test("player prioritizes the current track while adapting progress", async ({
   page,
 }, info) => {
   await page.goto("/");
@@ -974,11 +974,14 @@ test("player keeps transport centered in a narrow window", async ({
   const layouts: Array<{
     width: number;
     seekRangeWidth: number;
+    nowPlayingWidth: number;
   }> = [];
   for (const [width, expected] of [
+    [1800, { modes: true, volume: true, volumeColumn: true, times: true }],
     [1400, { modes: true, volume: true, volumeColumn: true, times: true }],
     [1100, { modes: false, volume: true, volumeColumn: true, times: true }],
     [900, { modes: false, volume: false, volumeColumn: false, times: true }],
+    [740, { modes: false, volume: false, volumeColumn: false, times: false }],
     [700, { modes: false, volume: false, volumeColumn: false, times: false }],
   ] as const) {
     await page.setViewportSize({ width, height: 900 });
@@ -999,6 +1002,7 @@ test("player keeps transport centered in a narrow window", async ({
       const trackLink = player.querySelector<HTMLElement>(".now-track-link")!;
       const artistLink = player.querySelector<HTMLElement>(".now-artist-link")!;
       const seekRange = player.querySelector<HTMLElement>(".seek-range")!;
+      const seek = player.querySelector<HTMLElement>(".seek")!;
       const time = player.querySelector<HTMLElement>(".seek-time")!;
       const transport = player.querySelector<HTMLElement>(".transport")!;
       const displayed = (element: Element | null) =>
@@ -1009,7 +1013,10 @@ test("player keeps transport centered in a narrow window", async ({
         playerHeight: player.getBoundingClientRect().height,
         playerCenter: playerRect.left + playerRect.width / 2,
         transportCenter: transportRect.left + transportRect.width / 2,
+        transportWidth: transportRect.width,
         seekRangeWidth: seekRange.getBoundingClientRect().width,
+        seekRightGap: playerRect.right - seek.getBoundingClientRect().right,
+        transportRightGap: playerRect.right - transportRect.right,
         modesVisible: displayed(shuffle) && displayed(repeat),
         volumeVisible: displayed(mute) && displayed(volumeRange),
         volumeColumnVisible: displayed(volume),
@@ -1022,10 +1029,25 @@ test("player keeps transport centered in a narrow window", async ({
     });
 
     expect(layout.playerHeight, `${width}px player height`).toBe(72);
-    expect(
-      Math.abs(layout.transportCenter - layout.playerCenter),
-      `${width}px transport center`,
-    ).toBeLessThanOrEqual(1);
+    if (expected.volumeColumn) {
+      expect(
+        Math.abs(layout.transportCenter - layout.playerCenter),
+        `${width}px transport center`,
+      ).toBeLessThanOrEqual(1);
+    } else {
+      expect(
+        layout.transportRightGap,
+        `${width}px transport uses the right edge`,
+      ).toBeLessThanOrEqual(26);
+      expect(
+        layout.seekRightGap - layout.transportRightGap,
+        `${width}px seek uses the transport edge`,
+      ).toBeLessThanOrEqual(20);
+      expect(
+        layout.transportWidth,
+        `${width}px transport takes more space`,
+      ).toBeGreaterThan(layout.nowPlayingWidth);
+    }
     expect(layout.modesVisible, `${width}px repeat/shuffle`).toBe(
       expected.modes,
     );
@@ -1053,15 +1075,19 @@ test("player keeps transport centered in a narrow window", async ({
     layouts.push({
       width,
       seekRangeWidth: layout.seekRangeWidth,
+      nowPlayingWidth: layout.nowPlayingWidth,
     });
   }
-  expect(layouts[0].seekRangeWidth, "1400px progress").toBeGreaterThan(
+  expect(layouts[0].seekRangeWidth, "1800px progress").toBeGreaterThan(
     layouts[1].seekRangeWidth,
   );
   expect(
     layouts[1].seekRangeWidth,
-    "1100px progress",
+    "1400px progress",
   ).toBeGreaterThan(layouts[2].seekRangeWidth);
+  expect(layouts[4].seekRangeWidth, "740px progress").toBeGreaterThan(
+    layouts[5].seekRangeWidth,
+  );
 });
 
 test("library root can be added to any playlist", async ({ page }, info) => {

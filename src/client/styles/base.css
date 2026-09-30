@@ -1011,16 +1011,20 @@ body.selection-dragging * {
 .player {
   height: 72px;
   min-height: 72px;
-  display: grid;
   container-type: inline-size;
-  grid-template-columns:
-    minmax(0, 1fr) minmax(0, min(42vw, 680px)) minmax(0, 1fr);
-  align-items: center;
-  column-gap: clamp(12px, 1.5vw, 24px);
   padding: 0 26px;
   background: #151b20;
   border-top: 1px solid #ffffff0c;
   z-index: 2;
+}
+.player-layout {
+  height: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr) minmax(0, 42%) minmax(0, 1fr);
+  align-items: center;
+  column-gap: clamp(12px, 1.5vw, 24px);
 }
 .now-playing {
   display: flex;
@@ -1130,7 +1134,6 @@ body.selection-dragging * {
   align-items: center;
   justify-content: center;
   width: 100%;
-  max-width: 680px;
   gap: clamp(10px, 1.1vw, 18px);
   min-width: 0;
 }
@@ -2106,11 +2109,10 @@ body {
   line-height: 1.6;
   max-width: 300px;
 }
-.player {
-  height: 72px;
-  min-height: 72px;
+.player-layout {
+  height: 100%;
   grid-template-columns:
-    minmax(0, 1fr) minmax(0, min(42vw, 680px)) minmax(0, 1fr);
+    minmax(0, 1fr) minmax(0, 42%) minmax(0, 1fr);
   column-gap: clamp(12px, 1.5vw, 24px);
 }
 .now-cover {
@@ -2183,8 +2185,8 @@ body {
   .search {
     width: 360px;
   }
-  .player {
-    grid-template-columns: minmax(180px, 1fr) minmax(0, 42vw) minmax(0, 1fr);
+  .player-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 42%) minmax(0, 1fr);
   }
   .workspace {
     grid-template-columns:
@@ -2193,8 +2195,8 @@ body {
   }
 }
 @media (max-width: 900px) {
-  .player {
-    grid-template-columns: minmax(180px, 1fr) minmax(0, 42vw) minmax(0, 1fr);
+  .player-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 42%) minmax(0, 1fr);
   }
   .workspace {
     grid-template-columns: 170px 4px 150px 4px 460px 4px minmax(320px, 1fr);
@@ -2203,8 +2205,10 @@ body {
 
 @media (max-width: 999px) {
   .player {
-    grid-template-columns: minmax(180px, 1fr) minmax(0, 42vw) minmax(0, 1fr);
     padding: 0 18px;
+  }
+  .player-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 42%) minmax(0, 1fr);
   }
   .now-playing {
     min-width: 0;
@@ -2231,11 +2235,16 @@ body {
 }
 
 @container (max-width: 980px) {
+  .player-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  }
+
   .volume {
     display: none;
   }
 
   .transport {
+    grid-column: 2;
     max-width: none;
   }
 
