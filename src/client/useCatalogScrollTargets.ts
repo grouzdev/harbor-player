@@ -6,6 +6,7 @@ export type CatalogScrollTarget = {
 };
 
 type ArtistScrollTarget = CatalogScrollTarget & { artist: string };
+type GenreScrollTarget = CatalogScrollTarget & { genre: string };
 type AlbumScrollTarget = CatalogScrollTarget & { album: string };
 type TrackScrollTarget = CatalogScrollTarget & { track: string };
 
@@ -14,6 +15,8 @@ export function useCatalogScrollTargets(filterKey: string) {
   filterKeyRef.current = filterKey;
   const [artistScrollTarget, setArtistScrollTarget] =
     useState<ArtistScrollTarget | null>(null);
+  const [genreScrollTarget, setGenreScrollTarget] =
+    useState<GenreScrollTarget | null>(null);
   const [albumScrollTarget, setAlbumScrollTarget] =
     useState<AlbumScrollTarget | null>(null);
   const [trackScrollTarget, setTrackScrollTarget] =
@@ -22,6 +25,15 @@ export function useCatalogScrollTargets(filterKey: string) {
     (artist: string, targetFilterKey = filterKeyRef.current) =>
       setArtistScrollTarget((current) => ({
         artist,
+        requestId: (current?.requestId || 0) + 1,
+        filterKey: targetFilterKey,
+      })),
+    [],
+  );
+  const requestGenreScroll = useCallback(
+    (genre: string, targetFilterKey = filterKeyRef.current) =>
+      setGenreScrollTarget((current) => ({
+        genre,
         requestId: (current?.requestId || 0) + 1,
         filterKey: targetFilterKey,
       })),
@@ -48,9 +60,11 @@ export function useCatalogScrollTargets(filterKey: string) {
   return {
     filterKeyRef,
     artistScrollTarget,
+    genreScrollTarget,
     albumScrollTarget,
     trackScrollTarget,
     requestArtistScroll,
+    requestGenreScroll,
     requestAlbumScroll,
     requestTrackScroll,
   };

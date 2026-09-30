@@ -2891,8 +2891,8 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     page
       .locator(".artists-panel .list-tile.selected")
       .filter({ hasText: "Исполнитель альбома" }),
-  ).toHaveCount(0);
-  await expect(rows).toHaveCount(7);
+  ).toHaveCount(1);
+  await expect(rows).toHaveCount(6);
   await downloadsTile.locator(".list-tile-main").dispatchEvent("click");
   await page.locator("audio").evaluate((a: HTMLAudioElement) => {
     a.loop = true;

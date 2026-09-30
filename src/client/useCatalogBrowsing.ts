@@ -305,6 +305,21 @@ export function useCatalogBrowsing() {
     [isSearching],
   );
 
+  const applyPlayerArtistSelection = useCallback(
+    (artists: string[]) => {
+      if (isSearching) {
+        setSelectedArtists(artists);
+        return;
+      }
+      snapshot.current = null;
+      restorePositions.current = null;
+      setSavedFilter((current) => ({ ...current, artists }));
+      setSelectedArtists(artists);
+      setNavigationEpoch((value) => value + 1);
+    },
+    [isSearching],
+  );
+
   const preservePanelPositions = useCallback(
     (
       update: () => void,
@@ -329,6 +344,7 @@ export function useCatalogBrowsing() {
     isSearching,
     searchPending,
     filterBySelection,
+    applyPlayerArtistSelection,
     navigationEpoch,
     selectedArtists,
     setSelectedArtists,

@@ -556,6 +556,7 @@ export function App() {
     isSearching,
     searchPending,
     filterBySelection,
+    applyPlayerArtistSelection,
     navigationEpoch,
     selectedArtists,
     setSelectedArtists,
@@ -648,9 +649,11 @@ export function App() {
   const {
     filterKeyRef,
     artistScrollTarget,
+    genreScrollTarget,
     albumScrollTarget,
     trackScrollTarget,
     requestArtistScroll,
+    requestGenreScroll,
     requestAlbumScroll,
     requestTrackScroll,
   } = useCatalogScrollTargets(filterKey);
@@ -2116,6 +2119,26 @@ export function App() {
       setSelectedArtists,
     ],
   );
+  const selectPlayerArtists = useCallback(
+    (artists: string[]) => {
+      if (isSearching) {
+        setSelectedArtists(artists);
+        return filterKey;
+      }
+      if (sameStringArray(filter.artists, artists)) return filterKey;
+      const next = { ...filter, artists };
+      const targetFilterKey = `${navigationEpoch + 1}:${JSON.stringify(next)}`;
+      applyPlayerArtistSelection(artists);
+      return targetFilterKey;
+    },
+    [
+      filter,
+      filterKey,
+      isSearching,
+      navigationEpoch,
+      applyPlayerArtistSelection,
+    ],
+  );
   const applyAlbumSelection = useCallback(
     (albumIds: string[], focusedAlbumId?: string) => {
       if (isSearching) {
@@ -2226,73 +2249,73 @@ export function App() {
         target === "album"
           ? { ...albumFilter, albumIds: [value] }
           : { ...artistFilter, artists };
+      const selectedArtistFilter = { ...filter, artists };
+      const genreLookupFilter = {
+        ...genreFilter,
+        artists: [artists[0]],
+      };
       try {
-        const { trackIds } = await api<{ trackIds: string[] }>(
-          "/track-ids",
-          targetFilter,
-        );
+        const [targetResult, artistGenres, trackResult] = await Promise.all([
+          api<{ trackIds: string[] }>("/track-ids", targetFilter),
+          api<{ name: string; count: number }[]>(
+            catalogUrl("genres", genreLookupFilter),
+          ).catch(() => []),
+          target === "album" && trackId
+            ? api<{ trackIds: string[] }>("/track-ids", selectedArtistFilter)
+            : Promise.resolve({ trackIds: [] }),
+        ]);
         if (filterKeyRef.current !== navigationFilterKey) return;
+        const { trackIds } = targetResult;
         if (trackIds.length) {
+          const targetFilterKey = selectPlayerArtists(artists);
+          requestArtistScroll(artists[0], targetFilterKey);
+          if (artistGenres[0])
+            requestGenreScroll(artistGenres[0].name, targetFilterKey);
           if (target === "artist") {
-            const artistSelectionChanged = !sameStringArray(
-              filter.artists,
-              artists,
-            );
-            applyArtistSelection(artists);
-            requestArtistScroll(
-              value,
-              isSearching || !artistSelectionChanged
-                ? filterKey
-                : `${navigationEpoch + 1}:${JSON.stringify({
-                    ...filter,
-                    artists,
-                  })}`,
-            );
             return;
           }
-          const [artistResult, trackResult] = await Promise.all([
-            api<{ trackIds: string[] }>("/track-ids", {
-              ...artistFilter,
-              artists: [artists[0]],
-            }),
-            trackId
-              ? api<{ trackIds: string[] }>("/track-ids", filter)
-              : Promise.resolve({ trackIds: [] }),
-          ]);
-          if (filterKeyRef.current !== navigationFilterKey) return;
-          if (artistResult.trackIds.length) requestArtistScroll(artists[0]);
-          requestAlbumScroll(value);
+          requestAlbumScroll(value, targetFilterKey);
           if (trackId && trackResult.trackIds.includes(trackId))
-            requestTrackScroll(trackId);
+            requestTrackScroll(trackId, targetFilterKey);
           return;
         }
       } catch {
         // Fall back to the established navigation when the presence check fails.
       }
       if (filterKeyRef.current !== navigationFilterKey) return;
-      setPanelVisible(target === "album" ? "albums" : "artists", true);
-      setExpandedLibraryIds(new Set());
-      setExpandedFolderKeys(new Set());
       const fallbackFilter = {
         ...emptyFilter,
         artists,
         ...(target === "album" ? { albumIds: [value] } : {}),
       };
+      const fallbackGenres = await api<{ name: string; count: number }[]>(
+        catalogUrl("genres", { ...fallbackFilter, artists: [artists[0]] }),
+      ).catch(() => []);
+      if (filterKeyRef.current !== navigationFilterKey) return;
+      setPanelVisible(target === "album" ? "albums" : "artists", true);
+      setExpandedLibraryIds(new Set());
+      setExpandedFolderKeys(new Set());
+      const fallbackFilterKey = `${navigationEpoch + 1}:${JSON.stringify(fallbackFilter)}`;
       replaceFilter(fallbackFilter);
-      requestArtistScroll(
-        artists[0],
-        `${navigationEpoch + 1}:${JSON.stringify(fallbackFilter)}`,
-      );
+      requestArtistScroll(artists[0], fallbackFilterKey);
+      if (fallbackGenres[0])
+        requestGenreScroll(fallbackGenres[0].name, fallbackFilterKey);
+      if (target === "album") {
+        requestAlbumScroll(value, fallbackFilterKey);
+        if (trackId) requestTrackScroll(trackId, fallbackFilterKey);
+      }
     },
     [
       albumFilter,
-      applyArtistSelection,
       artistFilter,
       filter,
+      genreFilter,
       isSearching,
       requestAlbumScroll,
       requestArtistScroll,
+      requestGenreScroll,
       requestTrackScroll,
+      selectPlayerArtists,
       setPanelVisible,
       filterKey,
       navigationEpoch,
@@ -3119,6 +3142,11 @@ export function App() {
               listRef={genreListRef}
               surfaceProps={genreSelection.surfaceProps}
               marquee={genreSelection.marquee}
+              scrollTarget={
+                genreScrollTarget?.filterKey === filterKey
+                  ? genreScrollTarget
+                  : null
+              }
               playlistDragEnabled={Boolean(
                 activePlaylistId && panelVisibility.playlists,
               )}

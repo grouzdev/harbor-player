@@ -1,4 +1,10 @@
-import type { HTMLAttributes, ReactNode, RefObject } from "react";
+import {
+  useEffect,
+  useRef,
+  type HTMLAttributes,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import {
   ChevronRight,
   Drama,
@@ -241,6 +247,7 @@ type GenrePanelProps = {
   onContextMenu: (event: React.MouseEvent, genre: string) => void;
   playlistDragEnabled?: boolean;
   onGenreDragStart: (genre: string) => void;
+  scrollTarget: { genre: string; requestId: number; filterKey: string } | null;
   onClose: () => void;
 };
 
@@ -260,9 +267,28 @@ export function GenrePanel({
   onContextMenu,
   playlistDragEnabled = false,
   onGenreDragStart,
+  scrollTarget,
   onClose,
 }: GenrePanelProps) {
   const selectionActive = filter.genres.length > 0;
+  const centeredRequestId = useRef<number | null>(null);
+  useEffect(() => {
+    if (!scrollTarget || centeredRequestId.current === scrollTarget.requestId)
+      return;
+    const list = listRef.current;
+    if (!list) return;
+    const target = [...list.children].find(
+      (element) =>
+        element instanceof HTMLElement &&
+        element.dataset.selectionKey === scrollTarget.genre,
+    );
+    if (!(target instanceof HTMLElement)) return;
+    list.scrollTop = Math.max(
+      0,
+      target.offsetTop - (list.clientHeight - target.offsetHeight) / 2,
+    );
+    centeredRequestId.current = scrollTarget.requestId;
+  }, [genres, listRef, scrollTarget]);
   return (
     <section className="panel genres-panel" data-panel-id="genres">
       <div
