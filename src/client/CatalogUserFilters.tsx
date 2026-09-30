@@ -22,6 +22,15 @@ import { RangeSlider } from "./RangeSlider";
 
 export type RatingRange = readonly [minimum: number, maximum: number];
 
+export const recentlyAddedDayOptions = [1, 3, 7, 14, 30] as const;
+export type RecentlyAddedDays = (typeof recentlyAddedDayOptions)[number];
+
+export function recentlyAddedFilterLabel(days: RecentlyAddedDays): string {
+  const label =
+    days === 1 ? "1 день" : days < 5 ? `${days} дня` : `${days} дней`;
+  return `Добавлено ${label} назад`;
+}
+
 export function ratingFilterLabel(minimum: number, maximum: number): string {
   return minimum === 0 && maximum === 0
     ? "Без рейтинга"
@@ -96,7 +105,10 @@ export function CatalogUserFilters({
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ left: 8, top: 8 });
-  const [draft, setDraft] = useState<RatingRange | null>(null);
+  const [ratingDraft, setRatingDraft] = useState<RatingRange | null>(null);
+  const [recentDraft, setRecentDraft] = useState<RecentlyAddedDays | null>(
+    null,
+  );
   const [neutralRating, setNeutralRating] = useState(false);
   const [order, setOrder] = useState<FilterKind[]>([]);
   const [previousFilter, setPreviousFilter] = useState(filter);
@@ -107,7 +119,7 @@ export function CatalogUserFilters({
     bookmarks: filter.bookmarksOnly,
     unviewed: filter.albumViewed === "unviewed",
     rating: ratingActive || (neutralRating && !reset),
-    recent: filter.recentlyAddedOnly,
+    recent: filter.recentlyAddedDays !== null,
   };
   // Reconcile externally changed filters without losing insertion order.
   const visible = order.filter((kind) => active[kind]);
@@ -120,13 +132,18 @@ export function CatalogUserFilters({
     setPreviousFilter(filter);
     if (reset) setNeutralRating(false);
     if (
-      draft &&
+      ratingDraft &&
       (reset ||
         ratingRangeFromFilter(previousFilter).join() !==
           [minimum, maximum].join())
     ) {
-      setDraft(null);
+      setRatingDraft(null);
     }
+    if (
+      recentDraft &&
+      (reset || previousFilter.recentlyAddedDays !== filter.recentlyAddedDays)
+    )
+      setRecentDraft(null);
   }
   const addable = filterDefinitions.filter(({ kind }) => !active[kind]);
 
@@ -158,18 +175,22 @@ export function CatalogUserFilters({
   useEffect(() => {
     if (disabled) {
       setMenuOpen(false);
-      setDraft(null);
+      setRatingDraft(null);
+      setRecentDraft(null);
     }
   }, [disabled]);
 
   useEffect(() => {
-    if (!draft) return;
+    if (!ratingDraft && !recentDraft) return;
     const cancel = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setDraft(null);
+      if (event.key === "Escape") {
+        setRatingDraft(null);
+        setRecentDraft(null);
+      }
     };
     document.addEventListener("keydown", cancel);
     return () => document.removeEventListener("keydown", cancel);
-  }, [draft]);
+  }, [ratingDraft, recentDraft]);
 
   useLayoutEffect(() => {
     if (!menuOpen) return;
@@ -221,7 +242,6 @@ export function CatalogUserFilters({
       ...(kind === "unviewed"
         ? { albumViewed: value ? ("unviewed" as const) : ("all" as const) }
         : {}),
-      ...(kind === "recent" ? { recentlyAddedOnly: value } : {}),
     }));
   };
   const add = (kind: FilterKind) => {
@@ -230,7 +250,8 @@ export function CatalogUserFilters({
       return;
     }
     setMenuOpen(false);
-    if (kind === "rating") setDraft([0, 5]);
+    if (kind === "rating") setRatingDraft([0, 5]);
+    else if (kind === "recent") setRecentDraft(1);
     else {
       setOrder([...visible, kind]);
       changeBoolean(kind, true);
@@ -240,12 +261,15 @@ export function CatalogUserFilters({
     setOrder(visible.filter((item) => item !== kind));
     if (kind === "rating") {
       setNeutralRating(false);
-      setDraft(null);
+      setRatingDraft(null);
       onChange((current) => withSharedRatingRange(current, 0, 5));
+    } else if (kind === "recent") {
+      setRecentDraft(null);
+      onChange((current) => ({ ...current, recentlyAddedDays: null }));
     } else changeBoolean(kind, false);
   };
   const renderRatingEditor = () =>
-    draft && (
+    ratingDraft && (
       <div
         className="catalog-filter-editor"
         role="group"
@@ -253,12 +277,12 @@ export function CatalogUserFilters({
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.stopPropagation();
-            setDraft(null);
+            setRatingDraft(null);
           }
         }}
       >
         <span>
-          Рейтинг: от {draft[0]} до {draft[1]}
+          Рейтинг: от {ratingDraft[0]} до {ratingDraft[1]}
         </span>
         <RangeSlider
           className="catalog-filter-slider"
@@ -266,10 +290,10 @@ export function CatalogUserFilters({
           min={0}
           max={5}
           step={1}
-          values={draft}
+          values={ratingDraft}
           ariaLabels={["Минимальная оценка", "Максимальная оценка"]}
           disabled={disabled}
-          onChange={setDraft}
+          onChange={setRatingDraft}
         />
         <button
           type="button"
@@ -277,12 +301,12 @@ export function CatalogUserFilters({
           aria-label="Применить рейтинг"
           disabled={disabled}
           onClick={() => {
-            setNeutralRating(draft[0] === 0 && draft[1] === 5);
+            setNeutralRating(ratingDraft[0] === 0 && ratingDraft[1] === 5);
             if (!visible.includes("rating")) setOrder([...visible, "rating"]);
             onChange((current) =>
-              withSharedRatingRange(current, draft[0], draft[1]),
+              withSharedRatingRange(current, ratingDraft[0], ratingDraft[1]),
             );
-            setDraft(null);
+            setRatingDraft(null);
           }}
         >
           <Check size={16} />
@@ -291,7 +315,58 @@ export function CatalogUserFilters({
           type="button"
           className="catalog-filter-small-button"
           aria-label="Отменить изменение рейтинга"
-          onClick={() => setDraft(null)}
+          onClick={() => setRatingDraft(null)}
+        >
+          <X size={16} />
+        </button>
+      </div>
+    );
+
+  const renderRecentEditor = () =>
+    recentDraft && (
+      <div
+        className="catalog-filter-editor"
+        role="group"
+        aria-label="Фильтр по времени добавления"
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            setRecentDraft(null);
+          }
+        }}
+      >
+        <span>{recentlyAddedFilterLabel(recentDraft)}</span>
+        <RangeSlider
+          className="catalog-filter-slider"
+          value={recentlyAddedDayOptions.indexOf(recentDraft)}
+          min={0}
+          max={recentlyAddedDayOptions.length - 1}
+          step={1}
+          ariaLabel="Период недавнего добавления"
+          disabled={disabled}
+          onChange={(index) => setRecentDraft(recentlyAddedDayOptions[index]!)}
+        />
+        <button
+          type="button"
+          className="catalog-filter-small-button"
+          aria-label="Применить период недавнего добавления"
+          disabled={disabled}
+          onClick={() => {
+            if (!visible.includes("recent")) setOrder([...visible, "recent"]);
+            onChange((current) => ({
+              ...current,
+              recentlyAddedDays: recentDraft,
+            }));
+            setRecentDraft(null);
+          }}
+        >
+          <Check size={16} />
+        </button>
+        <button
+          type="button"
+          className="catalog-filter-small-button"
+          aria-label="Отменить изменение периода недавнего добавления"
+          onClick={() => setRecentDraft(null)}
         >
           <X size={16} />
         </button>
@@ -345,10 +420,16 @@ export function CatalogUserFilters({
       </div>
       <div className={`catalog-filter-items${disabled ? " is-disabled" : ""}`}>
         {visible.map((kind) => {
-          if (kind === "rating" && draft)
+          if (kind === "rating" && ratingDraft)
             return (
               <div className="catalog-filter-editor-slot" key={kind}>
                 {renderRatingEditor()}
+              </div>
+            );
+          if (kind === "recent" && recentDraft)
+            return (
+              <div className="catalog-filter-editor-slot" key={kind}>
+                {renderRecentEditor()}
               </div>
             );
           const { label, Icon } = filterDefinitions.find(
@@ -359,7 +440,7 @@ export function CatalogUserFilters({
           const title = error
             ? "Не удалось загрузить закладки. Нажмите, чтобы повторить"
             : kind === "recent"
-              ? "Только добавленные за последние 30 дней"
+              ? recentlyAddedFilterLabel(filter.recentlyAddedDays!)
               : label;
           const content = (
             <>
@@ -371,6 +452,8 @@ export function CatalogUserFilters({
               <span>
                 {kind === "rating"
                   ? ratingFilterLabel(minimum, maximum)
+                  : kind === "recent"
+                    ? recentlyAddedFilterLabel(filter.recentlyAddedDays!)
                   : label}
               </span>
             </>
@@ -382,18 +465,26 @@ export function CatalogUserFilters({
               data-filter={kind}
               title={title}
             >
-              {kind === "rating" || error ? (
+              {kind === "rating" || kind === "recent" || error ? (
                 <button
                   type="button"
                   className="catalog-filter-chip-label"
                   aria-label={
                     error
                       ? "Повторить загрузку закладок"
-                      : "Редактировать рейтинг"
+                      : kind === "rating"
+                        ? "Редактировать рейтинг"
+                        : "Редактировать период недавнего добавления"
                   }
-                  disabled={disabled || busy || Boolean(draft)}
+                  disabled={
+                    disabled || busy || Boolean(ratingDraft || recentDraft)
+                  }
                   onClick={() =>
-                    error ? onRetryBookmarks() : setDraft([minimum, maximum])
+                    error
+                      ? onRetryBookmarks()
+                      : kind === "rating"
+                        ? setRatingDraft([minimum, maximum])
+                        : setRecentDraft(filter.recentlyAddedDays!)
                   }
                 >
                   {content}
@@ -414,6 +505,7 @@ export function CatalogUserFilters({
           );
         })}
         {!visible.includes("rating") && renderRatingEditor()}
+        {!visible.includes("recent") && renderRecentEditor()}
         <button
           ref={trigger}
           type="button"
@@ -421,7 +513,9 @@ export function CatalogUserFilters({
           aria-label="Добавить фильтр"
           aria-haspopup="menu"
           aria-expanded={menuOpen}
-          disabled={disabled || Boolean(draft) || !addable.length}
+          disabled={
+            disabled || Boolean(ratingDraft || recentDraft) || !addable.length
+          }
           onClick={() => setMenuOpen((open) => !open)}
         >
           <Plus size={18} />
@@ -450,7 +544,7 @@ export function CatalogUserFilters({
                 }
                 title={
                   kind === "recent"
-                    ? "Только добавленные за последние 30 дней"
+                    ? "Выбрать период недавнего добавления"
                     : undefined
                 }
                 onClick={() => add(kind)}

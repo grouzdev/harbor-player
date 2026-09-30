@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { emptyFilter } from "../src/shared/contracts";
 import {
+  recentlyAddedDayOptions,
+  recentlyAddedFilterLabel,
   ratingFilterLabel,
   ratingRangeFromFilter,
   withSharedRatingRange,
@@ -48,4 +50,15 @@ describe("catalog user filters", () => {
       expect(ratingFilterLabel(minimum, maximum)).toBe(label);
     },
   );
+
+  it.each([
+    [1, "Добавлено 1 день назад"],
+    [3, "Добавлено 3 дня назад"],
+    [7, "Добавлено 7 дней назад"],
+    [14, "Добавлено 14 дней назад"],
+    [30, "Добавлено 30 дней назад"],
+  ] as const)("formats the %i-day recent filter label", (days, label) => {
+    expect(recentlyAddedDayOptions).toContain(days);
+    expect(recentlyAddedFilterLabel(days)).toBe(label);
+  });
 });

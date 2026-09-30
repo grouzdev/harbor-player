@@ -82,7 +82,7 @@ test("filter menu excludes active filters and restores removed filters", async (
   await expect(add).toBeDisabled();
   await page.getByRole("button", { name: "Применить рейтинг" }).click();
   await expect(page.locator(".catalog-filter-chip")).toHaveText([
-    "Недавние",
+    "Добавлено 1 день назад",
     "Не просмотрено",
     "Закладки",
     "Рейтинг: от 0 до 5",
@@ -145,6 +145,55 @@ test("rating draft does not change queries until applied and Escape cancels it",
     page.getByRole("button", { name: "Редактировать рейтинг" }),
   ).toHaveText("Рейтинг: от 3 до 4");
   expect(requests.at(-1)?.trackRatingMin).toBe(3);
+});
+
+test("recent draft uses a discrete period and applies only by confirmation", async ({
+  page,
+}) => {
+  const requests: CatalogFilter[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/tracks" && url.searchParams.has("filter"))
+      requests.push(JSON.parse(url.searchParams.get("filter")!));
+  });
+  await page.goto("/");
+  await expect.poll(() => requests.length).toBeGreaterThan(0);
+  await page
+    .getByRole("button", { name: "Добавить фильтр", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "Недавние", exact: true }).click();
+  const period = page.getByRole("slider", {
+    name: "Период недавнего добавления",
+    exact: true,
+  });
+  await expect(page.locator(".catalog-filter-editor")).toContainText(
+    "Добавлено 1 день назад",
+  );
+  await period.fill("3");
+  await expect(page.locator(".catalog-filter-editor")).toContainText(
+    "Добавлено 14 дней назад",
+  );
+  expect(requests.every((filter) => filter.recentlyAddedDays === null)).toBe(
+    true,
+  );
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".catalog-filter-editor")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Добавить фильтр", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "Недавние", exact: true }).click();
+  await period.fill("4");
+  await page
+    .getByRole("button", { name: "Применить период недавнего добавления" })
+    .click();
+  await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBe(30);
+  const recent = page.getByRole("button", {
+    name: "Редактировать период недавнего добавления",
+  });
+  await recent.click();
+  await period.fill("1");
+  await page.keyboard.press("Escape");
+  expect(requests.at(-1)?.recentlyAddedDays).toBe(30);
 });
 
 for (const theme of ["dark", "light"]) {

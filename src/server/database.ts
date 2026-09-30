@@ -181,7 +181,7 @@ export class Catalog {
       filter.artists.length > 0 ||
       filter.albumIds.length > 0 ||
       filter.bookmarksOnly ||
-      filter.recentlyAddedOnly;
+      Boolean(filter.recentlyAddedDays);
     const libraryMatch =
       search && !hasManualFilters
         ? "(search_key(l.name) LIKE ? ESCAPE '\\' OR search_key(l.path) LIKE ? ESCAPE '\\')"
@@ -669,9 +669,9 @@ export class Catalog {
         ))
       )`);
     }
-    if (filter.recentlyAddedOnly) {
+    if (filter.recentlyAddedDays) {
       const cutoff = new Date(
-        Date.now() - 30 * 24 * 60 * 60 * 1000,
+        Date.now() - filter.recentlyAddedDays * 24 * 60 * 60 * 1000,
       ).toISOString();
       if (personal === "album") {
         clauses.push(`EXISTS (

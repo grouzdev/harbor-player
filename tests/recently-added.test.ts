@@ -108,7 +108,7 @@ describe("recently added catalog filter", () => {
       "expired",
     );
 
-    const filter = { ...emptyFilter, recentlyAddedOnly: true };
+    const filter = { ...emptyFilter, recentlyAddedDays: 30 as const };
     expect(
       catalog
         .tracks(filter)
@@ -124,5 +124,35 @@ describe("recently added catalog filter", () => {
     expect(
       catalog.albums(filter).items.find((item) => item.id === "mixed"),
     ).toMatchObject({ trackCount: 2 });
+  });
+
+  it.each([
+    [1, 1],
+    [3, 2],
+    [7, 3],
+    [14, 4],
+    [30, 5],
+  ] as const)("uses the configured %i-day period", (days, expectedCount) => {
+    const library = catalog.addLibrary("Library", path.join(root, "music"));
+    const db = (catalog as unknown as { db: Database.Database }).db;
+    const setDate = db.prepare("UPDATE tracks SET firstIndexedAt=? WHERE id=?");
+    const entries = [
+      ["day-1", 0.5],
+      ["day-3", 2],
+      ["day-7", 6],
+      ["day-14", 13],
+      ["day-30", 29],
+    ] as const;
+    for (const [id, age] of entries) {
+      catalog.upsert(track(id, id, library.id));
+      setDate.run(
+        new Date(Date.now() - age * 24 * 60 * 60 * 1000).toISOString(),
+        id,
+      );
+    }
+
+    expect(
+      catalog.tracks({ ...emptyFilter, recentlyAddedDays: days }).total,
+    ).toBe(expectedCount);
   });
 });

@@ -149,7 +149,7 @@ test("topbar groups catalog controls in the requested order", async ({
   await addCatalogFilter(page, "Закладки");
   await addCatalogFilter(page, "Не просмотрено");
   await expect(page.locator(".catalog-filter-chip")).toHaveText([
-    "Недавние",
+    "Добавлено 1 день назад",
     "Закладки",
     "Не просмотрено",
   ]);
