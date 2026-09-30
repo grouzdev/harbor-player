@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Disc3, ListMusic, Music2, Search, UserRound, X } from "lucide-react";
+import {
+  DiscAlbum,
+  ListMusic,
+  Music2,
+  Search,
+  UserRound,
+  X,
+} from "lucide-react";
 import {
   emptyFilter,
   type Album,
@@ -417,7 +424,7 @@ export function QuickSearchDialog({
                       item.value.coverId ? (
                         <img src={`/api/covers/${item.value.coverId}`} alt="" />
                       ) : (
-                        <Disc3 size={20} />
+                        <DiscAlbum size={20} />
                       )
                     ) : item.kind === "artist" ? (
                       <UserRound size={20} />

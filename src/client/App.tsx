@@ -133,6 +133,7 @@ import {
 import { useAppShellLayout } from "./useAppShellLayout";
 import { useCatalogScrollTargets } from "./useCatalogScrollTargets";
 import { PlaylistPanel } from "./PlaylistPanel";
+import { IconToggle } from "./IconToggle";
 import type {
   Playlist,
   PlaylistDetail,
@@ -328,7 +329,7 @@ const panelDefinitions = [
   {
     id: "albums",
     label: "Альбомы",
-    Icon: Disc3,
+    Icon: DiscAlbum,
     weightIndex: 3,
     minimumWidth: 150,
     group: "catalog",
@@ -2975,23 +2976,18 @@ export function App() {
             <History size={21} />
           </button>
         )}
-        <button
-          type="button"
-          className={`icon-button cover-mode-toggle panel-visibility-button ${coverMode ? "is-active" : "is-hidden"}`}
-          aria-label={
-            coverMode ? "Вернуться в каталог" : "Открыть режим обложки"
-          }
-          aria-pressed={coverMode}
-          title={coverMode ? "Вернуться в каталог" : "Открыть режим обложки"}
-          disabled={!player.queue?.track}
-          onClick={() => {
-            if (!player.queue?.track) return;
+        <IconToggle
+          className="cover-mode-toggle"
+          checked={coverMode}
+          onCheckedChange={() => {
             setCoverSearch("");
             setCoverMode((current) => !current);
           }}
-        >
-          <DiscAlbum size={21} />
-        </button>
+          offLabel="Открыть режим обложки"
+          onLabel="Вернуться в каталог"
+          disabled={!player.queue?.track}
+          icon={<Disc3 size={21} />}
+        />
         <button
           type="button"
           className="icon-button fullscreen-button"
@@ -3253,7 +3249,7 @@ export function App() {
                 title="Закрыть панель «Альбомы»"
                 onClick={() => togglePanelVisibility("albums")}
               >
-                <Disc3 size={19} />
+                <DiscAlbum size={19} />
               </button>
               <h2>Альбомы</h2>
               <PanelSelectionIndicator

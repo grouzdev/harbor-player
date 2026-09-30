@@ -167,6 +167,49 @@ a {
 .icon-button.danger:hover:not(:disabled) {
   color: #efa795;
 }
+.icon-toggle {
+  position: relative;
+  width: 60px;
+  height: 36px;
+  padding: 3px;
+  border: 1px solid #ffffff1c;
+  border-radius: 999px;
+  background: #070a0c;
+  color: #d8dfda;
+  flex-shrink: 0;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.icon-toggle.is-on {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--accent) 18%, #070a0c);
+}
+.icon-toggle-thumb {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #2a3431;
+  box-shadow: 0 1px 4px #0008;
+  transition:
+    transform 0.15s,
+    color 0.15s,
+    background 0.15s;
+}
+.icon-toggle.is-on .icon-toggle-thumb {
+  transform: translateX(24px);
+  color: #27402f;
+  background: var(--accent);
+}
+.icon-toggle:hover:not(:disabled) {
+  border-color: #ffffff30;
+}
+.icon-toggle.is-on:hover:not(:disabled) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--accent) 24%, #070a0c);
+}
 .workspace {
   display: grid;
   grid-template-columns:

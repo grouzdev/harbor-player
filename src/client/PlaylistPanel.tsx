@@ -4,7 +4,7 @@ import {
   ChevronDown,
   ChevronRight,
   CircleUserRound,
-  Disc3,
+  DiscAlbum,
   Download,
   Drama,
   FolderOpen,
@@ -504,7 +504,7 @@ export function PlaylistPanel({
   const playlist = detail.data?.playlist;
   const entryIcons = {
     track: Music,
-    album: Disc3,
+    album: DiscAlbum,
     artist: CircleUserRound,
     genre: Drama,
     folder: FolderOpen,

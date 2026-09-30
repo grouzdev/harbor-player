@@ -6,7 +6,12 @@ import {
   type CSSProperties,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Bookmark as BookmarkIcon, Disc3, Play, Search } from "lucide-react";
+import {
+  Bookmark as BookmarkIcon,
+  DiscAlbum,
+  Play,
+  Search,
+} from "lucide-react";
 import type {
   Album,
   BookmarkKind,
@@ -519,7 +524,7 @@ export function AlbumGrid({
     >
       {!albums.length ? (
         <div className="empty-small">
-          <Disc3 size={30} />
+          <DiscAlbum size={30} />
           <p>{loading ? "Загружаем альбомы…" : "Альбомы не найдены"}</p>
         </div>
       ) : (

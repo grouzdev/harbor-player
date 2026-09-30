@@ -3165,7 +3165,25 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     )
     .toBeGreaterThan(0);
 
-  await page.locator(".cover-mode-toggle").click();
+  const coverModeToggle = page.locator(".cover-mode-toggle");
+  await expect(coverModeToggle).toHaveAttribute("aria-pressed", "false");
+  await expect(coverModeToggle).toHaveCSS("width", "60px");
+  await expect(coverModeToggle).toHaveCSS("height", "36px");
+  await expect(coverModeToggle.locator(".icon-toggle-thumb svg")).toBeVisible();
+  await expect(coverModeToggle.locator(".icon-toggle-thumb svg")).toHaveClass(
+    /lucide-disc-3/,
+  );
+  await expect(coverModeToggle.locator(".icon-toggle-thumb svg")).toHaveCSS(
+    "width",
+    "21px",
+  );
+  await coverModeToggle.click();
+  await expect(coverModeToggle).toHaveAttribute("aria-pressed", "true");
+  await expect(coverModeToggle.locator(".icon-toggle-thumb svg")).toBeVisible();
+  await expect(coverModeToggle.locator(".icon-toggle-thumb")).toHaveCSS(
+    "transform",
+    "matrix(1, 0, 0, 1, 24, 0)",
+  );
   const coverMode = page.getByRole("main", { name: "Режим обложки" });
   await expect(coverMode).toBeVisible();
   await expect(page.locator(".workspace")).toBeHidden();
