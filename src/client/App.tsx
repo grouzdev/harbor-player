@@ -2482,6 +2482,24 @@ export function App() {
     () => tracks.data?.pages.flatMap((p) => p.items) || [],
     [tracks.data],
   );
+  const canOpenCoverMode =
+    Boolean(player.queue?.track) || trackItems.length > 0;
+  const toggleCoverMode = useCallback(() => {
+    setCoverSearch("");
+    if (coverMode) {
+      setCoverMode(false);
+      return;
+    }
+    if (player.queue?.track) {
+      setCoverMode(true);
+      return;
+    }
+    const firstTrack = trackItems[0];
+    if (!firstTrack) return;
+    void player.show(firstTrack, filter).then((started) => {
+      if (started) setCoverMode(true);
+    });
+  }, [coverMode, filter, player, trackItems]);
   const total = tracks.data?.pages[0]?.total || 0;
   const albumTotal = albums.data?.pages[0]?.total || 0;
   const operationSelection: Selection = selected.size
@@ -3016,13 +3034,10 @@ export function App() {
         <IconToggle
           className="cover-mode-toggle"
           checked={coverMode}
-          onCheckedChange={() => {
-            setCoverSearch("");
-            setCoverMode((current) => !current);
-          }}
+          onCheckedChange={toggleCoverMode}
           offLabel="Открыть режим обложки"
           onLabel="Вернуться в каталог"
-          disabled={!player.queue?.track}
+          disabled={!coverMode && !canOpenCoverMode}
           icon={<Disc3 size={21} />}
         />
         <button
@@ -3520,11 +3535,8 @@ export function App() {
           void navigateFromPlayer("artist", artist)
         }
         coverMode={coverMode}
-        onToggleCoverMode={() => {
-          if (!player.queue?.track) return;
-          setCoverSearch("");
-          setCoverMode((current) => !current);
-        }}
+        onToggleCoverMode={toggleCoverMode}
+        coverModeAvailable={canOpenCoverMode}
         onUserStateChange={changeUserState}
         pendingUserStateKeys={pendingUserStateKeys}
       />

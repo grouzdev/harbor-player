@@ -103,12 +103,13 @@ export function usePlayer(notify: (message: string) => void) {
       | { filter: CatalogFilter; startId?: string }
       | { albumId: string; startId?: string }
       | { playlistId: string; startId?: string },
+    play = true,
   ) => {
     const sequence = ++transition.current;
     try {
       const q = await api<Queue>("/queue", body);
       if (sequence !== transition.current) return false;
-      shouldPlay.current = true;
+      shouldPlay.current = play;
       seekAfterLoad.current = 0;
       setQueue(q);
       if (q.truncated && q.sourceTotal)
@@ -123,6 +124,8 @@ export function usePlayer(notify: (message: string) => void) {
   };
   const start = (track: Track, filter: CatalogFilter) =>
     loadQueue({ filter, startId: track.id });
+  const show = (track: Track, filter: CatalogFilter) =>
+    loadQueue({ filter, startId: track.id }, false);
   const startFilter = (filter: CatalogFilter, startId?: string) =>
     loadQueue({ filter, startId });
   const startAlbum = (albumId: string, startId?: string) =>
@@ -288,6 +291,7 @@ export function usePlayer(notify: (message: string) => void) {
     audioElement,
     events,
     start,
+    show,
     startFilter,
     startAlbum,
     startPlaylist,
@@ -312,6 +316,7 @@ export function Player({
   onNavigateToArtist,
   coverMode,
   onToggleCoverMode,
+  coverModeAvailable,
   onUserStateChange,
   pendingUserStateKeys,
 }: {
@@ -320,6 +325,7 @@ export function Player({
   onNavigateToArtist: (artist: string) => void;
   coverMode: boolean;
   onToggleCoverMode: () => void;
+  coverModeAvailable: boolean;
   onUserStateChange: UserStateChange;
   pendingUserStateKeys: Set<string>;
 }) {
@@ -339,7 +345,7 @@ export function Player({
             coverMode ? "Вернуться в каталог" : "Открыть режим обложки"
           }
           aria-pressed={coverMode}
-          disabled={!track}
+          disabled={!coverMode && !coverModeAvailable}
           title={coverMode ? "Вернуться в каталог" : "Открыть режим обложки"}
           onClick={onToggleCoverMode}
         >

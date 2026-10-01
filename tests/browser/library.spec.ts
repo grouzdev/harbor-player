@@ -3141,6 +3141,16 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   await expect
     .poll(() => page.getByTestId("track-row").count(), { timeout: 20_000 })
     .toBeGreaterThan(0);
+  const coverModeToggle = page.locator(".cover-mode-toggle");
+  await expect(coverModeToggle).toBeEnabled();
+  await coverModeToggle.click();
+  const coverMode = page.getByRole("main", { name: "Режим обложки" });
+  await expect(coverMode).toBeVisible();
+  await expect(coverMode.getByRole("heading", { level: 1 })).toContainText(
+    "Первый трек",
+  );
+  await coverModeToggle.click();
+  await expect(coverMode).toBeHidden();
   await page.getByTestId("track-row").first().dblclick();
   await expect
     .poll(() =>
@@ -3197,7 +3207,6 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     )
     .toBeGreaterThan(0);
 
-  const coverModeToggle = page.locator(".cover-mode-toggle");
   await expect(coverModeToggle).toHaveAttribute("aria-pressed", "false");
   await expect(coverModeToggle).toHaveCSS("width", "60px");
   await expect(coverModeToggle).toHaveCSS("height", "36px");
@@ -3255,7 +3264,6 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     "transform",
     "matrix(1, 0, 0, 1, 24, 0)",
   );
-  const coverMode = page.getByRole("main", { name: "Режим обложки" });
   await expect(coverMode).toBeVisible();
   await expect(page.locator(".workspace")).toBeHidden();
   await expect(page.locator(".app-shell")).toHaveClass(/app-shell--cover-mode/);
