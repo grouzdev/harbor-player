@@ -1,10 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   mkdir,
   mkdtemp,
   readFile,
   rm,
   stat,
+  copyFile,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
@@ -26,6 +28,96 @@ afterEach(async () => {
 });
 
 describe("playlist folder sync", () => {
+  async function autoSyncPlaylistFor(
+    name: string,
+    trackId: string,
+  ): Promise<string> {
+    const playlist = service.catalog.createPlaylist(name).playlist;
+    service.catalog.addPlaylistEntries(playlist.id, "track", [trackId]);
+    service.catalog.updatePlaylistSyncSettings(playlist.id, {
+      targetPath: path.join(root, name),
+      templateId: "default-album-artist",
+      autoSync: true,
+    });
+    return playlist.id;
+  }
+
+  async function scannedTrack(source: string) {
+    const sourceRoot = path.dirname(path.dirname(path.dirname(source)));
+    await mkdir(path.dirname(source), { recursive: true });
+    await copyFile(path.resolve(".fixtures", "sample.flac"), source);
+    const library = service.catalog.addLibrary("Music", sourceRoot);
+    service.scan(library.id);
+    await service.idle();
+    return { library, track: service.catalog.knownTracks()[0]! };
+  }
+
+  it("does not queue auto-sync after an unchanged scan", async () => {
+    const source = path.join(root, "music", "Artist", "Album", "song.flac");
+    const { library, track } = await scannedTrack(source);
+    await autoSyncPlaylistFor("Device", track.id);
+    const schedule = vi.spyOn(service, "schedulePlaylistSync");
+
+    service.scan(library.id);
+    await service.idle();
+
+    expect(schedule).not.toHaveBeenCalled();
+  });
+
+  it("queues only auto-sync playlists affected by a scan", async () => {
+    const source = path.join(root, "music", "Artist", "Album", "song.flac");
+    const { library, track } = await scannedTrack(source);
+    const affectedId = await autoSyncPlaylistFor("Affected", track.id);
+    const unrelated = service.catalog.createPlaylist("Unrelated").playlist;
+    service.catalog.updatePlaylistSyncSettings(unrelated.id, {
+      targetPath: path.join(root, "Unrelated"),
+      templateId: "default-album-artist",
+      autoSync: true,
+    });
+    const schedule = vi.spyOn(service, "schedulePlaylistSync");
+
+    const changedAt = new Date(Date.now() + 2_000);
+    await utimes(source, changedAt, changedAt);
+    service.scan(library.id);
+    await service.idle();
+
+    expect(schedule).toHaveBeenCalledTimes(1);
+    expect(schedule).toHaveBeenCalledWith(affectedId);
+  });
+
+  it("queues only affected auto-sync playlists after disconnecting a library", async () => {
+    const source = path.join(root, "music", "Artist", "Album", "song.flac");
+    const { library, track } = await scannedTrack(source);
+    const affectedId = await autoSyncPlaylistFor("Affected", track.id);
+    const unrelated = service.catalog.createPlaylist("Unrelated").playlist;
+    service.catalog.updatePlaylistSyncSettings(unrelated.id, {
+      targetPath: path.join(root, "Unrelated"),
+      templateId: "default-album-artist",
+      autoSync: true,
+    });
+    const schedule = vi.spyOn(service, "schedulePlaylistSync");
+
+    service.removeLibrary(library.id);
+    await service.idle();
+
+    expect(schedule).toHaveBeenCalledTimes(1);
+    expect(schedule).toHaveBeenCalledWith(affectedId);
+  });
+
+  it("does not queue auto-sync solely because the service starts", async () => {
+    const playlist = service.catalog.createPlaylist("Device").playlist;
+    service.catalog.updatePlaylistSyncSettings(playlist.id, {
+      targetPath: path.join(root, "Device"),
+      templateId: "default-album-artist",
+      autoSync: true,
+    });
+    const schedule = vi.spyOn(service, "schedulePlaylistSync");
+
+    await service.initialize();
+
+    expect(schedule).not.toHaveBeenCalled();
+  });
+
   it("copies incrementally and removes only manifest-owned files", async () => {
     const sourceRoot = path.join(root, "music");
     const source = path.join(sourceRoot, "Artist", "Album", "song.flac");

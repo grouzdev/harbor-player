@@ -33,11 +33,12 @@ export class LibraryScanner {
     job: Job,
     force: boolean,
     publishProgress: () => void,
-  ): Promise<void> {
+  ): Promise<Set<string>> {
     await this.refreshAvailability();
     const library = this.catalog.library(libraryId);
     if (!library.available) throw new Error("Папка библиотеки недоступна");
     const scanId = job.id;
+    const changedTrackIds = new Set<string>();
     const directories = [library.path];
     let traversalComplete = true;
     const processFile = async (file: string) => {
@@ -79,6 +80,7 @@ export class LibraryScanner {
             );
           }
           this.catalog.upsert(track, scanId);
+          changedTrackIds.add(track.id);
         }
       } catch (error) {
         if (old) this.catalog.markTrackScanned(old.id, scanId);
@@ -120,7 +122,13 @@ export class LibraryScanner {
     }
     const completedAt = new Date().toISOString();
     if (traversalComplete)
-      this.catalog.finishScan(libraryId, scanId, completedAt);
+      for (const trackId of this.catalog.finishScan(
+        libraryId,
+        scanId,
+        completedAt,
+      ))
+        changedTrackIds.add(trackId);
     else this.catalog.markLibraryScanned(libraryId, completedAt);
+    return changedTrackIds;
   }
 }

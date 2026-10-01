@@ -155,8 +155,6 @@ export class MusicService extends EventEmitter {
       () => void this.maintainRecovery(),
       60 * 60 * 1000,
     );
-    for (const playlistId of this.catalog.autoSyncPlaylistIds())
-      this.schedulePlaylistSync(playlistId);
     try {
       const report = JSON.parse(
         await readFile(
@@ -290,11 +288,19 @@ export class MusicService extends EventEmitter {
   }
   removeLibrary(libraryId: string): Job {
     const library = this.catalog.library(libraryId);
+    const before = this.autoSyncPlaylistTrackIds();
+    const changedTrackIds = new Set(
+      this.catalog
+        .knownTracks()
+        .filter((track) => track.libraryId === libraryId)
+        .map((track) => track.id),
+    );
     return this.enqueue(
       "library",
       `Отключение библиотеки: ${library.name}`,
       async () => {
         this.catalog.removeLibrary(libraryId);
+        this.scheduleAutoSyncForChangedTracks(changedTrackIds, before);
       },
     );
   }
@@ -345,11 +351,40 @@ export class MusicService extends EventEmitter {
       }
       this.publish(job);
       this.publishEvent({ type: "catalog" });
-      if (job.kind !== "playlist-sync")
-        for (const playlistId of this.catalog.autoSyncPlaylistIds())
-          this.schedulePlaylistSync(playlistId);
     });
     return job;
+  }
+  private autoSyncPlaylistTrackIds(): Map<string, Set<string>> {
+    return new Map(
+      this.catalog
+        .autoSyncPlaylistIds()
+        .map((playlistId) => [
+          playlistId,
+          new Set(
+            this.catalog
+              .playlistTracks(playlistId, 0, 100000)
+              .items.map(({ track }) => track.id),
+          ),
+        ]),
+    );
+  }
+  private scheduleAutoSyncForChangedTracks(
+    changedTrackIds: Set<string>,
+    before: Map<string, Set<string>>,
+  ): void {
+    if (!changedTrackIds.size) return;
+    const after = this.autoSyncPlaylistTrackIds();
+    const playlistIds = new Set([...before.keys(), ...after.keys()]);
+    for (const playlistId of playlistIds) {
+      const beforeTracks = before.get(playlistId) || new Set<string>();
+      const afterTracks = after.get(playlistId) || new Set<string>();
+      if (
+        [...changedTrackIds].some(
+          (trackId) => beforeTracks.has(trackId) || afterTracks.has(trackId),
+        )
+      )
+        this.schedulePlaylistSync(playlistId);
+    }
   }
   scan(libraryId: string, force = false): Job {
     const existing = this.catalog
@@ -363,8 +398,16 @@ export class MusicService extends EventEmitter {
     return this.enqueue(
       "scan",
       `Сканирование: ${this.catalog.library(libraryId).name}`,
-      (job) =>
-        this.scanner.scan(libraryId, job, force, () => this.publish(job)),
+      async (job) => {
+        const before = this.autoSyncPlaylistTrackIds();
+        const changedTrackIds = await this.scanner.scan(
+          libraryId,
+          job,
+          force,
+          () => this.publish(job),
+        );
+        this.scheduleAutoSyncForChangedTracks(changedTrackIds, before);
+      },
     );
   }
   scanAll(force = false): Job[] {
@@ -968,6 +1011,8 @@ export class MusicService extends EventEmitter {
             restore: "Восстановление",
           }[op.kind],
       async (job) => {
+        const before = this.autoSyncPlaylistTrackIds();
+        const changedTrackIds = new Set<string>();
         try {
           job.total = op.items.length;
           const ids = op.items.filter((i) => i.trackId).map((i) => i.trackId!);
@@ -997,6 +1042,7 @@ export class MusicService extends EventEmitter {
                 continue;
               }
               await this.applyItem(op, item);
+              if (item.trackId) changedTrackIds.add(item.trackId);
               item.phase = "done";
               item.error = undefined;
             } catch (e) {
@@ -1010,6 +1056,7 @@ export class MusicService extends EventEmitter {
           }
           op.status = "done";
           this.catalog.saveOperation(op);
+          this.scheduleAutoSyncForChangedTracks(changedTrackIds, before);
         } finally {
           this.active.delete(id);
           this.publishEvent({ type: "operation-finished", operationId: id });

@@ -54,7 +54,8 @@ const checkedFolderPath = (relativePath: string) => {
   if (
     path.isAbsolute(relativePath) ||
     (relativePath !== "" &&
-      (relativePath === "." || path.normalize(relativePath) !== relativePath)) ||
+      (relativePath === "." ||
+        path.normalize(relativePath) !== relativePath)) ||
     relativePath.split(path.sep).includes("..")
   )
     throw badRequest("Некорректный путь папки");
@@ -362,8 +363,13 @@ export class Catalog {
       .prepare("UPDATE tracks SET scanId=?,available=? WHERE id=?")
       .run(scanId, Number(available), id);
   }
-  finishScan(libraryId: string, scanId: string, completedAt: string): void {
-    this.db.transaction(() => {
+  finishScan(libraryId: string, scanId: string, completedAt: string): string[] {
+    return this.db.transaction(() => {
+      const unavailable = this.db
+        .prepare(
+          "SELECT id FROM tracks WHERE libraryId=? AND available=1 AND (scanId IS NULL OR scanId<>?)",
+        )
+        .all(libraryId, scanId) as { id: string }[];
       this.db
         .prepare(
           "UPDATE tracks SET available=0 WHERE libraryId=? AND (scanId IS NULL OR scanId<>?)",
@@ -372,6 +378,7 @@ export class Catalog {
       this.db
         .prepare("UPDATE libraries SET lastScan=? WHERE id=?")
         .run(completedAt, libraryId);
+      return unavailable.map((track) => track.id);
     })();
   }
   markLibraryScanned(libraryId: string, completedAt: string): void {
@@ -738,7 +745,8 @@ export class Catalog {
           AND rated.available=1
           AND state.rating IS NOT NULL
       )`);
-    if (unratedParts.length) ratingParts.push(`(${unratedParts.join(" AND ")})`);
+    if (unratedParts.length)
+      ratingParts.push(`(${unratedParts.join(" AND ")})`);
     if (ratingParts.length) clauses.push(`(${ratingParts.join(" OR ")})`);
     if (filter.albumViewed === "viewed")
       clauses.push(
