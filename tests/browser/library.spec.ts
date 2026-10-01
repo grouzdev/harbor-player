@@ -58,7 +58,11 @@ test("a dialog without text fields keeps focus off its close button", async ({
 }) => {
   await page.goto("/");
   const dialog = page.locator("dialog");
-  await page.getByRole("button", { name: "Журнал операций" }).click();
+  await page.getByRole("button", { name: "Открыть настройки" }).click();
+  await page
+    .getByRole("dialog", { name: /Настройки/ })
+    .getByRole("button", { name: "История", exact: true })
+    .click();
 
   await expect(dialog).toBeFocused();
   await expect(dialog).toHaveCSS("outline-style", "none");
@@ -68,7 +72,7 @@ test("a dialog without text fields keeps focus off its close button", async ({
 
 test("icon buttons keep their geometry on hover", async ({ page }) => {
   await page.goto("/");
-  const button = page.getByRole("button", { name: "Журнал операций" });
+  const button = page.getByRole("button", { name: "Открыть настройки" });
   const before = await button.boundingBox();
 
   await button.hover();
@@ -80,7 +84,7 @@ test("icon buttons keep their geometry on hover", async ({ page }) => {
   expect(after!.height).toBeCloseTo(before!.height, 5);
 });
 
-test("topbar keeps the decorative Harbor engraving centered", async ({ page }) => {
+test("topbar keeps the settings logo centered", async ({ page }) => {
   await page.goto("/");
 
   const topbar = page.locator(".topbar");
@@ -94,7 +98,7 @@ test("topbar keeps the decorative Harbor engraving centered", async ({ page }) =
   expect(
     Math.abs(brandBox.y + brandBox.height / 2 - (topbarBox.y + topbarBox.height / 2)),
   ).toBeLessThanOrEqual(1);
-  await expect(brand).toHaveCSS("pointer-events", "none");
+  await expect(brand).toHaveAttribute("aria-label", "Открыть настройки");
 });
 
 test("topbar groups catalog controls in the requested order", async ({
@@ -126,8 +130,6 @@ test("topbar groups catalog controls in the requested order", async ({
     1,
   );
   const rightControls = [
-    page.getByRole("button", { name: "Открыть настройки", exact: true }),
-    page.getByRole("button", { name: "Журнал операций", exact: true }),
     page
       .locator(".topbar")
       .getByRole("button", { name: "Открыть режим обложки", exact: true }),
@@ -2980,7 +2982,11 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     .dispatchEvent("click");
   await expect(rows).toHaveCount(0);
   await page
-    .getByRole("button", { name: "Журнал операций", exact: true })
+    .getByRole("button", { name: "Открыть настройки" })
+    .dispatchEvent("click");
+  await page
+    .getByRole("dialog", { name: /Настройки/ })
+    .getByRole("button", { name: "История", exact: true })
     .dispatchEvent("click");
   await expect(
     page
@@ -3264,8 +3270,8 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     page.getByRole("button", { name: "Добавить фильтр", exact: true }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Журнал операций" }),
-  ).toHaveCount(0);
+    page.getByRole("button", { name: "Открыть настройки" }),
+  ).toHaveCount(1);
   await expect(page.locator(".cover-mode-toggle")).toBeVisible();
   await expect(coverMode).toHaveCSS("background-image", /linear-gradient/);
   await expect(coverMode.getByRole("heading", { level: 1 })).toContainText(

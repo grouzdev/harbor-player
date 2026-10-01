@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { ImagePlus, MonitorCog, RefreshCw, Trash2 } from "lucide-react";
+import {
+  History,
+  ImagePlus,
+  MonitorCog,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import type { AppearanceSettings } from "./appearance";
 import { autoScanIntervals, type ScanSettings } from "../shared/scan-settings";
 import { api } from "./api";
@@ -58,6 +64,7 @@ export function AppearanceSettingsDialog({
   onScanSettingsChange,
   onScanAll,
   scanInProgress,
+  onOpenHistory,
   onClose,
 }: {
   settings: AppearanceSettings;
@@ -66,6 +73,7 @@ export function AppearanceSettingsDialog({
   onScanSettingsChange: (settings: ScanSettings) => void;
   onScanAll: (force: boolean) => Promise<void>;
   scanInProgress: boolean;
+  onOpenHistory: () => void;
   onClose: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -370,6 +378,16 @@ export function AppearanceSettingsDialog({
               </button>
             )}
           </div>
+        </div>
+        <div className="appearance-section" aria-label="История">
+          <h3>История</h3>
+          <button
+            type="button"
+            className="button secondary"
+            onClick={onOpenHistory}
+          >
+            <History size={17} /> История
+          </button>
         </div>
         <footer className="appearance-build-info">
           <span>

@@ -30,8 +30,6 @@ import {
   Drama,
   FolderOpen,
   FolderInput,
-  History,
-  Settings,
   Maximize2,
   Minimize2,
   Music,
@@ -2939,7 +2937,13 @@ export function App() {
         onPointerDown={beginFullscreenWindowMove}
         onDoubleClick={toggleFullscreenWindowSize}
       >
-        <span className="topbar-brand" aria-hidden="true" />
+        <button
+          type="button"
+          className="topbar-brand"
+          aria-label="Открыть настройки"
+          title="Настройки"
+          onClick={() => setModal("settings")}
+        />
         {!coverMode && (
           <CatalogUserFilters
             filter={savedFilter}
@@ -3008,25 +3012,6 @@ export function App() {
               />
             )}
           </div>
-        )}
-        <button
-          type="button"
-          className="icon-button settings-button"
-          aria-label="Открыть настройки"
-          title="Настройки"
-          onClick={() => setModal("settings")}
-        >
-          <Settings size={20} />
-        </button>
-        {!coverMode && (
-          <button
-            className="icon-button history-button"
-            aria-label="Журнал операций"
-            title="Журнал операций"
-            onClick={() => setModal("history")}
-          >
-            <History size={21} />
-          </button>
         )}
         <IconToggle
           className="cover-mode-toggle"
@@ -3692,6 +3677,7 @@ export function App() {
               refresh();
             }}
             scanInProgress={activeJobs.some((job) => job.kind === "scan")}
+            onOpenHistory={() => setModal("history")}
             onClose={() => setModal(null)}
           />
         </Suspense>

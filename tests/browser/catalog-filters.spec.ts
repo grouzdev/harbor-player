@@ -248,12 +248,12 @@ for (const theme of ["dark", "light"]) {
     for (const width of [1600, 800, 600]) {
       await page.setViewportSize({ width, height: 900 });
       const bounds = await page.locator(".catalog-user-filters").boundingBox();
-      const settings = await page
-        .getByRole("button", { name: "Открыть настройки", exact: true })
+      const coverModeToggle = await page
+        .getByRole("button", { name: "Открыть режим обложки", exact: true })
         .boundingBox();
-      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(settings!.x);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(coverModeToggle!.x);
       const editor = await page.locator(".catalog-filter-editor").boundingBox();
-      expect(editor!.x + editor!.width).toBeLessThanOrEqual(settings!.x);
+      expect(editor!.x + editor!.width).toBeLessThanOrEqual(coverModeToggle!.x);
       const fullscreen = await page
         .getByRole("button", { name: "Развернуть окно на весь экран" })
         .boundingBox();
