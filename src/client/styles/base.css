@@ -3830,7 +3830,8 @@ select {
 .genres-panel,
 .artists-panel,
 .albums-panel,
-.tracks-panel {
+.tracks-panel,
+.settings-panel {
   background:
     var(--fine-noise) 0 0 / 180px 180px repeat,
     #181917;

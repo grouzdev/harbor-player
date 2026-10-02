@@ -1,6 +1,11 @@
 import { beforeEach, afterEach, describe, it, expect, vi } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import sharp from "sharp";
+import {
+  MAX_BACKGROUND_IMAGE_BYTES,
+  MAX_BACKGROUND_IMAGE_BASE64_LENGTH,
+} from "../src/shared/appearance-background.js";
 import { createApp, rangeFor } from "../dist/server/app.js";
 import { apiResponseContract } from "../src/shared/api-contracts.js";
 import {
@@ -23,6 +28,120 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 describe("HTTP boundary", () => {
+  it("accepts numeric presets, rejects invalid values, and clears selection without image uploads", async () => {
+    const session = await context.app.inject({
+      url: "/api/session",
+      headers: { host: "127.0.0.1:4317" },
+    });
+    const headers = {
+      host: "127.0.0.1:4317",
+      cookie: String(session.headers["set-cookie"]).split(";")[0],
+      "x-csrf-token": session.json().csrf,
+    };
+    const settings = {
+      theme: "dark",
+      accent: "#b8bd82",
+      backgroundRevision: 0,
+    };
+    const save = (payload: object) =>
+      context.app.inject({
+        method: "POST",
+        url: "/api/appearance",
+        headers,
+        payload,
+      });
+    for (const backgroundPreset of [1, 2, 3, 4, 5]) {
+      const response = await save({ ...settings, backgroundPreset });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ ...settings, backgroundPreset });
+      const read = await context.app.inject({
+        url: "/api/appearance",
+        headers,
+      });
+      expect(read.json()).toEqual(response.json());
+    }
+    for (const backgroundPreset of [0, 6, 1.5, "1", null]) {
+      expect((await save({ ...settings, backgroundPreset })).statusCode).toBe(
+        400,
+      );
+    }
+    expect((await save(settings)).json()).toEqual(settings);
+    await save({ ...settings, backgroundPreset: 3 });
+    const image = await sharp({
+      create: { width: 2, height: 2, channels: 3, background: "#d04030" },
+    })
+      .png()
+      .toBuffer();
+    const imported = await context.app.inject({
+      method: "POST",
+      url: "/api/appearance/background",
+      headers,
+      payload: {
+        data: image.toString("base64"),
+        theme: settings.theme,
+        accent: settings.accent,
+      },
+    });
+    expect(imported.statusCode).toBe(200);
+    expect(imported.json()).toEqual({ ...settings, backgroundRevision: 1 });
+    expect((await save(settings)).json()).toEqual(settings);
+  });
+
+  it("bounds background uploads independently of other request bodies", async () => {
+    const session = await context.app.inject({
+      url: "/api/session",
+      headers: { host: "127.0.0.1:4317" },
+    });
+    const headers = {
+      host: "127.0.0.1:4317",
+      cookie: String(session.headers["set-cookie"]).split(";")[0],
+      "x-csrf-token": session.json().csrf,
+    };
+    const image = await sharp({
+      create: { width: 8, height: 5, channels: 3, background: "#d04030" },
+    })
+      .png()
+      .toBuffer();
+    const data = Buffer.concat([
+      image,
+      Buffer.alloc(13 * 1024 * 1024),
+    ]).toString("base64");
+    const upload = (data: string) =>
+      context.app.inject({
+        method: "POST",
+        url: "/api/appearance/background",
+        headers,
+        payload: { data, theme: "dark", accent: "#b8bd82" },
+      });
+    expect((await upload(data)).statusCode).toBe(200);
+    // A one-byte overflow can still fit the base64 length cap.
+    expect(
+      (
+        await upload(
+          Buffer.alloc(MAX_BACKGROUND_IMAGE_BYTES + 1).toString("base64"),
+        )
+      ).statusCode,
+    ).toBe(400);
+    expect(
+      (await upload("A".repeat(MAX_BACKGROUND_IMAGE_BASE64_LENGTH + 4)))
+        .statusCode,
+    ).toBe(400);
+    expect(
+      (await upload("A".repeat(MAX_BACKGROUND_IMAGE_BASE64_LENGTH + 64 * 1024)))
+        .statusCode,
+    ).toBe(413);
+    expect(
+      (
+        await context.app.inject({
+          method: "POST",
+          url: "/api/appearance",
+          headers,
+          payload: { data },
+        })
+      ).statusCode,
+    ).toBe(413);
+  });
+
   it("validates successful JSON responses through their shared contract", async () => {
     const response = await context.app.inject({
       url: "/api/session",

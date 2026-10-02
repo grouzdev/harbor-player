@@ -1,11 +1,13 @@
 export type AppearanceTheme = "dark" | "light";
 
 import { readMigratedStorageValue } from "./storage";
+import { backgroundPresets } from "./background-presets";
 
 export type AppearanceSettings = {
   theme: AppearanceTheme;
   accent: string;
   backgroundRevision: number;
+  backgroundPreset?: number;
 };
 
 export const defaultAppearance: AppearanceSettings = {
@@ -33,6 +35,11 @@ export function normalizeAppearance(value: unknown): AppearanceSettings {
       (candidate.backgroundRevision || 0) >= 0
         ? candidate.backgroundRevision!
         : 0,
+    ...(Number.isInteger(candidate.backgroundPreset) &&
+    candidate.backgroundPreset! >= 1 &&
+    candidate.backgroundPreset! <= 5
+      ? { backgroundPreset: candidate.backgroundPreset }
+      : {}),
   };
 }
 
@@ -64,6 +71,18 @@ export function applyAppearance(settings: AppearanceSettings) {
       "--appearance-background",
       `url("/api/appearance/background?v=${normalized.backgroundRevision}")`,
     );
+  } else if (normalized.backgroundPreset) {
+    const preset = backgroundPresets.find(
+      (preset) => preset.number === normalized.backgroundPreset,
+    );
+    if (preset) {
+      document.documentElement.style.setProperty(
+        "--appearance-background",
+        `url("${preset.url}")`,
+      );
+    } else {
+      document.documentElement.style.removeProperty("--appearance-background");
+    }
   } else {
     document.documentElement.style.removeProperty("--appearance-background");
   }

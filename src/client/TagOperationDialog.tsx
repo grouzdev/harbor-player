@@ -40,6 +40,7 @@ import {
 import { AutocompleteInput } from "./AutocompleteInput";
 import { Modal } from "./Modal";
 import { activateDialogPrimaryOnEnter } from "./dialog-keyboard";
+import "./styles/history-panel.css";
 
 function genreSegment(value: string, caret: number) {
   const start = value.lastIndexOf(";", caret - 1) + 1;
@@ -904,14 +905,17 @@ function effectivePreviewPatch(
 }
 
 export function HistoryDialog({
+  embedded = false,
   onClose,
   onPreview,
   onOperationStarted,
 }: {
-  onClose: () => void;
   onPreview: (preview: OperationPreview) => void;
   onOperationStarted: (id: string, job?: Job) => void;
-}) {
+} & (
+  | { embedded: true; onClose?: never }
+  | { embedded?: false; onClose: () => void }
+)) {
   const history = useQuery({
     queryKey: ["history"],
     queryFn: () => api<OperationSummary[]>("/operations"),
@@ -919,14 +923,12 @@ export function HistoryDialog({
   });
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const [details, setDetails] = useState<OperationPreview | null>(null);
-  return (
-    <Modal
-      wide
-      title="Журнал операций"
-      subtitle="История изменений и доступное восстановление файлов"
-      onClose={onClose}
-    >
+  const [details, setDetails] = useState<{
+    operationId: string;
+    preview: OperationPreview;
+  } | null>(null);
+  const content = (
+    <>
       {history.data?.some(
         (operation) =>
           operation.status === "done" &&
@@ -995,17 +997,30 @@ export function HistoryDialog({
             <div className="history-actions">
               <button
                 className="text-button"
+                disabled={!!busy}
+                aria-expanded={details?.operationId === op.id}
                 onClick={async () => {
+                  if (details?.operationId === op.id) {
+                    setDetails(null);
+                    return;
+                  }
+                  setBusy(op.id);
+                  setError("");
                   try {
-                    setDetails(
-                      await api<OperationPreview>(`/operations/${op.id}`),
+                    const preview = await api<OperationPreview>(
+                      `/operations/${op.id}`,
                     );
+                    setDetails({ operationId: op.id, preview });
                   } catch (e) {
                     setError((e as Error).message);
+                  } finally {
+                    setBusy("");
                   }
                 }}
               >
-                Подробнее
+                {details?.operationId === op.id
+                  ? "Скрыть подробности"
+                  : "Подробнее"}
               </button>
               {["trash", "tags"].includes(op.kind) &&
                 op.recoverable !== false &&
@@ -1032,7 +1047,7 @@ export function HistoryDialog({
                   </button>
                 )}
               {(op.status === "interrupted" ||
-                (op.errors.length && op.completed < op.total)) && (
+                (op.errors.length > 0 && op.completed < op.total)) && (
                 <button
                   className="text-button"
                   disabled={!!busy}
@@ -1072,33 +1087,55 @@ export function HistoryDialog({
                 </button>
               )}
             </div>
+            {details?.operationId === op.id && (
+              <div className="history-details">
+                <strong>Результаты по файлам</strong>
+                <div>
+                  {details.preview.items.map((i) => (
+                    <p key={i.id} className={i.error ? "error-text" : ""}>
+                      {i.title}:{" "}
+                      {i.error || (i.phase === "done" ? "готово" : i.phase)}
+                      <small>
+                        {i.source} → {i.destination}
+                      </small>
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
           </article>
         ))}
       </div>
-      {details && (
-        <div className="history-details">
-          <strong>Результаты по файлам</strong>
-          <div>
-            {details.items.map((i) => (
-              <p key={i.id} className={i.error ? "error-text" : ""}>
-                {i.title}:{" "}
-                {i.error || (i.phase === "done" ? "готово" : i.phase)}
-                <small>
-                  {i.source} → {i.destination}
-                </small>
-              </p>
-            ))}
-          </div>
-          <button className="text-button" onClick={() => setDetails(null)}>
-            Скрыть
-          </button>
-        </div>
-      )}
       {(error || history.error) && (
         <p className="error-text" role="alert">
           {error || history.error?.message}
         </p>
       )}
+    </>
+  );
+  if (embedded) {
+    return (
+      <section
+        className="settings-panel history-panel"
+        aria-label="История действий"
+      >
+        <header className="panel-heading settings-panel-heading">
+          <History size={20} aria-hidden="true" />
+          <h2>История действий</h2>
+          <span className="history-count">{history.data?.length ?? 0}</span>
+        </header>
+        <div className="settings-panel-body history-panel-body">{content}</div>
+      </section>
+    );
+  }
+  return (
+    <Modal
+      wide
+      title="Журнал операций"
+      subtitle="История изменений и доступное восстановление файлов"
+      onClose={onClose!}
+    >
+      {content}
     </Modal>
   );
 }

@@ -2,6 +2,162 @@
   display: grid;
   gap: 24px;
 }
+.settings-panel-body.appearance-settings {
+  display: block;
+}
+.settings-panel .appearance-section + .appearance-section {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.settings-control-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: var(--type-caption);
+}
+.settings-control-row select {
+  width: 155px;
+  flex-shrink: 0;
+  padding: 10px 8px;
+}
+.settings-scan-actions {
+  display: grid;
+  gap: 8px;
+}
+.settings-scan-actions .button {
+  justify-content: flex-start;
+}
+.settings-background-presets {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+.settings-background-preset {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: var(--panel);
+  aspect-ratio: 16 / 9;
+}
+.settings-background-preset img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.settings-background-preset[aria-pressed="true"] {
+  border-color: var(--accent);
+}
+.settings-background-preset:hover:not(:disabled),
+.settings-background-preset:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+.settings-accent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.settings-accent-row .settings-accent-value {
+  width: 100px;
+  min-width: 0;
+  padding: 8px 10px;
+}
+.settings-accent-value:invalid {
+  border-color: var(--danger);
+}
+.settings-accent-custom {
+  position: relative;
+  width: fit-content;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.settings-accent-custom input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.settings-accent-custom:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.settings-accent-value,
+.settings-build {
+  font-family: "Fira Mono", monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+.settings-version {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.settings-version strong {
+  font-size: 18px;
+  font-weight: 500;
+}
+.settings-version-badge {
+  padding: 3px 6px;
+  border-radius: 4px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+.settings-update-button {
+  width: fit-content;
+  justify-self: start;
+  padding: 8px 10px;
+  font-size: var(--type-caption);
+}
+.settings-changelog {
+  font-size: var(--type-caption);
+  line-height: 1.55;
+}
+.settings-release-heading,
+.settings-previous-release summary {
+  color: var(--text);
+}
+.settings-changelog time {
+  margin-left: 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.settings-changelog-group {
+  margin-top: 14px;
+}
+.settings-changelog-group h4 {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.settings-changelog-group ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.settings-changelog-group li + li {
+  margin-top: 5px;
+}
+.settings-previous-release {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.settings-previous-release summary {
+  cursor: pointer;
+}
 .appearance-section {
   display: grid;
   gap: 11px;

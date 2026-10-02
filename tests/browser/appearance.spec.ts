@@ -38,10 +38,12 @@ test("keeps the dark theme and persists appearance settings", async ({
   await expect(settings).toBeVisible();
   await settings.click();
 
-  const dialog = page.getByRole("dialog", { name: /Настройки/ });
+  const dialog = page.getByRole("main", { name: "Настройки" });
   await expect(dialog.getByRole("radiogroup", { name: "Тема" })).toHaveCount(0);
+  await expect(dialog.getByText("HARBOR 0.2.1", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("beta 6", { exact: true })).toBeVisible();
   await expect(
-    dialog.getByText(/^Версия 0\.2\.1-beta\.6 \(abcdef0\)$/),
+    dialog.getByText("Сборка abcdef0", { exact: true }),
   ).toBeVisible();
   const checkForUpdates = dialog.getByRole("button", {
     name: "Проверить обновления",
@@ -63,27 +65,24 @@ test("keeps the dark theme and persists appearance settings", async ({
   await dialog.getByRole("button", { name: "Выбрать цвет #79b9d4" }).click();
   await expect(page.locator("html")).toHaveCSS("--accent", "#79b9d4");
 
-  const scanIntervals = dialog.getByRole("radiogroup", {
+  const scanIntervals = dialog.getByRole("combobox", {
     name: "Автосканирование",
   });
-  await expect(scanIntervals.getByRole("radio")).toHaveText([
+  await expect(scanIntervals.getByRole("option")).toHaveText([
     "Только вручную",
     "Каждые 60 мин.",
     "Каждые 15 мин.",
     "Каждые 5 мин.",
   ]);
-  const manualScan = dialog.getByRole("radio", { name: "Только вручную" });
-  await manualScan.click();
-  await expect(manualScan).toHaveAttribute("aria-checked", "true");
-  await expect(manualScan).toHaveCSS("border-top-left-radius", "7px");
+  await scanIntervals.selectOption("0");
+  await expect(scanIntervals).toHaveValue("0");
+  await expect(scanIntervals).toBeEnabled();
+  await scanIntervals.selectOption("5");
+  await expect(scanIntervals).toBeEnabled();
 
-  const fiveMinuteScan = dialog.getByRole("radio", {
-    name: "Каждые 5 мин.",
+  const oneDayRetention = dialog.getByRole("combobox", {
+    name: "Срок хранения резервных копий",
   });
-  await fiveMinuteScan.click();
-  await expect(fiveMinuteScan).toHaveCSS("border-bottom-right-radius", "7px");
-
-  const oneDayRetention = dialog.getByRole("radio", { name: "1 день" });
   await expect(oneDayRetention).toBeEnabled();
   await expect(
     dialog.getByText("Резервных копий нет", { exact: true }),
@@ -91,8 +90,9 @@ test("keeps the dark theme and persists appearance settings", async ({
   await expect(
     dialog.getByRole("button", { name: "Очистить резервные копии" }),
   ).toBeDisabled();
-  await oneDayRetention.click();
-  await expect(oneDayRetention).toHaveAttribute("aria-checked", "true");
+  await oneDayRetention.selectOption("1d");
+  await expect(oneDayRetention).toHaveValue("1d");
+  await expect(oneDayRetention).toBeEnabled();
 
   await dialog
     .locator('input[type="file"]')
@@ -101,15 +101,17 @@ test("keeps the dark theme and persists appearance settings", async ({
     "background-image",
     /appearance\/background/,
   );
-  await dialog.getByRole("button", { name: "Закрыть" }).click();
+  await page
+    .getByRole("button", { name: "Вернуться в каталог", exact: true })
+    .click();
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await settings.click();
   await expect(
-    page.getByRole("dialog", { name: /Настройки/ }).getByRole("radio", {
-      name: "Каждые 5 мин.",
+    page.getByRole("main", { name: "Настройки" }).getByRole("combobox", {
+      name: "Автосканирование",
     }),
-  ).toHaveAttribute("aria-checked", "true");
+  ).toHaveValue("5");
 });
 
 test("starts ordinary and full scans from settings", async ({ page }) => {
@@ -120,7 +122,7 @@ test("starts ordinary and full scans from settings", async ({ page }) => {
   });
   await page.goto("/");
   await page.getByRole("button", { name: "Открыть настройки" }).click();
-  const dialog = page.getByRole("dialog", { name: /Настройки/ });
+  const dialog = page.getByRole("main", { name: "Настройки" });
 
   await dialog.getByRole("button", { name: "Быстрое сканирование" }).click();
   await dialog.getByRole("button", { name: "Полное обновление" }).click();
@@ -128,6 +130,96 @@ test("starts ordinary and full scans from settings", async ({ page }) => {
   await expect
     .poll(() => requests)
     .toEqual([{ force: false }, { force: true }]);
+});
+
+test("selects numbered bundled backgrounds and persists the selection", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Открыть настройки" }).click();
+  const settings = page.getByRole("main", { name: "Настройки" });
+  const presets = settings.locator(".settings-background-preset");
+  await expect(presets).toHaveCount(5);
+  await expect(
+    settings.getByRole("img", { name: "Предпросмотр фона" }),
+  ).toHaveCount(0);
+  const tops = await presets.evaluateAll((items) =>
+    items.map((item) => item.getBoundingClientRect().top),
+  );
+  expect(Math.max(...tops) - Math.min(...tops)).toBeLessThan(1);
+  for (const image of await presets.locator("img").all()) {
+    await expect
+      .poll(() => image.evaluate((node: HTMLImageElement) => node.naturalWidth))
+      .toBeGreaterThan(0);
+  }
+  const preset = settings.getByRole("button", {
+    name: "Выбрать фон 2",
+    exact: true,
+  });
+  await preset.click();
+  await expect(preset).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("body")).toHaveCSS("background-image", /2-.*\.jpg/);
+  await page.reload();
+  await page.getByRole("button", { name: "Открыть настройки" }).click();
+  await expect(preset).toHaveAttribute("aria-pressed", "true");
+  await settings.getByRole("button", { name: "Убрать фон" }).click();
+  await expect(preset).toHaveAttribute("aria-pressed", "false");
+});
+
+test("edits the accent code separately and shows compact desktop updates", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Открыть настройки" }).click();
+  const settings = page.getByRole("main", { name: "Настройки" });
+  const code = settings.getByRole("textbox", { name: "Код акцентного цвета" });
+  await code.fill("#123ABC");
+  await code.press("Enter");
+  await expect(page.locator("html")).toHaveCSS("--accent", "#123abc");
+  await code.fill("#invalid");
+  await code.press("Enter");
+  await expect(page.locator("html")).toHaveCSS("--accent", "#123abc");
+  await code.press("Escape");
+  await expect(code).toHaveValue("#123ABC");
+  const version = settings.getByRole("region", { name: "Версия и обновления" });
+  const update = version.getByRole("button", { name: "Проверить обновления" });
+  await expect(update).toHaveClass(/secondary/);
+  await expect(
+    version.getByRole("heading", { name: "Что нового" }),
+  ).toBeVisible();
+  const olderNotes = version.locator("details").first();
+  await expect(olderNotes).not.toHaveAttribute("open");
+  await olderNotes.locator("summary").click();
+  await expect(olderNotes).toHaveAttribute("open", "");
+  await expect(
+    olderNotes.getByRole("heading", { name: "Новое" }),
+  ).toBeVisible();
+});
+
+test("desktop background chooser imports its selection without a path form", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.evaluate((imagePath) => {
+    window.harborPlayerDesktop!.chooseImageFile = async () => imagePath;
+  }, path.resolve("assets/bg_lounge.jpg"));
+  await page.getByRole("button", { name: "Открыть настройки" }).click();
+  const settings = page.getByRole("main", { name: "Настройки" });
+  const response = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/appearance/background") &&
+      response.request().method() === "POST",
+  );
+  await settings.getByRole("button", { name: "Выбрать изображение" }).click();
+  expect((await response).ok()).toBe(true);
+  await expect(
+    settings.getByRole("button", { name: "Убрать фон" }),
+  ).toBeVisible();
+  await expect(page.locator("body")).toHaveCSS(
+    "background-image",
+    /appearance\/background/,
+  );
+  await expect(settings.getByPlaceholder("Путь к изображению")).toHaveCount(0);
 });
 
 test("disables mass scan actions while a scan is active", async ({ page }) => {
@@ -150,7 +242,7 @@ test("disables mass scan actions while a scan is active", async ({ page }) => {
   });
   await page.goto("/");
   await page.getByRole("button", { name: "Открыть настройки" }).click();
-  const dialog = page.getByRole("dialog", { name: /Настройки/ });
+  const dialog = page.getByRole("main", { name: "Настройки" });
 
   await expect(
     dialog.getByRole("button", { name: "Быстрое сканирование" }),

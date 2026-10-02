@@ -15,6 +15,7 @@ import {
   tagPatchSchema,
 } from "../shared/contracts.js";
 import { apiResponseContract } from "../shared/api-contracts.js";
+import { MAX_BACKGROUND_IMAGE_BASE64_LENGTH } from "../shared/appearance-background.js";
 import type {
   BookmarkKind,
   CatalogUserStatePatch,
@@ -213,6 +214,7 @@ export async function createApp(options: {
       theme: z.enum(["dark", "light"]),
       accent: z.string().regex(/^#[0-9a-f]{6}$/i),
       backgroundRevision: z.number().int().min(0),
+      backgroundPreset: z.number().int().min(1).max(5).optional(),
     })
     .strict();
   app.get("/api/appearance", async () => readAppearance(service.dataDir));
@@ -240,29 +242,40 @@ export async function createApp(options: {
       backgroundRevision: current.backgroundRevision,
     });
   });
-  app.post("/api/appearance/background", async (request) => {
-    const body = z
-      .object({
-        data: z.string().min(1).max(11_000_000).optional(),
-        path: z.string().trim().min(1).max(32000).optional(),
-        theme: z.enum(["dark", "light"]),
-        accent: z.string().regex(/^#[0-9a-f]{6}$/i),
-      })
-      .strict()
-      .refine((value) => Boolean(value.data) !== Boolean(value.path), {
-        message: "Укажите один источник изображения",
-      })
-      .parse(request.body);
-    const saved = await importAppearanceBackground(
-      service.dataDir,
-      body.data ? Buffer.from(body.data, "base64") : path.resolve(body.path!),
-    );
-    return writeAppearance(service.dataDir, {
-      ...saved,
-      theme: body.theme,
-      accent: body.accent.toLowerCase(),
-    });
-  });
+  app.post(
+    "/api/appearance/background",
+    {
+      // Base64 source plus bounded JSON metadata; other routes retain 16 MiB.
+      bodyLimit: MAX_BACKGROUND_IMAGE_BASE64_LENGTH + 64 * 1024,
+    },
+    async (request) => {
+      const body = z
+        .object({
+          data: z
+            .string()
+            .min(1)
+            .max(MAX_BACKGROUND_IMAGE_BASE64_LENGTH)
+            .optional(),
+          path: z.string().trim().min(1).max(32000).optional(),
+          theme: z.enum(["dark", "light"]),
+          accent: z.string().regex(/^#[0-9a-f]{6}$/i),
+        })
+        .strict()
+        .refine((value) => Boolean(value.data) !== Boolean(value.path), {
+          message: "Укажите один источник изображения",
+        })
+        .parse(request.body);
+      const saved = await importAppearanceBackground(
+        service.dataDir,
+        body.data ? Buffer.from(body.data, "base64") : path.resolve(body.path!),
+      );
+      return writeAppearance(service.dataDir, {
+        ...saved,
+        theme: body.theme,
+        accent: body.accent.toLowerCase(),
+      });
+    },
+  );
   app.get("/api/appearance/background", async (_request, reply) => {
     const file = appearanceBackgroundPath(service.dataDir);
     if (!existsSync(file)) return reply.code(404).send();

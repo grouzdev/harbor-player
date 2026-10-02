@@ -81,6 +81,7 @@ export const appearanceSchema = z.object({
   theme: z.enum(["dark", "light"]),
   accent: z.string().regex(/^#[0-9a-f]{6}$/i),
   backgroundRevision: z.number().int().nonnegative(),
+  backgroundPreset: z.number().int().min(1).max(5).optional(),
 });
 export const bookmarkSchema: z.ZodType<CatalogBookmark> = z.object({
   kind: z.enum(["artist", "album", "track"]),

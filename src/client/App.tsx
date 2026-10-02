@@ -16,6 +16,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { usesPortraitWorkspaceLayout } from "./workspace-layout";
+import { SettingsWorkspace } from "./SettingsWorkspace";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   AudioLines,
@@ -138,9 +139,9 @@ import type {
   PlaylistImportPreview,
 } from "../shared/playlists";
 
-const AppearanceSettingsDialog = lazy(() =>
-  import("./AppearanceSettingsDialog").then((module) => ({
-    default: module.AppearanceSettingsDialog,
+const AppearanceSettingsPanels = lazy(() =>
+  import("./AppearanceSettingsPanels").then((module) => ({
+    default: module.AppearanceSettingsPanels,
   })),
 );
 const ActionDialog = lazy(() =>
@@ -2700,7 +2701,9 @@ export function App() {
     ],
   );
   const showPreview = (p: OperationPreview) => {
-    setModal(null);
+    setModal((current) =>
+      current === "settings" || current === "history" ? current : null,
+    );
     setModalSelection(null);
     setAlbumMergeSelection(null);
     setFolderMoveRoots(null);
@@ -2985,15 +2988,22 @@ export function App() {
       />
     );
   };
+  const settingsOpen = modal === "settings" || modal === "history";
   return (
     <div
       ref={appShellRef}
       className={`app-shell fullscreen-window--${fullscreenWindowMode}${
-        coverMode ? " app-shell--cover-mode" : ""
+        coverMode && !settingsOpen ? " app-shell--cover-mode" : ""
       }${isPortraitLayout ? " layout--portrait" : ""}${
-        visiblePanelIds.length ? "" : " app-shell--empty-workspace"
-      }`}
+        visiblePanelIds.length || settingsOpen
+          ? ""
+          : " app-shell--empty-workspace"
+      }${settingsOpen ? " app-shell--settings" : ""}`}
       style={fullscreenWindowStyle}
+      onKeyDown={(event) => {
+        // Settings, the persistent player and update actions all use native Tab.
+        if (settingsOpen && event.key === "Tab") event.stopPropagation();
+      }}
     >
       {isWebFullscreen && (
         <>
@@ -3020,11 +3030,18 @@ export function App() {
         <button
           type="button"
           className="topbar-brand"
-          aria-label="Открыть настройки"
-          title="Настройки"
-          onClick={() => setModal("settings")}
+          aria-label={
+            settingsOpen ? "Вернуться в каталог" : "Открыть настройки"
+          }
+          aria-pressed={settingsOpen}
+          title={settingsOpen ? "Вернуться в каталог" : "Настройки"}
+          onClick={() => {
+            setContextMenu(null);
+            if (settingsOpen) setCoverMode(false);
+            setModal(settingsOpen ? null : "settings");
+          }}
         />
-        {!coverMode && (
+        {!settingsOpen && !coverMode && (
           <CatalogUserFilters
             filter={savedFilter}
             search={search}
@@ -3063,7 +3080,7 @@ export function App() {
             }
           />
         )}
-        {coverMode && (
+        {!settingsOpen && coverMode && (
           <div className="cover-search">
             <label className="search">
               <Search size={18} />
@@ -3093,36 +3110,68 @@ export function App() {
             )}
           </div>
         )}
-        <IconToggle
-          className="cover-mode-toggle"
-          checked={coverMode}
-          onCheckedChange={toggleCoverMode}
-          offLabel="Открыть режим обложки"
-          onLabel="Вернуться в каталог"
-          disabled={!coverMode && !canOpenCoverMode}
-          icon={<Disc3 size={21} />}
-        />
-        <button
-          type="button"
-          className="icon-button fullscreen-button"
-          aria-label={
-            isFullscreen
-              ? "Свернуть окно из полноэкранного режима"
-              : "Развернуть окно на весь экран"
-          }
-          aria-pressed={isFullscreen}
-          title={
-            isFullscreen
-              ? "Свернуть окно из полноэкранного режима"
-              : "Развернуть окно на весь экран"
-          }
-          onClick={toggleFullscreen}
-        >
-          {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
-        </button>
+        {!settingsOpen && (
+          <>
+            <IconToggle
+              className="cover-mode-toggle"
+              checked={coverMode}
+              onCheckedChange={toggleCoverMode}
+              offLabel="Открыть режим обложки"
+              onLabel="Вернуться в каталог"
+              disabled={!coverMode && !canOpenCoverMode}
+              icon={<Disc3 size={21} />}
+            />
+            <button
+              type="button"
+              className="icon-button fullscreen-button"
+              aria-label={
+                isFullscreen
+                  ? "Свернуть окно из полноэкранного режима"
+                  : "Развернуть окно на весь экран"
+              }
+              aria-pressed={isFullscreen}
+              title={
+                isFullscreen
+                  ? "Свернуть окно из полноэкранного режима"
+                  : "Развернуть окно на весь экран"
+              }
+              onClick={toggleFullscreen}
+            >
+              {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
+            </button>
+          </>
+        )}
       </header>
+      {settingsOpen && (
+        <SettingsWorkspace>
+          {(renderSeparator) => (
+            <Suspense fallback={<div role="status">Загрузка настроек…</div>}>
+              <AppearanceSettingsPanels
+                settings={appearance}
+                onChange={updateAppearance}
+                scanSettings={scanSettings}
+                onScanSettingsChange={setScanSettings}
+                onScanAll={async (force) => {
+                  await api<Job[]>("/libraries/scan", { force });
+                  refresh();
+                }}
+                scanInProgress={activeJobs.some((job) => job.kind === "scan")}
+                renderSeparator={renderSeparator}
+                history={
+                  <HistoryDialog
+                    embedded
+                    onPreview={showPreview}
+                    onOperationStarted={watchOperation}
+                  />
+                }
+              />
+            </Suspense>
+          )}
+        </SettingsWorkspace>
+      )}
       <main
         ref={workspaceRef}
+        inert={settingsOpen}
         className={`workspace ${portraitWorkspaceLayout ? "workspace--portrait" : ""} ${coverMode ? "workspace-hidden" : ""} ${visiblePanelIds.length ? "" : "workspace-empty"}`}
         style={
           {
@@ -3572,7 +3621,7 @@ export function App() {
           {panelVisibility.tracks && renderPanelResizer("tracks")}
         </div>
       </main>
-      {coverMode && player.queue?.track && (
+      {!settingsOpen && coverMode && player.queue?.track && (
         <CoverMode
           track={player.queue.track}
           queue={player.queue}
@@ -3585,19 +3634,28 @@ export function App() {
       )}
       <Player
         player={player}
-        onNavigateToAlbum={(albumId, albumArtists) =>
+        onNavigateToAlbum={(albumId, albumArtists) => {
+          if (settingsOpen) setModal(null);
           void navigateFromPlayer(
             "album",
             albumId,
             albumArtists,
             player.queue?.track?.id,
-          )
-        }
-        onNavigateToArtist={(artist) =>
-          void navigateFromPlayer("artist", artist)
-        }
-        coverMode={coverMode}
-        onToggleCoverMode={toggleCoverMode}
+          );
+        }}
+        onNavigateToArtist={(artist) => {
+          if (settingsOpen) setModal(null);
+          void navigateFromPlayer("artist", artist);
+        }}
+        coverMode={coverMode && !settingsOpen}
+        onToggleCoverMode={() => {
+          if (settingsOpen) {
+            setModal(null);
+            setCoverMode(true);
+          } else {
+            toggleCoverMode();
+          }
+        }}
         coverModeAvailable={canOpenCoverMode}
         onUserStateChange={changeUserState}
         pendingUserStateKeys={pendingUserStateKeys}
@@ -3730,32 +3788,6 @@ export function App() {
           />
         </Suspense>
       )}
-      {modal === "history" && (
-        <Suspense fallback={<LazyDialogFallback />}>
-          <HistoryDialog
-            onClose={() => setModal(null)}
-            onPreview={showPreview}
-            onOperationStarted={watchOperation}
-          />
-        </Suspense>
-      )}
-      {modal === "settings" && (
-        <Suspense fallback={<LazyDialogFallback />}>
-          <AppearanceSettingsDialog
-            settings={appearance}
-            onChange={updateAppearance}
-            scanSettings={scanSettings}
-            onScanSettingsChange={setScanSettings}
-            onScanAll={async (force) => {
-              await api<Job[]>("/libraries/scan", { force });
-              refresh();
-            }}
-            scanInProgress={activeJobs.some((job) => job.kind === "scan")}
-            onOpenHistory={() => setModal("history")}
-            onClose={() => setModal(null)}
-          />
-        </Suspense>
-      )}
       {preview && (
         <Suspense fallback={<LazyDialogFallback />}>
           <PreviewDialog
@@ -3765,8 +3797,10 @@ export function App() {
               const job = await api<Job>(`/operations/${id}/execute`, {});
               watchOperation(id, job);
               setPreview(null);
-              setSelected(new Set());
-              setSelectedAlbumId(null);
+              if (!settingsOpen) {
+                setSelected(new Set());
+                setSelectedAlbumId(null);
+              }
             }}
           />
         </Suspense>

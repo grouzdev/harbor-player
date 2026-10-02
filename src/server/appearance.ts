@@ -1,12 +1,15 @@
 import { existsSync } from "node:fs";
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
+import { MAX_BACKGROUND_IMAGE_BYTES } from "../shared/appearance-background.js";
+import { badRequest } from "./http-error.js";
 
 export type AppearanceSettings = {
   theme: "dark" | "light";
   accent: string;
   backgroundRevision: number;
+  backgroundPreset?: number;
 };
 
 export const defaultAppearance: AppearanceSettings = {
@@ -34,6 +37,11 @@ export async function readAppearance(
         (parsed.backgroundRevision || 0) >= 0
           ? parsed.backgroundRevision!
           : 0,
+      ...(Number.isInteger(parsed.backgroundPreset) &&
+      parsed.backgroundPreset! >= 1 &&
+      parsed.backgroundPreset! <= 5
+        ? { backgroundPreset: parsed.backgroundPreset }
+        : {}),
     };
   } catch {
     return defaultAppearance;
@@ -65,6 +73,10 @@ export async function importAppearanceBackground(
   dataDir: string,
   source: Buffer | string,
 ) {
+  const sourceBytes =
+    typeof source === "string" ? (await stat(source)).size : source.length;
+  if (sourceBytes > MAX_BACKGROUND_IMAGE_BYTES)
+    throw badRequest("Изображение фона не должно превышать 32 МиБ");
   const target = appearanceBackgroundPath(dataDir);
   await mkdir(path.dirname(target), { recursive: true });
   await sharp(source, { limitInputPixels: 40_000_000 })
@@ -78,8 +90,9 @@ export async function importAppearanceBackground(
     .jpeg({ quality: 90 })
     .toFile(target);
   const current = await readAppearance(dataDir);
+  const { backgroundPreset: _preset, ...withoutPreset } = current;
   return writeAppearance(dataDir, {
-    ...current,
+    ...withoutPreset,
     backgroundRevision: current.backgroundRevision + 1,
   });
 }
@@ -88,5 +101,6 @@ export async function clearAppearanceBackground(dataDir: string) {
   const target = appearanceBackgroundPath(dataDir);
   if (existsSync(target)) await unlink(target);
   const current = await readAppearance(dataDir);
-  return writeAppearance(dataDir, { ...current, backgroundRevision: 0 });
+  const { backgroundPreset: _preset, ...withoutPreset } = current;
+  return writeAppearance(dataDir, { ...withoutPreset, backgroundRevision: 0 });
 }

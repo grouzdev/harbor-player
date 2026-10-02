@@ -1,0 +1,102 @@
+.settings-workspace-scroll {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.settings-workspace {
+  display: grid;
+  grid-template-columns: var(--settings-columns);
+  min-width: 1212px;
+  height: 100%;
+}
+
+.settings-workspace > section {
+  min-width: 0;
+  min-height: 0;
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.settings-panel-heading {
+  flex-shrink: 0;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-panel-heading > svg {
+  color: var(--muted);
+}
+
+.settings-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px 22px;
+}
+
+.settings-workspace-resizer {
+  position: relative;
+  z-index: 2;
+  cursor: col-resize;
+  touch-action: none;
+  background: #ffffff06;
+}
+
+.settings-workspace-resizer::before {
+  content: "";
+  position: absolute;
+  inset: 0 -3px;
+}
+
+.settings-workspace-resizer:hover,
+.settings-workspace-resizer:focus-visible,
+.is-resizing .settings-workspace-resizer {
+  background: var(--accent);
+}
+
+.settings-workspace-scroll.is-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* Keep the catalog mounted, including its scroll positions and virtualizers. */
+.app-shell--settings > .workspace,
+.app-shell--settings > .cover-mode-layout {
+  display: none;
+}
+
+.app-shell--settings .topbar > :not(.topbar-brand) {
+  display: none;
+}
+
+.app-shell--settings .topbar-brand {
+  display: block;
+  background: transparent;
+  -webkit-mask: none;
+  mask: none;
+  overflow: visible;
+  /* Apply the halo outside the masked pseudo-elements, so it is not clipped. */
+  filter: drop-shadow(0 0 7px var(--accent));
+}
+
+.app-shell--settings .topbar-brand::before,
+.app-shell--settings .topbar-brand::after {
+  background: var(--accent);
+  transform: none;
+}
+
+.app-shell--settings .topbar-brand::before {
+  opacity: 0.85;
+  filter: blur(7px);
+}
+
+.app-shell--settings .topbar-brand::after {
+  opacity: 1;
+}

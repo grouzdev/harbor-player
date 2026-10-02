@@ -53,21 +53,33 @@ test("a dialog keeps Tab navigation in its text fields", async ({ page }) => {
   await expect(folder).toBeFocused();
 });
 
-test("a dialog without text fields keeps focus off its close button", async ({
+test("settings panels allow native Tab navigation to actions", async ({
   page,
 }) => {
   await page.goto("/");
-  const dialog = page.locator("dialog");
   await page.getByRole("button", { name: "Открыть настройки" }).click();
+  const settings = page.getByRole("main", { name: "Настройки" });
+  const firstColor = settings.getByRole("button", {
+    name: "Выбрать цвет #b8bd82",
+  });
+  await expect(firstColor).toBeVisible();
   await page
-    .getByRole("dialog", { name: /Настройки/ })
-    .getByRole("button", { name: "История", exact: true })
-    .click();
-
-  await expect(dialog).toBeFocused();
-  await expect(dialog).toHaveCSS("outline-style", "none");
-  await page.keyboard.press("Enter");
-  await expect(dialog).toBeVisible();
+    .getByRole("button", { name: "Вернуться в каталог", exact: true })
+    .focus();
+  await page.keyboard.press("Tab");
+  await expect(firstColor).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(
+    settings.getByRole("button", { name: "Выбрать цвет #9bc8aa" }),
+  ).toBeFocused();
+  await page
+    .getByRole("button", { name: "Выключить звук", exact: true })
+    .focus();
+  await page.keyboard.press("Tab");
+  await expect(
+    page.getByRole("slider", { name: "Громкость", exact: true }),
+  ).toBeFocused();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
 test("icon buttons keep their geometry on hover", async ({ page }) => {
@@ -2902,10 +2914,6 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await page
     .getByRole("button", { name: "Открыть настройки" })
     .dispatchEvent("click");
-  await page
-    .getByRole("dialog", { name: /Настройки/ })
-    .getByRole("button", { name: "История", exact: true })
-    .dispatchEvent("click");
   await expect(
     page
       .locator(".history-item")
@@ -2913,13 +2921,11 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
       .first()
       .getByRole("button", { name: "Восстановить", exact: true }),
   ).toHaveCount(0);
-  const historyDialog = page.getByRole("dialog", {
-    name: "Журнал операций",
-  });
-  await historyDialog
-    .getByRole("button", { name: "Закрыть", exact: true })
+  const settingsWorkspace = page.getByRole("main", { name: "Настройки" });
+  await page
+    .getByRole("button", { name: "Вернуться в каталог", exact: true })
     .dispatchEvent("click");
-  await expect(historyDialog).not.toBeVisible();
+  await expect(settingsWorkspace).not.toBeVisible();
   await collectionTile.locator(".list-tile-main").dispatchEvent("contextmenu");
   await libraryMenu
     .getByRole("menuitem", { name: "Удалить" })

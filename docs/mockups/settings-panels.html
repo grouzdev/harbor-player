@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HARBOR — панели настроек · мокап</title>
+  <style>
+    @import url("../../src/client/fonts.css");
+    :root {
+      color-scheme: dark;
+      font-family: "Fira Sans Condensed", "Arial Narrow", sans-serif;
+      --accent: #b8bd82;
+      --muted: #8b959c;
+      --line: #ffffff0b;
+      --background: none;
+      color: #dce0e2;
+      background: #171c21;
+      font-synthesis: none;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    button, input, select { font: inherit; }
+    button { color: inherit; cursor: pointer; border: 0; }
+    button:disabled { opacity: .4; cursor: default; }
+    button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible,
+    .resizer:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    h1, h2, h3, p { margin: 0; }
+    .shell { height: 100dvh; min-height: 480px; display: flex; flex-direction: column; }
+    .topbar {
+      position: relative; height: 65px; flex-shrink: 0; padding: 0 24px;
+      display: flex; align-items: center; background: #191e23; border-bottom: 1px solid var(--line);
+    }
+    .brand {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      width: 126px; height: 30px; background: transparent;
+    }
+    .brand svg {
+      position: absolute; left: 0; top: 5px; width: 126px; height: 20px;
+      fill: currentColor; stroke: none; color: #b8c1b35c;
+    }
+    .brand .glow { display: none; }
+    .shell.settings .brand svg { color: var(--accent); }
+    .shell.settings .brand .glow { display: block; filter: blur(7px); opacity: .85; overflow: visible; }
+    .topbar-tools { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+    .shell.settings .topbar-tools { display: none; }
+    .search { width: 240px; }
+    .workspace-scroll { flex: 1; min-height: 0; overflow-x: auto; }
+    .workspace {
+      height: 100%; min-width: 908px; display: grid;
+      grid-template-columns: minmax(300px, 1fr) 4px minmax(300px, 1fr) 4px minmax(300px, 1fr);
+    }
+    .panel { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #181e23; }
+    .panel:nth-of-type(2) { background: #1b2127; }
+    .panel:nth-of-type(3) { background: #191f24; }
+    .panel-heading {
+      height: 42px; flex-shrink: 0; display: flex; align-items: center;
+      gap: 9px; padding: 0 16px; border-bottom: 1px solid var(--line);
+    }
+    .panel-heading h2 { font-size: 14px; font-weight: 600; letter-spacing: .15px; }
+    .panel-icon { color: var(--muted); display: flex; }
+    svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+    .count { margin-left: auto; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+    .panel-body { overflow-y: auto; flex: 1; min-height: 0; padding: 24px 22px; }
+    .block + .block { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--line); }
+    h3 { font-size: 16px; font-weight: 500; margin-bottom: 12px; }
+    .hint, .label { color: var(--muted); font-size: 14px; line-height: 1.5; }
+    .hint { margin-top: 10px; }
+    .label { display: block; margin-bottom: 8px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .button {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 10px 12px; border-radius: 7px; background: #ffffff07; border: 1px solid #ffffff12;
+      font-size: 14px; line-height: 1.3;
+    }
+    .button:hover { background: #ffffff0e; }
+    .primary { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 28%, transparent); }
+    .text-button { padding: 0; background: transparent; color: var(--accent); font-size: 14px; }
+    .text-button:hover { text-decoration: underline; }
+    .danger { color: #dcaaa3; }
+    input:not([type="color"]), select {
+      width: 100%; min-width: 0; background: #14191e; border: 1px solid #ffffff15;
+      color: #dce0e2; border-radius: 7px; padding: 10px 12px; font-size: 14px;
+    }
+    .palette { display: flex; flex-wrap: wrap; gap: 12px; padding: 3px; }
+    .swatch { width: 29px; height: 29px; background: var(--swatch); border-radius: 50%; box-shadow: 0 0 0 1px #ffffff28; }
+    .swatch[aria-pressed="true"] { border: 2px solid #fff; box-shadow: 0 0 0 2px var(--accent); }
+    .custom-color { display: flex; align-items: center; gap: 10px; margin-top: 18px; color: var(--muted); font-size: 14px; }
+    input[type="color"] { width: 26px; height: 26px; border: 0; padding: 0; background: transparent; cursor: pointer; }
+    .hex { font-family: "Fira Mono", monospace; font-size: 12px; margin-left: auto; }
+    .preview {
+      height: 160px; border-radius: 7px; border: 1px solid #ffffff12;
+      background: linear-gradient(#171c2140, #171c21a0), var(--background);
+      background-position: center; background-size: cover; padding: 16px;
+      display: flex; align-items: flex-end; gap: 4px;
+    }
+    .preview-bar { width: 23%; height: 76px; background: #171c21c9; border: 1px solid #ffffff0a; }
+    .preview-bar:first-child { width: 15%; }
+    .preview-bar:last-child { flex: 1; }
+    .preview-dot { width: 24px; height: 4px; margin: 10px; border-radius: 3px; background: var(--accent); }
+    .path { margin-top: 18px; }
+    .path .actions { justify-content: flex-end; margin-top: 8px; }
+    .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+    .setting-row select { width: 155px; flex-shrink: 0; }
+    .setting-row .label { margin: 0; }
+    .scan-actions { display: grid; gap: 8px; margin-top: 16px; }
+    .scan-actions .button { justify-content: flex-start; }
+    .storage { display: flex; align-items: baseline; justify-content: space-between; margin-top: 18px; gap: 10px; }
+    .storage strong { font-size: 20px; font-weight: 400; }
+    .version { display: flex; align-items: center; gap: 8px; }
+    .version strong { font-weight: 500; font-size: 18px; }
+    .badge { font-size: 11px; letter-spacing: .8px; color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); padding: 3px 6px; border-radius: 4px; }
+    .build { font-family: "Fira Mono", monospace; font-size: 11px; }
+    .resizer { background: #ffffff06; cursor: col-resize; touch-action: none; position: relative; z-index: 2; }
+    .resizer::before { content: ""; position: absolute; inset: 0 -3px; }
+    .resizer:hover, .resizer:focus-visible, .resizer.dragging { background: var(--accent); }
+    body.resizing { cursor: col-resize; user-select: none; }
+    .history-body { padding: 0; }
+    .history-intro { padding: 16px; border-bottom: 1px solid var(--line); }
+    .history-intro p { margin: 0 0 10px; }
+    .day { padding: 14px 16px 7px; color: var(--muted); font-size: 12px; letter-spacing: .5px; }
+    .operation { padding: 16px; border-bottom: 1px solid var(--line); }
+    .operation-head { display: flex; align-items: baseline; gap: 10px; justify-content: space-between; }
+    .operation h3 { font-size: 16px; margin: 0; }
+    time { font-size: 12px; color: var(--muted); flex-shrink: 0; }
+    .operation p { margin-top: 7px; font-size: 14px; color: var(--muted); }
+    .status { display: inline-flex; align-items: center; gap: 6px; }
+    .status::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: #9bc8aa; }
+    .status.warning::before { background: #dd9e7c; }
+    .warning { color: #dd9e7c; }
+    details { margin-top: 12px; }
+    summary { color: var(--accent); font-size: 14px; cursor: pointer; width: fit-content; }
+    .file-result { margin-top: 10px; padding: 10px; background: #00000014; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+    .player { height: 80px; flex-shrink: 0; border-top: 1px solid var(--line); background: #151a1f; display: flex; align-items: center; gap: 16px; padding: 0 24px; }
+    .cover { width: 44px; height: 44px; border-radius: 5px; background: linear-gradient(135deg, #525753, #252c30); display: grid; place-items: center; color: var(--accent); }
+    .track { font-size: 14px; min-width: 160px; }
+    .track small { display: block; color: var(--muted); margin-top: 3px; }
+    .play { background: transparent; color: var(--accent); font-size: 22px; cursor: default; }
+    .timeline { flex: 1; height: 3px; background: #ffffff0c; border-radius: 3px; }
+    .timeline span { display: block; width: 36%; height: 100%; background: var(--accent); }
+    .player-time { color: var(--muted); font-size: 12px; }
+    .catalog { display: none; flex: 1; min-height: 0; place-content: center; text-align: center; padding: 32px; }
+    .catalog h1 { font-size: 24px; font-weight: 400; margin-bottom: 12px; }
+    .catalog p { color: var(--muted); line-height: 1.6; }
+    .shell:not(.settings) .workspace-scroll { display: none; }
+    .shell:not(.settings) .catalog { display: grid; }
+    .toast { position: fixed; bottom: 94px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 32px); padding: 12px 18px; border: 1px solid #ffffff20; background: #272f35; border-radius: 8px; box-shadow: 0 6px 30px #0004; font-size: 14px; z-index: 4; }
+    [hidden] { display: none !important; }
+    @media (max-width: 1000px) { .panel-body:not(.history-body) { padding: 22px 16px; } }
+  </style>
+</head>
+<body>
+  <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+    <!-- HARBOR.svg inlined so the logo also works on file:// without external SVG masks. -->
+    <symbol id="harbor-logo" viewBox="0 0 464 74">
+      <path d="M69.0001 1.60009V71.6001H45.4001V45.8001H23.6001V71.6001H4.92036e-05V1.60009H23.6001V26.4001H45.4001V1.60009H69.0001ZM114.271 9.56059e-05C121.071 9.56059e-05 127.071 1.36676 132.271 4.1001C137.471 6.76676 141.504 10.7001 144.371 15.9001C147.304 21.0334 148.771 27.1668 148.771 34.3001V71.6001H125.171V57.5001H102.971V71.6001H79.7711V34.3001C79.7711 27.1668 81.2045 21.0334 84.0711 15.9001C87.0045 10.7001 91.0711 6.76676 96.2711 4.1001C101.471 1.36676 107.471 9.56059e-05 114.271 9.56059e-05ZM125.171 39.7001V32.3001C125.171 27.9668 124.138 24.7001 122.071 22.5001C120.071 20.2334 117.404 19.1001 114.071 19.1001C110.738 19.1001 108.038 20.2334 105.971 22.5001C103.971 24.7001 102.971 27.9668 102.971 32.3001V39.7001H125.171ZM189.57 54.0001H183.17V71.6001H159.57V1.60009H193.27C199.737 1.60009 205.37 2.66676 210.17 4.80009C214.97 6.93343 218.67 10.0001 221.27 14.0001C223.87 18.0001 225.17 22.6668 225.17 28.0001C225.17 33.0001 224.037 37.3668 221.77 41.1001C219.504 44.8334 216.237 47.8001 211.97 50.0001L226.67 71.6001H201.47L189.57 54.0001ZM201.37 28.0001C201.37 25.4001 200.57 23.4001 198.97 22.0001C197.37 20.5334 194.97 19.8001 191.77 19.8001H183.17V36.2001H191.77C194.97 36.2001 197.37 35.5001 198.97 34.1001C200.57 32.6334 201.37 30.6001 201.37 28.0001ZM290.082 35.0001C294.215 36.5334 297.415 38.7668 299.682 41.7001C301.949 44.6334 303.082 48.1668 303.082 52.3001C303.082 58.4334 300.549 63.2001 295.482 66.6001C290.415 69.9334 283.082 71.6001 273.482 71.6001H234.082V1.60009H271.482C280.815 1.60009 287.849 3.26676 292.582 6.60009C297.382 9.93343 299.782 14.3668 299.782 19.9001C299.782 23.1668 298.949 26.1001 297.282 28.7001C295.682 31.3001 293.282 33.4001 290.082 35.0001ZM257.282 18.1001V28.5001H268.282C273.415 28.5001 275.982 26.7668 275.982 23.3001C275.982 19.8334 273.415 18.1001 268.282 18.1001H257.282ZM271.482 55.1001C276.682 55.1001 279.282 53.2668 279.282 49.6001C279.282 45.9334 276.682 44.1001 271.482 44.1001H257.282V55.1001H271.482ZM348.126 73.2001C340.592 73.2001 333.826 71.6334 327.826 68.5001C321.826 65.3668 317.126 61.0334 313.726 55.5001C310.326 49.9001 308.626 43.6001 308.626 36.6001C308.626 29.6001 310.326 23.3334 313.726 17.8001C317.126 12.2001 321.826 7.83343 327.826 4.70009C333.826 1.56676 340.592 9.56059e-05 348.126 9.56059e-05C355.659 9.56059e-05 362.426 1.56676 368.426 4.70009C374.426 7.83343 379.126 12.2001 382.526 17.8001C385.926 23.3334 387.626 29.6001 387.626 36.6001C387.626 43.6001 385.926 49.9001 382.526 55.5001C379.126 61.0334 374.426 65.3668 368.426 68.5001C362.426 71.6334 355.659 73.2001 348.126 73.2001ZM348.126 54.1001C351.059 54.1001 353.692 53.4001 356.026 52.0001C358.426 50.5334 360.326 48.5001 361.726 45.9001C363.126 43.2334 363.826 40.1334 363.826 36.6001C363.826 33.0668 363.126 30.0001 361.726 27.4001C360.326 24.7334 358.426 22.7001 356.026 21.3001C353.692 19.8334 351.059 19.1001 348.126 19.1001C345.192 19.1001 342.526 19.8334 340.126 21.3001C337.792 22.7001 335.926 24.7334 334.526 27.4001C333.126 30.0001 332.426 33.0668 332.426 36.6001C332.426 40.1334 333.126 43.2334 334.526 45.9001C335.926 48.5001 337.792 50.5334 340.126 52.0001C342.526 53.4001 345.192 54.1001 348.126 54.1001ZM426.191 54.0001H419.791V71.6001H396.191V1.60009H429.891C436.358 1.60009 441.991 2.66676 446.791 4.80009C451.591 6.93343 455.291 10.0001 457.891 14.0001C460.491 18.0001 461.791 22.6668 461.791 28.0001C461.791 33.0001 460.658 37.3668 458.391 41.1001C456.125 44.8334 452.858 47.8001 448.591 50.0001L463.291 71.6001H438.091L426.191 54.0001ZM437.991 28.0001C437.991 25.4001 437.191 23.4001 435.591 22.0001C433.991 20.5334 431.591 19.8001 428.391 19.8001H419.791V36.2001H428.391C431.591 36.2001 433.991 35.5001 435.591 34.1001C437.191 32.6334 437.991 30.6001 437.991 28.0001Z"/>
+    </symbol>
+    <symbol id="palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4 2 2 0 0 1 1-4h3a3 3 0 0 0 3-3c0-4-4-7-9-7Z"/><path d="M7 10h.01M10 6h.01M15 7h.01"/></symbol>
+    <symbol id="app" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 22h8M12 18v4"/></symbol>
+    <symbol id="history" viewBox="0 0 24 24"><path d="M3 11a9 9 0 1 1 2 7M3 4v7h7M12 7v5l3 2"/></symbol>
+    <symbol id="refresh" viewBox="0 0 24 24"><path d="M20 7a9 9 0 0 0-15-2L2 8m0-6v6h6M4 17a9 9 0 0 0 15 2l3-3m0 6v-6h-6"/></symbol>
+    <symbol id="image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/></symbol>
+  </svg>
+  <div class="shell settings" id="shell">
+    <header class="topbar">
+      <div class="topbar-tools"><span class="hint">Медиатека · Избранное</span><input class="search" aria-label="Поиск в медиатеке" placeholder="Поиск по медиатеке" disabled></div>
+      <button class="brand" id="brand" aria-label="Вернуться в медиатеку" aria-pressed="true" title="Настройки · нажмите, чтобы вернуться в медиатеку"><svg class="glow" aria-hidden="true"><use href="#harbor-logo"/></svg><svg aria-hidden="true"><use href="#harbor-logo"/></svg></button>
+    </header>
+    <div class="workspace-scroll">
+      <main class="workspace" id="workspace" aria-label="Настройки">
+        <section class="panel" aria-labelledby="appearance-title">
+          <header class="panel-heading"><span class="panel-icon"><svg><use href="#palette"/></svg></span><h2 id="appearance-title">Внешний вид</h2></header>
+          <div class="panel-body">
+            <section class="block">
+              <h3>Акцентный цвет</h3>
+              <div class="palette" role="group" aria-label="Акцентный цвет">
+                <button class="swatch" style="--swatch:#b8bd82" data-color="#b8bd82" aria-label="Оливковый" aria-pressed="true"></button>
+                <button class="swatch" style="--swatch:#9bc8aa" data-color="#9bc8aa" aria-label="Зелёный" aria-pressed="false"></button>
+                <button class="swatch" style="--swatch:#79b9d4" data-color="#79b9d4" aria-label="Голубой" aria-pressed="false"></button>
+                <button class="swatch" style="--swatch:#c59bc9" data-color="#c59bc9" aria-label="Сиреневый" aria-pressed="false"></button>
+                <button class="swatch" style="--swatch:#dd9e7c" data-color="#dd9e7c" aria-label="Персиковый" aria-pressed="false"></button>
+                <button class="swatch" style="--swatch:#d0b66d" data-color="#d0b66d" aria-label="Золотой" aria-pressed="false"></button>
+              </div>
+              <label class="custom-color"><input type="color" id="custom-color" value="#b8bd82">Свой цвет <output class="hex" id="hex">#B8BD82</output></label>
+            </section>
+            <section class="block">
+              <h3>Фон</h3>
+              <div class="preview" role="img" aria-label="Превью фона и панелей"><div class="preview-bar"><div class="preview-dot"></div></div><div class="preview-bar"></div><div class="preview-bar"></div><div class="preview-bar"></div></div>
+              <p class="hint" id="background-name">Фон не выбран</p>
+              <div class="actions">
+                <button class="button" id="choose-background"><svg><use href="#image"/></svg>Выбрать изображение</button>
+                <button class="text-button" id="remove-background" hidden>Убрать фон</button>
+              </div>
+              <input id="background-file" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+            </section>
+          </div>
+        </section>
+        <div class="resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Ширина: Внешний вид — Приложение" data-index="0" title="Перетащите · стрелки ← → · Home: равные ширины"></div>
+        <section class="panel" aria-labelledby="application-title">
+          <header class="panel-heading"><span class="panel-icon"><svg><use href="#app"/></svg></span><h2 id="application-title">Приложение</h2></header>
+          <div class="panel-body">
+            <section class="block">
+              <h3>Сканирование</h3>
+              <div class="setting-row"><label class="label" for="scan-interval">Автосканирование</label><select id="scan-interval"><option>Только вручную</option><option>Каждые 60 мин.</option><option>Каждые 15 мин.</option><option selected>Каждые 5 мин.</option></select></div>
+              <div class="scan-actions"><button class="button" data-demo="Быстрое сканирование: проверка новых и изменённых файлов"><svg><use href="#refresh"/></svg>Быстрое сканирование</button><button class="button" data-demo="Полное обновление: повторное чтение всех файлов"><svg><use href="#refresh"/></svg>Полное обновление</button></div>
+            </section>
+            <section class="block">
+              <h3>Резервные копии</h3>
+              <div class="setting-row"><label class="label" for="retention">Срок хранения</label><select id="retention"><option>Не сохранять</option><option>1 день</option><option selected>7 дней</option><option>Не очищать никогда</option></select></div>
+              <p class="hint">Для восстановления изменений тегов и удалённых файлов.</p>
+              <div class="storage"><strong id="storage-size">248,6 МБ</strong><span class="label">занято копиями</span></div>
+              <div class="actions"><button class="button danger" id="clear-backups">Очистить резервные копии</button></div>
+            </section>
+            <section class="block">
+              <h3>Версия и обновления</h3>
+              <div class="version"><strong>HARBOR 0.3.0</strong><span class="badge">BETA 3</span></div>
+              <div class="actions"><button class="button primary" id="check-update"><svg><use href="#refresh"/></svg><span>Проверить обновления</span></button></div>
+              <p class="hint" id="update-status" aria-live="polite" hidden></p>
+            </section>
+          </div>
+        </section>
+        <div class="resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Ширина: Приложение — История действий" data-index="1" title="Перетащите · стрелки ← → · Home: равные ширины"></div>
+        <section class="panel" aria-labelledby="history-title">
+          <header class="panel-heading"><span class="panel-icon"><svg><use href="#history"/></svg></span><h2 id="history-title">История действий</h2><span class="count" id="history-count">5</span></header>
+          <div class="panel-body history-body">
+            <div class="history-intro"><p class="hint">Журнал операций · демонстрационные записи</p><button class="text-button" id="clear-history">Очистить завершённые</button></div>
+            <div class="day">СЕГОДНЯ</div>
+            <article class="operation">
+              <div class="operation-head"><h3>Изменение тегов</h3><time datetime="2026-07-17T14:32">14:32</time></div>
+              <p>Kind of Blue · 5 файлов</p><p><span class="status">Готово: 5 из 5</span></p>
+              <details><summary>Подробнее</summary><div class="file-result">So What.flac — готово<br>Freddie Freeloader.flac — готово<br>Blue in Green.flac — готово<br>All Blues.flac — готово<br>Flamenco Sketches.flac — готово</div></details>
+              <div class="actions"><button class="text-button restore">Восстановить</button></div>
+            </article>
+            <article class="operation" data-clearable>
+              <div class="operation-head"><h3>Перенос файлов</h3><time datetime="2026-07-17T14:18">14:18</time></div>
+              <p>12 файлов → D:\Music\Jazz</p><p><span class="status">Готово: 12 из 12</span></p>
+              <details><summary>Подробнее</summary><div class="file-result">D:\Incoming\Jazz → D:\Music\Jazz<br>12 файлов перенесено без ошибок.</div></details>
+            </article>
+            <article class="operation">
+              <div class="operation-head"><h3>Удаление файлов</h3><time datetime="2026-07-17T13:54">13:54</time></div>
+              <p>3 файла · копии доступны</p><p><span class="status">Готово: 3 из 3</span></p>
+              <details><summary>Подробнее</summary><div class="file-result">demo-01.mp3 · demo-02.mp3 · demo-03.mp3<br>Файлы удалены, резервные копии сохранены.</div></details>
+              <div class="actions"><button class="text-button restore">Восстановить</button></div>
+            </article>
+            <div class="day">ВЧЕРА</div>
+            <article class="operation">
+              <div class="operation-head"><h3>Изменение тегов</h3><time datetime="2026-07-16T19:06">19:06</time></div>
+              <p>Discovery · 14 файлов</p><p><span class="status warning">Прервано · готово: 12 из 14</span></p>
+              <details><summary>Подробнее</summary><div class="file-result warning">Too Long.flac — файл занят<br>Short Circuit.flac — ожидает обработки</div></details>
+              <div class="actions"><button class="text-button" data-demo="Повторная обработка 2 незавершённых файлов">Повторить незавершённые</button><button class="text-button restore">Восстановить</button></div>
+            </article>
+            <article class="operation" data-clearable>
+              <div class="operation-head"><h3>Восстановление файлов</h3><time datetime="2026-07-16T18:42">18:42</time></div>
+              <p>8 файлов</p><p><span class="status">Готово: 8 из 8</span></p>
+              <details><summary>Подробнее</summary><div class="file-result">8 файлов восстановлено из резервных копий.</div></details>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+    <section class="catalog" aria-label="Медиатека — заглушка"><h1>Медиатека</h1><p>Это HTML-мокап настроек, не рабочий плеер.<br>Нажмите логотип HARBOR, чтобы снова открыть три панели.</p></section>
+    <footer class="player" aria-label="Плеер — демонстрация"><div class="cover">♫</div><div class="track">So What<small>Miles Davis · Kind of Blue</small></div><span class="play" aria-hidden="true">Ⅱ</span><span class="player-time">3:24</span><div class="timeline"><span></span></div><span class="player-time">9:22</span></footer>
+  </div>
+  <div class="toast" id="toast" role="status" hidden></div>
+  <script>
+    const root = document.documentElement;
+    const shell = document.querySelector("#shell");
+    const workspace = document.querySelector("#workspace");
+    const panels = [...document.querySelectorAll(".panel")];
+    const separators = [...document.querySelectorAll(".resizer")];
+    let widths = [1, 1, 1];
+    let toastTimer;
+    function notify(message) {
+      const toast = document.querySelector("#toast");
+      toast.textContent = message;
+      toast.hidden = false;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.hidden = true, 4000);
+    }
+    function applyWidths() {
+      workspace.style.gridTemplateColumns = widths.map(w => `minmax(300px, ${w}fr)`).join(" 4px ");
+      requestAnimationFrame(() => separators.forEach((separator, i) => {
+        const total = panels[i].offsetWidth + panels[i + 1].offsetWidth;
+        separator.setAttribute("aria-valuemin", Math.round(300 / total * 100));
+        separator.setAttribute("aria-valuemax", Math.round((total - 300) / total * 100));
+        separator.setAttribute("aria-valuenow", Math.round(panels[i].offsetWidth / total * 100));
+      }));
+    }
+    function setPair(i, requested, total, weight) {
+      const left = Math.max(300, Math.min(total - 300, requested));
+      widths[i] = left / total * weight;
+      widths[i + 1] = (total - left) / total * weight;
+      applyWidths();
+    }
+    separators.forEach((separator, i) => {
+      separator.addEventListener("pointerdown", event => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        // Normalize to actual sizes so minimum-width constraints do not cause a jump.
+        widths = panels.map(panel => panel.getBoundingClientRect().width);
+        const start = event.clientX;
+        const left = widths[i];
+        const total = left + widths[i + 1];
+        const weight = total;
+        separator.setPointerCapture(event.pointerId);
+        separator.classList.add("dragging");
+        document.body.classList.add("resizing");
+        const move = e => setPair(i, left + e.clientX - start, total, weight);
+        const end = () => {
+          separator.classList.remove("dragging");
+          document.body.classList.remove("resizing");
+          separator.removeEventListener("pointermove", move);
+          separator.removeEventListener("lostpointercapture", end);
+        };
+        separator.addEventListener("pointermove", move);
+        separator.addEventListener("lostpointercapture", end);
+      });
+      separator.addEventListener("keydown", event => {
+        if (event.key === "Home") { event.preventDefault(); widths = [1, 1, 1]; applyWidths(); }
+        if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+        event.preventDefault();
+        widths = panels.map(panel => panel.getBoundingClientRect().width);
+        const total = widths[i] + widths[i + 1];
+        setPair(i, widths[i] + (event.key === "ArrowRight" ? 20 : -20), total, total);
+      });
+    });
+    new ResizeObserver(() => applyWidths()).observe(document.querySelector(".workspace-scroll"));
+    document.querySelector("#brand").addEventListener("click", event => {
+      const open = shell.classList.toggle("settings");
+      event.currentTarget.setAttribute("aria-pressed", open);
+      event.currentTarget.setAttribute("aria-label", open ? "Вернуться в медиатеку" : "Открыть настройки");
+      event.currentTarget.title = open ? "Настройки · нажмите, чтобы вернуться в медиатеку" : "Открыть настройки";
+      if (open) { widths = [1, 1, 1]; applyWidths(); }
+    });
+    function setAccent(color) {
+      root.style.setProperty("--accent", color);
+      document.querySelector("#hex").textContent = color.toUpperCase();
+      document.querySelector("#custom-color").value = color;
+      document.querySelectorAll(".swatch").forEach(button => button.setAttribute("aria-pressed", button.dataset.color === color));
+    }
+    document.querySelectorAll(".swatch").forEach(button => button.addEventListener("click", () => setAccent(button.dataset.color)));
+    document.querySelector("#custom-color").addEventListener("input", event => setAccent(event.target.value));
+    const fileInput = document.querySelector("#background-file");
+    let imageUrl;
+    document.querySelector("#choose-background").addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files[0];
+      fileInput.value = "";
+      if (!file) return;
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 32 * 1024 * 1024) {
+        notify("Выберите JPG, PNG или WebP размером до 32 МБ."); return;
+      }
+      if (imageUrl) URL.revokeObjectURL(imageUrl);
+      imageUrl = URL.createObjectURL(file);
+      root.style.setProperty("--background", `url("${imageUrl}")`);
+      document.querySelector("#background-name").textContent = file.name;
+      document.querySelector("#remove-background").hidden = false;
+    });
+    document.querySelector("#remove-background").addEventListener("click", event => {
+      root.style.removeProperty("--background");
+      if (imageUrl) URL.revokeObjectURL(imageUrl);
+      imageUrl = null;
+      document.querySelector("#background-name").textContent = "Фон не выбран";
+      event.currentTarget.hidden = true;
+    });
+    document.querySelectorAll("[data-demo]").forEach(button => button.addEventListener("click", () => notify(`Демонстрация · ${button.dataset.demo}`)));
+    document.querySelectorAll(".restore").forEach(button => button.addEventListener("click", () => notify("Демонстрация · в приложении здесь откроется предварительный просмотр восстановления.")));
+    document.querySelector("#clear-backups").addEventListener("click", event => {
+      if (!confirm("Демонстрация: очистить резервные копии? Связанное восстановление станет недоступно.")) return;
+      document.querySelector("#storage-size").textContent = "0 Б";
+      document.querySelectorAll(".restore").forEach(button => button.hidden = true);
+      event.currentTarget.disabled = true;
+      notify("Демонстрационные копии очищены. Реальные файлы не затронуты.");
+    });
+    document.querySelector("#clear-history").addEventListener("click", event => {
+      if (!confirm("Демонстрация: очистить завершённые операции без возможности восстановления?")) return;
+      document.querySelectorAll("[data-clearable]").forEach(item => item.remove());
+      document.querySelector("#history-count").textContent = document.querySelectorAll(".operation").length;
+      event.currentTarget.disabled = true;
+      notify("Восстановимые и прерванные операции сохранены.");
+    });
+    document.querySelector("#check-update").addEventListener("click", event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      document.querySelector("#update-status").hidden = false;
+      document.querySelector("#update-status").textContent = "Демонстрация · проверяем обновления…";
+      setTimeout(() => {
+        document.querySelector("#update-status").textContent = "Демонстрация · установлена последняя версия.";
+        button.disabled = false;
+      }, 1200);
+    });
+    applyWidths();
+  </script>
+</body>
+</html>
