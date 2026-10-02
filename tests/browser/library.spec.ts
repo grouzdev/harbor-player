@@ -773,9 +773,15 @@ test("panel visibility controls reshape and persist the catalog", async ({
   await expect(
     page.getByRole("separator", { name: "Высота строк" }),
   ).toHaveCount(0);
-  const albumOnlyHeight = await page
-    .locator(".workspace-catalog")
-    .evaluate((row) => row.getBoundingClientRect().height);
+  const catalogWorkspace = page.locator(".workspace-catalog");
+  await expect
+    .poll(() =>
+      catalogWorkspace.evaluate((row) => row.getBoundingClientRect().height),
+    )
+    .toBeGreaterThan(0);
+  const albumOnlyHeight = await catalogWorkspace.evaluate(
+    (row) => row.getBoundingClientRect().height,
+  );
   expect(albumOnlyHeight).toBeCloseTo(
     await workspace.evaluate(
       (element) => element.getBoundingClientRect().height,
