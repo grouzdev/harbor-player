@@ -4374,6 +4374,8 @@ html[data-theme="light"] .appearance-theme-card {
 }
 .catalog-filter-chip,
 .catalog-filter-editor {
+  position: relative;
+  z-index: 2;
   min-height: 36px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -4419,6 +4421,8 @@ button.catalog-filter-chip-label:hover:not(:disabled) {
   color: var(--accent);
 }
 .catalog-user-filters .catalog-filter-add {
+  position: relative;
+  z-index: 2;
   flex: 0 0 36px;
   width: 36px;
   height: 36px;

@@ -17,7 +17,9 @@ test("catalog search expands on click and Tab, collapses empty, and preserves en
     exact: true,
   });
   await expect(open).toBeVisible();
-  await expect(page.locator(".catalog-user-filters button")).toHaveCount(2);
+  await expect(
+    page.locator(".catalog-search button, .catalog-filter-add"),
+  ).toHaveCount(2);
   for (const button of [open, add]) {
     await expect(button).toHaveClass(/icon-button/);
     await expect(button).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
@@ -74,7 +76,13 @@ test("filter menu excludes active filters and restores removed filters", async (
   await add.click();
   await page.locator(".topbar").click({ position: { x: 500, y: 10 } });
   await expect(menu).toHaveCount(0);
-  for (const label of ["Недавние", "Не просмотрено", "Закладки"])
+  await addCatalogFilter(page, "Недавние");
+  await page
+    .getByRole("button", {
+      name: "Закрыть изменение периода недавнего добавления",
+    })
+    .click();
+  for (const label of ["Не просмотрено", "Закладки"])
     await addCatalogFilter(page, label);
   await add.click();
   await expect(menu.getByRole("menuitem")).toHaveText(["Рейтинг"]);
@@ -229,11 +237,13 @@ for (const theme of ["dark", "light"]) {
     page,
   }, info) => {
     await page.goto("/");
-    for (const name of ["Закладки", "Не просмотрено", "Недавние", "Рейтинг"])
+    for (const name of ["Закладки", "Не просмотрено", "Недавние"]) {
       await addCatalogFilter(page, name);
-    await page
-      .getByRole("button", { name: "Закрыть изменение рейтинга" })
-      .click();
+      if (name === "Недавние")
+        await page.keyboard.press("Escape");
+    }
+    await addCatalogFilter(page, "Рейтинг");
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Открыть поиск" }).click();
     // The app currently selects dark; exercise the retained light CSS explicitly
     // after startup has finished applying the saved appearance.
@@ -249,7 +259,7 @@ for (const theme of ["dark", "light"]) {
       await page.setViewportSize({ width, height: 900 });
       const bounds = await page.locator(".catalog-user-filters").boundingBox();
       const coverModeToggle = await page
-        .getByRole("button", { name: "Открыть режим обложки", exact: true })
+        .locator(".topbar .cover-mode-toggle")
         .boundingBox();
       expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(coverModeToggle!.x);
       const editor = await page.locator(".catalog-filter-editor").boundingBox();
@@ -262,9 +272,7 @@ for (const theme of ["dark", "light"]) {
         path: info.outputPath(`${theme}-rating-${width}.png`),
       });
     }
-    await page
-      .getByRole("button", { name: "Закрыть изменение рейтинга" })
-      .click();
+    await page.keyboard.press("Escape");
     await page
       .getByRole("button", { name: "Удалить фильтр «Рейтинг»" })
       .click();
