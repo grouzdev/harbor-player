@@ -1021,8 +1021,7 @@ body.selection-dragging * {
   height: 100%;
   min-width: 0;
   display: grid;
-  grid-template-columns:
-    minmax(0, 1fr) minmax(0, 42%) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 42%) minmax(0, 1fr);
   align-items: center;
   column-gap: clamp(12px, 1.5vw, 24px);
 }
@@ -2111,8 +2110,7 @@ body {
 }
 .player-layout {
   height: 100%;
-  grid-template-columns:
-    minmax(0, 1fr) minmax(0, 42%) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 42%) minmax(0, 1fr);
   column-gap: clamp(12px, 1.5vw, 24px);
 }
 .now-cover {
@@ -2334,7 +2332,8 @@ body {
   aspect-ratio: 464 / 74;
   transform: translate(-50%, -50%);
   background: #b8c1b338;
-  --topbar-brand-mask: url("../../../assets/HARBOR.svg") center / contain no-repeat;
+  --topbar-brand-mask: url("../../../assets/HARBOR.svg") center / contain
+    no-repeat;
   -webkit-mask: var(--topbar-brand-mask);
   mask: var(--topbar-brand-mask);
 }

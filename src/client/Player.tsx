@@ -337,177 +337,177 @@ export function Player({
     <footer className="player">
       {player.audioElement}
       <div className="player-layout">
-      <div className="now-playing">
-        <button
-          type="button"
-          className="now-cover"
-          aria-label={
-            coverMode ? "Вернуться в каталог" : "Открыть режим обложки"
-          }
-          aria-pressed={coverMode}
-          disabled={!coverMode && !coverModeAvailable}
-          title={coverMode ? "Вернуться в каталог" : "Открыть режим обложки"}
-          onClick={onToggleCoverMode}
-        >
-          {track?.coverId ? (
-            <img src={`/api/covers/${track.coverId}`} alt="" />
-          ) : (
-            <CoverPlaceholder />
-          )}
-        </button>
-        <div className="now-copy">
-          {track ? (
-            <span className="now-artists">
-              {albumArtists.length ? (
-                albumArtists.map((artist, index) => (
-                  <span key={`${artist}-${index}`}>
-                    {index > 0 && ", "}
-                    <button
-                      type="button"
-                      className="now-artist-link"
-                      aria-label={`Открыть исполнителя «${artist}»`}
-                      onClick={() => onNavigateToArtist(artist)}
-                    >
-                      {artist}
-                    </button>
-                  </span>
-                ))
-              ) : (
-                <button
-                  type="button"
-                  className="now-artist-link"
-                  aria-label="Открыть неизвестного исполнителя"
-                  onClick={() => onNavigateToArtist("")}
-                >
-                  Неизвестный исполнитель
-                </button>
-              )}
-            </span>
-          ) : (
-            <strong>Ваша музыка — здесь</strong>
-          )}
-          {track ? (
-            <button
-              type="button"
-              className="now-track-link"
-              aria-label={`Открыть альбом «${track.albumTitle || "Без альбома"}»`}
-              onClick={() => onNavigateToAlbum(track.albumKey, albumArtists)}
-            >
-              {track.title || "Без названия"}
-            </button>
-          ) : (
-            <span>Выберите трек для воспроизведения</span>
+        <div className="now-playing">
+          <button
+            type="button"
+            className="now-cover"
+            aria-label={
+              coverMode ? "Вернуться в каталог" : "Открыть режим обложки"
+            }
+            aria-pressed={coverMode}
+            disabled={!coverMode && !coverModeAvailable}
+            title={coverMode ? "Вернуться в каталог" : "Открыть режим обложки"}
+            onClick={onToggleCoverMode}
+          >
+            {track?.coverId ? (
+              <img src={`/api/covers/${track.coverId}`} alt="" />
+            ) : (
+              <CoverPlaceholder />
+            )}
+          </button>
+          <div className="now-copy">
+            {track ? (
+              <span className="now-artists">
+                {albumArtists.length ? (
+                  albumArtists.map((artist, index) => (
+                    <span key={`${artist}-${index}`}>
+                      {index > 0 && ", "}
+                      <button
+                        type="button"
+                        className="now-artist-link"
+                        aria-label={`Открыть исполнителя «${artist}»`}
+                        onClick={() => onNavigateToArtist(artist)}
+                      >
+                        {artist}
+                      </button>
+                    </span>
+                  ))
+                ) : (
+                  <button
+                    type="button"
+                    className="now-artist-link"
+                    aria-label="Открыть неизвестного исполнителя"
+                    onClick={() => onNavigateToArtist("")}
+                  >
+                    Неизвестный исполнитель
+                  </button>
+                )}
+              </span>
+            ) : (
+              <strong>Ваша музыка — здесь</strong>
+            )}
+            {track ? (
+              <button
+                type="button"
+                className="now-track-link"
+                aria-label={`Открыть альбом «${track.albumTitle || "Без альбома"}»`}
+                onClick={() => onNavigateToAlbum(track.albumKey, albumArtists)}
+              >
+                {track.title || "Без названия"}
+              </button>
+            ) : (
+              <span>Выберите трек для воспроизведения</span>
+            )}
+          </div>
+          {track && <span className="format-badge">{track.format}</span>}
+          {track && (
+            <RatingControl
+              kind="track"
+              id={track.id}
+              rating={track.rating}
+              pending={pendingUserStateKeys.has(`track:${track.id}`)}
+              onChange={onUserStateChange}
+            />
           )}
         </div>
-        {track && <span className="format-badge">{track.format}</span>}
-        {track && (
-          <RatingControl
-            kind="track"
-            id={track.id}
-            rating={track.rating}
-            pending={pendingUserStateKeys.has(`track:${track.id}`)}
-            onChange={onUserStateChange}
-          />
-        )}
-      </div>
-      <div className="transport">
-        <div className="transport-buttons">
+        <div className="transport">
+          <div className="transport-buttons">
+            <button
+              className="icon-button"
+              aria-label="Предыдущий трек"
+              disabled={!track}
+              onClick={() => void player.step(-1)}
+            >
+              <SkipBack size={20} fill="currentColor" />
+            </button>
+            <button
+              className="play-button"
+              aria-label={player.playing ? "Пауза" : "Воспроизвести"}
+              disabled={!track}
+              onClick={player.toggle}
+            >
+              {player.playing ? (
+                <Pause size={23} fill="currentColor" />
+              ) : (
+                <Play size={23} fill="currentColor" />
+              )}
+            </button>
+            <button
+              className="icon-button"
+              aria-label="Следующий трек"
+              disabled={!track}
+              onClick={() => void player.step(1)}
+            >
+              <SkipForward size={20} fill="currentColor" />
+            </button>
+          </div>
+          <div className="seek">
+            <span className="seek-time">{duration(player.position)}</span>
+            <RangeSlider
+              className="seek-range"
+              min={0}
+              max={Number.isFinite(player.length) ? player.length : 0}
+              step={0.1}
+              value={player.position}
+              disabled={!track}
+              ariaLabel="Позиция воспроизведения"
+              onChange={player.seek}
+            />
+            <span className="seek-time">{duration(player.length)}</span>
+          </div>
+        </div>
+        <div className="volume">
+          <span className="queue-count">
+            {player.queue
+              ? `${player.queue.position + 1} / ${player.queue.total}`
+              : "Локальное воспроизведение"}
+          </span>
           <button
-            className="icon-button"
-            aria-label="Предыдущий трек"
-            disabled={!track}
-            onClick={() => void player.step(-1)}
+            className={`icon-button player-volume-control ${player.volume === 0 ? "active" : ""}`}
+            aria-label={player.volume ? "Выключить звук" : "Включить звук"}
+            aria-pressed={player.volume === 0}
+            onClick={() => player.setVolume(player.volume ? 0 : 0.7)}
           >
-            <SkipBack size={20} fill="currentColor" />
+            {player.volume ? <Volume2 size={18} /> : <VolumeX size={18} />}
           </button>
+          <RangeSlider
+            className="volume-range player-volume-control"
+            min={0}
+            max={1}
+            step={0.01}
+            value={player.volume}
+            ariaLabel="Громкость"
+            onChange={player.setVolume}
+          />
           <button
-            className="play-button"
-            aria-label={player.playing ? "Пауза" : "Воспроизвести"}
-            disabled={!track}
-            onClick={player.toggle}
+            className={`icon-button player-playback-mode ${player.repeat !== "off" ? "active" : ""}`}
+            aria-label={`Повтор: ${player.repeat === "off" ? "выключен" : player.repeat === "all" ? "вся очередь" : "один трек"}`}
+            aria-pressed={player.repeat !== "off"}
+            onClick={() =>
+              player.setRepeat(
+                player.repeat === "off"
+                  ? "all"
+                  : player.repeat === "all"
+                    ? "one"
+                    : "off",
+              )
+            }
           >
-            {player.playing ? (
-              <Pause size={23} fill="currentColor" />
+            {player.repeat === "one" ? (
+              <Repeat1 size={17} />
             ) : (
-              <Play size={23} fill="currentColor" />
+              <Repeat size={17} />
             )}
           </button>
           <button
-            className="icon-button"
-            aria-label="Следующий трек"
-            disabled={!track}
-            onClick={() => void player.step(1)}
+            className={`icon-button player-playback-mode ${player.shuffle ? "active" : ""}`}
+            aria-label="Перемешать"
+            aria-pressed={player.shuffle}
+            onClick={() => player.setShuffle(!player.shuffle)}
           >
-            <SkipForward size={20} fill="currentColor" />
+            <Shuffle size={17} />
           </button>
         </div>
-        <div className="seek">
-          <span className="seek-time">{duration(player.position)}</span>
-          <RangeSlider
-            className="seek-range"
-            min={0}
-            max={Number.isFinite(player.length) ? player.length : 0}
-            step={0.1}
-            value={player.position}
-            disabled={!track}
-            ariaLabel="Позиция воспроизведения"
-            onChange={player.seek}
-          />
-          <span className="seek-time">{duration(player.length)}</span>
-        </div>
-      </div>
-      <div className="volume">
-        <span className="queue-count">
-          {player.queue
-            ? `${player.queue.position + 1} / ${player.queue.total}`
-            : "Локальное воспроизведение"}
-        </span>
-        <button
-          className={`icon-button player-volume-control ${player.volume === 0 ? "active" : ""}`}
-          aria-label={player.volume ? "Выключить звук" : "Включить звук"}
-          aria-pressed={player.volume === 0}
-          onClick={() => player.setVolume(player.volume ? 0 : 0.7)}
-        >
-          {player.volume ? <Volume2 size={18} /> : <VolumeX size={18} />}
-        </button>
-        <RangeSlider
-          className="volume-range player-volume-control"
-          min={0}
-          max={1}
-          step={0.01}
-          value={player.volume}
-          ariaLabel="Громкость"
-          onChange={player.setVolume}
-        />
-        <button
-          className={`icon-button player-playback-mode ${player.repeat !== "off" ? "active" : ""}`}
-          aria-label={`Повтор: ${player.repeat === "off" ? "выключен" : player.repeat === "all" ? "вся очередь" : "один трек"}`}
-          aria-pressed={player.repeat !== "off"}
-          onClick={() =>
-            player.setRepeat(
-              player.repeat === "off"
-                ? "all"
-                : player.repeat === "all"
-                  ? "one"
-                  : "off",
-            )
-          }
-        >
-          {player.repeat === "one" ? (
-            <Repeat1 size={17} />
-          ) : (
-            <Repeat size={17} />
-          )}
-        </button>
-        <button
-          className={`icon-button player-playback-mode ${player.shuffle ? "active" : ""}`}
-          aria-label="Перемешать"
-          aria-pressed={player.shuffle}
-          onClick={() => player.setShuffle(!player.shuffle)}
-        >
-          <Shuffle size={17} />
-        </button>
-      </div>
       </div>
     </footer>
   );

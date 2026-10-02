@@ -169,10 +169,12 @@ describe("catalog user state", () => {
     expect(catalog.albums(filter).items.map((album) => album.id)).toEqual([
       "matching",
     ]);
-    expect(catalog.tracks(filter).items.map((item) => item.id).sort()).toEqual([
-      "match-one",
-      "match-two",
-    ]);
+    expect(
+      catalog
+        .tracks(filter)
+        .items.map((item) => item.id)
+        .sort(),
+    ).toEqual(["match-one", "match-two"]);
   });
 
   it("copies album state on an internal album-key change without overwriting the destination", () => {

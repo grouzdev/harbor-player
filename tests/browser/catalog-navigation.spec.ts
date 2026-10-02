@@ -523,16 +523,16 @@ test("artist and album selection cascades to lower-priority panels", async ({
     ),
   ).toBe(true);
   await filterArtist(page, "Zebra");
-  await expect(
-    page.locator(".artists-panel .panel-count"),
-  ).toContainText("2/4");
-  await expect(
-    page.locator(".albums-panel .panel-count"),
-  ).toContainText("1/133");
+  await expect(page.locator(".artists-panel .panel-count")).toContainText(
+    "2/4",
+  );
+  await expect(page.locator(".albums-panel .panel-count")).toContainText(
+    "1/133",
+  );
   await page.getByRole("button", { name: "Сбросить исполнителей" }).click();
-  await expect(
-    page.locator(".albums-panel .panel-count"),
-  ).toContainText("1/139");
+  await expect(page.locator(".albums-panel .panel-count")).toContainText(
+    "1/139",
+  );
 });
 
 test("selecting an album keeps the album grid in place while another album plays", async ({
@@ -890,12 +890,10 @@ test("global search restores filters, selection, expanded folders and scroll pos
     page.getByRole("heading", { name: "Треки не найдены" }),
   ).toBeVisible();
   await search.fill("   ");
-  await expect(
-    page.locator(".artists-panel .panel-count"),
-  ).toContainText("1/1");
-  await expect(
-    page.locator(".genres-panel .panel-count"),
-  ).toContainText("1/1");
+  await expect(page.locator(".artists-panel .panel-count")).toContainText(
+    "1/1",
+  );
+  await expect(page.locator(".genres-panel .panel-count")).toContainText("1/1");
   await expect(
     page.getByRole("button", { name: "Удалить фильтр «Закладки»" }),
   ).toBeEnabled();
@@ -903,9 +901,7 @@ test("global search restores filters, selection, expanded folders and scroll pos
     page.getByRole("button", { name: "Свернуть библиотеку «rock»" }),
   ).toBeVisible();
   await expect(page.locator(".library-folder-tile.selected")).toHaveCount(1);
-  await expect(
-    page.locator(".tracks-panel .panel-count"),
-  ).toContainText("1/3");
+  await expect(page.locator(".tracks-panel .panel-count")).toContainText("1/3");
   await expect
     .poll(() =>
       page
@@ -1059,9 +1055,9 @@ test("clearing a pending search ignores its late response and quick input does n
   await expect(artist(page, "Queen")).toBeVisible();
   await search.fill("zz-quick");
   await search.fill("");
-  await expect(
-    page.locator(".artists-panel .panel-count"),
-  ).toContainText("1/4");
+  await expect(page.locator(".artists-panel .panel-count")).toContainText(
+    "1/4",
+  );
   expect(
     data.requests
       .filter((request) => request.filter.search)
@@ -1108,9 +1104,9 @@ test("album context filtering supports a union and search album operations stay 
   await page
     .getByRole("menuitem", { name: "Фильтровать по выбранному", exact: true })
     .click();
-  await expect(
-    page.locator(".albums-panel .panel-count"),
-  ).toContainText("2/136");
+  await expect(page.locator(".albums-panel .panel-count")).toContainText(
+    "2/136",
+  );
   await expect(count(page, "tracks")).toHaveText("6");
   await expect(
     page.getByRole("button", { name: "Сбросить жанры" }),

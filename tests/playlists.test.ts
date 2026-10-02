@@ -318,7 +318,8 @@ describe("playlists", () => {
     );
     expect(catalog.playlist(created.playlist.id).playlist.trackCount).toBe(2);
     expect(
-      catalog.addPlaylistEntries(created.playlist.id, "folder", [target]).entries,
+      catalog.addPlaylistEntries(created.playlist.id, "folder", [target])
+        .entries,
     ).toHaveLength(2);
     expect(catalog.playlist(created.playlist.id).playlist.trackCount).toBe(4);
   });

@@ -54,10 +54,8 @@ export function filterForCatalogPanel(
     };
   if (panel === "genres")
     return { ...filter, genres: [], artists: [], albumIds: [] };
-  if (panel === "artists")
-    return { ...filter, artists: [], albumIds: [] };
-  if (panel === "albums")
-    return { ...filter, albumIds: [] };
+  if (panel === "artists") return { ...filter, artists: [], albumIds: [] };
+  if (panel === "albums") return { ...filter, albumIds: [] };
   return filter;
 }
 

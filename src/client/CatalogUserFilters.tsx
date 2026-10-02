@@ -129,10 +129,7 @@ export function CatalogUserFilters({
   if (previousFilter !== filter) {
     setPreviousFilter(filter);
     if (reset) setNeutralRating(false);
-    if (
-      ratingEditing &&
-      (reset || (!ratingActive && !neutralRating))
-    ) {
+    if (ratingEditing && (reset || (!ratingActive && !neutralRating))) {
       setRatingEditing(false);
     }
     if (recentEditing && (reset || filter.recentlyAddedDays === null))
@@ -248,13 +245,11 @@ export function CatalogUserFilters({
       setNeutralRating(true);
       onChange((current) => withSharedRatingRange(current, 0, 5));
       setRatingEditing(true);
-    }
-    else if (kind === "recent") {
+    } else if (kind === "recent") {
       setOrder([...visible, "recent"]);
       onChange((current) => ({ ...current, recentlyAddedDays: 1 }));
       setRecentEditing(true);
-    }
-    else {
+    } else {
       setOrder([...visible, kind]);
       changeBoolean(kind, true);
     }
@@ -455,7 +450,7 @@ export function CatalogUserFilters({
                   ? ratingFilterLabel(minimum, maximum)
                   : kind === "recent"
                     ? recentlyAddedFilterLabel(filter.recentlyAddedDays!)
-                  : label}
+                    : label}
               </span>
             </>
           );
@@ -515,7 +510,9 @@ export function CatalogUserFilters({
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           disabled={
-            disabled || Boolean(ratingEditing || recentEditing) || !addable.length
+            disabled ||
+            Boolean(ratingEditing || recentEditing) ||
+            !addable.length
           }
           onClick={() => setMenuOpen((open) => !open)}
         >

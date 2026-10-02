@@ -93,10 +93,14 @@ test("topbar keeps the settings logo centered", async ({ page }) => {
   const brandBox = (await brand.boundingBox())!;
 
   expect(
-    Math.abs(brandBox.x + brandBox.width / 2 - (topbarBox.x + topbarBox.width / 2)),
+    Math.abs(
+      brandBox.x + brandBox.width / 2 - (topbarBox.x + topbarBox.width / 2),
+    ),
   ).toBeLessThanOrEqual(1);
   expect(
-    Math.abs(brandBox.y + brandBox.height / 2 - (topbarBox.y + topbarBox.height / 2)),
+    Math.abs(
+      brandBox.y + brandBox.height / 2 - (topbarBox.y + topbarBox.height / 2),
+    ),
   ).toBeLessThanOrEqual(1);
   await expect(brand).toHaveAttribute("aria-label", "Открыть настройки");
 });
@@ -125,10 +129,7 @@ test("topbar groups catalog controls in the requested order", async ({
   ]);
   expect(
     firstSectionControlBox!.x - initialAddBox!.x - initialAddBox!.width,
-  ).toBeCloseTo(
-    7,
-    1,
-  );
+  ).toBeCloseTo(7, 1);
   const rightControls = [
     page
       .locator(".topbar")
@@ -202,16 +203,22 @@ test("active catalog filters show their current labels", async ({ page }) => {
   await rating.click();
   await minimum.fill("0");
   await maximum.fill("0");
-  await page.getByRole("button", { name: "Закрыть изменение рейтинга" }).click();
+  await page
+    .getByRole("button", { name: "Закрыть изменение рейтинга" })
+    .click();
   await expect(rating).toHaveText("Без рейтинга");
   await rating.click();
   await minimum.fill("0");
   await maximum.fill("0");
-  await page.getByRole("button", { name: "Закрыть изменение рейтинга" }).click();
+  await page
+    .getByRole("button", { name: "Закрыть изменение рейтинга" })
+    .click();
   await expect(rating).toHaveText("Без рейтинга");
   await rating.click();
   await maximum.fill("5");
-  await page.getByRole("button", { name: "Закрыть изменение рейтинга" }).click();
+  await page
+    .getByRole("button", { name: "Закрыть изменение рейтинга" })
+    .click();
   await expect(rating).toHaveText("Рейтинг: от 0 до 5");
   await addCatalogFilter(page, "Не просмотрено");
   await expect(page.locator('[data-filter="unviewed"]')).toHaveText(
@@ -1088,10 +1095,9 @@ test("player prioritizes the current track while adapting progress", async ({
   expect(layouts[0].seekRangeWidth, "1800px progress").toBeGreaterThan(
     layouts[1].seekRangeWidth,
   );
-  expect(
-    layouts[1].seekRangeWidth,
-    "1400px progress",
-  ).toBeGreaterThan(layouts[2].seekRangeWidth);
+  expect(layouts[1].seekRangeWidth, "1400px progress").toBeGreaterThan(
+    layouts[2].seekRangeWidth,
+  );
   expect(layouts[4].seekRangeWidth, "740px progress").toBeGreaterThan(
     layouts[5].seekRangeWidth,
   );
@@ -1421,9 +1427,9 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await albumFolderButton.click();
   await expect(albumFolder).toHaveClass(/selected/);
   await expect(page.getByTestId("track-row")).toHaveCount(7);
-  await expect(
-    page.locator(".libraries-panel .panel-count"),
-  ).toHaveText(/^0\/\d+$/);
+  await expect(page.locator(".libraries-panel .panel-count")).toHaveText(
+    /^0\/\d+$/,
+  );
   await downloadsTile.locator(".list-tile-main").click();
   await expect(
     page.locator(".track-row .track-number, .track-row .row-play"),
@@ -1460,9 +1466,9 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     }),
   ).toBeVisible();
   await downloadsTile.locator(".list-tile-main").click();
-  await expect(
-    page.locator(".libraries-panel .panel-count"),
-  ).toHaveText(/^1\/\d+$/);
+  await expect(page.locator(".libraries-panel .panel-count")).toHaveText(
+    /^1\/\d+$/,
+  );
 
   const genreRow = page
     .locator(".genres-panel .list-tile")
@@ -1539,9 +1545,9 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await expect(
     page.getByRole("button", { name: "Сбросить выбор треков" }),
   ).toBeVisible();
-  await expect(
-    page.locator(".tracks-panel .panel-count"),
-  ).toContainText(/^1\/\d+$/);
+  await expect(page.locator(".tracks-panel .panel-count")).toContainText(
+    /^1\/\d+$/,
+  );
   await page
     .locator(".tracks-panel")
     .getByRole("button", { name: "Закрыть панель «Треки»" })
@@ -2122,9 +2128,9 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   if (await resetTrackSelection.count()) await resetTrackSelection.click();
   await genreButton.dispatchEvent("click");
   await expect(genreRow).toHaveClass(/selected/);
-  await expect(
-    page.locator(".genres-panel .panel-count"),
-  ).toContainText(/^1\/\d+$/);
+  await expect(page.locator(".genres-panel .panel-count")).toContainText(
+    /^1\/\d+$/,
+  );
   await expect(artistRow).toHaveClass(/selected/);
   await expect(firstAlbum).toHaveClass(/selected/);
   await page
@@ -2153,9 +2159,9 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
 
   await artistButton.dispatchEvent("click");
   await expect(artistRow).toHaveClass(/selected/);
-  await expect(
-    page.locator(".artists-panel .panel-count"),
-  ).toContainText(/^1\/\d+$/);
+  await expect(page.locator(".artists-panel .panel-count")).toContainText(
+    /^1\/\d+$/,
+  );
   await artistButton.dispatchEvent("click", { ctrlKey: true });
   await expect(artistRow).not.toHaveClass(/selected/);
   await artistButton.dispatchEvent("click");
@@ -2210,9 +2216,9 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   );
   await firstAlbumButton.dispatchEvent("click");
   await expect(firstAlbum).toHaveClass(/selected/);
-  await expect(
-    page.locator(".albums-panel .panel-count"),
-  ).toContainText(/^1\/\d+$/);
+  await expect(page.locator(".albums-panel .panel-count")).toContainText(
+    /^1\/\d+$/,
+  );
   await firstAlbumButton.dispatchEvent("click");
   await expect
     .poll(() =>

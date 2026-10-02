@@ -88,7 +88,9 @@ test("filter menu excludes active filters and restores removed filters", async (
   await expect(menu.getByRole("menuitem")).toHaveText(["Рейтинг"]);
   await menu.getByRole("menuitem", { name: "Рейтинг", exact: true }).click();
   await expect(add).toBeDisabled();
-  await page.getByRole("button", { name: "Закрыть изменение рейтинга" }).click();
+  await page
+    .getByRole("button", { name: "Закрыть изменение рейтинга" })
+    .click();
   await expect(page.locator(".catalog-filter-chip")).toHaveText([
     "Добавлено 1 день назад",
     "Не просмотрено",
@@ -120,9 +122,7 @@ test("filter menu excludes active filters and restores removed filters", async (
   await expect(add).toBeEnabled();
 });
 
-test("rating filter applies changes immediately", async ({
-  page,
-}) => {
+test("rating filter applies changes immediately", async ({ page }) => {
   const requests: CatalogFilter[] = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
@@ -159,9 +159,7 @@ test("rating filter applies changes immediately", async ({
   await expect.poll(() => requests.at(-1)?.trackRatingMin).toBeNull();
 });
 
-test("recent filter applies its period immediately", async ({
-  page,
-}) => {
+test("recent filter applies its period immediately", async ({ page }) => {
   const requests: CatalogFilter[] = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
@@ -204,7 +202,10 @@ test("recent filter applies its period immediately", async ({
   await expect(page.locator(".catalog-filter-editor")).toHaveCount(0);
   expect(requests.at(-1)?.recentlyAddedDays).toBe(30);
   await recent.click();
-  await page.getByRole("button", { name: "Удалить фильтр «Недавние»" }).first().click();
+  await page
+    .getByRole("button", { name: "Удалить фильтр «Недавние»" })
+    .first()
+    .click();
   await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBeNull();
   await expect(recent).toHaveCount(0);
 });
@@ -214,7 +215,9 @@ test("recent filter reaches every catalog panel", async ({ page }) => {
   page.on("request", (request) => {
     const url = new URL(request.url());
     if (!url.searchParams.has("filter")) return;
-    const panel = url.pathname.match(/^\/api\/(libraries|genres|artists|albums|tracks)$/)?.[1];
+    const panel = url.pathname.match(
+      /^\/api\/(libraries|genres|artists|albums|tracks)$/,
+    )?.[1];
     if (!panel) return;
     const panelRequests = requests.get(panel) || [];
     panelRequests.push(JSON.parse(url.searchParams.get("filter")!));
@@ -225,9 +228,7 @@ test("recent filter reaches every catalog panel", async ({ page }) => {
   for (const panel of ["libraries", "genres", "artists", "albums", "tracks"])
     await expect
       .poll(() =>
-        requests
-          .get(panel)
-          ?.some((filter) => filter.recentlyAddedDays === 1),
+        requests.get(panel)?.some((filter) => filter.recentlyAddedDays === 1),
       )
       .toBe(true);
 });
@@ -239,8 +240,7 @@ for (const theme of ["dark", "light"]) {
     await page.goto("/");
     for (const name of ["Закладки", "Не просмотрено", "Недавние"]) {
       await addCatalogFilter(page, name);
-      if (name === "Недавние")
-        await page.keyboard.press("Escape");
+      if (name === "Недавние") await page.keyboard.press("Escape");
     }
     await addCatalogFilter(page, "Рейтинг");
     await page.keyboard.press("Escape");
