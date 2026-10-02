@@ -14,6 +14,11 @@ export interface DesktopBridge {
     name: string,
     format: "m3u8" | "xspf",
   ): Promise<string | null>;
+  saveCover(
+    defaultDirectory: string,
+    mime: "image/jpeg" | "image/png",
+    data: Uint8Array,
+  ): Promise<boolean>;
   reportClientReady(): Promise<void>;
   subscribeUpdateState(listener: (state: UpdateState) => void): () => void;
   getWindowFullscreen(): Promise<boolean>;

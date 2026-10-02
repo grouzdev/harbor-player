@@ -11,7 +11,7 @@ import {
   utilityProcess,
   type UtilityProcess,
 } from "electron";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import electronUpdater from "electron-updater";
@@ -645,6 +645,51 @@ async function bootstrap() {
             ],
           });
           return result.canceled ? null : result.filePath || null;
+        },
+      );
+      ipcMain.handle(
+        "desktop:save-cover",
+        async (
+          event,
+          defaultDirectory: string,
+          mime: "image/jpeg" | "image/png",
+          data: Uint8Array,
+        ) => {
+          requireDesktopSender(event);
+          if (!path.isAbsolute(defaultDirectory))
+            throw new Error("Неверная папка альбома");
+          if (
+            !["image/jpeg", "image/png"].includes(mime) ||
+            !(data instanceof Uint8Array) ||
+            data.byteLength > 10 * 1024 * 1024
+          )
+            throw new Error("Неверный файл обложки");
+          const extension = mime === "image/png" ? "png" : "jpg";
+          const result = await dialog.showSaveDialog(mainWindow!, {
+            title: "Сохранить обложку",
+            defaultPath: path.join(defaultDirectory, `cover.${extension}`),
+            filters: [
+              {
+                name: mime === "image/png" ? "PNG" : "JPEG",
+                extensions: [extension],
+              },
+            ],
+          });
+          if (result.canceled || !result.filePath) return false;
+          const file = result.filePath;
+          if (existsSync(file)) {
+            const confirmation = await dialog.showMessageBox(mainWindow!, {
+              type: "warning",
+              message: `Файл «${path.basename(file)}» уже существует`,
+              detail: "Заменить существующую обложку?",
+              buttons: ["Заменить", "Отмена"],
+              defaultId: 1,
+              cancelId: 1,
+            });
+            if (confirmation.response !== 0) return false;
+          }
+          await writeFile(file, data);
+          return true;
         },
       );
       ipcMain.handle("desktop:report-client-ready", async (event) => {

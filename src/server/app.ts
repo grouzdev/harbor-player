@@ -496,6 +496,16 @@ export async function createApp(options: {
       .type(id.endsWith(".png") ? "image/png" : "image/jpeg")
       .send(createReadStream(file));
   });
+  app.get("/api/albums/:id/cover-directory", async (request) => {
+    const albumId = idParam.parse(request.params).id;
+    const track = service.catalog.firstAlbumTrack(albumId);
+    if (!track) throw notFound("Альбом не найден");
+    const library = service.catalog.library(track.libraryId);
+    if (!library.available) throw conflict("Библиотека недоступна");
+    const directory = path.dirname(path.join(library.path, track.relativePath));
+    await service.safePath(directory);
+    return { directory };
+  });
   app.post("/api/covers/normalize-webp", async (request) => {
     const body = z
       .object({ data: z.string().min(1).max(14_000_000) })

@@ -86,6 +86,7 @@ export type CatalogContextMenuHandler = (
   id: string,
   selectedIds: string[],
   copyTexts?: string[],
+  coverId?: string | null,
 ) => void;
 
 function copyArtistLabel(artists: string[]) {
@@ -603,6 +604,7 @@ export function AlbumGrid({
                             album.id,
                             selectedIds,
                             copyTexts,
+                            album.coverId,
                           );
                         }}
                       >

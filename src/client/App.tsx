@@ -1425,6 +1425,57 @@ export function App() {
     }),
     [addToPlaylist, createPlaylistForEntries, playlists.data],
   );
+  const saveAlbumCover = useCallback(
+    async (albumId: string, coverId: string) => {
+      const desktop = window.harborPlayerDesktop;
+      try {
+        const response = await fetch(`/api/covers/${coverId}`);
+        if (!response.ok) throw new Error("Не удалось прочитать обложку");
+        const mime = coverId.endsWith(".png") ? "image/png" : "image/jpeg";
+        const data = new Uint8Array(await response.arrayBuffer());
+        if (desktop) {
+          const { directory } = await api<{ directory: string }>(
+            `/albums/${albumId}/cover-directory`,
+          );
+          await desktop.saveCover(directory, mime, data);
+          return;
+        }
+        const browserWindow = window as typeof window & {
+          showSaveFilePicker?: unknown;
+        };
+        const showSaveFilePicker =
+          browserWindow.showSaveFilePicker as unknown as
+            | ((options: {
+                suggestedName: string;
+                types: Array<{
+                  description: string;
+                  accept: Record<string, string[]>;
+                }>;
+              }) => Promise<FileSystemFileHandle>)
+            | undefined;
+        if (!showSaveFilePicker)
+          throw new Error("Сохранение файла не поддерживается браузером");
+        const extension = mime === "image/png" ? "png" : "jpg";
+        const file = await showSaveFilePicker({
+          suggestedName: `cover.${extension}`,
+          types: [
+            {
+              description: mime === "image/png" ? "PNG" : "JPEG",
+              accept: { [mime]: [`.${extension}`] },
+            },
+          ],
+        });
+        const writer = await file.createWritable();
+        await writer.write(data);
+        await writer.close();
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError")
+          return;
+        notify(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [notify],
+  );
   const showCatalogMenu = useCallback(
     (
       event: React.MouseEvent,
@@ -1432,6 +1483,7 @@ export function App() {
       id: string,
       selectedIds: string[],
       copyTexts?: string[],
+      coverId?: string | null,
     ) => {
       event.preventDefault();
       const ids = [...new Set(selectedIds)];
@@ -1472,6 +1524,15 @@ export function App() {
                 {
                   label: "Фильтровать по выбранному",
                   onSelect: () => filterBySelection(kind, ids),
+                },
+              ]
+            : []),
+          ...(kind === "album"
+            ? [
+                {
+                  label: "Сохранить обложку",
+                  disabled: !coverId || ids.length !== 1,
+                  onSelect: () => saveAlbumCover(id, coverId!),
                 },
               ]
             : []),
@@ -1679,6 +1740,7 @@ export function App() {
       pendingUserStateKeys,
       playlistMenuItem,
       queryClient,
+      saveAlbumCover,
     ],
   );
   const showGenreMenu = useCallback(

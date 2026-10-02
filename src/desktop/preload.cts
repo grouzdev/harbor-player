@@ -35,6 +35,17 @@ contextBridge.exposeInMainWorld("harborPlayerDesktop", {
       name,
       format,
     ) as Promise<string | null>,
+  saveCover: (
+    defaultDirectory: string,
+    mime: "image/jpeg" | "image/png",
+    data: Uint8Array,
+  ) =>
+    ipcRenderer.invoke(
+      "desktop:save-cover",
+      defaultDirectory,
+      mime,
+      data,
+    ) as Promise<boolean>,
   reportClientReady: () => ipcRenderer.invoke("desktop:report-client-ready"),
   getWindowFullscreen: () =>
     ipcRenderer.invoke("desktop:get-window-fullscreen") as Promise<boolean>,
