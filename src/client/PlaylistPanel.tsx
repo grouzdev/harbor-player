@@ -1,15 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ChevronDown,
-  ChevronRight,
-  CircleUserRound,
-  DiscAlbum,
   Download,
-  Drama,
-  FolderOpen,
   ListMusic,
-  Music,
   Pencil,
   Play,
   Plus,
@@ -27,8 +20,8 @@ import type {
   PlaylistTrackPage,
 } from "../shared/playlists";
 import { api, count, duration } from "./api";
-import { CoverPlaceholder } from "./CoverPlaceholder";
 import { Modal } from "./Modal";
+import { PlaylistContent, type PlaylistCurrentTrack } from "./PlaylistContent";
 
 const templateFieldLabels: Record<PathTemplateField, string> = {
   albumArtist: "Исполнитель альбома",
@@ -60,6 +53,8 @@ const fieldPart = (
   suffix: "",
   pad,
 });
+
+const emptyCollapsed = new Set<string>();
 
 function SyncDialog({
   playlist,
@@ -416,6 +411,7 @@ export function PlaylistPanel({
   playlistId,
   onAddSelection,
   onPlay,
+  current,
   onRename,
   onDelete,
   notify,
@@ -423,17 +419,20 @@ export function PlaylistPanel({
 }: {
   playlistId: string | null;
   onAddSelection: (beforeEntryId?: string) => Promise<void>;
-  onPlay: (id: string, startId?: string) => void;
+  onPlay: (id: string, startId?: string, startEntryId?: string) => void;
+  current?: PlaylistCurrentTrack;
   onRename: (playlist: PlaylistDetail["playlist"]) => void;
   onDelete: (playlist: PlaylistDetail["playlist"]) => void;
   notify: (message: string) => void;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [dragged, setDragged] = useState<string | null>(null);
-  const [dropBefore, setDropBefore] = useState<string | null>(null);
   const [syncOpen, setSyncOpen] = useState(false);
+  const mutationBusy = useRef(false);
+  const [mutating, setMutating] = useState(false);
+  const [collapsedByPlaylist, setCollapsedByPlaylist] = useState<
+    Record<string, Set<string>>
+  >({});
   const detail = useQuery({
     queryKey: ["playlist", playlistId],
     enabled: Boolean(playlistId),
@@ -442,10 +441,9 @@ export function PlaylistPanel({
   const tracks = useQuery({
     queryKey: ["playlist-tracks", playlistId],
     enabled: Boolean(playlistId),
+    // One resolved snapshot: independent pages could mix catalog revisions.
     queryFn: () =>
-      api<PlaylistTrackPage>(
-        `/playlists/${playlistId}/tracks?offset=0&limit=500`,
-      ),
+      api<PlaylistTrackPage>(`/playlists/${playlistId}/tracks?limit=all`),
   });
   const refresh = async () => {
     await Promise.all([
@@ -461,17 +459,23 @@ export function PlaylistPanel({
     body?: unknown,
     method?: "POST" | "DELETE",
   ) => {
+    if (mutationBusy.current) return;
+    mutationBusy.current = true;
+    setMutating(true);
     try {
       await api(url, body, method);
       await refresh();
     } catch (error) {
       notify((error as Error).message);
+    } finally {
+      mutationBusy.current = false;
+      setMutating(false);
     }
   };
-  const reorder = async (entryId: string, beforeId: string) => {
+  const reorder = async (entryId: string, beforeId: string | null) => {
     const ids = detail.data?.entries.map((entry) => entry.id) || [];
     const from = ids.indexOf(entryId);
-    const to = ids.indexOf(beforeId);
+    const to = beforeId === null ? ids.length : ids.indexOf(beforeId);
     if (from < 0 || to < 0 || from === to) return;
     ids.splice(from, 1);
     ids.splice(from < to ? to - 1 : to, 0, entryId);
@@ -502,13 +506,6 @@ export function PlaylistPanel({
       </section>
     );
   const playlist = detail.data?.playlist;
-  const entryIcons = {
-    track: Music,
-    album: DiscAlbum,
-    artist: CircleUserRound,
-    genre: Drama,
-    folder: FolderOpen,
-  } as const;
   return (
     <section
       className="panel tracks-panel playlist-panel"
@@ -516,7 +513,6 @@ export function PlaylistPanel({
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         if (
-          !dragged &&
           event.dataTransfer.types.includes(
             "application/x-harbor-catalog-selection",
           )
@@ -581,129 +577,55 @@ export function PlaylistPanel({
           </button>
         </div>
       </div>
-      <div className="playlist-content">
-        {detail.isFetching && !detail.data ? (
-          <div className="empty-small track-empty playlist-loading">
-            <RefreshCw className="spinning" size={18} /> Загрузка…
-          </div>
-        ) : detail.data?.entries.length ? (
-          detail.data.entries.map((entry) => {
-            const isExpanded = expanded.has(entry.id);
-            const EntryIcon = entryIcons[entry.kind];
-            const nested =
-              tracks.data?.items.filter((item) => item.entryId === entry.id) ||
-              [];
-            return (
-              <div key={entry.id}>
-                {dropBefore === entry.id && (
-                  <div className="playlist-drop-indicator" />
-                )}
-                <div
-                  className="playlist-entry"
-                  draggable
-                  onDragStart={() => setDragged(entry.id)}
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    setDropBefore(entry.id);
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setDropBefore(null);
-                    if (dragged) void reorder(dragged, entry.id);
-                    else if (
-                      event.dataTransfer.types.includes(
-                        "application/x-harbor-catalog-selection",
-                      )
-                    )
-                      void onAddSelection(entry.id);
-                  }}
-                  onDragEnd={() => {
-                    setDragged(null);
-                    setDropBefore(null);
-                  }}
-                >
-                  <div className="playlist-entry-main">
-                    <button
-                      className="playlist-expand"
-                      aria-label={isExpanded ? "Свернуть" : "Развернуть"}
-                      onClick={() =>
-                        setExpanded((current) => {
-                          const next = new Set(current);
-                          if (next.has(entry.id)) next.delete(entry.id);
-                          else next.add(entry.id);
-                          return next;
-                        })
-                      }
-                    >
-                      {isExpanded ? (
-                        <ChevronDown size={15} />
-                      ) : (
-                        <ChevronRight size={15} />
-                      )}
-                    </button>
-                    {entry.snapshot.coverId ? (
-                      <img
-                        className="tiny-cover"
-                        src={`/api/covers/${entry.snapshot.coverId}`}
-                        alt=""
-                      />
-                    ) : (
-                      <span className="tiny-cover playlist-entry-placeholder">
-                        <CoverPlaceholder />
-                      </span>
-                    )}
-                    <EntryIcon
-                      className="playlist-entry-kind"
-                      size={16}
-                      aria-hidden
-                    />
-                    <span
-                      className="playlist-entry-copy"
-                      title={entry.snapshot.subtitle}
-                    >
-                      <small>{entry.snapshot.subtitle}</small>
-                      <strong>{entry.snapshot.title}</strong>
-                    </span>
-                    <span className="playlist-entry-count">
-                      {count(entry.resolvedCount)}
-                    </span>
-                    <button
-                      className="icon-button"
-                      aria-label="Удалить из плейлиста"
-                      onClick={() =>
-                        void mutate(
-                          `/playlists/${playlistId}/entries/${entry.id}`,
-                          undefined,
-                          "DELETE",
-                        )
-                      }
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                  {isExpanded &&
-                    nested.map((item) => (
-                      <button
-                        key={item.track.id}
-                        className="playlist-nested-track"
-                        onDoubleClick={() => onPlay(playlistId, item.track.id)}
-                      >
-                        <strong>{item.track.title}</strong>
-                        <small>{duration(item.track.duration)}</small>
-                      </button>
-                    ))}
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          <div className="empty-small track-empty playlist-empty">
-            <ListMusic size={28} />
-            <p>Добавьте музыку из каталога</p>
-          </div>
-        )}
-      </div>
+      {detail.isError || tracks.isError ? (
+        <div className="empty-small track-empty playlist-empty">
+          <p>{(detail.error || tracks.error)?.message}</p>
+          <button
+            className="button secondary small"
+            onClick={() => void refresh()}
+          >
+            Повторить загрузку
+          </button>
+        </div>
+      ) : (detail.isFetching && !detail.data) ||
+        (tracks.isFetching && !tracks.data) ? (
+        <div className="empty-small track-empty playlist-loading">
+          <RefreshCw className="spinning" size={18} /> Загрузка…
+        </div>
+      ) : detail.data?.entries.length ? (
+        <PlaylistContent
+          key={playlistId}
+          entries={detail.data.entries}
+          items={tracks.data?.items || []}
+          editingDisabled={mutating}
+          collapsed={collapsedByPlaylist[playlistId] ?? emptyCollapsed}
+          setCollapsed={(update) =>
+            setCollapsedByPlaylist((previous) => ({
+              ...previous,
+              [playlistId]:
+                typeof update === "function"
+                  ? update(previous[playlistId] ?? emptyCollapsed)
+                  : update,
+            }))
+          }
+          current={current}
+          onPlay={(entryId, trackId) => onPlay(playlistId, trackId, entryId)}
+          onReorder={(entryId, beforeId) => void reorder(entryId, beforeId)}
+          onRemove={(entryId) =>
+            void mutate(
+              `/playlists/${playlistId}/entries/${entryId}`,
+              undefined,
+              "DELETE",
+            )
+          }
+          onAddSelection={onAddSelection}
+        />
+      ) : (
+        <div className="empty-small track-empty playlist-empty">
+          <ListMusic size={28} />
+          <p>Добавьте музыку из каталога</p>
+        </div>
+      )}
       <div className="playlist-statusbar">
         <span>
           {count(playlist?.trackCount || 0)} треков ·{" "}

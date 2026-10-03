@@ -51,6 +51,7 @@ import {
 } from "lucide-react";
 import {
   emptyFilter,
+  filterSchema,
   type Album,
   type AlbumPage,
   type ArtistPage,
@@ -3268,7 +3269,18 @@ export function App() {
             <PlaylistPanel
               playlistId={activePlaylistId}
               onAddSelection={addCurrentSelectionToPlaylist}
-              onPlay={(id, startId) => void player.startPlaylist(id, startId)}
+              onPlay={(id, startId, entryId) =>
+                void player.startPlaylist(id, startId, entryId)
+              }
+              current={
+                player.queue?.playlistId === activePlaylistId
+                  ? {
+                      entryId: player.queue?.entryId,
+                      trackId: player.queue?.track?.id,
+                      requestKey: `${player.queue?.id}:${player.queue?.position}`,
+                    }
+                  : undefined
+              }
               onRename={(playlist) => void renamePlaylist(playlist)}
               onDelete={(playlist) => void deletePlaylist(playlist)}
               notify={notify}
@@ -3457,7 +3469,18 @@ export function App() {
             <PlaylistPanel
               playlistId={activePlaylistId}
               onAddSelection={addCurrentSelectionToPlaylist}
-              onPlay={(id, startId) => void player.startPlaylist(id, startId)}
+              onPlay={(id, startId, entryId) =>
+                void player.startPlaylist(id, startId, entryId)
+              }
+              current={
+                player.queue?.playlistId === activePlaylistId
+                  ? {
+                      entryId: player.queue?.entryId,
+                      trackId: player.queue?.track?.id,
+                      requestKey: `${player.queue?.id}:${player.queue?.position}`,
+                    }
+                  : undefined
+              }
               onRename={(playlist) => void renamePlaylist(playlist)}
               onDelete={(playlist) => void deletePlaylist(playlist)}
               notify={notify}
@@ -3622,7 +3645,19 @@ export function App() {
                 tracks={trackItems}
                 total={total}
                 selected={selected}
-                currentId={player.queue?.track?.id}
+                currentId={
+                  player.queue?.playlistId ? undefined : player.queue?.track?.id
+                }
+                playbackRequestKey={
+                  player.queue && !player.queue.playlistId
+                    ? `${player.queue.id}:${player.queue.position}`
+                    : undefined
+                }
+                playbackPagingEnabled={Boolean(
+                  player.queue?.filter &&
+                  JSON.stringify(filterSchema.parse(player.queue.filter)) ===
+                    JSON.stringify(filterSchema.parse(filter)),
+                )}
                 loading={tracks.isFetching || searchPending}
                 onPlay={(track) => void player.start(track, filter)}
                 selectedAlbumId={selectedAlbumId}

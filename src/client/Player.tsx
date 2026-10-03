@@ -23,6 +23,9 @@ interface Queue {
   total: number;
   sourceTotal?: number;
   truncated?: boolean;
+  playlistId?: string;
+  entryId?: string;
+  filter?: CatalogFilter;
   track: Track | null;
 }
 export function usePlayer(notify: (message: string) => void) {
@@ -102,7 +105,7 @@ export function usePlayer(notify: (message: string) => void) {
     body:
       | { filter: CatalogFilter; startId?: string }
       | { albumId: string; startId?: string }
-      | { playlistId: string; startId?: string },
+      | { playlistId: string; startId?: string; startEntryId?: string },
     play = true,
   ) => {
     const sequence = ++transition.current;
@@ -130,8 +133,11 @@ export function usePlayer(notify: (message: string) => void) {
     loadQueue({ filter, startId });
   const startAlbum = (albumId: string, startId?: string) =>
     loadQueue({ albumId, startId });
-  const startPlaylist = (playlistId: string, startId?: string) =>
-    loadQueue({ playlistId, startId });
+  const startPlaylist = (
+    playlistId: string,
+    startId?: string,
+    startEntryId?: string,
+  ) => loadQueue({ playlistId, startId, startEntryId });
   const step = async (direction: number, ended = false) => {
     if (!queue) return;
     if (direction < 0 && position > 3) {

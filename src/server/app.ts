@@ -679,8 +679,19 @@ export async function createApp(options: {
   });
   app.get("/api/playlists/:id/tracks", async (request) => {
     const id = idParam.parse(request.params).id;
-    const query = pageSchema.omit({ filter: true }).parse(request.query);
-    return service.catalog.playlistTracks(id, query.offset, query.limit);
+    const query = z
+      .object({
+        offset: z.coerce.number().int().nonnegative().default(0),
+        limit: z
+          .union([z.literal("all"), z.coerce.number().int().min(1).max(5000)])
+          .default(200),
+      })
+      .parse(request.query);
+    return service.catalog.playlistTracks(
+      id,
+      query.offset,
+      query.limit === "all" ? Number.MAX_SAFE_INTEGER : query.limit,
+    );
   });
   app.get("/api/playlists/:id/sync", async (request) =>
     service.catalog.playlistSyncSettings(idParam.parse(request.params).id),
@@ -924,14 +935,22 @@ export async function createApp(options: {
       .union([
         z.object({ filter: filterSchema, startId: z.string().optional() }),
         z.object({ albumId: z.string(), startId: z.string().optional() }),
-        z.object({ playlistId: z.string(), startId: z.string().optional() }),
+        z.object({
+          playlistId: z.string(),
+          startId: z.string().optional(),
+          startEntryId: z.string().optional(),
+        }),
       ])
       .parse(request.body);
+    const items =
+      "playlistId" in body
+        ? service.catalog.playlistQueueItems(body.playlistId)
+        : undefined;
     const result =
       "playlistId" in body
         ? {
-            trackIds: service.catalog.playlistTrackIds(body.playlistId),
-            total: service.catalog.playlistTrackIds(body.playlistId).length,
+            trackIds: items!.map((item) => item.trackId),
+            total: items!.length,
             truncated: false,
           }
         : "albumId" in body
@@ -941,7 +960,16 @@ export async function createApp(options: {
             })
           : service.catalog.trackIdResult(body.filter);
     const { trackIds: ids } = result;
-    const position = body.startId ? ids.indexOf(body.startId) : 0;
+    const position =
+      "startEntryId" in body && body.startEntryId
+        ? items!.findIndex(
+            (item) =>
+              item.entryId === body.startEntryId &&
+              (!body.startId || item.trackId === body.startId),
+          )
+        : body.startId
+          ? ids.indexOf(body.startId)
+          : 0;
     if (position < 0 || !ids.length)
       throw conflict(
         "albumId" in body
@@ -951,13 +979,26 @@ export async function createApp(options: {
             : "Трек больше не входит в результат",
       );
     const id = randomUUID();
-    service.catalog.saveQueue(id, new Date().toISOString(), ids);
+    service.catalog.saveQueue(
+      id,
+      new Date().toISOString(),
+      ids,
+      "playlistId" in body
+        ? {
+            playlistId: body.playlistId,
+            entryIds: items!.map((item) => item.entryId),
+          }
+        : undefined,
+    );
     return {
       id,
       position,
       total: ids.length,
       sourceTotal: result.total,
       truncated: result.truncated,
+      ...("playlistId" in body
+        ? { playlistId: body.playlistId, entryId: items![position].entryId }
+        : {}),
       track: service.catalog.track(ids[position]),
     };
   });
@@ -966,12 +1007,17 @@ export async function createApp(options: {
     const position = z
       .object({ position: z.coerce.number().int().min(0).max(100000) })
       .parse(request.query).position;
-    const ids = service.catalog.queueTrackIds(id);
-    if (!ids) throw new Error("Очередь больше недоступна");
+    const snapshot = service.catalog.queueSnapshot(id);
+    if (!snapshot) throw new Error("Очередь больше недоступна");
+    const ids = snapshot.trackIds;
     return {
       id,
       position,
       total: ids.length,
+      ...(snapshot.playlistId ? { playlistId: snapshot.playlistId } : {}),
+      ...(snapshot.entryIds?.[position]
+        ? { entryId: snapshot.entryIds[position] }
+        : {}),
       track: ids[position]
         ? service.catalog.track(ids[position]) || null
         : null,

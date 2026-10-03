@@ -215,6 +215,8 @@ export const queueSchema = z.object({
   total: z.number().int().nonnegative(),
   sourceTotal: z.number().int().nonnegative().optional(),
   truncated: z.boolean().optional(),
+  playlistId: z.string().optional(),
+  entryId: z.string().optional(),
   track: trackSchema.nullable(),
 });
 export const queueAlbumBlockSchema = z.object({

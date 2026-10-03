@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 
-export const catalogSchemaVersion = 11;
+export const catalogSchemaVersion = 12;
 
 export function runCatalogMigrations(db: Database.Database): void {
   db.exec(`
@@ -22,7 +22,7 @@ export function runCatalogMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS album_artists_value ON track_album_artists(artist,trackId);
     CREATE TABLE IF NOT EXISTS operations (id TEXT PRIMARY KEY, createdAt TEXT NOT NULL, payload TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS queues (id TEXT PRIMARY KEY, createdAt TEXT NOT NULL, trackIds TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS queues (id TEXT PRIMARY KEY, createdAt TEXT NOT NULL, trackIds TEXT NOT NULL, playlistId TEXT, entryIds TEXT);
     CREATE TABLE IF NOT EXISTS bookmarks (kind TEXT NOT NULL CHECK(kind IN ('artist','album','track')), id TEXT NOT NULL, PRIMARY KEY(kind,id));
     CREATE TABLE IF NOT EXISTS catalog_user_state (
       kind TEXT NOT NULL CHECK(kind IN ('album','track')),
@@ -217,6 +217,19 @@ export function runCatalogMigrations(db: Database.Database): void {
         CREATE INDEX playlist_entries_order ON playlist_entries(playlistId,position,id);
       `);
       db.pragma("user_version = 11");
+    })();
+  if (version < 12)
+    db.transaction(() => {
+      const columns = new Set(
+        (db.pragma("table_info(queues)") as { name: string }[]).map(
+          (column) => column.name,
+        ),
+      );
+      if (!columns.has("playlistId"))
+        db.exec("ALTER TABLE queues ADD COLUMN playlistId TEXT");
+      if (!columns.has("entryIds"))
+        db.exec("ALTER TABLE queues ADD COLUMN entryIds TEXT");
+      db.pragma("user_version = 12");
     })();
   db.exec(
     "CREATE INDEX IF NOT EXISTS tracks_first_indexed_at ON tracks(firstIndexedAt)",

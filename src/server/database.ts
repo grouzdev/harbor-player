@@ -407,11 +407,24 @@ export class Catalog {
         .get(albumKey) as { n: number }
     ).n;
   }
-  saveQueue(id: string, createdAt: string, trackIds: string[]): void {
+  saveQueue(
+    id: string,
+    createdAt: string,
+    trackIds: string[],
+    source?: { playlistId: string; entryIds: string[] },
+  ): void {
     this.db.transaction(() => {
       this.db
-        .prepare("INSERT INTO queues VALUES (?,?,?)")
-        .run(id, createdAt, JSON.stringify(trackIds));
+        .prepare(
+          "INSERT INTO queues(id,createdAt,trackIds,playlistId,entryIds) VALUES (?,?,?,?,?)",
+        )
+        .run(
+          id,
+          createdAt,
+          JSON.stringify(trackIds),
+          source?.playlistId ?? null,
+          source ? JSON.stringify(source.entryIds) : null,
+        );
       this.db
         .prepare(
           "DELETE FROM queues WHERE id NOT IN (SELECT id FROM queues ORDER BY createdAt DESC LIMIT 20)",
@@ -420,10 +433,27 @@ export class Catalog {
     })();
   }
   queueTrackIds(id: string): string[] | undefined {
+    return this.queueSnapshot(id)?.trackIds;
+  }
+  queueSnapshot(id: string):
+    | {
+        trackIds: string[];
+        playlistId?: string;
+        entryIds?: string[];
+      }
+    | undefined {
     const row = this.db
-      .prepare("SELECT trackIds FROM queues WHERE id=?")
-      .get(id) as { trackIds: string } | undefined;
-    return row ? JSON.parse(row.trackIds) : undefined;
+      .prepare("SELECT trackIds,playlistId,entryIds FROM queues WHERE id=?")
+      .get(id) as
+      | { trackIds: string; playlistId: string | null; entryIds: string | null }
+      | undefined;
+    return row
+      ? {
+          trackIds: JSON.parse(row.trackIds),
+          ...(row.playlistId ? { playlistId: row.playlistId } : {}),
+          ...(row.entryIds ? { entryIds: JSON.parse(row.entryIds) } : {}),
+        }
+      : undefined;
   }
   cachedHttpResponse(key: string): { status: number; payload: unknown } | null {
     const row = this.db
@@ -1906,9 +1936,14 @@ export class Catalog {
     };
   }
   playlistTrackIds(playlistId: string): string[] {
+    return this.playlistQueueItems(playlistId).map((item) => item.trackId);
+  }
+  playlistQueueItems(
+    playlistId: string,
+  ): { trackId: string; entryId: string }[] {
     return this.resolvePlaylistRows(playlistId)
       .tracks.filter((item) => item.track.available)
-      .map((item) => item.track.id);
+      .map((item) => ({ trackId: item.track.id, entryId: item.entryId }));
   }
   knownTracks(): Track[] {
     const rows = this.db

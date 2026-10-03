@@ -43,6 +43,8 @@ import {
 } from "./panel-selection";
 import { buildTrackListRows } from "./track-grouping";
 import { usePanelScrollResolver } from "./panel-scroll";
+import { AlbumHeader } from "./AlbumHeader";
+import { DiscHeader } from "./DiscHeader";
 
 const virtualPanelTopInset = 14;
 
@@ -812,6 +814,8 @@ export function TrackList({
   selected,
   selectedAlbumId,
   currentId,
+  playbackRequestKey,
+  playbackPagingEnabled = false,
   loading,
   onPlay,
   onSelectAlbum,
@@ -837,6 +841,8 @@ export function TrackList({
   selected: Set<string>;
   selectedAlbumId: string | null;
   currentId?: string;
+  playbackRequestKey?: string;
+  playbackPagingEnabled?: boolean;
   loading: boolean;
   onPlay: (track: Track) => void;
   onSelectAlbum: (albumId: string) => void;
@@ -904,6 +910,44 @@ export function TrackList({
       onMore();
     }
   }, [scrollTarget, loading, rows, tracks.length, total, onMore, virtual]);
+  const followedPlayback = useRef<string | null>(null);
+  const playbackPage = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      !currentId ||
+      !playbackRequestKey ||
+      loading ||
+      followedPlayback.current === playbackRequestKey
+    )
+      return;
+    const index = rows.findIndex(
+      (row) => row.type === "track" && row.track.id === currentId,
+    );
+    if (index >= 0) {
+      virtual.scrollToIndex(index, { align: "auto" });
+      followedPlayback.current = playbackRequestKey;
+    } else {
+      const page = `${playbackRequestKey}:${tracks.length}`;
+      if (
+        playbackPagingEnabled &&
+        tracks.length < total &&
+        playbackPage.current !== page
+      ) {
+        playbackPage.current = page;
+        onMore();
+      }
+    }
+  }, [
+    currentId,
+    playbackRequestKey,
+    playbackPagingEnabled,
+    loading,
+    rows,
+    tracks.length,
+    total,
+    onMore,
+    virtual,
+  ]);
   return (
     <div
       ref={ref}
@@ -972,28 +1016,30 @@ export function TrackList({
               );
             if (entry.type === "disc")
               return (
-                <div
+                <DiscHeader
                   key={`disc-${entry.albumKey}-${row.index}`}
-                  className="track-disc-header"
-                  data-selection-ignore
-                  aria-hidden="true"
+                  discNumber={entry.discNumber}
                   style={{
                     position: "absolute",
                     width: "100%",
                     height: row.size,
                     transform: `translateY(${row.start}px)`,
                   }}
-                >
-                  Диск {entry.discNumber}
-                </div>
+                />
               );
             const track = entry.track;
             const bookmarked = bookmarkKeys.has(`album:${track.albumKey}`);
             const rated = track.albumRating !== null;
             return entry.type === "album" ? (
-              <div
+              <AlbumHeader
                 key={`album-${track.albumKey}`}
-                className={`track-album-header ${selectedAlbumId === track.albumKey ? "selected" : ""}`}
+                selected={selectedAlbumId === track.albumKey}
+                title={track.albumTitle}
+                artists={entry.artists}
+                year={track.year}
+                genres={entry.genres}
+                coverId={track.coverId}
+                duration={duration(entry.duration)}
                 data-selection-ignore
                 role="button"
                 tabIndex={-1}
@@ -1021,29 +1067,8 @@ export function TrackList({
                   height: row.size,
                   transform: `translateY(${row.start}px)`,
                 }}
-              >
-                <div className="tiny-cover">
-                  {track.coverId ? (
-                    <img src={`/api/covers/${track.coverId}`} alt="" />
-                  ) : (
-                    <CoverPlaceholder />
-                  )}
-                </div>
-                <div>
-                  <small>
-                    {entry.artists.join(", ") || "Неизвестный исполнитель"}
-                  </small>
-                  <strong>{track.albumTitle || "Без альбома"}</strong>
-                  {(track.year || entry.genres.length > 0) && (
-                    <small>
-                      {[track.year?.toString(), ...entry.genres]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </small>
-                  )}
-                </div>
-                <div className="track-album-state" data-selection-ignore>
-                  <div className="track-album-actions">
+                actions={
+                  <>
                     <div
                       className={`track-album-action track-album-action--rating ${rated ? "is-active" : ""}`}
                     >
@@ -1090,12 +1115,9 @@ export function TrackList({
                         filledWhenBookmarked={false}
                       />
                     </div>
-                  </div>
-                  <span className="track-album-duration">
-                    {duration(entry.duration)}
-                  </span>
-                </div>
-              </div>
+                  </>
+                }
+              />
             ) : (
               <ListTile
                 key={track.id}
@@ -1108,8 +1130,8 @@ export function TrackList({
                     selectedAlbumId !== track.albumKey)
                 }
                 selectionKey={track.id}
-                current={showPlayingTrackIndicators && currentId === track.id}
-                playing={showPlayingTrackIndicators && currentId === track.id}
+                current={currentId === track.id}
+                playing={currentId === track.id}
                 statusIcon={
                   currentId === track.id ? (
                     <Play size={13} fill="currentColor" />

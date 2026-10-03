@@ -24,6 +24,8 @@ type ListTileProps = {
   onContextMenu?: (event: MouseEvent<HTMLDivElement>) => void;
   draggable?: boolean;
   onDragStart?: (event: DragEvent<HTMLDivElement>) => void;
+  onDragOver?: (event: DragEvent<HTMLDivElement>) => void;
+  onDrop?: (event: DragEvent<HTMLDivElement>) => void;
 };
 
 export function ListTile({
@@ -50,6 +52,8 @@ export function ListTile({
   onContextMenu,
   draggable,
   onDragStart,
+  onDragOver,
+  onDrop,
 }: ListTileProps) {
   return (
     <div
@@ -61,6 +65,8 @@ export function ListTile({
       onContextMenu={onContextMenu}
       draggable={draggable}
       onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
     >
       {startAction}
       <button

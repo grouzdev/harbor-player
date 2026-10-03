@@ -1241,6 +1241,105 @@ describe("Explorer endpoint", () => {
     expect(fromFilter.json()).toMatchObject({ position: 0, total: 2 });
     expect(fromFilter.json().track.id).toBe("first");
   });
+  it("selects exact playlist occurrences and restores snapshot source after edits", async () => {
+    await addTrack("Album/01-first.flac", "first");
+    await addTrack("Album/02-second.flac", "second");
+    const catalog = context.service.catalog;
+    const playlistId = catalog.createPlaylist("Duplicates").playlist.id;
+    const detail = catalog.addPlaylistEntries(playlistId, "album", [
+      "album",
+      "album",
+    ]);
+    const entryIds = detail.entries.map((entry) => entry.id);
+    const headers = await sessionHeaders();
+    const start = (payload: object) =>
+      context.app.inject({
+        method: "POST",
+        url: "/api/queue",
+        headers,
+        payload,
+      });
+    const started = await start({
+      playlistId,
+      startId: "first",
+      startEntryId: entryIds[1],
+    });
+    expect(started.statusCode).toBe(200);
+    expect(started.json()).toMatchObject({
+      playlistId,
+      entryId: entryIds[1],
+      position: 2,
+      total: 4,
+      track: { id: "first" },
+    });
+    expect(
+      (await start({ playlistId, startId: "first" })).json().position,
+    ).toBe(0);
+    expect(
+      (
+        await start({
+          playlistId,
+          startId: "missing",
+          startEntryId: entryIds[1],
+        })
+      ).statusCode,
+    ).toBe(409);
+    expect(
+      (await start({ playlistId, startId: "first", startEntryId: "missing" }))
+        .statusCode,
+    ).toBe(409);
+    catalog.reorderPlaylistEntries(playlistId, [...entryIds].reverse());
+    catalog.removePlaylistEntry(playlistId, entryIds[1]);
+    catalog.deletePlaylist(playlistId);
+    catalog.saveQueue("legacy", new Date().toISOString(), ["first"]);
+    await context.app.close();
+    context = await createApp({ dataDir: root });
+    const restoredHeaders = await sessionHeaders();
+    for (const [position, entryId, trackId] of [
+      [0, entryIds[0], "first"],
+      [1, entryIds[0], "second"],
+      [2, entryIds[1], "first"],
+      [3, entryIds[1], "second"],
+    ] as const) {
+      const response = await context.app.inject({
+        url: `/api/queue/${started.json().id}?position=${position}`,
+        headers: restoredHeaders,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        playlistId,
+        entryId,
+        position,
+        total: 4,
+        track: { id: trackId },
+      });
+      expect(
+        apiResponseContract("GET", `/api/queue/${started.json().id}`)?.parse(
+          response.json(),
+        ),
+      ).toMatchObject({ playlistId, entryId });
+    }
+    const legacy = await context.app.inject({
+      url: "/api/queue/legacy?position=0",
+      headers: restoredHeaders,
+    });
+    expect(legacy.json().track.id).toBe("first");
+    expect(legacy.json()).not.toHaveProperty("playlistId");
+    expect(legacy.json()).not.toHaveProperty("entryId");
+  });
+  it("allows playlist track batches up to 5000 without a catalog offset cap", async () => {
+    const playlistId =
+      context.service.catalog.createPlaylist("Paging").playlist.id;
+    const headers = await sessionHeaders();
+    const page = (query: string) =>
+      context.app.inject({
+        url: `/api/playlists/${playlistId}/tracks${query}`,
+        headers,
+      });
+    expect((await page("?offset=100001&limit=5000")).statusCode).toBe(200);
+    for (const query of ["?offset=-1", "?limit=0", "?limit=5001"])
+      expect((await page(query)).statusCode).toBe(400);
+  });
   it("returns cyclic consecutive album blocks from a queue", async () => {
     await addTrack("A/01-first.flac", "a-first", "album-a");
     await addTrack("A/02-second.flac", "a-second", "album-a");

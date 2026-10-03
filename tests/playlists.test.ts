@@ -329,6 +329,7 @@ describe("playlists", () => {
     catalog.upsert(makeTrack("one", library.id));
     const created = catalog.createPlaylist("Legacy");
     catalog.addPlaylistEntries(created.playlist.id, "track", ["one"]);
+    catalog.saveQueue("legacy-queue", new Date().toISOString(), ["one"]);
     catalog.close();
 
     const db = new Database(path.join(root, "catalog.sqlite"));
@@ -342,11 +343,14 @@ describe("playlists", () => {
       DROP TABLE playlist_entries;
       ALTER TABLE playlist_entries_legacy RENAME TO playlist_entries;
       CREATE INDEX playlist_entries_order ON playlist_entries(playlistId,position,id);
+      ALTER TABLE queues DROP COLUMN playlistId;
+      ALTER TABLE queues DROP COLUMN entryIds;
     `);
     db.pragma("user_version = 10");
     db.close();
 
     catalog = new Catalog(root);
+    expect(catalog.queueSnapshot("legacy-queue")).toEqual({ trackIds: ["one"] });
     expect(
       catalog.playlist(created.playlist.id).entries.map((entry) => entry.kind),
     ).toEqual(["track"]);
@@ -355,7 +359,7 @@ describe("playlists", () => {
         "user_version",
         { simple: true },
       ),
-    ).toBe(11);
+    ).toBe(12);
   });
 
   it("retains unavailable entries and reports them", () => {
