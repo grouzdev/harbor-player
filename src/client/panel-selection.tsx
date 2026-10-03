@@ -7,11 +7,26 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from "react";
+import type { ViewportAnchor } from "./panel-scroll";
 
 export type SelectionClickResult = {
   keys: string[];
   anchor: string;
 };
+
+export type SelectionChangeOptions = {
+  resetOtherPanels?: boolean;
+  viewportAnchor?: ViewportAnchor;
+};
+
+export function selectionChangeOptions(
+  event: Pick<MouseEvent, "ctrlKey" | "metaKey" | "shiftKey" | "altKey">,
+): SelectionChangeOptions {
+  return {
+    resetOtherPanels:
+      !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey,
+  };
+}
 
 export function resolveContextSelection(
   currentKeys: readonly string[],
@@ -107,7 +122,7 @@ export function usePanelSelection({
 }: {
   scrollRef: RefObject<HTMLDivElement | null>;
   selectedKeys: readonly string[];
-  onChange: (keys: string[]) => void;
+  onChange: (keys: string[], options?: SelectionChangeOptions) => void;
   onFocus?: (key: string, keys: string[]) => void;
 }) {
   const anchorRef = useRef<string | null>(null);
@@ -339,7 +354,7 @@ export function usePanelSelection({
 
   const selectFromClick = useCallback(
     (
-      event: Pick<MouseEvent, "ctrlKey" | "metaKey" | "shiftKey">,
+      event: Pick<MouseEvent, "ctrlKey" | "metaKey" | "shiftKey" | "altKey">,
       targetKey: string,
       orderedKeys = selectionKeysInDom(scrollRef.current),
     ) => {
@@ -352,7 +367,24 @@ export function usePanelSelection({
       );
       anchorRef.current = result.anchor;
       onFocusRef.current?.(targetKey, result.keys);
-      onChangeRef.current(result.keys);
+      const options = selectionChangeOptions(event);
+      const surface = scrollRef.current;
+      const item = surface
+        ? [
+            ...surface.querySelectorAll<HTMLElement>("[data-selection-key]"),
+          ].find((node) => node.dataset.selectionKey === targetKey)
+        : undefined;
+      const panelId =
+        surface?.closest<HTMLElement>("[data-panel-id]")?.dataset.panelId;
+      if (surface && item && panelId)
+        options.viewportAnchor = {
+          panelId,
+          key: targetKey,
+          y:
+            item.getBoundingClientRect().top -
+            surface.getBoundingClientRect().top,
+        };
+      onChangeRef.current(result.keys, options);
     },
     [scrollRef],
   );

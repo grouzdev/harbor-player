@@ -1574,9 +1574,16 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await expect(firstTrackRow).not.toHaveClass(/selected/);
   await artistButton.dispatchEvent("click");
   await expect(artistRow).toHaveClass(/selected/);
+  await expect(downloadsTile).not.toHaveClass(/selected/);
   await artistButton.dispatchEvent("click", { ctrlKey: true });
   await expect(artistRow).not.toHaveClass(/selected/);
   await artistButton.dispatchEvent("click");
+  await expect(artistRow).toHaveClass(/selected/);
+  // Combine panels explicitly; ordinary artist selection clears the library.
+  await downloadsTile.locator(".list-tile-main").click({
+    modifiers: ["Control"],
+  });
+  await expect(downloadsTile).toHaveClass(/selected/);
   await expect(artistRow).toHaveClass(/selected/);
 
   await expect(downloadsTile).toHaveClass(/related/);
@@ -1589,9 +1596,15 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   );
   await expect(artistRow).not.toHaveClass(/related/);
 
-  const firstAlbum = page.getByTitle("Тестовый альбом · Исполнитель альбома", {
+  const sourceAlbum = page.getByTitle("Тестовый альбом · Исполнитель альбома", {
     exact: true,
   });
+  const firstAlbumId = await sourceAlbum.getAttribute("data-selection-key");
+  expect(firstAlbumId).not.toBeNull();
+  // Keep identifying this source album when ordinary clicks expose other libraries.
+  const firstAlbum = page.locator(
+    `.album-card[data-selection-key=${JSON.stringify(firstAlbumId)}]`,
+  );
   const accentBackground = await page.evaluate(() => {
     const swatch = document.createElement("span");
     swatch.style.background = "var(--accent)";
@@ -1600,8 +1613,6 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     swatch.remove();
     return background;
   });
-  const firstAlbumId = await firstAlbum.getAttribute("data-selection-key");
-  expect(firstAlbumId).not.toBeNull();
   const firstAlbumButton = firstAlbum.locator(".album-main");
   const unratedAlbumRating = firstAlbum.getByRole("button", {
     name: "Без оценки",
@@ -1950,7 +1961,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
       return { gap: style.gap };
     });
   expect(albumGridGeometry.gap).toBe("8px");
-  await firstAlbumButton.dispatchEvent("click");
+  await firstAlbumButton.dispatchEvent("click", { ctrlKey: true });
   await expect(firstAlbum).toHaveClass(/selected/);
   await expect(firstAlbum.locator(".album-cover")).toHaveCSS(
     "border-color",
@@ -2144,7 +2155,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     name: "Сбросить выбор треков",
   });
   if (await resetTrackSelection.count()) await resetTrackSelection.click();
-  await genreButton.dispatchEvent("click");
+  await genreButton.dispatchEvent("click", { ctrlKey: true });
   await expect(genreRow).toHaveClass(/selected/);
   await expect(page.locator(".genres-panel .panel-count")).toContainText(
     /^1\/\d+$/,
@@ -2177,12 +2188,18 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
 
   await artistButton.dispatchEvent("click");
   await expect(artistRow).toHaveClass(/selected/);
+  await expect(firstAlbum).not.toHaveClass(/selected/);
+  await expect(downloadsTile).not.toHaveClass(/selected/);
+  await firstAlbumButton.dispatchEvent("click", { ctrlKey: true });
+  await downloadsTile.locator(".list-tile-main").click({
+    modifiers: ["Control"],
+  });
   await expect(page.locator(".artists-panel .panel-count")).toContainText(
     /^1\/\d+$/,
   );
   await artistButton.dispatchEvent("click", { ctrlKey: true });
   await expect(artistRow).not.toHaveClass(/selected/);
-  await artistButton.dispatchEvent("click");
+  await artistButton.dispatchEvent("click", { ctrlKey: true });
   await page
     .locator(".artists-panel")
     .getByRole("button", { name: "Сбросить исполнителей" })
@@ -2193,7 +2210,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await expect(artistRow).not.toHaveClass(/selected/);
   await expect(firstAlbum).toHaveClass(/selected/);
 
-  await artistButton.dispatchEvent("click");
+  await artistButton.dispatchEvent("click", { ctrlKey: true });
   await secondArtistRow
     .locator(".list-tile-main")
     .dispatchEvent("click", { ctrlKey: true });
@@ -2214,9 +2231,15 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     .dispatchEvent("click");
   await expect(multiArtistTagDialog).not.toBeVisible();
 
-  const secondAlbum = page.getByTitle("Тестовый альбом · Исполнитель", {
+  const secondSourceAlbum = page.getByTitle("Тестовый альбом · Исполнитель", {
     exact: true,
   });
+  const secondAlbumId =
+    await secondSourceAlbum.getAttribute("data-selection-key");
+  expect(secondAlbumId).not.toBeNull();
+  const secondAlbum = page.locator(
+    `.album-card[data-selection-key=${JSON.stringify(secondAlbumId)}]`,
+  );
   const secondAlbumButton = secondAlbum.locator(".album-main");
   await firstAlbumButton.dispatchEvent("click");
   await secondAlbumButton.dispatchEvent("click", { ctrlKey: true });

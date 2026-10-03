@@ -10,7 +10,12 @@ import {
 // restoration. Other app services (session, settings) use the real test server.
 async function catalog(
   page: Page,
-  { extraRockArtists = 0, extraJazzArtists = 0 } = {},
+  {
+    extraRockArtists = 0,
+    extraJazzArtists = 0,
+    extraGenres = 0,
+    sortFacets = false,
+  } = {},
 ) {
   const tracks: Track[] = [
     ...[
@@ -234,37 +239,55 @@ async function catalog(
         trackCount: rows.filter((track) => track.albumArtists.includes(name))
           .length,
       }));
-    else if (endpoint === "genres")
+    else if (endpoint === "genres") {
       body = [...new Set(rows.flatMap((track) => track.genres))].map(
         (name) => ({ name, count: 1 }),
       );
-    else if (endpoint === "artists")
+      if (extraGenres) {
+        const genres = body as { name: string; count: number }[];
+        const expanded = Array.from({ length: extraGenres }, (_, index) => ({
+          name: `Unrelated genre ${index}`,
+          count: 1,
+        }));
+        for (const [index, genre] of genres.entries())
+          expanded.splice(
+            Math.floor((extraGenres * (index + 1)) / 3),
+            0,
+            genre,
+          );
+        body = expanded;
+      }
+    } else if (endpoint === "artists")
       body = paginated(
-        [...new Set(rows.flatMap((track) => track.albumArtists))].map(
-          (name) => ({
+        [...new Set(rows.flatMap((track) => track.albumArtists))]
+          .sort((a, b) => (sortFacets ? a.localeCompare(b) : 0))
+          .map((name) => ({
             name,
             count:
               rows.filter((track) => track.albumArtists.includes(name)).length /
               3,
-          }),
-        ),
+          })),
       );
     else if (endpoint === "albums")
-      body = paginated([
-        ...new Map(
-          rows.map((track) => [
-            track.albumKey,
-            {
-              id: track.albumKey,
-              title: track.albumTitle,
-              artists: track.albumArtists,
-              year: track.year,
-              coverId: null,
-              trackCount: 3,
-            },
-          ]),
-        ).values(),
-      ]);
+      body = paginated(
+        [
+          ...new Map(
+            rows.map((track) => [
+              track.albumKey,
+              {
+                id: track.albumKey,
+                title: track.albumTitle,
+                artists: track.albumArtists,
+                year: track.year,
+                coverId: null,
+                trackCount: 3,
+              },
+            ]),
+          ).values(),
+        ].sort((a, b) =>
+          sortFacets ? a.artists[0]!.localeCompare(b.artists[0]!) : 0,
+        ),
+      );
     else if (endpoint === "tracks") body = paginated(rows);
     else if (endpoint === "queue") {
       const request = route.request().postDataJSON() as {
@@ -406,6 +429,327 @@ async function filterArtist(page: Page, name: string) {
 const count = (page: Page, panel: string) =>
   page.locator(`.${panel}-panel .panel-heading .panel-count`);
 
+test("artist selection minimally reveals its first genre without selecting it or moving the artist", async ({
+  page,
+}) => {
+  const data = await catalog(page, { extraGenres: 80 });
+  const queen = artist(page, "Queen");
+  const before = await queen.boundingBox();
+  expect(before).not.toBeNull();
+  const genre = page.locator('.genres-panel [data-selection-key="Rock"]');
+  const surface = page.locator(".genre-list");
+  await expect(genre).not.toBeInViewport();
+  await queen.locator(".list-tile-main").click();
+  await expect(genre).toBeInViewport({ ratio: 1 });
+  await expect(page.locator(".genres-panel .list-tile.selected")).toHaveCount(
+    0,
+  );
+  await expect
+    .poll(
+      () =>
+        data.requests.filter((item) => item.endpoint === "tracks").at(-1)
+          ?.filter,
+    )
+    .toMatchObject({ artists: ["Queen"], genres: [] });
+  const [genreBox, surfaceBox, after] = await Promise.all([
+    genre.boundingBox(),
+    surface.boundingBox(),
+    queen.boundingBox(),
+  ]);
+  expect(genreBox).not.toBeNull();
+  expect(surfaceBox).not.toBeNull();
+  expect(after).not.toBeNull();
+  // Reveal at the nearest edge, not in the center.
+  expect(
+    surfaceBox!.y + surfaceBox!.height - genreBox!.y - genreBox!.height,
+  ).toBeLessThanOrEqual(20);
+  expect(Math.abs(after!.y - before!.y)).toBeLessThanOrEqual(2);
+});
+
+test("adding an artist leaves a visible first matching genre in place and removing an artist does not seek", async ({
+  page,
+}) => {
+  await catalog(page, { extraGenres: 80 });
+  const surface = page.locator(".genre-list");
+  const rock = page.locator('.genres-panel [data-selection-key="Rock"]');
+  await artist(page, "Queen").locator(".list-tile-main").click();
+  await expect(rock).toBeInViewport({ ratio: 1 });
+  const top = await surface.evaluate((node) => node.scrollTop);
+  await artist(page, "Miles")
+    .locator(".list-tile-main")
+    .click({
+      modifiers: ["Control"],
+    });
+  await expect(count(page, "artists")).toHaveText("2/4");
+  await expect(rock).toBeInViewport({ ratio: 1 });
+  expect(await surface.evaluate((node) => node.scrollTop)).toBe(top);
+  await surface.hover();
+  await page.mouse.wheel(0, -5000);
+  await expect.poll(() => surface.evaluate((node) => node.scrollTop)).toBe(0);
+  await artist(page, "Queen")
+    .locator(".list-tile-main")
+    .click({
+      modifiers: ["Control"],
+    });
+  await expect(count(page, "artists")).toHaveText("1/4");
+  await page.waitForLoadState("networkidle");
+  expect(await surface.evaluate((node) => node.scrollTop)).toBe(0);
+});
+
+test("manual genre scrolling cancels a pending artist genre reveal", async ({
+  page,
+}) => {
+  await catalog(page, { extraGenres: 80 });
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let pending = 0;
+  await page.route("**/api/facet-relevance?**", async (route) => {
+    const filter = JSON.parse(
+      new URL(route.request().url()).searchParams.get("filter")!,
+    ) as CatalogFilter;
+    if (filter.artists.includes("Queen")) {
+      pending++;
+      await gate;
+    }
+    await route.fallback();
+  });
+  await artist(page, "Queen").locator(".list-tile-main").click();
+  await expect.poll(() => pending).toBeGreaterThan(0);
+  const surface = page.locator(".genre-list");
+  await surface.hover();
+  await page.mouse.wheel(0, 100);
+  await expect
+    .poll(() => surface.evaluate((node) => node.scrollTop))
+    .toBeGreaterThan(0);
+  const top = await surface.evaluate((node) => node.scrollTop);
+  release();
+  await page.waitForLoadState("networkidle");
+  expect(await surface.evaluate((node) => node.scrollTop)).toBe(top);
+});
+
+test("a late genre response from a previous artist does not override the current reveal", async ({
+  page,
+}) => {
+  await catalog(page, { extraGenres: 80 });
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let pending = 0;
+  await page.route("**/api/facet-relevance?**", async (route) => {
+    const filter = JSON.parse(
+      new URL(route.request().url()).searchParams.get("filter")!,
+    ) as CatalogFilter;
+    if (filter.artists.includes("Queen")) {
+      pending++;
+      await gate;
+    }
+    await route.fallback();
+  });
+  await artist(page, "Queen").locator(".list-tile-main").click();
+  await expect.poll(() => pending).toBeGreaterThan(0);
+  await artist(page, "Miles").locator(".list-tile-main").click();
+  const jazz = page.locator('.genres-panel [data-selection-key="Jazz"]');
+  await expect(jazz).toBeInViewport({ ratio: 1 });
+  const surface = page.locator(".genre-list");
+  const top = await surface.evaluate((node) => node.scrollTop);
+  release();
+  await page.waitForLoadState("networkidle");
+  await expect(jazz).toBeInViewport({ ratio: 1 });
+  expect(await surface.evaluate((node) => node.scrollTop)).toBe(top);
+});
+
+test("plain artist click keeps the clicked artist visible when clearing a genre expands the list", async ({
+  page,
+}) => {
+  await catalog(page, {
+    extraJazzArtists: 140,
+    extraRockArtists: 40,
+    sortFacets: true,
+  });
+  await page
+    .locator(".genres-panel .list-tile-main")
+    .filter({ hasText: "Rock" })
+    .click();
+  await expect(count(page, "artists")).toHaveText("43");
+  const queen = artist(page, "Queen");
+  await expect(queen).toBeInViewport();
+  const before = await queen.boundingBox();
+  expect(before).not.toBeNull();
+  await queen.locator(".list-tile-main").click();
+  await expect(count(page, "artists")).toHaveText("1/184");
+  await expect(page.locator(".genres-panel .list-tile.selected")).toHaveCount(
+    0,
+  );
+  await expect(queen).toHaveClass(/selected/);
+  await expect(queen).toBeInViewport();
+  await expect
+    .poll(async () => {
+      const after = await queen.boundingBox();
+      return after && Math.abs(after.y - before!.y);
+    })
+    .toBeLessThanOrEqual(2);
+});
+
+test("plain album click retains its viewport position after clearing a genre beyond the first page", async ({
+  page,
+}) => {
+  await catalog(page, { extraJazzArtists: 140, sortFacets: true });
+  await page
+    .locator(".genres-panel .list-tile-main")
+    .filter({ hasText: "Rock" })
+    .click();
+  const album = page.locator('.album-card[data-selection-key="Queen-0"]');
+  await expect(album).toBeInViewport();
+  const before = await album.boundingBox();
+  expect(before).not.toBeNull();
+  await album.locator(".album-main").click();
+  await expect(page.locator(".genres-panel .list-tile.selected")).toHaveCount(
+    0,
+  );
+  await expect(album).toHaveClass(/selected/);
+  await expect(album).toBeInViewport();
+  await expect
+    .poll(async () => {
+      const after = await album.boundingBox();
+      return after && Math.abs(after.y - before!.y);
+    })
+    .toBeLessThanOrEqual(2);
+});
+
+async function combinedPanelFilters(
+  page: Page,
+  location: "library" | "folder",
+) {
+  const data = await catalog(page);
+  const library = page.locator(
+    '.library-container > .list-tile[data-selection-key="library:rock"]',
+  );
+  await page
+    .getByRole("button", { name: "Развернуть библиотеку «rock»" })
+    .click();
+  const folder = page
+    .locator(".library-folder-tile")
+    .filter({ has: page.locator(".list-tile-main", { hasText: "Queen" }) });
+  const genre = page
+    .locator(".genres-panel .list-tile")
+    .filter({ hasText: "Rock" });
+  const queen = artist(page, "Queen");
+  const album = page.locator('.album-card[data-selection-key="Queen-0"]');
+  const items = { library, folder, genre, artist: queen, album };
+  for (const item of [items[location], genre, queen, album]) {
+    await item.click({ modifiers: ["Control"] });
+    await expect(item).toHaveClass(/selected/);
+  }
+  const panelFilter = () => {
+    const filter = data.requests
+      .filter((request) => request.endpoint === "tracks")
+      .at(-1)?.filter;
+    return (
+      filter && {
+        libraryIds: filter.libraryIds,
+        folders: filter.folders,
+        genres: filter.genres,
+        artists: filter.artists,
+        albumIds: filter.albumIds,
+        bookmarksOnly: filter.bookmarksOnly,
+      }
+    );
+  };
+  return { items, panelFilter };
+}
+
+for (const location of ["library", "folder"] as const) {
+  for (const target of [
+    "library",
+    "folder",
+    "genre",
+    "artist",
+    "album",
+  ] as const) {
+    test(`plain ${target} click clears other panels with a ${location} filter, even when already selected`, async ({
+      page,
+    }) => {
+      const { items, panelFilter } = await combinedPanelFilters(page, location);
+      await addCatalogFilter(page, "Закладки");
+      await expect.poll(panelFilter).toMatchObject({ bookmarksOnly: true });
+      if (target === "album") {
+        await page
+          .locator('.album-card[data-selection-key="Queen-1"]')
+          .click({ modifiers: ["Control"] });
+        await expect(page.locator(".album-card.selected")).toHaveCount(2);
+      }
+      await items[target].click();
+
+      const expected = {
+        libraryIds: target === "library" ? ["rock"] : [],
+        folders:
+          target === "folder"
+            ? [{ libraryId: "rock", relativePath: "Queen" }]
+            : [],
+        genres: target === "genre" ? ["Rock"] : [],
+        artists: target === "artist" ? ["Queen"] : [],
+        albumIds: target === "album" ? ["Queen-0"] : [],
+        bookmarksOnly: true,
+      };
+      await expect.poll(panelFilter).toEqual(expected);
+      for (const [name, item] of Object.entries(items)) {
+        if (name === target) await expect(item).toHaveClass(/selected/);
+        else await expect(item).not.toHaveClass(/selected/);
+      }
+      await expect(
+        page.locator(".libraries-panel .list-tile.selected"),
+      ).toHaveCount(target === "library" || target === "folder" ? 1 : 0);
+      await expect(page.locator(".album-card.selected")).toHaveCount(
+        target === "album" ? 1 : 0,
+      );
+      await expect(page.locator('[data-filter="bookmarks"]')).toHaveText(
+        "Закладки",
+      );
+    });
+  }
+}
+
+for (const modifier of ["Control", "Meta"] as const) {
+  test(`${modifier} click toggles albums and preserves all other panel filters`, async ({
+    page,
+  }) => {
+    const { items, panelFilter } = await combinedPanelFilters(page, "folder");
+    const before = panelFilter();
+    const second = page.locator('.album-card[data-selection-key="Queen-1"]');
+    await second.click({ modifiers: [modifier] });
+    await expect
+      .poll(panelFilter)
+      .toEqual({ ...before, albumIds: ["Queen-0", "Queen-1"] });
+    await expect(items.album).toHaveClass(/selected/);
+    await expect(second).toHaveClass(/selected/);
+    await second.click({ modifiers: [modifier] });
+    await expect.poll(panelFilter).toEqual(before);
+    await expect(second).not.toHaveClass(/selected/);
+    for (const item of [items.folder, items.genre, items.artist, items.album])
+      await expect(item).toHaveClass(/selected/);
+  });
+}
+
+for (const modifiers of [["Shift"], ["Control", "Shift"], ["Alt"]] as const) {
+  test(`${modifiers.join("+")} click preserves cross-panel combinations`, async ({
+    page,
+  }) => {
+    const { items, panelFilter } = await combinedPanelFilters(page, "library");
+    const before = panelFilter();
+    const third = page.locator('.album-card[data-selection-key="Queen-2"]');
+    await third.click({ modifiers: [...modifiers] });
+    const albumIds =
+      modifiers[0] === "Alt" ? ["Queen-2"] : ["Queen-0", "Queen-1", "Queen-2"];
+    await expect.poll(panelFilter).toEqual({ ...before, albumIds });
+    await expect(third).toHaveClass(/selected/);
+    for (const item of [items.library, items.genre, items.artist])
+      await expect(item).toHaveClass(/selected/);
+  });
+}
+
 test("catalog names use one primary style", async ({ page }) => {
   await catalog(page);
 
@@ -510,7 +854,7 @@ test("artist and album selection cascades to lower-priority panels", async ({
   await expect(count(page, "tracks")).toHaveText("399");
   const album = page.locator('.album-card[data-selection-key="Queen-0"]');
   await expect(album).toBeInViewport();
-  await album.locator(".album-main").click();
+  await album.locator(".album-main").click({ modifiers: ["Control"] });
   await expect(
     page.locator('[data-testid="track-row"][data-selection-key="Queen-0-0"]'),
   ).toBeInViewport();
@@ -700,7 +1044,7 @@ test("clearing a genre filter keeps the last selected album in view", async ({
   );
 
   const selected = page.locator('.album-card[data-selection-key="Queen-0"]');
-  await selected.locator(".album-main").click();
+  await selected.locator(".album-main").click({ modifiers: ["Control"] });
   await expect(selected).toHaveClass(/selected/);
   await expect(selected).toBeInViewport();
   await expect(artist(page, "Queen")).toHaveClass(/related/);
@@ -846,11 +1190,11 @@ test("global search restores filters, selection, expanded folders and scroll pos
   await page
     .locator(".library-folder-tile .list-tile-main")
     .filter({ hasText: "Queen" })
-    .click();
+    .click({ modifiers: ["Control"] });
   await expect(page.locator(".library-folder-tile.selected")).toHaveCount(1);
   await page
     .locator('.album-card[data-selection-key="Queen-0"] .album-main')
-    .click();
+    .click({ modifiers: ["Control"] });
   await page
     .locator(
       '[data-testid="track-row"][data-selection-key="Queen-0-0"] .list-tile-main',
@@ -1094,7 +1438,7 @@ test("album context filtering supports a union and search album operations stay 
     .click();
   await page
     .locator('.album-card[data-selection-key="Bowie-0"] .album-main')
-    .click();
+    .click({ modifiers: ["Control"] });
   await page
     .locator('.album-card[data-selection-key="Bowie-1"] .album-main')
     .click({ modifiers: ["Control"] });
@@ -1152,14 +1496,16 @@ test("higher-priority panels cascade without narrowing their predecessors", asyn
   await expect(count(page, "albums")).toHaveText("136");
   await expect(count(page, "tracks")).toHaveText("408");
   await expect(rock).toHaveClass(/selected/);
-  await rockGenre.locator(".list-tile-main").click();
+  await rockGenre.locator(".list-tile-main").click({ modifiers: ["Control"] });
   await expect(count(page, "tracks")).toHaveText("408");
-  await artist(page, "Queen").locator(".list-tile-main").click();
+  await artist(page, "Queen")
+    .locator(".list-tile-main")
+    .click({ modifiers: ["Control"] });
   await expect(count(page, "albums")).toHaveText("130");
   await expect(count(page, "tracks")).toHaveText("390");
   await page
     .locator('.album-card[data-selection-key="Queen-0"] .album-main')
-    .click();
+    .click({ modifiers: ["Control"] });
   await expect(count(page, "tracks")).toHaveText("3");
   await expect(libraries).toHaveCount(2);
   await expect(genres).toHaveCount(1);

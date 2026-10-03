@@ -16,6 +16,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { usesPortraitWorkspaceLayout } from "./workspace-layout";
+import { useArtistGenreReveal } from "./useArtistGenreReveal";
 import { SettingsWorkspace } from "./SettingsWorkspace";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -105,8 +106,13 @@ import { CoverDropConfirmDialog } from "./CoverDropConfirmDialog";
 import { Modal } from "./Modal";
 import { ListTile } from "./ListTile";
 import { buildTrackListRows } from "./track-grouping";
-import { resolveContextSelection, usePanelSelection } from "./panel-selection";
 import {
+  resolveContextSelection,
+  usePanelSelection,
+  type SelectionChangeOptions,
+} from "./panel-selection";
+import {
+  catalogFilterForSelection,
   filterForCatalogPanel,
   useCatalogBrowsing,
 } from "./useCatalogBrowsing";
@@ -552,6 +558,7 @@ export function App() {
     search,
     setSearch,
     preservePanelPositions,
+    releasePanelPosition,
     isSearching,
     searchPending,
     filterBySelection,
@@ -2151,6 +2158,17 @@ export function App() {
       api<{ name: string; count: number }[]>(catalogUrl("genres", genreFilter)),
     enabled: ready && !searchPending,
   });
+  const releaseGenrePosition = useCallback(
+    () => releasePanelPosition("genres"),
+    [releasePanelPosition],
+  );
+  const requestArtistGenreReveal = useArtistGenreReveal(
+    filter,
+    isSearching,
+    genres.data,
+    genres.isFetching,
+    releaseGenrePosition,
+  );
   const artists = useInfiniteQuery({
     queryKey: ["artists", artistFilter],
     initialPageParam: 0,
@@ -2186,25 +2204,46 @@ export function App() {
       ),
     [currentPlayerTrack],
   );
+  const commitPanelSelection = useCallback(
+    (
+      next: CatalogFilter,
+      preservePositions = true,
+      options?: SelectionChangeOptions,
+    ) => {
+      const commit = () => {
+        setSelectedArtists(next.artists);
+        setSelectedAlbums(next.albumIds);
+        if (!next.albumIds.length) setSelectedAlbumFocus(null);
+        setFilter(next);
+      };
+      if (preservePositions)
+        preservePanelPositions(commit, {}, [], options?.viewportAnchor);
+      else commit();
+    },
+    [preservePanelPositions, setFilter, setSelectedArtists, setSelectedAlbums],
+  );
   const applyArtistSelection = useCallback(
-    (artists: string[]) => {
+    (artists: string[], options?: SelectionChangeOptions) => {
       if (isSearching) {
         setSearchArtistSelection(artists);
         return;
       }
-      const next = { ...filter, artists };
-      preservePanelPositions(() => {
-        setSelectedArtists(artists);
-        setFilter(next);
-      });
+      commitPanelSelection(
+        {
+          ...catalogFilterForSelection(filter, options?.resetOtherPanels),
+          artists,
+        },
+        true,
+        options,
+      );
+      requestArtistGenreReveal(artists, options);
     },
     [
       filter,
       isSearching,
-      preservePanelPositions,
-      setFilter,
-      setSelectedArtists,
+      commitPanelSelection,
       setSearchArtistSelection,
+      requestArtistGenreReveal,
     ],
   );
   const selectPlayerArtists = useCallback(
@@ -2228,15 +2267,15 @@ export function App() {
     ],
   );
   const applyAlbumSelection = useCallback(
-    (albumIds: string[], focusedAlbumId?: string) => {
+    (
+      albumIds: string[],
+      focusedAlbumId?: string,
+      options?: SelectionChangeOptions,
+    ) => {
       if (isSearching) {
         setSearchAlbumSelection(albumIds);
         return;
       }
-      // Album selection only narrows the tracks panel. The album grid and all
-      // higher-priority facets keep the same query, so restoring their context
-      // would unnecessarily move them to the currently playing album.
-      setSelectedAlbums(albumIds);
       setSelectedAlbumFocus((current) => {
         if (focusedAlbumId && albumIds.includes(focusedAlbumId))
           return current?.id === focusedAlbumId
@@ -2246,17 +2285,32 @@ export function App() {
         const id = albumIds.at(-1);
         return id ? { id, artist: null } : null;
       });
-      setFilter((current) => ({ ...current, albumIds }));
+      // Combining album selections only narrows tracks. An exclusive click
+      // also changes upstream queries, so preserve those panels' positions.
+      commitPanelSelection(
+        {
+          ...catalogFilterForSelection(filter, options?.resetOtherPanels),
+          albumIds,
+        },
+        Boolean(options?.resetOtherPanels),
+        options,
+      );
     },
-    [isSearching, setFilter, setSearchAlbumSelection, setSelectedAlbums],
+    [filter, isSearching, commitPanelSelection, setSearchAlbumSelection],
   );
   const applyGenreSelection = useCallback(
-    (genres: string[]) => {
+    (genres: string[], options?: SelectionChangeOptions) => {
       if (isSearching) return;
-      const next = { ...filter, genres };
-      preservePanelPositions(() => setFilter(next));
+      commitPanelSelection(
+        {
+          ...catalogFilterForSelection(filter, options?.resetOtherPanels),
+          genres,
+        },
+        true,
+        options,
+      );
     },
-    [filter, isSearching, preservePanelPositions, setFilter],
+    [filter, isSearching, commitPanelSelection],
   );
   const valid = useQuery({
     queryKey: ["filter-validity", filter],
@@ -2812,13 +2866,19 @@ export function App() {
     [filter.libraryIds, filter.folders],
   );
   const applyLocationSelection = useCallback(
-    (keys: string[]) => {
+    (keys: string[], options?: SelectionChangeOptions) => {
       if (isSearching) return;
       const locations = locationsFromSelectionKeys(keys);
-      const next = { ...filter, ...locations };
-      preservePanelPositions(() => setFilter(next));
+      commitPanelSelection(
+        {
+          ...catalogFilterForSelection(filter, options?.resetOtherPanels),
+          ...locations,
+        },
+        true,
+        options,
+      );
     },
-    [filter, isSearching, preservePanelPositions, setFilter],
+    [filter, isSearching, commitPanelSelection],
   );
   const selectLocation = (event: React.MouseEvent, key: string) => {
     if (isSearching) {
@@ -3443,7 +3503,9 @@ export function App() {
               averageGroupSize={albums.data?.pages[0]?.averageGroupSize}
               selected={selectedAlbums}
               currentAlbumId={currentPlayerTrack?.albumKey ?? null}
-              onSelectionChange={applyAlbumSelection}
+              onSelectionChange={(ids, options) =>
+                applyAlbumSelection(ids, undefined, options)
+              }
               onSelectionFocus={(albumId, albumIds, artist) =>
                 setSelectedAlbumFocus(
                   albumIds.includes(albumId) ? { id: albumId, artist } : null,

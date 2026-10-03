@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { emptyFilter } from "../src/shared/contracts";
-import { filterForCatalogPanel } from "../src/client/useCatalogBrowsing";
+import {
+  catalogFilterForSelection,
+  filterForCatalogPanel,
+} from "../src/client/useCatalogBrowsing";
 
 describe("catalog panel filters", () => {
   const filter = {
@@ -48,5 +51,59 @@ describe("catalog panel filters", () => {
     const search = { ...filter, search: "needle" };
     expect(filterForCatalogPanel(search, "libraries")).toEqual(search);
     expect(filterForCatalogPanel(search, "albums")).toEqual(search);
+  });
+
+  describe("selection filter base", () => {
+    const selectedFilter = {
+      ...filter,
+      search: "needle",
+      albumRatingMax: 5,
+      trackRatingMax: 5,
+      albumUnrated: true,
+      trackUnrated: true,
+    };
+
+    it("preserves all filters by default and when reset is explicitly false", () => {
+      const original = structuredClone(selectedFilter);
+
+      expect(catalogFilterForSelection(selectedFilter)).toEqual(original);
+      expect(catalogFilterForSelection(selectedFilter, false)).toEqual(
+        original,
+      );
+      expect(selectedFilter).toEqual(original);
+    });
+
+    it("clears all panel selections including locations, but keeps user filters", () => {
+      const original = structuredClone(selectedFilter);
+      const base = catalogFilterForSelection(selectedFilter, true);
+
+      expect(base).toEqual({
+        ...original,
+        libraryIds: [],
+        folders: [],
+        genres: [],
+        artists: [],
+        albumIds: [],
+      });
+      expect(selectedFilter).toEqual(original);
+    });
+
+    it("allows the new panel selection to be applied after resetting other panels", () => {
+      const original = structuredClone(selectedFilter);
+      const next = {
+        ...catalogFilterForSelection(selectedFilter, true),
+        genres: ["Jazz"],
+      };
+
+      expect(next).toEqual({
+        ...original,
+        libraryIds: [],
+        folders: [],
+        genres: ["Jazz"],
+        artists: [],
+        albumIds: [],
+      });
+      expect(selectedFilter).toEqual(original);
+    });
   });
 });

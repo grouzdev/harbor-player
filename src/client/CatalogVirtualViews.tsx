@@ -36,8 +36,13 @@ import {
 } from "./RatingControl";
 import { ListTile } from "./ListTile";
 import { showPlayingTrackIndicators } from "./feature-flags";
-import { resolveContextSelection, usePanelSelection } from "./panel-selection";
+import {
+  resolveContextSelection,
+  usePanelSelection,
+  type SelectionChangeOptions,
+} from "./panel-selection";
 import { buildTrackListRows } from "./track-grouping";
+import { usePanelScrollResolver } from "./panel-scroll";
 
 const virtualPanelTopInset = 14;
 
@@ -146,7 +151,10 @@ export function ArtistList({
   averageGroupSize?: number;
   selected: string[];
   loading: boolean;
-  onSelectionChange: (names: string[]) => void;
+  onSelectionChange: (
+    names: string[],
+    options?: SelectionChangeOptions,
+  ) => void;
   onNavigate: (id: string) => void;
   onMore: () => void;
   onContextMenu: CatalogContextMenuHandler;
@@ -208,6 +216,22 @@ export function ArtistList({
     scrollPaddingStart: virtualPanelTopInset,
     overscan: 6,
   });
+  usePanelScrollResolver(
+    ref,
+    (key) => {
+      const index = rows.findIndex(
+        (row) => row.type === "artist" && row.item.name === key,
+      );
+      if (index < 0) return undefined;
+      // Populate measurements for rows outside the mounted virtual window.
+      virtual.getOffsetForIndex(index, "start");
+      return virtual.measurementsCache[index]?.start;
+    },
+    items.length,
+    total,
+    loading,
+    onMore,
+  );
   const visible = virtual.getVirtualItems();
   const last = visible.at(-1)?.index ?? 0;
   useEffect(() => {
@@ -374,7 +398,7 @@ export function AlbumGrid({
   averageGroupSize?: number;
   selected: string[];
   currentAlbumId: string | null;
-  onSelectionChange: (ids: string[]) => void;
+  onSelectionChange: (ids: string[], options?: SelectionChangeOptions) => void;
   onSelectionFocus?: (id: string, ids: string[], artist: string | null) => void;
   onNavigate: (id: string) => void;
   onMore: () => void;
@@ -487,6 +511,22 @@ export function AlbumGrid({
     scrollPaddingStart: virtualPanelTopInset,
     overscan: 3,
   });
+  usePanelScrollResolver(
+    ref,
+    (key) => {
+      const index = rows.findIndex(
+        (row) =>
+          row.type === "albums" && row.albums.some((album) => album.id === key),
+      );
+      if (index < 0) return undefined;
+      virtual.getOffsetForIndex(index, "start");
+      return virtual.measurementsCache[index]?.start;
+    },
+    albums.length,
+    total,
+    loading,
+    onMore,
+  );
   const visible = virtual.getVirtualItems();
   const last = visible.at(-1)?.index ?? 0;
   useEffect(() => {

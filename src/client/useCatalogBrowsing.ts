@@ -8,6 +8,11 @@ import {
 } from "react";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { emptyFilter, type CatalogFilter } from "../shared/contracts";
+import {
+  panelScrollResolvers,
+  preservedScrollTop,
+  type ViewportAnchor,
+} from "./panel-scroll";
 
 const panelIds = ["libraries", "genres", "artists", "albums", "tracks"];
 const catalogQueries = new Set([
@@ -27,6 +32,7 @@ type PanelPosition = {
   top: number;
   left: number;
   anchorKey?: string;
+  anchorY?: number;
 };
 type SearchSelectionRestore = {
   requestId: number;
@@ -37,6 +43,23 @@ type SearchSelectionRestore = {
 
 export type CatalogPanelId =
   "libraries" | "genres" | "artists" | "albums" | "tracks";
+
+// Reset only panel selections, not the user's search or catalog-wide filters.
+export function catalogFilterForSelection(
+  filter: CatalogFilter,
+  resetOtherPanels = false,
+): CatalogFilter {
+  return resetOtherPanels
+    ? {
+        ...filter,
+        libraryIds: [],
+        folders: [],
+        genres: [],
+        artists: [],
+        albumIds: [],
+      }
+    : filter;
+}
 
 export function filterForCatalogPanel(
   filter: CatalogFilter,
@@ -111,6 +134,7 @@ export function useCatalogBrowsing() {
     (
       anchors: Partial<Record<CatalogPanelId, string>> = {},
       skipped: readonly CatalogPanelId[] = [],
+      clicked?: ViewportAnchor,
     ) =>
       panelIds.flatMap((id) => {
         if (skipped.includes(id as CatalogPanelId)) return [];
@@ -121,7 +145,11 @@ export function useCatalogBrowsing() {
                 id,
                 top: node.scrollTop,
                 left: node.scrollLeft,
-                anchorKey: anchors[id as CatalogPanelId],
+                anchorKey:
+                  clicked?.panelId === id
+                    ? clicked.key
+                    : anchors[id as CatalogPanelId],
+                anchorY: clicked?.panelId === id ? clicked.y : undefined,
               },
             ]
           : [];
@@ -288,6 +316,7 @@ export function useCatalogBrowsing() {
     let frame = 0;
     let stableFrames = 0;
     let settledFrames = 0;
+    const automatedOffsets = new Map<HTMLElement, number>();
     const restore = () => {
       const positions = restorePositions.current;
       if (!positions) return;
@@ -300,6 +329,12 @@ export function useCatalogBrowsing() {
               ...node.querySelectorAll<HTMLElement>("[data-selection-key]"),
             ].find((item) => item.dataset.selectionKey === position.anchorKey)
           : undefined;
+        const resolved = position.anchorKey
+          ? panelScrollResolvers.get(node)?.(position.anchorKey)
+          : undefined;
+        if (resolved?.pending) {
+          complete = false;
+        }
         if (anchor) {
           const box = node.getBoundingClientRect();
           const item = anchor.getBoundingClientRect();
@@ -308,7 +343,20 @@ export function useCatalogBrowsing() {
               node.scrollTop +
               item.top -
               box.top -
-              (node.clientHeight - item.height) / 2,
+              (position.anchorY ?? (node.clientHeight - item.height) / 2),
+            left: position.left,
+            behavior: "instant",
+          });
+        } else if (
+          resolved?.top !== undefined &&
+          position.anchorY !== undefined
+        ) {
+          node.scrollTo({
+            top: preservedScrollTop(
+              resolved.top,
+              position.anchorY,
+              node.scrollHeight - node.clientHeight,
+            ),
             left: position.left,
             behavior: "instant",
           });
@@ -318,15 +366,22 @@ export function useCatalogBrowsing() {
             left: position.left,
             behavior: "instant",
           });
-        if (!anchor && Math.abs(node.scrollTop - position.top) > 1)
+        automatedOffsets.set(node, node.scrollTop);
+        if (
+          !anchor &&
+          resolved?.top === undefined &&
+          Math.abs(node.scrollTop - position.top) > 1
+        )
           complete = false;
       }
       const fetching = queryClient.isFetching({
         predicate: (query) => catalogQueries.has(String(query.queryKey[0])),
       });
       settledFrames = fetching ? 0 : settledFrames + 1;
-      // A rescan or a resized viewport may make the old offset unreachable.
+      // A rescan, resize, or failed page request can make an anchor unreachable.
+      // Do not leave an idle restoration loop running after fetching stops.
       if (settledFrames >= 10) complete = true;
+      if (fetching) complete = false;
       stableFrames = complete ? stableFrames + 1 : 0;
       if (stableFrames >= 3) restorePositions.current = null;
       else frame = requestAnimationFrame(restore);
@@ -335,14 +390,25 @@ export function useCatalogBrowsing() {
     const cancel = () => {
       restorePositions.current = null;
     };
+    const onScroll = (event: Event) => {
+      const node = event.target;
+      if (
+        node instanceof HTMLElement &&
+        automatedOffsets.has(node) &&
+        Math.abs(node.scrollTop - automatedOffsets.get(node)!) > 1
+      )
+        cancel();
+    };
     window.addEventListener("pointerdown", cancel, true);
     window.addEventListener("wheel", cancel, true);
     window.addEventListener("keydown", cancel, true);
+    window.addEventListener("scroll", onScroll, true);
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener("pointerdown", cancel, true);
       window.removeEventListener("wheel", cancel, true);
       window.removeEventListener("keydown", cancel, true);
+      window.removeEventListener("scroll", onScroll, true);
     };
   }, [navigationEpoch, queryClient]);
 
@@ -405,13 +471,20 @@ export function useCatalogBrowsing() {
       update: () => void,
       anchors: Partial<Record<CatalogPanelId, string>> = {},
       skipped: readonly CatalogPanelId[] = [],
+      clicked?: ViewportAnchor,
     ) => {
-      restorePositions.current = panelPositions(anchors, skipped);
+      restorePositions.current = panelPositions(anchors, skipped, clicked);
       update();
       setNavigationEpoch((value) => value + 1);
     },
     [panelPositions],
   );
+
+  const releasePanelPosition = useCallback((id: CatalogPanelId) => {
+    restorePositions.current =
+      restorePositions.current?.filter((position) => position.id !== id) ??
+      null;
+  }, []);
 
   return {
     filter,
@@ -421,6 +494,7 @@ export function useCatalogBrowsing() {
     search,
     setSearch,
     preservePanelPositions,
+    releasePanelPosition,
     isSearching,
     searchPending,
     filterBySelection,
