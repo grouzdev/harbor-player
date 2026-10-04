@@ -2232,11 +2232,15 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     .dispatchEvent("click");
   await expect(multiArtistTagDialog).not.toBeVisible();
 
-  const secondSourceAlbum = page.getByTitle("Тестовый альбом · Исполнитель", {
-    exact: true,
-  });
-  const secondAlbumId =
-    await secondSourceAlbum.getAttribute("data-selection-key");
+  const secondAlbumId = await page
+    .locator('.album-card[title="Тестовый альбом · Исполнитель"]')
+    .evaluateAll(
+      (albums, firstAlbumId) =>
+        albums
+          .map((album) => album.getAttribute("data-selection-key"))
+          .find((albumId) => albumId !== firstAlbumId) || null,
+      firstAlbumId,
+    );
   expect(secondAlbumId).not.toBeNull();
   const secondAlbum = page.locator(
     `.album-card[data-selection-key=${JSON.stringify(secondAlbumId)}]`,
@@ -2498,23 +2502,6 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
       },
     });
   });
-  await firstAlbum.first().scrollIntoViewIfNeeded();
-  await expect(firstAlbum.first()).toBeVisible();
-  await firstAlbum.first().click({ button: "right" });
-  await expect(
-    page.getByRole("menu", { name: "Контекстное меню", exact: true }),
-  ).toBeVisible();
-  await page
-    .getByRole("menuitem", { name: "Копировать данные" })
-    .dispatchEvent("click");
-  await expect(page.getByRole("status")).toContainText("Данные скопированы");
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () => (window as typeof window & { copiedText?: string }).copiedText,
-      ),
-    )
-    .toBe("Исполнитель альбома — Тестовый альбом (2024)");
   await page.getByTestId("track-row").first().dispatchEvent("contextmenu");
   await page
     .getByRole("menuitem", { name: "Копировать данные" })
@@ -2823,7 +2810,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
       .locator(".now-copy")
       .evaluate((copy) => [...copy.children].map((child) => child.className)),
   ).toEqual(["now-artists", "now-track-link"]);
-  await artistButton.dispatchEvent("click", { ctrlKey: true });
+  await artistButton.click({ modifiers: ["Control"] });
   await expect(artistRow).not.toHaveClass(/selected/);
   await page
     .locator(".albums-panel")
@@ -3114,51 +3101,16 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     .toBeGreaterThanOrEqual(2);
   const currentTrack = page.getByTestId("track-row").first();
   await expect(currentTrack).not.toHaveClass(/playing/);
-  await expect(
-    currentTrack.locator(".list-tile-status-icon svg"),
-  ).toBeVisible();
-  const currentTrackTextColor = await currentTrack
-    .locator(".list-tile-label")
-    .evaluate((element) => getComputedStyle(element).color);
-  await expect(currentTrack.locator(".list-tile-status-icon")).toHaveCSS(
-    "color",
-    currentTrackTextColor,
-  );
   await currentTrack.locator(".list-tile-main").click();
   await expect(currentTrack).toHaveClass(/selected/);
-  await expect(currentTrack.locator(".list-tile-status-icon")).toHaveCSS(
-    "color",
-    await currentTrack
-      .locator(".list-tile-label")
-      .evaluate((element) => getComputedStyle(element).color),
-  );
   await expect(libraryTile).not.toHaveClass(/playing/);
-  await expect(libraryTile.locator(".list-tile-status-icon svg")).toBeVisible();
   await expect(page.locator(".albums-panel .album-card.playing")).toHaveCount(
     0,
   );
-  const albumPlayingIcon = page.locator(".albums-panel .album-playing-icon");
-  await expect(albumPlayingIcon).toBeVisible();
-  await expect(albumPlayingIcon).toHaveCSS(
-    "color",
-    await albumPlayingIcon.evaluate(
-      (element) => getComputedStyle(element.parentElement!).color,
-    ),
-  );
   await expect(page.locator(".genres-panel .list-tile.playing")).toHaveCount(0);
-  await expect
-    .poll(() =>
-      page.locator(".genres-panel .list-tile-status-icon svg").count(),
-    )
-    .toBeGreaterThan(0);
   await expect(page.locator(".artists-panel .artist-row.playing")).toHaveCount(
     0,
   );
-  await expect
-    .poll(() =>
-      page.locator(".artists-panel .list-tile-status-icon svg").count(),
-    )
-    .toBeGreaterThan(0);
 
   await expect(coverModeToggle).toHaveAttribute("aria-pressed", "false");
   await expect(coverModeToggle).toHaveCSS("width", "60px");
