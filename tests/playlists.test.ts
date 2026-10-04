@@ -350,7 +350,9 @@ describe("playlists", () => {
     db.close();
 
     catalog = new Catalog(root);
-    expect(catalog.queueSnapshot("legacy-queue")).toEqual({ trackIds: ["one"] });
+    expect(catalog.queueSnapshot("legacy-queue")).toEqual({
+      trackIds: ["one"],
+    });
     expect(
       catalog.playlist(created.playlist.id).entries.map((entry) => entry.kind),
     ).toEqual(["track"]);

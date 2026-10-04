@@ -1181,18 +1181,19 @@ test("library root can be added to any playlist", async ({ page }, info) => {
   await page.getByRole("menuitem", { name: playlistName }).click();
   await expect(page.getByText("Добавлено в плейлист")).toBeVisible();
 
-  await page
-    .getByRole("button", { name: new RegExp(libraryName) })
-    .first()
-    .click({ button: "right" });
+  const libraryTile = page
+    .locator(".libraries-panel .library-container")
+    .filter({
+      has: page.getByRole("button", { name: new RegExp(libraryName) }),
+    })
+    .locator(":scope > .list-tile .list-tile-main");
+  await libraryTile.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Удалить" }).click();
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Отключить", exact: true })
     .click();
-  await expect(
-    page.getByRole("button", { name: new RegExp(libraryName) }),
-  ).toHaveCount(0);
+  await expect(libraryTile).toHaveCount(0);
 });
 
 test("local library: readable UI, playback, tags, move and permanent delete", async ({
@@ -2497,7 +2498,12 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
       },
     });
   });
-  await firstAlbum.first().dispatchEvent("contextmenu");
+  await firstAlbum.first().scrollIntoViewIfNeeded();
+  await expect(firstAlbum.first()).toBeVisible();
+  await firstAlbum.first().click({ button: "right" });
+  await expect(
+    page.getByRole("menu", { name: "Контекстное меню", exact: true }),
+  ).toBeVisible();
   await page
     .getByRole("menuitem", { name: "Копировать данные" })
     .dispatchEvent("click");
@@ -2783,7 +2789,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     .locator(".artists-panel")
     .locator(".list-tile-main")
     .filter({ hasText: "Исполнитель альбома" })
-    .dispatchEvent("click");
+    .click({ modifiers: ["Control"] });
   await expect(rows).toHaveCount(6);
   await flac().locator(".list-tile-main").dispatchEvent("click");
   await expect(flac()).toHaveClass(/selected/);
