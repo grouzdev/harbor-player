@@ -12,6 +12,14 @@ test.beforeEach(async ({ page }) => {
           portable: false,
         }),
         getUpdateState: async () => ({ status: "idle" }),
+        getUpdatePreferences: async () => ({ automaticChecks: true }),
+        setUpdatePreferences: async (patch: object) => ({
+          automaticChecks: true,
+          ...patch,
+        }),
+        dismissUpdate: async () => {},
+        retryUpdate: async () => {},
+        openUpdateLog: async () => {},
         checkForUpdates: async () => {
           checkForUpdatesCalls += 1;
         },

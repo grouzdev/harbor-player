@@ -1,8 +1,18 @@
-import type { UpdateState } from "../shared/desktop-contract";
+import type {
+  UpdatePreferences,
+  UpdateState,
+} from "../shared/desktop-contract";
 
 export interface DesktopBridge {
   getAppInfo(): Promise<{ version: string; commit: string; portable: boolean }>;
   getUpdateState(): Promise<UpdateState>;
+  getUpdatePreferences(): Promise<UpdatePreferences>;
+  setUpdatePreferences(
+    preferences: Partial<UpdatePreferences>,
+  ): Promise<UpdatePreferences>;
+  dismissUpdate(): Promise<void>;
+  retryUpdate(): Promise<void>;
+  openUpdateLog(): Promise<void>;
   checkForUpdates(): Promise<void>;
   downloadUpdate(): Promise<void>;
   installUpdate(): Promise<void>;

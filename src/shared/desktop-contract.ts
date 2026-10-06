@@ -1,6 +1,13 @@
 import type { TagPatch } from "./contracts.js";
 
-export type UpdateState =
+export type UpdatePreferences = {
+  automaticChecks: boolean;
+  skippedVersion?: string;
+};
+
+export type UpdateStage = "check" | "download" | "install";
+
+export type UpdateState = (
   | { status: "idle" }
   | { status: "checking" }
   | { status: "available"; version: string }
@@ -9,7 +16,14 @@ export type UpdateState =
   | { status: "preparingInstall"; version: string }
   | { status: "upToDate" }
   | { status: "unsupported" }
-  | { status: "error"; message: string };
+  | {
+      status: "error";
+      message: string;
+      stage: UpdateStage;
+      retryable: boolean;
+      version?: string;
+    }
+) & { notificationId?: string; notificationHidden?: boolean };
 
 export type BackendToMainMessage =
   | { type: "ready"; url: string }

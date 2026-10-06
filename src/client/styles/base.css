@@ -1256,10 +1256,12 @@ body.selection-dragging * {
   bottom: 92px;
   z-index: 21;
   display: flex;
-  max-width: 440px;
-  align-items: center;
+  flex-direction: column;
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 116px);
+  box-sizing: border-box;
   gap: 10px;
-  padding: 12px 14px;
+  padding: 14px;
   border: 1px solid #819c8555;
   border-radius: 8px;
   background: #34463e;
@@ -1267,8 +1269,50 @@ body.selection-dragging * {
   font-size: var(--type-caption);
   line-height: 1.45;
 }
-.update-panel button {
-  white-space: nowrap;
+.update-panel-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 28px;
+}
+.update-text,
+.settings-update-status {
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+.update-text {
+  margin: 0 0 10px;
+}
+.update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.update-actions .button {
+  white-space: normal;
+}
+.settings-update-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--type-caption);
+}
+.update-panel-footer {
+  flex-shrink: 0;
+}
+.update-panel .update-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+@media (max-width: 480px) {
+  .update-panel {
+    right: 16px;
+  }
 }
 .context-menu {
   position: fixed;

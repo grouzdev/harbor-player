@@ -15,6 +15,22 @@ contextBridge.exposeInMainWorld("harborPlayerDesktop", {
   checkForUpdates: () => ipcRenderer.invoke("desktop:check-for-updates"),
   downloadUpdate: () => ipcRenderer.invoke("desktop:download-update"),
   installUpdate: () => ipcRenderer.invoke("desktop:install-update"),
+  retryUpdate: () => ipcRenderer.invoke("desktop:retry-update"),
+  dismissUpdate: () => ipcRenderer.invoke("desktop:dismiss-update"),
+  openUpdateLog: () => ipcRenderer.invoke("desktop:open-update-log"),
+  getUpdatePreferences: () =>
+    ipcRenderer.invoke("desktop:get-update-preferences") as Promise<
+      import("../shared/desktop-contract.js").UpdatePreferences
+    >,
+  setUpdatePreferences: (
+    preferences: Partial<
+      import("../shared/desktop-contract.js").UpdatePreferences
+    >,
+  ) =>
+    ipcRenderer.invoke(
+      "desktop:set-update-preferences",
+      preferences,
+    ) as Promise<import("../shared/desktop-contract.js").UpdatePreferences>,
   chooseImageFile: () =>
     ipcRenderer.invoke("desktop:choose-image-file") as Promise<string | null>,
   chooseLibraryDirectory: () =>

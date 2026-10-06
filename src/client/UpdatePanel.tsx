@@ -1,69 +1,78 @@
 import { useEffect, useState } from "react";
+import { X } from "lucide-react";
 import type { UpdateState } from "../shared/desktop-contract";
+import { UpdateControls, updateStatus } from "./UpdateControls";
 import "./desktop";
 
 export function UpdatePanel() {
   const bridge = window.harborPlayerDesktop;
   const [state, setState] = useState<UpdateState | null>(null);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissedId, setDismissedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!bridge) return;
+    let active = true;
+    let receivedUpdate = false;
+    const unsubscribe = bridge.subscribeUpdateState((next) => {
+      receivedUpdate = true;
+      if (active) setState(next);
+    });
     void bridge
       .getUpdateState()
-      .then(setState)
+      .then((next) => {
+        if (active && !receivedUpdate) setState(next);
+      })
       .catch(() => undefined);
-    return bridge.subscribeUpdateState((next) => {
-      setDismissed(false);
-      setState(next);
-    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [bridge]);
+  const notificationId = state?.notificationId;
   if (
     !bridge ||
     !state ||
-    dismissed ||
+    state.notificationHidden ||
+    (notificationId !== undefined && dismissedId === notificationId) ||
     ["idle", "checking", "upToDate"].includes(state.status)
   )
     return null;
-  const retry = () => void bridge.checkForUpdates();
+  const dismiss = () => {
+    setDismissedId(notificationId ?? null);
+    void bridge.dismissUpdate().catch(() => undefined);
+  };
   return (
-    <aside className="update-panel" aria-live="polite">
-      {state.status === "unsupported" && (
-        <span>Portable-версия обновляется вручную со страницы релизов.</span>
-      )}
-      {state.status === "available" && (
-        <>
-          <span>Доступна версия {state.version}.</span>
-          <button onClick={() => void bridge.downloadUpdate()}>Скачать</button>
-        </>
-      )}
-      {state.status === "downloading" && (
-        <span>
-          Скачивание версии {state.version}: {state.percent}%
-        </span>
-      )}
-      {state.status === "downloaded" && (
-        <>
-          <span>Версия {state.version} готова к установке.</span>
-          <button onClick={() => void bridge.installUpdate()}>
-            Перезапустить и установить
-          </button>
-          <button className="secondary" onClick={() => setDismissed(true)}>
-            Позже
-          </button>
-        </>
-      )}
-      {state.status === "preparingInstall" && (
-        <span>Ожидаем безопасного завершения операции…</span>
-      )}
-      {state.status === "error" && (
-        <>
-          <span>
-            Не удалось проверить или скачать обновление: {state.message}
-          </span>
-          <button onClick={retry}>Повторить</button>
-        </>
-      )}
+    <aside className="update-panel" aria-label="Обновление приложения">
+      <button
+        type="button"
+        className="update-close"
+        aria-label="Закрыть уведомление об обновлении"
+        onClick={dismiss}
+      >
+        <X size={18} />
+      </button>
+      <div className="update-panel-body">
+        <p className="update-text" role="status">
+          {updateStatus(state)}
+        </p>
+        {state.status === "error" && (
+          <p className="hint update-text">
+            Можно продолжить пользоваться плеером и обновиться позже.
+          </p>
+        )}
+        {state.status === "downloading" && (
+          <p className="hint update-text">
+            Закрытие уведомления не отменяет загрузку. Статус доступен в
+            настройках.
+          </p>
+        )}
+        <UpdateControls key={notificationId} state={state} desktop={bridge} />
+      </div>
+      <div className="update-panel-footer">
+        <button className="button secondary" onClick={dismiss}>
+          {state.status === "downloading" ? "Скрыть" : "Не сейчас"}
+        </button>
+      </div>
     </aside>
   );
 }

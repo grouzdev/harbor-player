@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import { Info, RefreshCw } from "lucide-react";
 import changelog from "../../releases/changelog.json";
 import { browserBuildInfo } from "./build-info";
-import type { UpdateState } from "../shared/desktop-contract";
+import type {
+  UpdatePreferences,
+  UpdateState,
+} from "../shared/desktop-contract";
+import { UpdateControls, updateStatus } from "./UpdateControls";
 import "./desktop";
 
 type ReleaseNotes = {
@@ -34,33 +38,18 @@ function Notes({ release }: { release: ReleaseNotes }) {
   );
 }
 
-function updateStatus(state: UpdateState) {
-  switch (state.status) {
-    case "idle":
-      return "";
-    case "checking":
-      return "Проверяем обновления…";
-    case "upToDate":
-      return "Установлена актуальная версия";
-    case "available":
-      return `Доступна версия ${state.version}`;
-    case "downloading":
-      return `Загрузка ${state.version}: ${Math.round(state.percent)}%`;
-    case "downloaded":
-      return `Версия ${state.version} готова к установке`;
-    case "preparingInstall":
-      return "Подготовка к установке…";
-    case "unsupported":
-      return "Автоматическое обновление недоступно для этой сборки";
-    case "error":
-      return state.message;
-  }
-}
-
 export function VersionSettingsPanel() {
   const desktop = window.harborPlayerDesktop;
-  const [appInfo, setAppInfo] = useState(browserBuildInfo);
+  const [appInfo, setAppInfo] = useState<{
+    version: string;
+    commit: string;
+    portable?: boolean;
+  }>(browserBuildInfo);
   const [state, setState] = useState<UpdateState>({ status: "idle" });
+  const [preferences, setPreferences] = useState<UpdatePreferences | null>(
+    null,
+  );
+  const [savingPreferences, setSavingPreferences] = useState(false);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -73,8 +62,8 @@ export function VersionSettingsPanel() {
     });
     void desktop
       .getAppInfo()
-      .then(({ version, commit }) => {
-        if (active) setAppInfo({ version, commit });
+      .then((info) => {
+        if (active) setAppInfo(info);
       })
       .catch(() => {});
     void desktop
@@ -88,6 +77,19 @@ export function VersionSettingsPanel() {
       unsubscribe();
     };
   }, [desktop]);
+  useEffect(() => {
+    if (!desktop) return;
+    let active = true;
+    void desktop
+      .getUpdatePreferences()
+      .then((next) => {
+        if (active) setPreferences(next);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [desktop, state.notificationId, state.notificationHidden]);
   const current = releases.find(
     (release) => release.version === appInfo.version,
   );
@@ -95,6 +97,20 @@ export function VersionSettingsPanel() {
   const busy =
     checking ||
     ["checking", "downloading", "preparingInstall"].includes(state.status);
+  const savePreferences = async (next: Partial<UpdatePreferences>) => {
+    if (!desktop || savingPreferences) return;
+    setSavingPreferences(true);
+    setError("");
+    try {
+      setPreferences(await desktop.setUpdatePreferences(next));
+    } catch {
+      setError(
+        "Не удалось сохранить настройки обновления. Попробуйте ещё раз.",
+      );
+    } finally {
+      setSavingPreferences(false);
+    }
+  };
   return (
     <section className="panel settings-panel" aria-label="Версия и обновления">
       <header className="panel-heading settings-panel-heading">
@@ -116,6 +132,21 @@ export function VersionSettingsPanel() {
             )}
           </div>
           <span className="settings-build">Сборка {appInfo.commit}</span>
+          {desktop && appInfo.portable === false && preferences && (
+            <label className="settings-update-toggle">
+              <input
+                type="checkbox"
+                checked={preferences.automaticChecks}
+                disabled={savingPreferences}
+                onChange={(event) =>
+                  void savePreferences({
+                    automaticChecks: event.target.checked,
+                  })
+                }
+              />
+              Автоматически проверять обновления
+            </label>
+          )}
           {desktop && (
             <button
               type="button"
@@ -126,9 +157,9 @@ export function VersionSettingsPanel() {
                 setError("");
                 try {
                   await desktop.checkForUpdates();
-                } catch (cause) {
+                } catch {
                   setError(
-                    cause instanceof Error ? cause.message : String(cause),
+                    "Не удалось проверить обновления. Попробуйте позже.",
                   );
                 } finally {
                   setChecking(false);
@@ -146,14 +177,28 @@ export function VersionSettingsPanel() {
           )}
           {desktop && updateStatus(state) && (
             <p
-              className={state.status === "error" ? "error-text" : "hint"}
+              className={`settings-update-status ${state.status === "error" ? "error-text" : "hint"}`}
               role="status"
             >
               {updateStatus(state)}
             </p>
           )}
+          {desktop && (
+            <UpdateControls
+              key={state.notificationId}
+              state={state}
+              desktop={desktop}
+              onPreferencesChange={setPreferences}
+            />
+          )}
+          {desktop && preferences?.skippedVersion && (
+            <p className="hint settings-update-status">
+              Пропущена версия {preferences.skippedVersion}. Ручная проверка
+              позволит вернуться к обновлению.
+            </p>
+          )}
           {error && (
-            <p className="error-text" role="alert">
+            <p className="error-text settings-update-status" role="alert">
               {error}
             </p>
           )}
