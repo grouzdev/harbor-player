@@ -44,28 +44,12 @@ type SearchSelectionRestore = {
 export type CatalogPanelId =
   "libraries" | "genres" | "artists" | "albums" | "tracks";
 
-// Reset only panel selections, not the user's search or catalog-wide filters.
+// A panel's context consists only of selections upstream of it.
+// Keep search and catalog-wide filters when opening a new branch.
 export function catalogFilterForSelection(
-  filter: CatalogFilter,
-  resetOtherPanels = false,
-): CatalogFilter {
-  return resetOtherPanels
-    ? {
-        ...filter,
-        libraryIds: [],
-        folders: [],
-        genres: [],
-        artists: [],
-        albumIds: [],
-      }
-    : filter;
-}
-
-export function filterForCatalogPanel(
   filter: CatalogFilter,
   panel: CatalogPanelId,
 ): CatalogFilter {
-  if (filter.search.trim()) return filter;
   if (panel === "libraries")
     return {
       ...filter,
@@ -80,6 +64,14 @@ export function filterForCatalogPanel(
   if (panel === "artists") return { ...filter, artists: [], albumIds: [] };
   if (panel === "albums") return { ...filter, albumIds: [] };
   return filter;
+}
+
+export function filterForCatalogPanel(
+  filter: CatalogFilter,
+  panel: CatalogPanelId,
+): CatalogFilter {
+  if (filter.search.trim()) return filter;
+  return catalogFilterForSelection(filter, panel);
 }
 
 export function effectiveCatalogFilter(

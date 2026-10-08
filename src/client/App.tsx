@@ -2231,7 +2231,9 @@ export function App() {
       }
       commitPanelSelection(
         {
-          ...catalogFilterForSelection(filter, options?.resetOtherPanels),
+          ...(artists.length
+            ? catalogFilterForSelection(filter, "artists")
+            : filter),
           artists,
         },
         true,
@@ -2286,14 +2288,14 @@ export function App() {
         const id = albumIds.at(-1);
         return id ? { id, artist: null } : null;
       });
-      // Combining album selections only narrows tracks. An exclusive click
-      // also changes upstream queries, so preserve those panels' positions.
+      // Album selection only narrows tracks; its upstream context and the
+      // album grid remain unchanged, including on an ordinary click.
       commitPanelSelection(
         {
-          ...catalogFilterForSelection(filter, options?.resetOtherPanels),
+          ...catalogFilterForSelection(filter, "albums"),
           albumIds,
         },
-        Boolean(options?.resetOtherPanels),
+        false,
         options,
       );
     },
@@ -2304,7 +2306,9 @@ export function App() {
       if (isSearching) return;
       commitPanelSelection(
         {
-          ...catalogFilterForSelection(filter, options?.resetOtherPanels),
+          ...(genres.length
+            ? catalogFilterForSelection(filter, "genres")
+            : filter),
           genres,
         },
         true,
@@ -2872,7 +2876,9 @@ export function App() {
       const locations = locationsFromSelectionKeys(keys);
       commitPanelSelection(
         {
-          ...catalogFilterForSelection(filter, options?.resetOtherPanels),
+          ...(keys.length
+            ? catalogFilterForSelection(filter, "libraries")
+            : filter),
           ...locations,
         },
         true,

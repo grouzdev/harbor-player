@@ -15,18 +15,8 @@ export type SelectionClickResult = {
 };
 
 export type SelectionChangeOptions = {
-  resetOtherPanels?: boolean;
   viewportAnchor?: ViewportAnchor;
 };
-
-export function selectionChangeOptions(
-  event: Pick<MouseEvent, "ctrlKey" | "metaKey" | "shiftKey" | "altKey">,
-): SelectionChangeOptions {
-  return {
-    resetOtherPanels:
-      !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey,
-  };
-}
 
 export function resolveContextSelection(
   currentKeys: readonly string[],
@@ -367,7 +357,7 @@ export function usePanelSelection({
       );
       anchorRef.current = result.anchor;
       onFocusRef.current?.(targetKey, result.keys);
-      const options = selectionChangeOptions(event);
+      const options: SelectionChangeOptions = {};
       const surface = scrollRef.current;
       const item = surface
         ? [

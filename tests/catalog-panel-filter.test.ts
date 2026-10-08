@@ -63,19 +63,18 @@ describe("catalog panel filters", () => {
       trackUnrated: true,
     };
 
-    it("preserves all filters by default and when reset is explicitly false", () => {
+    it("track selection preserves every catalog filter", () => {
       const original = structuredClone(selectedFilter);
 
-      expect(catalogFilterForSelection(selectedFilter)).toEqual(original);
-      expect(catalogFilterForSelection(selectedFilter, false)).toEqual(
+      expect(catalogFilterForSelection(selectedFilter, "tracks")).toEqual(
         original,
       );
       expect(selectedFilter).toEqual(original);
     });
 
-    it("clears all panel selections including locations, but keeps user filters", () => {
+    it("starts a new location branch without clearing user filters or search", () => {
       const original = structuredClone(selectedFilter);
-      const base = catalogFilterForSelection(selectedFilter, true);
+      const base = catalogFilterForSelection(selectedFilter, "libraries");
 
       expect(base).toEqual({
         ...original,
@@ -88,22 +87,38 @@ describe("catalog panel filters", () => {
       expect(selectedFilter).toEqual(original);
     });
 
-    it("allows the new panel selection to be applied after resetting other panels", () => {
+    it("keeps locations when selecting a new genre and clears downstream", () => {
       const original = structuredClone(selectedFilter);
       const next = {
-        ...catalogFilterForSelection(selectedFilter, true),
+        ...catalogFilterForSelection(selectedFilter, "genres"),
         genres: ["Jazz"],
       };
 
       expect(next).toEqual({
         ...original,
-        libraryIds: [],
-        folders: [],
         genres: ["Jazz"],
         artists: [],
         albumIds: [],
       });
       expect(selectedFilter).toEqual(original);
+    });
+
+    it("keeps location and genre when selecting a different artist", () => {
+      expect({
+        ...catalogFilterForSelection(selectedFilter, "artists"),
+        artists: ["Other artist"],
+      }).toEqual({
+        ...selectedFilter,
+        artists: ["Other artist"],
+        albumIds: [],
+      });
+    });
+
+    it("keeps the artist context when selecting an album", () => {
+      expect({
+        ...catalogFilterForSelection(selectedFilter, "albums"),
+        albumIds: ["other album"],
+      }).toEqual({ ...selectedFilter, albumIds: ["other album"] });
     });
   });
 });

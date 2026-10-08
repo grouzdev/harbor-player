@@ -4,27 +4,11 @@ import {
   isEmptySelectionSurfaceClick,
   resolveContextSelection,
   resolveSelectionClick,
-  selectionChangeOptions,
 } from "../src/client/panel-selection";
 
 const order = ["a", "b", "c", "d"];
 
 describe("panel selection", () => {
-  it.each(
-    Array.from({ length: 16 }, (_, mask) => ({
-      ctrlKey: Boolean(mask & 1),
-      metaKey: Boolean(mask & 2),
-      shiftKey: Boolean(mask & 4),
-      altKey: Boolean(mask & 8),
-      resetOtherPanels: mask === 0,
-    })),
-  )(
-    "sets resetOtherPanels=$resetOtherPanels for Ctrl=$ctrlKey Meta=$metaKey Shift=$shiftKey Alt=$altKey",
-    ({ resetOtherPanels, ...event }) => {
-      expect(selectionChangeOptions(event)).toEqual({ resetOtherPanels });
-    },
-  );
-
   it("replaces selection and establishes an anchor", () => {
     expect(
       resolveSelectionClick(["a", "b"], order, "c", null, {
