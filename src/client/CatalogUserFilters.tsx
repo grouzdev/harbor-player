@@ -22,14 +22,42 @@ import { ExpandingSearch } from "./ExpandingSearch";
 
 export type RatingRange = readonly [minimum: number, maximum: number];
 
-export const recentlyAddedDayOptions = [1, 3, 7, 14, 30] as const;
-export type RecentlyAddedDays = (typeof recentlyAddedDayOptions)[number];
+const recentPeriodStorageKey = "harbor-player-recently-added-days";
 
-export function recentlyAddedFilterLabel(days: RecentlyAddedDays): string {
+function readRecentPeriod(): number {
+  try {
+    const days = Number(localStorage.getItem(recentPeriodStorageKey));
+    if (Number.isInteger(days) && days >= 1 && days <= 30) return days;
+  } catch {
+    // Storage may be unavailable; the filter should still work.
+  }
+  return 1;
+}
+
+function rememberRecentPeriod(days: number) {
+  try {
+    localStorage.setItem(recentPeriodStorageKey, String(days));
+  } catch {
+    // Remembering the period is optional when storage is unavailable.
+  }
+}
+
+export function recentlyAddedFilterLabel(days: number): string {
+  const lastDigit = days % 10;
   const label =
-    days === 1 ? "1 день" : days < 5 ? `${days} дня` : `${days} дней`;
+    days >= 11 && days <= 14
+      ? `${days} дней`
+      : lastDigit === 1
+        ? `${days} день`
+        : lastDigit >= 2 && lastDigit <= 4
+          ? `${days} дня`
+          : `${days} дней`;
   return `Добавлено ${label} назад`;
 }
+
+const recentPeriodLabels = Array.from({ length: 30 }, (_, index) =>
+  recentlyAddedFilterLabel(index + 1),
+);
 
 export function ratingFilterLabel(minimum: number, maximum: number): string {
   return minimum === 0 && maximum === 0
@@ -219,8 +247,9 @@ export function CatalogUserFilters({
       setRatingEditing(true);
     } else if (kind === "recent") {
       setOrder([...visible, "recent"]);
-      onChange((current) => ({ ...current, recentlyAddedDays: 1 }));
-      setRecentEditing(true);
+      const days = readRecentPeriod();
+      onChange((current) => ({ ...current, recentlyAddedDays: days }));
+      setRecentEditing(false);
     } else {
       setOrder([...visible, kind]);
       changeBoolean(kind, true);
@@ -304,21 +333,33 @@ export function CatalogUserFilters({
           }
         }}
       >
-        <span>{recentlyAddedFilterLabel(filter.recentlyAddedDays)}</span>
+        <span className="catalog-recent-period-label">
+          {recentPeriodLabels.map((label) => (
+            <span
+              key={label}
+              className="catalog-recent-period-sizer"
+              aria-hidden="true"
+            >
+              {label}
+            </span>
+          ))}
+          <span>{recentlyAddedFilterLabel(filter.recentlyAddedDays)}</span>
+        </span>
         <RangeSlider
           className="catalog-filter-slider"
-          value={recentlyAddedDayOptions.indexOf(filter.recentlyAddedDays)}
-          min={0}
-          max={recentlyAddedDayOptions.length - 1}
+          value={filter.recentlyAddedDays}
+          min={1}
+          max={30}
           step={1}
           ariaLabel="Период недавнего добавления"
           disabled={disabled}
-          onChange={(index) =>
+          onChange={(days) => {
+            rememberRecentPeriod(days);
             onChange((current) => ({
               ...current,
-              recentlyAddedDays: recentlyAddedDayOptions[index]!,
-            }))
-          }
+              recentlyAddedDays: days,
+            }));
+          }}
         />
         <button
           type="button"

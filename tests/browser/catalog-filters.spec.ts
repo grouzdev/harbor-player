@@ -176,11 +176,39 @@ test("recent filter applies its period immediately", async ({ page }) => {
     name: "Период недавнего добавления",
     exact: true,
   });
+  const recent = page.getByRole("button", {
+    name: "Редактировать период недавнего добавления",
+  });
+  await expect(recent).toContainText("Добавлено 1 день назад");
+  await expect(period).toHaveCount(0);
+  await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBe(1);
+  await recent.click();
   await expect(page.locator(".catalog-filter-editor")).toContainText(
     "Добавлено 1 день назад",
   );
   await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBe(1);
-  await period.fill("3");
+  await expect(period).toHaveAttribute("min", "1");
+  await expect(period).toHaveAttribute("max", "30");
+  await expect(period).toHaveAttribute("step", "1");
+  await page.evaluate(() => document.fonts.ready);
+  const editor = page.getByRole("group", {
+    name: "Фильтр по времени добавления",
+  });
+  const editorBounds = await editor.boundingBox();
+  const sliderBounds = await period.boundingBox();
+  for (let days = 1; days <= 30; days++) {
+    await period.fill(String(days));
+    await expect(period).toHaveValue(String(days));
+    expect(await editor.boundingBox()).toEqual(editorBounds);
+    expect(await period.boundingBox()).toEqual(sliderBounds);
+  }
+  await period.fill("2");
+  await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBe(2);
+  await period.focus();
+  await period.press("ArrowRight");
+  await expect(period).toHaveValue("3");
+  await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBe(3);
+  await period.fill("14");
   await expect(page.locator(".catalog-filter-editor")).toContainText(
     "Добавлено 14 дней назад",
   );
@@ -192,11 +220,14 @@ test("recent filter applies its period immediately", async ({ page }) => {
     .click();
   await expect(page.locator(".catalog-filter-editor")).toHaveCount(0);
   expect(requests.at(-1)?.recentlyAddedDays).toBe(14);
-  const recent = page.getByRole("button", {
-    name: "Редактировать период недавнего добавления",
-  });
   await recent.click();
-  await period.fill("4");
+  await expect(period).toHaveValue("14");
+  await period.fill("21");
+  await expect(page.locator(".catalog-filter-editor")).toContainText(
+    "Добавлено 21 день назад",
+  );
+  await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBe(21);
+  await period.fill("30");
   await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBe(30);
   await page.keyboard.press("Escape");
   await expect(page.locator(".catalog-filter-editor")).toHaveCount(0);
@@ -208,6 +239,19 @@ test("recent filter applies its period immediately", async ({ page }) => {
     .click();
   await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBeNull();
   await expect(recent).toHaveCount(0);
+
+  await addCatalogFilter(page, "Недавние");
+  await expect(recent).toContainText("Добавлено 30 дней назад");
+  await expect(period).toHaveCount(0);
+  await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBe(30);
+
+  await page.reload();
+  await expect(recent).toHaveCount(0);
+  await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBeNull();
+  await addCatalogFilter(page, "Недавние");
+  await expect(recent).toContainText("Добавлено 30 дней назад");
+  await expect(period).toHaveCount(0);
+  await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBe(30);
 });
 
 test("recent filter reaches every catalog panel", async ({ page }) => {

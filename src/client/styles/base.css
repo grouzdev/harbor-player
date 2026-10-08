@@ -4500,6 +4500,16 @@ button.catalog-filter-chip-label:hover:not(:disabled) {
 .catalog-filter-editor > span {
   white-space: nowrap;
 }
+.catalog-recent-period-label {
+  display: inline-grid;
+  flex-shrink: 0;
+}
+.catalog-recent-period-label > span {
+  grid-area: 1 / 1;
+}
+.catalog-recent-period-sizer {
+  visibility: hidden;
+}
 .catalog-filter-slider {
   width: 220px;
   max-width: 100%;

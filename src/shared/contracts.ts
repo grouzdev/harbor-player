@@ -143,16 +143,7 @@ export const filterSchema = z.object({
   albumIds: z.array(z.string()).max(10000).default([]),
   search: z.string().max(300).default(""),
   bookmarksOnly: z.boolean().default(false),
-  recentlyAddedDays: z
-    .union([
-      z.literal(1),
-      z.literal(3),
-      z.literal(7),
-      z.literal(14),
-      z.literal(30),
-    ])
-    .nullable()
-    .default(null),
+  recentlyAddedDays: z.number().int().min(1).max(30).nullable().default(null),
   albumRatingMin: z.number().int().min(1).max(5).nullable().default(null),
   albumRatingMax: z.number().int().min(1).max(5).nullable().default(null),
   albumUnrated: z.boolean().default(false),
