@@ -3091,14 +3091,68 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     .toBeGreaterThan(0);
   const coverModeToggle = page.locator(".cover-mode-toggle");
   await expect(coverModeToggle).toBeEnabled();
+  await page.route("**/api/queue/*/album-block?*", async (route) => {
+    const response = await route.fetch();
+    const block = await response.json();
+    await route.fulfill({
+      json: {
+        ...block,
+        totalBlocks: 1,
+        previousPosition: null,
+        nextPosition: null,
+      },
+    });
+  });
   await coverModeToggle.click();
   const coverMode = page.getByRole("main", { name: "Режим обложки" });
   await expect(coverMode).toBeVisible();
   await expect(coverMode.getByRole("heading", { level: 1 })).toContainText(
     "Первый трек",
   );
+  await expect(coverMode.locator(".cover-album-navigation")).toHaveCount(0);
+  const artwork = coverMode.locator(".cover-mode-artwork");
+  const expectArtworkGeometry = async () => {
+    await expect(artwork).toHaveCSS("grid-column-start", "2");
+    await expect(artwork).toHaveCSS("grid-row-start", "1");
+    await expect
+      .poll(() =>
+        artwork.evaluate((element) => {
+          const bounds = element.getBoundingClientRect();
+          const area = element.parentElement!;
+          const areaBounds = area.getBoundingClientRect();
+          const style = getComputedStyle(area);
+          const columns = style.gridTemplateColumns.split(" ").map(parseFloat);
+          const gap = parseFloat(style.columnGap);
+          const left = areaBounds.left + columns[0] + gap;
+          const right = left + columns[1];
+          return (
+            bounds.width > 200 &&
+            Math.abs(bounds.width - bounds.height) < 1 &&
+            bounds.left >= left - 1 &&
+            bounds.right <= right + 1 &&
+            area.scrollWidth <= area.clientWidth
+          );
+        }),
+      )
+      .toBe(true);
+  };
+  const originalViewport = page.viewportSize()!;
+  await expectArtworkGeometry();
+  await page.setViewportSize({ width: 800, height: 1000 });
+  await expectArtworkGeometry();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectArtworkGeometry();
+  await page.setViewportSize(originalViewport);
+  await page.locator(".app-shell").evaluate((element) => {
+    element.classList.add("layout--portrait");
+  });
+  await expectArtworkGeometry();
+  await page.locator(".app-shell").evaluate((element) => {
+    element.classList.remove("layout--portrait");
+  });
   await coverModeToggle.click();
   await expect(coverMode).toBeHidden();
+  await page.unroute("**/api/queue/*/album-block?*");
   await page.getByTestId("track-row").first().dblclick();
   await expect
     .poll(() =>
@@ -3178,6 +3232,8 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     "matrix(1, 0, 0, 1, 24, 0)",
   );
   await expect(coverMode).toBeVisible();
+  await expect(coverMode.locator(".cover-album-navigation")).toHaveCount(2);
+  await expectArtworkGeometry();
   await expect(page.locator(".workspace")).toBeHidden();
   await expect(page.locator(".app-shell")).toHaveClass(/app-shell--cover-mode/);
   await expect(page.locator(".app-shell")).toHaveCSS(
