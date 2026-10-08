@@ -223,6 +223,13 @@ export const queueAlbumBlockSchema = z.object({
   id: z.string(),
   position: z.number().int().nonnegative(),
   totalBlocks: z.number().int().positive(),
+  blocks: z.array(
+    z.object({
+      position: z.number().int().nonnegative(),
+      albumKey: z.string(),
+      title: z.string(),
+    }),
+  ),
   previousPosition: z.number().int().nonnegative().nullable(),
   nextPosition: z.number().int().nonnegative().nullable(),
   tracks: z.array(trackSchema),

@@ -3098,6 +3098,13 @@ test("cover mode shows the album, artwork and quick playback search", async ({
       json: {
         ...block,
         totalBlocks: 1,
+        blocks: [
+          {
+            position: block.position,
+            albumKey: block.tracks[0].albumKey,
+            title: block.tracks[0].albumTitle,
+          },
+        ],
         previousPosition: null,
         nextPosition: null,
       },
@@ -3106,10 +3113,15 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   await coverModeToggle.click();
   const coverMode = page.getByRole("main", { name: "Режим обложки" });
   await expect(coverMode).toBeVisible();
-  await expect(coverMode.getByRole("heading", { level: 1 })).toContainText(
+  await expect(coverMode.getByRole("heading", { level: 2 })).toContainText(
     "Первый трек",
   );
   await expect(coverMode.locator(".cover-album-navigation")).toHaveCount(0);
+  await expect(coverMode.locator(".cover-album-dot")).toHaveCount(0);
+  await expect(coverMode.locator(".cover-tracklist")).toHaveCSS(
+    "background-color",
+    "rgba(0, 0, 0, 0)",
+  );
   const artwork = coverMode.locator(".cover-mode-artwork");
   const expectArtworkGeometry = async () => {
     await expect(artwork).toHaveCSS("grid-column-start", "2");
@@ -3125,9 +3137,14 @@ test("cover mode shows the album, artwork and quick playback search", async ({
           const gap = parseFloat(style.columnGap);
           const left = areaBounds.left + columns[0] + gap;
           const right = left + columns[1];
+          const caption = element
+            .closest(".cover-mode-album-panel")!
+            .querySelector(".cover-mode-album-caption")!
+            .getBoundingClientRect();
           return (
             bounds.width > 200 &&
             Math.abs(bounds.width - bounds.height) < 1 &&
+            caption.bottom <= bounds.top + 1 &&
             bounds.left >= left - 1 &&
             bounds.right <= right + 1 &&
             area.scrollWidth <= area.clientWidth
@@ -3137,6 +3154,15 @@ test("cover mode shows the album, artwork and quick playback search", async ({
       .toBe(true);
   };
   const originalViewport = page.viewportSize()!;
+  await expectArtworkGeometry();
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await expectArtworkGeometry();
+  await expect
+    .poll(async () => (await artwork.boundingBox())!.width)
+    .toBeGreaterThanOrEqual(600);
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await expectArtworkGeometry();
+  await page.setViewportSize({ width: 1600, height: 420 });
   await expectArtworkGeometry();
   await page.setViewportSize({ width: 800, height: 1000 });
   await expectArtworkGeometry();
@@ -3187,6 +3213,20 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   );
   let firstBlockPosition: number | null = null;
   let firstBlock: Record<string, any> | null = null;
+  let visualTrack: Record<string, any> | null = null;
+  let longQueue = false;
+  await page.route("**/api/tracks?*", async (route) => {
+    const filter = JSON.parse(
+      new URL(route.request().url()).searchParams.get("filter") || "{}",
+    );
+    if (!filter.albumIds?.includes("visual-second-album")) {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      json: { items: [visualTrack], total: 1, offset: 0, limit: 200 },
+    });
+  });
   await page.route("**/api/queue/*/album-block?*", async (route) => {
     const requestedPosition = Number(
       new URL(route.request().url()).searchParams.get("position"),
@@ -3198,21 +3238,43 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     }
     const block = firstBlock;
     const visualBlockPosition = firstBlockPosition === 0 ? 1 : 0;
-    const visualTrack = {
+    visualTrack = {
       ...block.tracks[0],
       id: "visual-second-album-track",
       title: "Второй альбом",
       albumTitle: "Второй альбом",
+      albumKey: "visual-second-album",
     };
+    const blocks = [
+      {
+        position: firstBlockPosition,
+        albumKey: block.tracks[0].albumKey,
+        title: block.tracks[0].albumTitle,
+      },
+      {
+        position: visualBlockPosition,
+        albumKey: visualTrack.albumKey,
+        title: visualTrack.albumTitle,
+      },
+    ];
+    if (longQueue)
+      for (let index = 2; index < 1000; index++)
+        blocks.push({
+          position: index,
+          albumKey:
+            index % 2 ? "visual-second-album" : block.tracks[0].albumKey,
+          title: `Альбом ${index + 1}`,
+        });
     await route.fulfill({
       json:
-        requestedPosition === visualBlockPosition
+        requestedPosition !== firstBlockPosition
           ? {
               ...block,
-              position: visualBlockPosition,
+              position: requestedPosition,
               previousPosition: firstBlockPosition,
               nextPosition: firstBlockPosition,
-              totalBlocks: 2,
+              totalBlocks: blocks.length,
+              blocks,
               tracks: [visualTrack],
             }
           : {
@@ -3220,7 +3282,8 @@ test("cover mode shows the album, artwork and quick playback search", async ({
               position: firstBlockPosition,
               previousPosition: visualBlockPosition,
               nextPosition: visualBlockPosition,
-              totalBlocks: 2,
+              totalBlocks: blocks.length,
+              blocks,
             },
     });
   });
@@ -3251,7 +3314,7 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   ).toHaveCount(1);
   await expect(page.locator(".cover-mode-toggle")).toBeVisible();
   await expect(coverMode).toHaveCSS("background-image", /linear-gradient/);
-  await expect(coverMode.getByRole("heading", { level: 1 })).toContainText(
+  await expect(coverMode.getByRole("heading", { level: 2 })).toContainText(
     "Первый трек",
   );
   await page
@@ -3282,16 +3345,70 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     coverMode.locator(".cover-track-row.current .cover-track-title"),
   ).toHaveText("Первый трек");
   const audioSource = await page.locator("audio").getAttribute("src");
+  const initialArtworkWidth = (await artwork.boundingBox())!.width;
+  await expect(coverMode.locator(".cover-album-dot")).toHaveCount(2);
   await coverMode.getByRole("button", { name: "Следующий альбом" }).click();
   await expect(coverMode.getByRole("heading", { level: 1 })).toHaveText(
     "Второй альбом",
   );
+  await expect(coverMode.getByRole("heading", { level: 2 })).toHaveCount(0);
+  await expect(coverMode.locator(".cover-mode-artist")).toHaveCount(0);
+  await expect(coverMode.locator(".cover-mode-album-state")).toBeVisible();
+  await expect(coverMode.locator(".cover-track-title")).toHaveText(
+    "Второй альбом",
+  );
+  await expect(coverMode.locator(".cover-album-dot").nth(1)).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
   await expect(page.locator("audio")).toHaveAttribute("src", audioSource!);
-  await coverMode.getByRole("button", { name: "Следующий альбом" }).click();
-  await expect(coverMode.getByRole("heading", { level: 1 })).toContainText(
+  await coverMode.locator(".cover-album-dot").first().focus();
+  await page.keyboard.press("Enter");
+  await expect(coverMode.getByRole("heading", { level: 2 })).toContainText(
     "Первый трек",
   );
+  await expect(coverMode.locator(".cover-album-dot").first()).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
+  await expect(coverMode.locator(".cover-album-dot").first()).toBeFocused();
+  await expect(page.locator("audio")).toHaveAttribute("src", audioSource!);
+  expect((await artwork.boundingBox())!.width).toBeCloseTo(
+    initialArtworkWidth,
+    0,
+  );
+  await page.setViewportSize({ width: 800, height: 600 });
+  await coverMode.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await coverMode.getByRole("button", { name: "Следующий альбом" }).click();
+  await expect(coverMode.getByRole("heading", { level: 1 })).toHaveText(
+    "Второй альбом",
+  );
+  expect(await coverMode.evaluate((element) => element.scrollTop)).toBe(0);
+  await coverMode.getByRole("button", { name: "Предыдущий альбом" }).click();
+  await page.setViewportSize(originalViewport);
+  longQueue = true;
+  await coverMode.getByRole("button", { name: "Следующий альбом" }).click();
+  await expect(coverMode.locator(".cover-album-dot-strip")).toHaveCSS(
+    "width",
+    "28000px",
+  );
+  expect(await coverMode.locator(".cover-album-dot").count()).toBeLessThan(100);
+  const selectedDot = coverMode.locator(
+    '.cover-album-dot[aria-current="true"]',
+  );
+  await selectedDot.focus();
+  await page.keyboard.press("End");
+  await expect(selectedDot).toHaveAttribute("data-block-position", "999");
+  await expect(selectedDot).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(coverMode.getByRole("heading", { level: 2 })).toContainText(
+    "Первый трек",
+  );
+  await expect(page.locator("audio")).toHaveAttribute("src", audioSource!);
   await page.unroute("**/api/queue/*/album-block?*");
+  await page.unroute("**/api/tracks?*");
   await page.screenshot({ path: `.test-data/cover-mode-${browser}.png` });
 
   await coverMode.locator(".cover-track-row").first().click();
@@ -3302,6 +3419,10 @@ test("cover mode shows the album, artwork and quick playback search", async ({
 
   const coverSearch = page.locator(".cover-search");
   const coverSearchInput = coverSearch.getByLabel("Поиск музыки");
+  const openSearch = coverSearch.getByRole("button", { name: "Открыть поиск" });
+  await expect(openSearch).toBeVisible();
+  await openSearch.click();
+  await expect(coverSearchInput).toBeFocused();
   await expect(coverSearchInput).toHaveAttribute(
     "placeholder",
     "Треки, артисты, альбомы",
@@ -3312,13 +3433,7 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   ]);
   expect(topbarBox).not.toBeNull();
   expect(coverSearchBox).not.toBeNull();
-  expect(
-    Math.abs(
-      coverSearchBox!.x +
-        coverSearchBox!.width / 2 -
-        (topbarBox!.x + topbarBox!.width / 2),
-    ),
-  ).toBeLessThanOrEqual(1);
+  expect(coverSearchBox!.width).toBe(220);
   expect(
     Math.abs(
       coverSearchBox!.y +
@@ -3332,9 +3447,23 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   await coverSearchInput.fill("проверка");
   await coverSearch.getByRole("button", { name: "Очистить поиск" }).click();
   await expect(coverSearchInput).toHaveValue("");
+  await expect(coverSearchInput).toBeFocused();
   await expect(
     page.getByRole("dialog", { name: "Результаты поиска" }),
   ).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(openSearch).toBeFocused();
+  await expect(coverMode).toBeVisible();
+  await openSearch.click();
+  await coverSearchInput.fill("проверка");
+  await page.keyboard.press("Escape");
+  await expect(openSearch).toBeFocused();
+  await expect(coverSearchInput).toHaveValue("");
+  await expect(coverMode).toBeVisible();
+  await expect(
+    page.getByRole("dialog", { name: "Результаты поиска" }),
+  ).toHaveCount(0);
+  await openSearch.click();
   await coverSearchInput.fill("Первый трек");
   await expect(
     coverSearch.getByRole("button", { name: "Очистить поиск" }),

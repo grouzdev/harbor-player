@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">
+  <defs>
+    <linearGradient id="sky" x2=".8" y2="1">
+      <stop stop-color="#152e36"/>
+      <stop offset=".55" stop-color="#496d71"/>
+      <stop offset="1" stop-color="#c1baa0"/>
+    </linearGradient>
+    <linearGradient id="sea" x2="0" y2="1">
+      <stop stop-color="#2a515b"/>
+      <stop offset="1" stop-color="#0d252d"/>
+    </linearGradient>
+    <radialGradient id="light">
+      <stop stop-color="#e8dfb2" stop-opacity=".75"/>
+      <stop offset="1" stop-color="#e8dfb2" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <path fill="url(#sky)" d="M0 0h1000v1000H0z"/>
+  <circle cx="650" cy="470" r="340" fill="url(#light)"/>
+  <circle cx="650" cy="470" r="74" fill="#d8c99f"/>
+  <path fill="url(#sea)" d="M0 575q180-65 360-10t350-15 290 40v410H0z"/>
+  <g fill="none" stroke="#89a9a6" stroke-opacity=".23" stroke-width="2">
+    <path d="M0 625q180-65 360-10t350-15 290 40"/>
+    <path d="M0 655q180-65 360-10t350-15 290 40"/>
+    <path d="M0 690q180-65 360-10t350-15 290 40"/>
+    <path d="M0 730q180-65 360-10t350-15 290 40"/>
+    <path d="M0 775q180-65 360-10t350-15 290 40"/>
+    <path d="M0 825q180-65 360-10t350-15 290 40"/>
+    <path d="M0 880q180-65 360-10t350-15 290 40"/>
+    <path d="M0 940q180-65 360-10t350-15 290 40"/>
+  </g>
+  <g fill="#e5e5cf" font-family="Arial, sans-serif">
+    <text x="72" y="110" font-size="23" letter-spacing="9">NORTH ATLANTIC</text>
+    <text x="67" y="205" font-size="76" letter-spacing="-3">Still waters</text>
+    <text x="72" y="925" font-size="16" letter-spacing="5">SIDE A / 2024 / STEREO</text>
+  </g>
+</svg>

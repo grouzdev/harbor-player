@@ -1074,6 +1074,11 @@ export async function createApp(options: {
       id,
       position: block.position,
       totalBlocks: blocks.length,
+      blocks: blocks.map((item) => ({
+        position: item.position,
+        albumKey: item.albumKey,
+        title: item.tracks[0].albumTitle || "Без альбома",
+      })),
       previousPosition:
         blocks.length > 1
           ? blocks[(blockIndex - 1 + blocks.length) % blocks.length].position

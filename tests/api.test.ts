@@ -1359,6 +1359,11 @@ describe("Explorer endpoint", () => {
     expect(first.json()).toMatchObject({
       position: 0,
       totalBlocks: 3,
+      blocks: [
+        { position: 0, albumKey: "album-a", title: expect.any(String) },
+        { position: 2, albumKey: "album-b", title: expect.any(String) },
+        { position: 3, albumKey: "album-a", title: expect.any(String) },
+      ],
       previousPosition: 3,
       nextPosition: 2,
       tracks: [{ id: "a-first" }, { id: "a-second" }],

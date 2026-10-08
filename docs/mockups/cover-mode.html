@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>HARBOR — режим обложки · три варианта</title>
+    <style>
+      @import url("../../src/client/fonts.css");
+      :root { color-scheme: dark; font-family: "Fira Sans Condensed", sans-serif; color: #e1e6e4; background: #101719; --accent: #bec58c; --muted: #91a19f; }
+      * { box-sizing: border-box; }
+      body { margin: 0; }
+      button, input { font: inherit; color: inherit; }
+      button { cursor: pointer; border: 0; }
+      button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+      button:hover { color: #f3f4dc; }
+      [hidden] { display: none !important; }
+      h1, h2, p { margin: 0; }
+      svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+      .lab { min-height: 64px; display: flex; gap: 18px; align-items: center; padding: 12px 24px; background: #222e31; border-bottom: 1px solid #ffffff12; flex-wrap: wrap; }
+      .lab-label { font-size: 11px; letter-spacing: 2px; color: #acbcbc; }
+      .variants { display: flex; gap: 4px; }
+      .variants button, .lab-tools button { padding: 9px 13px; background: #ffffff06; border-radius: 5px; font-size: 14px; }
+      .variants button[aria-pressed="true"], .lab-tools button[aria-pressed="true"] { background: #bec58c22; color: var(--accent); }
+      .lab-tools { margin-left: auto; display: flex; gap: 5px; flex-wrap: wrap; }
+      .shell { height: calc(100dvh - 64px); min-height: 620px; display: flex; flex-direction: column; background: radial-gradient(ellipse at 26% 36%, #29434466, transparent 65%), #11191b; margin: auto; }
+      .shell.narrow { width: min(390px, 100%); height: 844px; }
+      .topbar { height: 64px; flex: 0 0 64px; display: flex; align-items: center; padding: 0 28px; gap: 12px; position: relative; border-bottom: 1px solid #ffffff0b; background: #ffffff02; }
+      .brand { position: absolute; width: 122px; left: 50%; transform: translateX(-50%); opacity: .35; pointer-events: none; }
+      .icon { width: 38px; height: 38px; border-radius: 7px; background: transparent; display: inline-grid; place-items: center; color: #a9b5b0; flex-shrink: 0; }
+      .icon:hover { background: #ffffff09; }
+      .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+      .mode { width: 60px; height: 36px; border-radius: 20px; background: #bec58c24; display: flex; align-items: center; justify-content: flex-end; padding: 3px; }
+      .mode svg { width: 30px; height: 30px; padding: 5px; background: var(--accent); color: #25322b; border-radius: 50%; }
+      .search { display: flex; align-items: center; position: relative; z-index: 2; }
+      .search.open { width: min(330px, 45vw); height: 38px; background: #101617; border: 1px solid #ffffff18; border-radius: 7px; }
+      .search input { border: 0; background: transparent; min-width: 0; width: 100%; outline-offset: 0; padding: 8px 12px; font-size: 14px; }
+      .search-results { position: absolute; top: 48px; left: 0; width: min(390px, 80vw); background: #202c2f; box-shadow: 0 12px 40px #0008; border: 1px solid #ffffff18; border-radius: 8px; padding: 14px; }
+      .search-results p { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+      .search-result { background: #ffffff05; text-align: left; padding: 12px; width: 100%; border-radius: 5px; }
+      .search-result small { display: block; color: var(--muted); margin-top: 4px; }
+      .content { flex: 1; min-height: 0; overflow: auto; display: flex; padding: 32px 48px; }
+      .layout { width: 100%; max-width: 1480px; margin: auto; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(340px, 1fr); gap: clamp(32px, 4vw, 64px); align-items: center; }
+      .art-section { min-width: 0; display: flex; flex-direction: column; gap: 18px; }
+      .art-nav { display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; gap: 12px; align-items: center; }
+      .album-arrow { grid-row: 1; width: 40px; height: 40px; border-radius: 50%; background: #ffffff08; display: grid; place-items: center; }
+      #previous { grid-column: 1; }
+      #next { grid-column: 3; }
+      .artwork { grid-column: 2; grid-row: 1; width: min(100%, max(240px, calc(100dvh - 350px))); aspect-ratio: 1; justify-self: center; padding: 0; background: #253b3f; box-shadow: 0 24px 80px #0006; overflow: hidden; cursor: zoom-in; }
+      .artwork img { width: 100%; height: 100%; display: block; object-fit: contain; }
+      .no-cover { width: 100%; height: 100%; display: grid; place-content: center; gap: 18px; color: #a0b1ab; font-size: 16px; }
+      .no-cover svg { width: 64px; height: 64px; margin: auto; }
+      .album-caption { text-align: center; color: var(--muted); font-size: 14px; }
+      .album-caption strong { font-weight: 400; color: #c9d2ce; }
+      .album-caption span { display: block; margin-top: 6px; font-size: 12px; }
+      .album-dots { display: none; justify-content: safe center; overflow-x: auto; gap: 2px; max-width: 100%; }
+      .album-dot { width: 24px; height: 24px; flex: 0 0 24px; display: grid; place-items: center; background: transparent; border-radius: 50%; }
+      .album-dot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #91a19f55; }
+      .album-dot[aria-current="true"]::before { background: var(--accent); }
+      .album-dot:hover::before { background: #c7d2bd; }
+      .details { min-width: 0; }
+      .eyebrow { font-size: 11px; letter-spacing: 2px; color: var(--accent); margin-bottom: 14px; text-transform: uppercase; }
+      .artist { font-size: 24px; color: #b4c3bd; margin-bottom: 9px; }
+      .title { font-weight: 400; font-size: clamp(36px, 3.4vw, 58px); line-height: 1.07; letter-spacing: -.8px; overflow-wrap: anywhere; }
+      .album-meta { margin-top: 15px; color: var(--muted); font-size: 17px; }
+      .album-state { display: flex; gap: 4px; align-items: center; margin-top: 12px; }
+      .album-state .icon { width: 32px; height: 32px; }
+      .album-state .active { color: var(--accent); }
+      .track-panel { margin-top: 24px; }
+      .track-heading { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid #ffffff13; }
+      .track-heading h2 { font-size: 16px; font-weight: 400; }
+      .track-heading small { margin-left: auto; color: var(--muted); font-size: 13px; }
+      .tracks { max-height: min(310px, 35dvh); overflow: auto; }
+      .track { display: grid; grid-template-columns: 26px minmax(0, 1fr) 38px 32px; align-items: center; gap: 8px; min-height: 46px; border-bottom: 1px solid #ffffff08; padding: 0 8px; }
+      .track.current { color: var(--accent); background: #bec58c0c; }
+      .track-number, .duration { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+      .track-name { padding: 12px 0; text-align: left; background: transparent; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      .track .icon { width: 28px; height: 28px; }
+      .track .icon svg { width: 15px; height: 15px; }
+      .track-toggle { display: none; background: #ffffff08; border: 1px solid #ffffff12; border-radius: 24px; padding: 10px 18px; align-self: center; color: #c8d2cd; }
+      .player { flex: 0 0 84px; display: flex; align-items: center; gap: 24px; padding: 12px 28px; background: #1d2829ed; border-top: 1px solid #ffffff0c; }
+      .player-copy { width: 240px; min-width: 0; }
+      .player-copy p { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 16px; }
+      .player-copy small { display: block; color: var(--muted); margin-top: 4px; }
+      .transport { display: flex; align-items: center; gap: 10px; }
+      .play { width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: #243128; display: grid; place-items: center; }
+      .progress { flex: 1; display: flex; align-items: center; gap: 12px; font-size: 12px; color: #98aaa3; font-variant-numeric: tabular-nums; }
+      .progress-line { flex: 1; height: 3px; background: #ffffff18; border-radius: 3px; }
+      .progress-line i { display: block; width: 37%; height: 3px; background: var(--accent); }
+      .demo { font-size: 11px; color: #81948c; }
+      /* B: one large artwork, details are secondary and tracks open on demand. */
+      .shell[data-variant="focus"] .content { padding-block: 16px; }
+      .shell[data-variant="focus"] .layout { grid-template-columns: minmax(0, 1fr); max-width: 940px; gap: 18px; }
+      .shell[data-variant="focus"] .artwork { width: min(100%, max(240px, calc(100dvh - 320px))); }
+      .shell[data-variant="focus"] .album-caption { display: none; }
+      .shell[data-variant="focus"] .details { text-align: center; position: relative; padding-inline: 170px; }
+      .shell[data-variant="focus"] .eyebrow, .shell[data-variant="focus"] .artist, .shell[data-variant="focus"] .album-state { display: none; }
+      .shell[data-variant="focus"] .title { font-size: 28px; letter-spacing: 0; }
+      .shell[data-variant="focus"] .album-meta { margin-top: 8px; font-size: 15px; }
+      .shell[data-variant="focus"] .track-toggle { display: block; position: absolute; right: 0; top: 8px; }
+      .shell[data-variant="focus"]:not(.tracks-open) .track-panel { display: none; }
+      .shell[data-variant="focus"].tracks-open .layout { max-width: 1480px; grid-template-columns: minmax(0, 1.4fr) minmax(340px, 1fr); gap: 48px; }
+      .shell[data-variant="focus"].tracks-open .details { text-align: left; padding-inline: 0; }
+      .shell[data-variant="focus"].tracks-open .artist, .shell[data-variant="focus"].tracks-open .album-state { display: flex; }
+      .shell[data-variant="focus"].tracks-open .track-toggle { position: static; margin-top: 15px; }
+      /* C: album information belongs to the artwork, tracklist is a separate column. */
+      .shell[data-variant="album"] .layout { grid-template-columns: minmax(0, 1.25fr) minmax(340px, 1fr); gap: 56px; }
+      .shell[data-variant="album"] .artwork { width: min(100%, max(240px, calc(100dvh - 386px))); }
+      .shell[data-variant="album"] .album-caption { font-size: 24px; color: #e0e5d9; }
+      .shell[data-variant="album"] .album-caption span, .shell[data-variant="album"] .eyebrow { display: none; }
+      .shell[data-variant="album"] .album-dots { display: flex; margin-top: -10px; }
+      .shell[data-variant="album"] .title { font-size: 32px; }
+      .shell[data-variant="album"] .artist { font-size: 18px; }
+      .shell[data-variant="album"] .album-meta { display: none; }
+      .shell[data-variant="album"] .tracks { max-height: min(460px, 53dvh); }
+      .shell.narrow .content { padding: 24px 16px; }
+      .shell.narrow .layout, .shell.narrow[data-variant="focus"].tracks-open .layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+      .shell.narrow .artwork { width: 100%; }
+      .shell.narrow .art-nav { grid-template-columns: 32px minmax(0, 1fr) 32px; gap: 8px; }
+      .shell.narrow .album-arrow { width: 32px; height: 32px; }
+      .shell.narrow .title { font-size: 32px; }
+      .shell.narrow .artist { font-size: 19px; }
+      .shell.narrow .tracks { max-height: 260px; }
+      .shell.narrow .topbar { padding: 0 12px; gap: 4px; }
+      .shell.narrow .brand { width: 88px; }
+      .shell.narrow .search.open { width: 170px; }
+      .shell.narrow .search.open + .brand { visibility: hidden; }
+      .shell.narrow[data-variant="focus"] .details { padding-inline: 0; }
+      .shell.narrow[data-variant="focus"] .track-toggle { position: static; margin: 15px auto 0; }
+      .shell.narrow .player { padding: 12px 16px; gap: 8px; flex-wrap: wrap; flex-basis: 108px; }
+      .shell.narrow .player-copy { flex: 1; width: auto; }
+      .shell.narrow .progress { flex-basis: 100%; }
+      .shell.narrow .demo, .shell.narrow .volume, .shell.narrow .transport > .icon { display: none; }
+      @media (max-width: 900px) {
+        .lab { gap: 10px; padding: 12px; }
+        .lab-tools { margin-left: 0; }
+        .shell { height: calc(100dvh - 120px); }
+        .content { padding: 24px 16px; }
+        .layout, .shell[data-variant="album"] .layout, .shell[data-variant="focus"].tracks-open .layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+        .artwork, .shell[data-variant="album"] .artwork, .shell[data-variant="focus"] .artwork { width: min(100%, 520px); }
+        .art-nav { grid-template-columns: 32px minmax(0, 1fr) 32px; gap: 8px; }
+        .album-arrow { width: 32px; height: 32px; }
+        .title { font-size: 32px; }
+        .tracks { max-height: 260px; }
+        .shell[data-variant="focus"] .details { padding-inline: 0; }
+        .shell[data-variant="focus"] .track-toggle { position: static; margin: 15px auto 0; }
+        .player { padding: 12px 16px; gap: 12px; }
+        .player-copy { width: 160px; }
+        .demo, .volume { display: none; }
+      }
+      @media (max-width: 500px) {
+        .topbar { padding: 0 12px; gap: 4px; }
+        .brand { width: 88px; }
+        .search.open { width: 170px; }
+        .search.open + .brand { visibility: hidden; }
+        .player { flex-wrap: wrap; flex-basis: 108px; gap: 8px; }
+        .player-copy { flex: 1; }
+        .progress { flex-basis: 100%; }
+        .transport > .icon { display: none; }
+      }
+      dialog { background: #101719; color: inherit; border: 1px solid #ffffff18; padding: 16px; max-width: 90vw; max-height: 94dvh; }
+      dialog::backdrop { background: #000c; }
+      dialog img { display: block; width: min(76dvh, 80vw); margin-top: 12px; }
+      dialog button { background: #ffffff10; padding: 8px 14px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <svg hidden aria-hidden="true">
+      <defs>
+        <symbol id="search-icon" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+        <symbol id="disc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M7 7 5 9m14 6-2 2"/></symbol>
+        <symbol id="left" viewBox="0 0 24 24"><path d="m14 5-7 7 7 7"/></symbol>
+        <symbol id="right" viewBox="0 0 24 24"><path d="m10 5 7 7-7 7"/></symbol>
+        <symbol id="star" viewBox="0 0 24 24"><path d="m12 3 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/></symbol>
+        <symbol id="eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></symbol>
+        <symbol id="pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14" stroke-width="3"/></symbol>
+        <symbol id="play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7z"/></symbol>
+        <symbol id="close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+        <symbol id="expand" viewBox="0 0 24 24"><path d="M14 4h6v6m0-6-7 7M10 20H4v-6m0 6 7-7"/></symbol>
+        <symbol id="settings" viewBox="0 0 24 24"><path d="M5 5h14v14H5z"/><path d="M8 9h8M8 15h8M10 7v4m4 2v4"/></symbol>
+        <symbol id="music" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/></symbol>
+      </defs>
+    </svg>
+    <nav class="lab" aria-label="Выбор концепции">
+      <span class="lab-label">DESIGN LAB · ОБЛОЖКА</span>
+      <div class="variants">
+        <button type="button" data-view="split" aria-pressed="false">A · Баланс</button>
+        <button type="button" data-view="focus" aria-pressed="false">B · Фокус</button>
+        <button type="button" data-view="album" aria-pressed="true">C · Альбом</button>
+      </div>
+      <div class="lab-tools">
+        <button type="button" id="narrow" aria-pressed="false">Узкое окно</button>
+        <button type="button" id="single" aria-pressed="false">Один альбом</button>
+        <button type="button" id="empty" aria-pressed="false">Без обложки</button>
+        <button type="button" id="long" aria-pressed="false">Длинное название</button>
+      </div>
+    </nav>
+    <div class="shell" data-variant="album" id="shell">
+      <header class="topbar">
+        <button class="icon" type="button" aria-label="Настройки (демо)" title="Настройки · не реализовано" disabled><svg><use href="#settings"/></svg></button>
+        <div class="search" id="search">
+          <button type="button" class="icon" id="search-open" aria-label="Открыть поиск" aria-expanded="false"><svg><use href="#search-icon"/></svg></button>
+          <input id="query" aria-label="Поиск музыки" placeholder="Треки, артисты, альбомы" hidden>
+          <button type="button" class="icon" id="search-clear" aria-label="Очистить поиск" hidden><svg><use href="#close"/></svg></button>
+          <div class="search-results" id="results" hidden><p>Демонстрационный результат · без API</p><button type="button" class="search-result" id="result">Low tide<small>North Atlantic · Still waters</small></button></div>
+        </div>
+        <img class="brand" src="../../assets/HARBOR.svg" alt="HARBOR">
+        <div class="topbar-right">
+          <button class="mode" type="button" aria-label="Вернуться в каталог (демо)" title="Каталог · не реализовано" disabled><svg><use href="#disc"/></svg></button>
+          <button class="icon" type="button" id="fullscreen" aria-label="Полноэкранный режим"><svg><use href="#expand"/></svg></button>
+        </div>
+      </header>
+      <main class="content" aria-label="Режим обложки">
+        <div class="layout">
+          <section class="art-section" aria-label="Обложка альбома">
+            <div class="art-nav">
+              <button class="album-arrow" type="button" id="previous" aria-label="Предыдущий альбом"><svg><use href="#left"/></svg></button>
+              <button class="artwork" type="button" id="artwork" aria-label="Открыть обложку">
+                <img src="cover-mode-artwork.svg" alt="Условная обложка Still waters" id="cover">
+                <span class="no-cover" id="no-cover" hidden><svg><use href="#music"/></svg>Обложка отсутствует</span>
+              </button>
+              <button class="album-arrow" type="button" id="next" aria-label="Следующий альбом"><svg><use href="#right"/></svg></button>
+            </div>
+            <p class="album-caption" id="caption"><strong>Still waters</strong> · 2024<span>Альбом 1 из 3 в очереди</span></p>
+            <nav class="album-dots" id="album-dots" aria-label="Альбомы плейлиста"></nav>
+          </section>
+          <section class="details" aria-label="Информация и треклист">
+            <p class="eyebrow" id="eyebrow">Сейчас играет</p>
+            <p class="artist">North Atlantic</p>
+            <h1 class="title" id="title">Low tide</h1>
+            <p class="album-meta" id="meta">Still waters · 2024 · 8 треков</p>
+            <div class="album-state" aria-label="Оценка альбома">
+              <button class="icon" type="button" aria-label="Отметить альбом избранным" aria-pressed="false" data-toggle><svg><use href="#star"/></svg></button>
+              <button class="icon active" type="button" aria-label="Отметить альбом прослушанным" aria-pressed="true" data-toggle><svg><use href="#eye"/></svg></button>
+            </div>
+            <button class="track-toggle" type="button" id="track-toggle" aria-expanded="false">Показать треки · 8</button>
+            <section class="track-panel" aria-label="Треклист альбома">
+              <header class="track-heading"><h2>Треки альбома</h2><small>8 треков · 42 мин</small></header>
+              <div class="tracks" id="tracks"></div>
+            </section>
+          </section>
+        </div>
+      </main>
+      <footer class="player">
+        <div class="player-copy"><p id="player-title">Low tide</p><small id="player-meta">North Atlantic · Still waters</small></div>
+        <div class="transport">
+          <button class="icon" type="button" id="track-prev" aria-label="Предыдущий трек"><svg><use href="#left"/></svg></button>
+          <button class="play" type="button" id="play-button" aria-label="Пауза демо-плеера"><svg><use href="#pause"/></svg></button>
+          <button class="icon" type="button" id="track-next" aria-label="Следующий трек"><svg><use href="#right"/></svg></button>
+        </div>
+        <div class="progress"><span>2:04</span><div class="progress-line"><i></i></div><span>5:32</span></div>
+        <span class="demo">Демо · без звука</span>
+        <span class="volume" aria-label="Громкость демо-плеера">♪ ━━━</span>
+      </footer>
+    </div>
+    <dialog id="viewer"><button type="button" id="viewer-close">Закрыть</button><img src="cover-mode-artwork.svg" alt="Условная обложка в крупном размере"></dialog>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const shell = $("shell");
+      const names = ["First light", "Low tide", "Open water", "The distance between shores", "Night crossing", "Quiet signals", "Salt air", "Homeward"];
+      const albums = ["Still waters", "Night crossing", "Quiet signals"];
+      let album = 0, playingAlbum = 0, playingTrack = 1, paused = false, longTitle = false;
+      const fullTitle = () => longTitle ? "The distance between the northern shores and the place we used to call home" : names[playingTrack];
+      function render() {
+        $("title").textContent = album === playingAlbum ? fullTitle() : albums[album];
+        $("eyebrow").textContent = album === playingAlbum ? "Сейчас играет" : "Альбом в очереди · просмотр";
+        $("meta").textContent = `${albums[album]} · 2024 · 8 треков`;
+        const single = $("single").getAttribute("aria-pressed") === "true";
+        $("caption").innerHTML = `<strong>${albums[album]}</strong> · 2024<span>${single ? "Один альбом в очереди" : `Альбом ${album + 1} из 3 в очереди`}</span>`;
+        const positions = single ? [album] : albums.map((_, index) => index);
+        $("album-dots").innerHTML = positions.map((index) => `<button type="button" class="album-dot" data-album="${index}" aria-label="Альбом ${single ? 1 : index + 1}: ${albums[index]}" ${index === album ? 'aria-current="true"' : ""}></button>`).join("");
+        $("player-title").textContent = fullTitle();
+        $("player-meta").textContent = `North Atlantic · ${albums[playingAlbum]}`;
+        $("tracks").innerHTML = names.map((name, i) => `<div class="track ${album === playingAlbum && i === playingTrack ? "current" : ""}"><span class="track-number">${album === playingAlbum && i === playingTrack ? "♫" : String(i + 1).padStart(2, "0")}</span><button type="button" class="track-name" data-track="${i}" ${album === playingAlbum && i === playingTrack ? 'aria-current="true"' : ""}>${longTitle && i === playingTrack ? fullTitle() : name}</button><span class="duration">${["4:12", "5:32", "6:08", "4:51", "5:06", "5:14", "4:22", "6:45"][i]}</span><button class="icon" type="button" aria-label="Отметить трек ${i + 1} избранным" aria-pressed="false" data-toggle><svg><use href="#star"/></svg></button></div>`).join("");
+      }
+      function chooseVariant(view) {
+        shell.dataset.variant = view;
+        shell.classList.remove("tracks-open");
+        $("track-toggle").setAttribute("aria-expanded", "false");
+        $("track-toggle").textContent = "Показать треки · 8";
+        document.querySelectorAll("[data-view]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.view === view)));
+        render();
+      }
+      document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => { chooseVariant(button.dataset.view); location.hash = button.dataset.view; }));
+      addEventListener("hashchange", () => chooseVariant(["split", "focus", "album"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "album"));
+      chooseVariant(["split", "focus", "album"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "album");
+      $("narrow").onclick = () => { const active = shell.classList.toggle("narrow"); $("narrow").setAttribute("aria-pressed", String(active)); };
+      $("single").onclick = () => {
+        const active = $("single").getAttribute("aria-pressed") !== "true";
+        $("single").setAttribute("aria-pressed", String(active));
+        $("previous").hidden = $("next").hidden = active;
+        if (active) album = playingAlbum;
+        render();
+      };
+      $("empty").onclick = () => {
+        const active = $("empty").getAttribute("aria-pressed") !== "true";
+        $("empty").setAttribute("aria-pressed", String(active));
+        $("cover").hidden = active; $("no-cover").hidden = !active; $("artwork").disabled = active;
+      };
+      $("long").onclick = () => { longTitle = !longTitle; $("long").setAttribute("aria-pressed", String(longTitle)); render(); };
+      $("previous").onclick = () => { album = (album + 2) % 3; render(); };
+      $("next").onclick = () => { album = (album + 1) % 3; render(); };
+      $("track-toggle").onclick = () => {
+        const active = shell.classList.toggle("tracks-open");
+        $("track-toggle").setAttribute("aria-expanded", String(active));
+        $("track-toggle").textContent = active ? "Скрыть треки" : "Показать треки · 8";
+      };
+      function openSearch() {
+        $("search").classList.add("open"); $("search-open").hidden = true; $("search-open").setAttribute("aria-expanded", "true");
+        $("query").hidden = false; $("query").focus();
+      }
+      function closeSearch() {
+        $("query").value = ""; $("query").hidden = true; $("results").hidden = true; $("search-clear").hidden = true;
+        $("search").classList.remove("open"); $("search-open").hidden = false; $("search-open").setAttribute("aria-expanded", "false");
+      }
+      $("search-open").onclick = openSearch;
+      $("query").oninput = () => { $("results").hidden = $("search-clear").hidden = !$("query").value.trim(); };
+      $("search-clear").onclick = () => { $("query").value = ""; $("results").hidden = $("search-clear").hidden = true; $("query").focus(); };
+      $("search").onfocusout = () => setTimeout(() => { if (!$("search").contains(document.activeElement) && !$("query").value.trim()) closeSearch(); }, 0);
+      $("query").onkeydown = (event) => { if (event.key === "Escape") { closeSearch(); $("search-open").focus(); } };
+      $("result").onclick = () => { playingAlbum = album = 0; playingTrack = 1; closeSearch(); render(); };
+      document.addEventListener("click", (event) => {
+        const dot = event.target.closest("[data-album]");
+        if (dot) {
+          album = Number(dot.dataset.album);
+          render();
+          $("album-dots").querySelector(`[data-album="${album}"]`).focus({ preventScroll: true });
+        }
+        const track = event.target.closest("[data-track]");
+        if (track) { playingAlbum = album; playingTrack = Number(track.dataset.track); render(); }
+        const toggle = event.target.closest("[data-toggle]");
+        if (toggle) { const active = toggle.getAttribute("aria-pressed") !== "true"; toggle.setAttribute("aria-pressed", String(active)); toggle.classList.toggle("active", active); }
+      });
+      $("track-prev").onclick = () => { playingTrack = (playingTrack + 7) % 8; album = playingAlbum; render(); };
+      $("track-next").onclick = () => { playingTrack = (playingTrack + 1) % 8; album = playingAlbum; render(); };
+      $("play-button").onclick = () => { paused = !paused; $("play-button").setAttribute("aria-label", paused ? "Продолжить демо-плеер" : "Пауза демо-плеера"); $("play-button").querySelector("use").setAttribute("href", paused ? "#play" : "#pause"); };
+      $("fullscreen").onclick = async () => { if (document.fullscreenElement) await document.exitFullscreen(); else await shell.requestFullscreen(); };
+      $("artwork").onclick = () => $("viewer").showModal();
+      $("viewer-close").onclick = () => $("viewer").close();
+      render();
+    </script>
+  </body>
+</html>

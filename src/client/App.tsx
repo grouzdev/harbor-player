@@ -41,7 +41,6 @@ import {
   Play,
   Plus,
   RefreshCw,
-  Search,
   Eye,
   EyeOff,
   Star,
@@ -129,6 +128,7 @@ import { UpdatePanel } from "./UpdatePanel";
 import { BookmarkToggle, type BookmarkChange } from "./BookmarkToggle";
 import { RatingPopover, type UserStateChange } from "./RatingControl";
 import { CatalogUserFilters } from "./CatalogUserFilters";
+import { ExpandingSearch } from "./ExpandingSearch";
 import { GenrePanel, LibraryPanel } from "./LibraryGenrePanels";
 import {
   ArtistList,
@@ -3149,24 +3149,11 @@ export function App() {
         )}
         {!settingsOpen && coverMode && (
           <div className="cover-search">
-            <label className="search">
-              <Search size={18} />
-              <input
-                aria-label="Поиск музыки"
-                placeholder="Треки, артисты, альбомы"
-                value={coverSearch}
-                onChange={(event) => setCoverSearch(event.target.value)}
-              />
-              {coverSearch && (
-                <button
-                  className="icon-button"
-                  aria-label="Очистить поиск"
-                  onClick={() => setCoverSearch("")}
-                >
-                  <X size={15} />
-                </button>
-              )}
-            </label>
+            <ExpandingSearch
+              value={coverSearch}
+              onChange={setCoverSearch}
+              closeOnEscape
+            />
             {coverSearch.trim() && (
               <QuickSearchDialog
                 query={coverSearch}

@@ -13,12 +13,12 @@ import {
   Eye,
   Plus,
   RefreshCw,
-  Search,
   Star,
   X,
 } from "lucide-react";
 import { emptyFilter, type CatalogFilter } from "../shared/contracts";
 import { RangeSlider } from "./RangeSlider";
+import { ExpandingSearch } from "./ExpandingSearch";
 
 export type RatingRange = readonly [minimum: number, maximum: number];
 
@@ -97,10 +97,7 @@ export function CatalogUserFilters({
   onRetryBookmarks: () => void;
   trailingControls?: ReactNode;
 }) {
-  const [searchFocused, setSearchFocused] = useState(false);
-  const searchInput = useRef<HTMLInputElement>(null);
-  const pointerDown = useRef(false);
-  const collapsed = !search.trim() && !searchFocused;
+  const [collapsed, setCollapsed] = useState(!search.trim());
   const [menuOpen, setMenuOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
@@ -136,31 +133,6 @@ export function CatalogUserFilters({
       setRecentEditing(false);
   }
   const addable = filterDefinitions.filter(({ kind }) => !active[kind]);
-
-  useEffect(() => {
-    let releaseTimer: ReturnType<typeof setTimeout> | undefined;
-    const press = () => {
-      pointerDown.current = true;
-    };
-    const release = () => {
-      pointerDown.current = false;
-      // Keep the clicked control in place until pointerup has dispatched click.
-      // Otherwise collapsing an empty search on blur moves the filter away.
-      clearTimeout(releaseTimer);
-      releaseTimer = setTimeout(() => {
-        setSearchFocused(document.activeElement === searchInput.current);
-      }, 0);
-    };
-    document.addEventListener("pointerdown", press, true);
-    document.addEventListener("pointerup", release, true);
-    document.addEventListener("pointercancel", release, true);
-    return () => {
-      clearTimeout(releaseTimer);
-      document.removeEventListener("pointerdown", press, true);
-      document.removeEventListener("pointerup", release, true);
-      document.removeEventListener("pointercancel", release, true);
-    };
-  }, []);
 
   useEffect(() => {
     if (disabled) {
@@ -375,45 +347,11 @@ export function CatalogUserFilters({
       aria-label="Поиск и фильтры каталога"
       data-window-control
     >
-      <div
-        className={`catalog-search${collapsed ? " is-collapsed" : " search"}`}
-        title={collapsed ? "Поиск музыки" : undefined}
-      >
-        <input
-          ref={searchInput}
-          aria-label="Поиск музыки"
-          placeholder={collapsed ? "" : "Треки, артисты, альбомы"}
-          value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
-          onFocus={() => setSearchFocused(true)}
-          onBlur={() => {
-            if (!pointerDown.current) setSearchFocused(false);
-          }}
-        />
-        {collapsed && (
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Открыть поиск"
-            onClick={() => searchInput.current?.focus()}
-          >
-            <Search size={19} aria-hidden="true" />
-          </button>
-        )}
-        {search.trim() && (
-          <button
-            type="button"
-            className="catalog-filter-small-button"
-            aria-label="Очистить поиск"
-            onClick={() => {
-              onSearchChange("");
-              searchInput.current?.focus();
-            }}
-          >
-            <X size={16} />
-          </button>
-        )}
-      </div>
+      <ExpandingSearch
+        value={search}
+        onChange={onSearchChange}
+        onCollapsedChange={setCollapsed}
+      />
       <div className={`catalog-filter-items${disabled ? " is-disabled" : ""}`}>
         {visible.map((kind) => {
           if (kind === "rating" && ratingEditing)

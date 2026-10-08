@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ChevronLeft,
   ChevronRight,
@@ -48,6 +49,7 @@ type QueueAlbumBlock = {
   id: string;
   position: number;
   totalBlocks: number;
+  blocks: { position: number; albumKey: string; title: string }[];
   previousPosition: number | null;
   nextPosition: number | null;
   tracks: Track[];
@@ -77,6 +79,8 @@ export function CoverMode({
     albumKey: string;
   } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const dotsRef = useRef<HTMLElement>(null);
+  const focusDot = useRef(false);
   const isSameQueue = viewedBlock?.queueId === queue.id;
   const blockRequest = isSameQueue
     ? { position: viewedBlock.position }
@@ -85,6 +89,8 @@ export function CoverMode({
       : { position: queue.position };
   const albumBlock = useQuery({
     queryKey: ["cover-mode-album-block", queue.id, blockRequest],
+    placeholderData: (previous) =>
+      previous?.id === queue.id ? previous : undefined,
     queryFn: () =>
       api<QueueAlbumBlock>(
         `/queue/${queue.id}/album-block?${new URLSearchParams(
@@ -100,6 +106,22 @@ export function CoverMode({
     (!isSameQueue || albumBlock.data.position === viewedBlock?.position)
       ? albumBlock.data
       : null;
+  const navigationBlock =
+    albumBlock.data?.id === queue.id ? albumBlock.data : null;
+  const navigationPosition = isSameQueue
+    ? viewedBlock.position
+    : navigationBlock?.position;
+  const dotVirtualizer = useVirtualizer({
+    count:
+      navigationBlock && navigationBlock.totalBlocks > 1
+        ? navigationBlock.blocks.length
+        : 0,
+    getScrollElement: () => dotsRef.current,
+    horizontal: true,
+    estimateSize: () => 28,
+    overscan: 6,
+  });
+  const visibleDots = dotVirtualizer.getVirtualItems();
   const displayTrack =
     block?.tracks.find((item) => item.id === track.id) ||
     block?.tracks[0] ||
@@ -122,6 +144,31 @@ export function CoverMode({
         : undefined,
   });
   const tracks = albumTracks.data?.pages.flatMap((page) => page.items) || [];
+  const showsPlayingTrack = Boolean(
+    block &&
+    queue.position >= block.position &&
+    queue.position <
+      (block.blocks.find((item) => item.position > block.position)?.position ??
+        queue.total) &&
+    block.tracks.some((item) => item.id === track.id),
+  );
+  useEffect(() => {
+    const index = navigationBlock?.blocks.findIndex(
+      (item) => item.position === navigationPosition,
+    );
+    if (index !== undefined && index >= 0)
+      dotVirtualizer.scrollToIndex(index, { align: "auto" });
+  }, [navigationBlock, navigationPosition, dotVirtualizer]);
+  useEffect(() => {
+    if (!focusDot.current) return;
+    const target = dotsRef.current?.querySelector<HTMLButtonElement>(
+      `[data-block-position="${navigationPosition}"]`,
+    );
+    if (target) {
+      target.focus({ preventScroll: true });
+      focusDot.current = false;
+    }
+  }, [navigationPosition, visibleDots]);
   useEffect(() => {
     if (!block) return;
     setViewedBlock((current) =>
@@ -151,91 +198,159 @@ export function CoverMode({
       }}
     >
       <div className="cover-mode-layout">
-        <div className="cover-mode-artwork-area">
-          {block && block.totalBlocks > 1 && (
-            <button
-              type="button"
-              className="cover-album-navigation"
-              aria-label="Предыдущий альбом"
-              onClick={() =>
-                block.previousPosition !== null &&
-                setViewedBlock({
-                  queueId: queue.id,
-                  position: block.previousPosition,
-                  albumKey: displayTrack.albumKey,
-                })
-              }
-            >
-              <ChevronLeft size={28} />
-            </button>
-          )}
-          <button
-            type="button"
-            className="cover-mode-artwork"
-            aria-label={
-              displayTrack.coverId
-                ? "Открыть обложку в оригинальном размере"
-                : "Обложка отсутствует"
-            }
-            disabled={!displayTrack.coverId}
-            onClick={() => setArtworkOpen(true)}
-          >
-            {displayTrack.coverId ? (
-              <img
-                src={`/api/covers/${displayTrack.coverId}`}
-                alt={`Обложка альбома «${displayTrack.albumTitle || "Без альбома"}»`}
-              />
-            ) : (
-              <Music2 size={72} />
+        <section className="cover-mode-album-panel">
+          <div className="cover-mode-album-caption">
+            <h1>{displayTrack.albumTitle || "Без альбома"}</h1>
+            {displayTrack.year && <p>{displayTrack.year}</p>}
+          </div>
+          <div className="cover-mode-artwork-area">
+            {block && block.totalBlocks > 1 && (
+              <button
+                type="button"
+                className="cover-album-navigation"
+                aria-label="Предыдущий альбом"
+                onClick={() =>
+                  block.previousPosition !== null &&
+                  setViewedBlock({
+                    queueId: queue.id,
+                    position: block.previousPosition,
+                    albumKey: displayTrack.albumKey,
+                  })
+                }
+              >
+                <ChevronLeft size={28} />
+              </button>
             )}
-          </button>
-          {block && block.totalBlocks > 1 && (
             <button
               type="button"
-              className="cover-album-navigation"
-              aria-label="Следующий альбом"
-              onClick={() =>
-                block.nextPosition !== null &&
-                setViewedBlock({
-                  queueId: queue.id,
-                  position: block.nextPosition,
-                  albumKey: displayTrack.albumKey,
-                })
+              className="cover-mode-artwork"
+              aria-label={
+                displayTrack.coverId
+                  ? "Открыть обложку в оригинальном размере"
+                  : "Обложка отсутствует"
               }
+              disabled={!displayTrack.coverId}
+              onClick={() => setArtworkOpen(true)}
             >
-              <ChevronRight size={28} />
+              {displayTrack.coverId ? (
+                <img
+                  src={`/api/covers/${displayTrack.coverId}`}
+                  alt={`Обложка альбома «${displayTrack.albumTitle || "Без альбома"}»`}
+                />
+              ) : (
+                <Music2 size={72} />
+              )}
             </button>
+            {block && block.totalBlocks > 1 && (
+              <button
+                type="button"
+                className="cover-album-navigation"
+                aria-label="Следующий альбом"
+                onClick={() =>
+                  block.nextPosition !== null &&
+                  setViewedBlock({
+                    queueId: queue.id,
+                    position: block.nextPosition,
+                    albumKey: displayTrack.albumKey,
+                  })
+                }
+              >
+                <ChevronRight size={28} />
+              </button>
+            )}
+          </div>
+          {navigationBlock && navigationBlock.totalBlocks > 1 && (
+            <nav
+              ref={dotsRef}
+              className="cover-album-dots"
+              aria-label="Альбомы плейлиста"
+            >
+              <div
+                className="cover-album-dot-strip"
+                style={{ width: dotVirtualizer.getTotalSize() }}
+              >
+                {visibleDots.map(({ index, start }) => {
+                  const item = navigationBlock.blocks[index];
+                  return (
+                    <button
+                      key={item.position}
+                      type="button"
+                      className="cover-album-dot"
+                      style={{ left: start }}
+                      data-block-position={item.position}
+                      tabIndex={item.position === navigationPosition ? 0 : -1}
+                      aria-label={`Альбом ${index + 1}: ${item.title}`}
+                      aria-current={
+                        item.position === navigationPosition
+                          ? "true"
+                          : undefined
+                      }
+                      onClick={() =>
+                        setViewedBlock({
+                          queueId: queue.id,
+                          position: item.position,
+                          albumKey: item.albumKey,
+                        })
+                      }
+                      onKeyDown={(event) => {
+                        const count = navigationBlock.blocks.length;
+                        const next =
+                          event.key === "ArrowRight"
+                            ? (index + 1) % count
+                            : event.key === "ArrowLeft"
+                              ? (index - 1 + count) % count
+                              : event.key === "Home"
+                                ? 0
+                                : event.key === "End"
+                                  ? count - 1
+                                  : null;
+                        if (next === null) return;
+                        event.preventDefault();
+                        focusDot.current = true;
+                        const selected = navigationBlock.blocks[next];
+                        setViewedBlock({
+                          queueId: queue.id,
+                          position: selected.position,
+                          albumKey: selected.albumKey,
+                        });
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            </nav>
           )}
-        </div>
-        <section className="cover-mode-details">
-          <div className="cover-mode-copy">
-            <p className="cover-mode-artist">
-              {displayTrack.artists.join(", ") || "Неизвестный исполнитель"}
-            </p>
-            <h1>{displayTrack.title || "Без названия"}</h1>
-            <p className="cover-mode-album">
-              {displayTrack.albumTitle || "Без альбома"}
-              {displayTrack.year ? ` · ${displayTrack.year}` : ""}
-            </p>
-            <div className="cover-mode-album-state">
-              <RatingControl
-                kind="album"
-                id={displayTrack.albumKey}
-                rating={displayTrack.albumRating}
-                pending={pendingUserStateKeys.has(
-                  `album:${displayTrack.albumKey}`,
-                )}
-                onChange={onUserStateChange}
-              />
-              <ViewedToggle
-                id={displayTrack.albumKey}
-                viewed={displayTrack.albumViewed}
-                pending={pendingUserStateKeys.has(
-                  `album:${displayTrack.albumKey}`,
-                )}
-                onChange={onUserStateChange}
-              />
+        </section>
+        <section
+          className="cover-mode-details"
+          aria-label="Треки и действия альбома"
+        >
+          {showsPlayingTrack && (
+            <div className="cover-mode-copy">
+              <p className="cover-mode-artist">
+                {track.artists.join(", ") || "Неизвестный исполнитель"}
+              </p>
+              <h2>{track.title || "Без названия"}</h2>
             </div>
+          )}
+          <div className="cover-mode-album-state">
+            <RatingControl
+              kind="album"
+              id={displayTrack.albumKey}
+              rating={displayTrack.albumRating}
+              pending={pendingUserStateKeys.has(
+                `album:${displayTrack.albumKey}`,
+              )}
+              onChange={onUserStateChange}
+            />
+            <ViewedToggle
+              id={displayTrack.albumKey}
+              viewed={displayTrack.albumViewed}
+              pending={pendingUserStateKeys.has(
+                `album:${displayTrack.albumKey}`,
+              )}
+              onChange={onUserStateChange}
+            />
           </div>
           <div
             className="cover-tracklist"
