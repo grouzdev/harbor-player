@@ -139,6 +139,32 @@ describe("Pulse time recorder → HTTP → SQLite", () => {
     expect(accepted).toEqual([15_000, 30_000, 30_000, 30_000, 30_000, 30_000]);
   });
 
+  it("delivers bounded jitter catch-up checkpoints across midnight without revising the prefix", async () => {
+    await zone("UTC");
+    const f = recorder(Date.parse("2026-03-07T23:59:40Z"));
+    f.advance(0.125);
+    f.instance.playing(0, 1);
+    for (let i = 1; i <= 180; i++) {
+      f.advance(251);
+      f.instance.sample((i * 251 - (i <= 60 ? 5 : 0)) / 1000, 1);
+    }
+    f.instance.close(45.18, 1);
+    const wire = f.events.map(toPulseEvent);
+    expect(wire.at(-1)!.playedMs).toBeGreaterThanOrEqual(45_170);
+    let previous = 0;
+    for (const event of [...wire, ...wire]) {
+      const albumId = await send(event);
+      const total = catalog.pulse.albumStats(albumId).playedMs;
+      expect(total).toBeGreaterThanOrEqual(previous);
+      previous = total;
+      totals(total);
+    }
+    expect(previous).toBe(wire.at(-1)!.playedMs);
+    expect(catalog.pulse.layout("2026-03-07", "2026-03-08").days).toHaveLength(
+      2,
+    );
+  });
+
   it.each([0.5, 1, 2])(
     "keeps cumulative integer revisions at %sx across midnight",
     async (rate) => {

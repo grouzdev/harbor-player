@@ -19,6 +19,9 @@ export class PulseRecorder {
   private active = false;
   private baseline = { time: 0, position: 0, rate: 1 };
   private event: ListeningEvent | null = null;
+  private intervalElapsed = 0;
+  private intervalProgression = 0;
+  private published: { endedAt: number; playedMs: number } | null = null;
   private sessionId: string;
   private visitId: string;
   private albumKey: string | null = null;
@@ -49,6 +52,15 @@ export class PulseRecorder {
   }
   source(track: Track | null, position = 0, rate = 1) {
     this.close(position, rate);
+    // Catalog operations can change the album key of the same stable track.
+    // Like the server's track alias, that continuity preserves the album visit.
+    // playing() still starts a new session after a 30-minute interruption.
+    if (
+      track &&
+      track.id === this.track?.id &&
+      this.albumKey === this.track.albumKey
+    )
+      this.albumKey = track.albumKey;
     this.track = track ? structuredClone(track) : null;
   }
   playing(position: number, rate: number) {
@@ -84,10 +96,9 @@ export class PulseRecorder {
       this.finish();
       return;
     }
-    const played = Math.min(elapsed, progression);
     this.lastProgress = now;
-    let remaining = played;
-    let cursor = this.utc() - played;
+    let remaining = elapsed;
+    let cursor = this.utc() - elapsed;
     while (remaining > 0) {
       if (this.event && cursor - this.event.startedAt >= 3_600_000)
         this.finish();
@@ -104,13 +115,24 @@ export class PulseRecorder {
           playedMs: 0,
           final: false,
         };
+        this.intervalElapsed = 0;
+        this.intervalProgression = 0;
+        this.published = null;
         this.checkpoint = now - remaining;
       }
       const part = Math.min(
         remaining,
         3_600_000 - (cursor - this.event.startedAt),
       );
-      this.event.playedMs += part;
+      this.intervalElapsed += part;
+      this.intervalProgression += progression * (part / elapsed);
+      // Cap cumulative elapsed by cumulative progression evidence. A per-sample
+      // min loses backward position jitter forever; forward jitter must be
+      // able to compensate it before checkpoint/final, without decreasing time.
+      this.event.playedMs = Math.min(
+        this.intervalElapsed,
+        this.intervalProgression,
+      );
       cursor += part;
       remaining -= part;
       this.event.endedAt = cursor;
@@ -128,9 +150,26 @@ export class PulseRecorder {
   }
   private publish(final: boolean) {
     if (!this.event || this.event.playedMs < 1) return;
+    const startedAt = Math.floor(this.event.startedAt);
+    const endedAt = Math.floor(this.event.endedAt);
+    // The server appends only to the new UTC tail, including across midnight.
+    // Recovery of old jitter/rounding debt must not revise an accepted prefix.
+    const playedMs = Math.min(
+      Math.floor(this.event.playedMs),
+      this.published
+        ? this.published.playedMs + endedAt - this.published.endedAt
+        : endedAt - startedAt,
+    );
+    if (playedMs < 1) return;
     this.event.revision++;
     this.event.final = final;
-    this.emit(structuredClone(this.event));
+    this.emit({
+      ...structuredClone(this.event),
+      startedAt,
+      endedAt,
+      playedMs,
+    });
+    this.published = { endedAt, playedMs };
   }
   private finish() {
     this.publish(true);

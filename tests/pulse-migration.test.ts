@@ -166,6 +166,34 @@ describe("real old-code v12 → v13 migration", () => {
     }
   });
 
+  it("verifies a readonly source through the migration CLI without retaining private copies", () => {
+    const before = new Database(path.join(fixture, "catalog.sqlite"), {
+      readonly: true,
+    });
+    const original = snapshot(before);
+    before.close();
+    const output = execFileSync(
+      process.execPath,
+      ["scripts/pulse-migrate-check.mjs", path.join(fixture, "catalog.sqlite")],
+      { encoding: "utf8" },
+    );
+    expect(JSON.parse(output)).toMatchObject({
+      migratedVersion: 13,
+      originalOpenedReadOnly: true,
+      catalogRowsAndSchemaUnchanged: true,
+      audioPlaybackChecked: false,
+    });
+    const after = new Database(path.join(fixture, "catalog.sqlite"), {
+      readonly: true,
+    });
+    try {
+      expect(after.pragma("user_version", { simple: true })).toBe(12);
+      expect(snapshot(after)).toEqual(original);
+    } finally {
+      after.close();
+    }
+  });
+
   it("rolls back DDL and user_version on a fault inside v13, then retries", () => {
     const target = path.join(root, "fault");
     cpSync(fixture, target, { recursive: true });

@@ -55,6 +55,64 @@ describe("PulseRecorder", () => {
     for (const event of wire)
       expect(pulseEventSchema.safeParse(event).success).toBe(true);
   });
+  it.each([0.5, 1, 2])(
+    "does not accumulate timing loss from bounded position jitter at %sx",
+    (rate) => {
+      const f = fixture();
+      f.recorder.playing(0, rate);
+      for (let i = 1; i <= 2400; i++) {
+        f.advance(250);
+        // Alternating ±5ms position deltas telescope to exactly ten minutes.
+        // Clamping each delta to elapsed independently loses six seconds.
+        const positionMs = i * 250 - (i % 2 ? 5 : 0);
+        f.recorder.sample((positionMs * rate) / 1000, rate);
+      }
+      f.recorder.close(600 * rate, rate);
+      const finals = f.events.filter((event) => event.final);
+      expect(finals).toHaveLength(1);
+      expect(finals[0].playedMs).toBe(600_000);
+      expect(finals[0].endedAt - finals[0].startedAt).toBe(600_000);
+      expect(new Set(f.events.map((event) => event.eventId)).size).toBe(1);
+    },
+  );
+  it("rejects a long clock gap despite a small positive media advance", () => {
+    const f = fixture();
+    f.recorder.playing(0, 1);
+    f.advance(1000);
+    f.recorder.sample(1, 1);
+    f.advance(60_000);
+    f.recorder.sample(2, 1);
+    f.advance(1000);
+    f.recorder.close(3, 1);
+    expect(f.events.map((event) => event.playedMs)).toEqual([1000, 1000]);
+  });
+  it("bounds a partially confirmed delayed sample instead of counting the entire gap", () => {
+    const f = fixture();
+    f.recorder.playing(0, 1);
+    f.advance(60_000);
+    f.recorder.close(48, 1);
+    expect(f.events[0].playedMs).toBe(48_000);
+    expect(f.events[0].endedAt - f.events[0].startedAt).toBe(60_000);
+  });
+  it("bounds published catch-up by each integer UTC tail", () => {
+    const f = fixture();
+    f.advance(0.125);
+    f.recorder.playing(0, 1);
+    for (let i = 1; i <= 180; i++) {
+      f.advance(251);
+      f.recorder.sample((i * 251 - (i <= 60 ? 5 : 0)) / 1000, 1);
+    }
+    f.recorder.close(45.18, 1);
+    const wire = f.events.map(toPulseEvent);
+    for (let i = 1; i < wire.length; i++) {
+      expect(wire[i].playedMs).toBeGreaterThanOrEqual(wire[i - 1].playedMs);
+      expect(wire[i].playedMs - wire[i - 1].playedMs).toBeLessThanOrEqual(
+        wire[i].endedAtUtc - wire[i - 1].endedAtUtc,
+      );
+    }
+    expect(wire.at(-1)!.playedMs).toBeGreaterThanOrEqual(45_170);
+    expect(wire.at(-1)!.final).toBe(true);
+  });
   it("accumulates submillisecond samples but drops an entire interval below 1 ms", () => {
     const f = fixture();
     f.recorder.playing(0, 1);
@@ -218,6 +276,32 @@ describe("PulseRecorder", () => {
     listen();
     expect(f.events[3].visitId).not.toBe(f.events[2].visitId);
     expect(f.events[3].sessionId).not.toBe(f.events[2].sessionId);
+  });
+  it("preserves a stable track's visit through moved/retagged source replacement", () => {
+    const f = fixture();
+    const listen = () => {
+      f.recorder.playing(0, 1);
+      f.advance(1000);
+      f.recorder.close(1, 1);
+    };
+    listen();
+    f.recorder.source({ ...f.track, albumKey: "moved-album" });
+    listen();
+    f.recorder.source({ ...f.track, id: "next", albumKey: "moved-album" });
+    listen();
+    expect(f.events.map((event) => event.playedMs)).toEqual([1000, 1000, 1000]);
+    expect(f.events[0].track.albumKey).toBe("album");
+    expect(f.events[1].track.albumKey).toBe("moved-album");
+    expect(new Set(f.events.map((event) => event.visitId)).size).toBe(1);
+    expect(new Set(f.events.map((event) => event.sessionId)).size).toBe(1);
+    f.recorder.source({ ...f.track, id: "other", albumKey: "other-album" });
+    listen();
+    expect(f.events[3].visitId).not.toBe(f.events[2].visitId);
+    f.advance(30 * 60_000);
+    f.recorder.source({ ...f.track, id: "other", albumKey: "retagged-other" });
+    listen();
+    expect(f.events[4].visitId).not.toBe(f.events[3].visitId);
+    expect(f.events[4].sessionId).not.toBe(f.events[3].sessionId);
   });
   it("generation change discards an open pre-clear interval", () => {
     const f = fixture();
