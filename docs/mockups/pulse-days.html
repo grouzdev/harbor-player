@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>HARBOR — Пульс · дни на таймлайне</title>
+    <style>
+      @import url("../../src/client/fonts.css");
+      :root { color-scheme: dark; font-family: "Fira Sans Condensed", "Arial Narrow", sans-serif; color: #dce0e2; background: #171c21; --accent: #c3dbc1; --muted: #929fa7; --line: #ffffff12; }
+      * { box-sizing: border-box; }
+      body { margin: 0; }
+      button, select { font: inherit; color: inherit; }
+      button { cursor: pointer; background: none; border: 0; }
+      button:hover, a:hover { color: var(--accent); }
+      button:disabled { opacity: .3; cursor: default; }
+      button:focus-visible, select:focus-visible, a:focus-visible, .rail:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; }
+      h1, h2, p { margin: 0; }
+      small, .muted { color: var(--muted); }
+      a { text-decoration: none; color: var(--muted); }
+      .lab { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 12px 24px; background: #101519; font-size: 12px; color: var(--muted); }
+      .variants { display: flex; gap: 4px; }
+      .variants button { padding: 7px 16px; border-radius: 5px; }
+      .variants button[aria-pressed="true"] { background: var(--accent); color: #19231b; }
+      .topbar { height: 64px; padding: 0 32px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 20px; border-bottom: 1px solid var(--line); }
+      .topbar a { font-size: 12px; }
+      .brand { width: 116px; height: 24px; opacity: .7; }
+      .demo { justify-self: end; font-size: 11px; color: var(--muted); }
+      main { max-width: 1440px; margin: auto; padding: 44px 48px 110px; }
+      .heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+      h1 { font-size: 38px; font-weight: 400; }
+      .controls { display: flex; align-items: center; gap: 18px; }
+      select { padding: 8px 12px; font-size: 14px; background: #20272d; border: 1px solid #ffffff18; border-radius: 5px; }
+      .controls button { font-size: 20px; padding: 2px 4px; }
+      .summary { margin-top: 12px; font-size: 14px; color: var(--muted); }
+      .summary strong { font-weight: 400; color: #dce0e2; }
+      .rail { margin-top: 48px; padding: 10px 6px 20px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; scrollbar-color: #53645b #ffffff05; }
+      .days { display: flex; width: max-content; min-width: 100%; }
+      .day { width: 174px; flex: 1 0 174px; min-width: 0; }
+      .day-heading { display: none; }
+      .plot { height: 330px; display: flex; flex-direction: column; justify-content: end; align-items: center; position: relative; }
+      .gallery { width: 112px; position: relative; z-index: 1; }
+      .cover { display: block; padding: 0; width: 112px; aspect-ratio: 1; }
+      .cover[aria-pressed="true"] { outline: 1px solid var(--accent); outline-offset: 5px; }
+      .art { display: block; width: 100%; aspect-ratio: 1; position: relative; overflow: hidden; box-shadow: 0 8px 24px #0003; }
+      .art::before, .art::after { content: ""; position: absolute; }
+      .mezzanine { background: radial-gradient(ellipse at 50% 70%, #6d7269, #282d28 25%, #121712 55%); }
+      .mezzanine::before { width: 33%; height: 65%; background: #0a0c09; border: 1px solid #6b786355; border-radius: 46%; left: 34%; top: 20%; transform: rotate(-22deg); }
+      .mezzanine::after { width: 80%; height: 35%; border-top: 2px solid #76826b; border-bottom: 1px solid #76826b; left: 10%; top: 40%; transform: rotate(25deg); }
+      .dive { background: linear-gradient(155deg, #e1a987, #c99d8c 24%, #7e9599 25%, #546d79 55%, #233d51 56%, #152b3d); }
+      .spaces { background: repeating-linear-gradient(75deg, transparent 0 7%, #cad6c71c 7% 8%), linear-gradient(120deg, #1e3033, #73928a); }
+      .spaces::before { inset: 20%; border: 1px solid #dbe7d27a; transform: rotate(25deg); }
+      .inrainbows { background: radial-gradient(ellipse at 20% 0, #f5ba5c, transparent 45%), radial-gradient(ellipse at 80% 70%, #a32d21, transparent 50%), repeating-linear-gradient(30deg, #be6938 0 3%, #40212a 4% 9%); }
+      .inrainbows::after { content: "IN / RAINBOWS"; top: 40%; left: 10%; font-size: 9px; letter-spacing: 1px; color: #f1e9c6; }
+      .moon { background: radial-gradient(circle at 45% 45%, #d9d9c9 0 20%, #869896 21%, #1b3a46 50%, #10232b); }
+      .moon::before { inset: 10%; border: 1px solid #ffffff30; border-radius: 50%; }
+      .secondary { display: none; }
+      .stem { width: 112px; height: var(--activity); margin-top: 10px; background: linear-gradient(#8da99825, #8da99804); border-top: 1px solid #a5c2b330; }
+      .day.selected .stem { background: linear-gradient(#c3dbc145, #c3dbc109); border-color: var(--accent); }
+      .daily-time { font-size: 11px; color: var(--muted); text-align: center; margin: 14px 0 18px; min-height: 14px; }
+      .day.selected .daily-time { color: var(--accent); }
+      .axis { position: relative; padding-top: 20px; text-align: center; border-top: 1px solid #ffffff20; }
+      .axis::before { content: ""; position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #69756f; top: -3px; left: calc(50% - 2px); }
+      .axis small { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+      .day-number { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; margin: 6px auto 0; font-size: 18px; color: #aab6bd; }
+      .day.weekend .day-number { background: #ffffff06; }
+      .day.selected .day-number { background: var(--accent); color: #18231b; }
+      .day.selected .axis::before { background: var(--accent); box-shadow: 0 0 10px #c3dbc180; }
+      .day.selected .axis small { color: var(--accent); }
+      .empty { font-size: 20px; color: #ffffff20; text-align: center; }
+      .quiet .stem { border: 0; }
+      .quiet .axis { opacity: .4; }
+      .selection { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); gap: 60px; border-top: 1px solid var(--line); padding-top: 28px; margin-top: 28px; }
+      .selected-date { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+      .album-title { font-size: 30px; font-weight: 400; }
+      .artist { font-size: 15px; color: var(--muted); margin-top: 5px; }
+      .album-time { font-size: 12px; color: var(--muted); margin-top: 16px; }
+      .fact { font-size: 22px; font-weight: 400; line-height: 1.45; color: #c4d5c5; margin-top: 8px; }
+      .period-fact { font-size: 13px; color: var(--muted); margin-top: 14px; }
+      .player { position: fixed; bottom: 0; left: 0; right: 0; padding: 14px 32px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px; background: #13191ff5; backdrop-filter: blur(20px); border-top: 1px solid #ffffff12; }
+      .now-playing { display: flex; align-items: center; gap: 12px; }
+      .now-playing .art { width: 40px; flex-shrink: 0; }
+      .now-playing p { font-size: 13px; }
+      .now-playing small { font-size: 11px; }
+      .transport { display: flex; align-items: center; gap: 20px; }
+      .play { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #15231b; }
+      .player-time { justify-self: end; font-size: 11px; color: var(--muted); }
+      /* B: the day is a container; the second cover belongs to the same day. */
+      body[data-view="columns"] .day { width: 184px; flex-basis: 184px; border-right: 1px solid #ffffff09; }
+      body[data-view="columns"] .day:first-child { border-left: 1px solid #ffffff09; }
+      body[data-view="columns"] .day.selected { background: linear-gradient(#c3dbc10b, transparent); }
+      body[data-view="columns"] .day.weekend:not(.selected) { background: linear-gradient(#ffffff03, transparent); }
+      body[data-view="columns"] .day-heading { display: flex; justify-content: space-between; align-items: baseline; padding: 14px 18px 20px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; border-top: 1px solid #ffffff13; }
+      body[data-view="columns"] .day-heading strong { font-size: 22px; font-weight: 400; letter-spacing: 0; }
+      body[data-view="columns"] .day.selected .day-heading { color: var(--accent); border-color: var(--accent); }
+      body[data-view="columns"] .plot { height: 310px; }
+      body[data-view="columns"] .gallery { width: 126px; }
+      body[data-view="columns"] .secondary { display: block; width: 48px; position: absolute; right: -14px; bottom: -12px; box-shadow: 0 0 0 5px #171c21; }
+      body[data-view="columns"] .stem { margin-top: 24px; }
+      body[data-view="columns"] .axis { display: none; }
+      body[data-view="columns"] .daily-time { padding: 16px 0 20px; margin: 0; border-bottom: 1px solid #ffffff13; }
+      @media (max-width: 900px) { main { padding-inline: 24px; } .selection { gap: 30px; } }
+      @media (max-width: 640px) {
+        .lab { padding: 12px 16px; flex-direction: column; align-items: stretch; gap: 10px; }
+        .variants button { flex: 1; }
+        .topbar { padding: 14px 16px; height: auto; grid-template-columns: 1fr auto; gap: 10px; }
+        .topbar a { grid-row: 2; grid-column: 1 / -1; }
+        .brand { width: 86px; grid-row: 1; }
+        .demo { grid-row: 1; font-size: 10px; }
+        main { padding: 28px 16px 100px; }
+        h1 { font-size: 32px; }
+        .heading { align-items: start; gap: 16px; }
+        .controls { flex-wrap: wrap; justify-content: end; gap: 10px; }
+        select { font-size: 12px; }
+        .rail { margin-top: 26px; }
+        .day { width: 148px; flex-basis: 148px; }
+        body[data-view="columns"] .day { width: 158px; flex-basis: 158px; }
+        .selection { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+        .fact { font-size: 20px; }
+        .player { padding: 12px 16px; grid-template-columns: 1fr auto; gap: 12px; }
+        .player-time { display: none; }
+        .transport { gap: 10px; }
+      }
+    </style>
+  </head>
+  <body data-view="axis">
+    <nav class="lab" aria-label="Варианты компоновки"><span>DESIGN LAB / 04</span><div class="variants"><button type="button" data-view="axis" aria-pressed="true">C1 · Шкала дней</button><button type="button" data-view="columns" aria-pressed="false">C2 · Колонки дней</button></div></nav>
+    <header class="topbar"><a href="pulse.html#rhythm">← Предыдущий вариант C</a><img class="brand" src="../../assets/HARBOR.svg" alt="HARBOR"><span class="demo">Мокап · вымышленные данные</span></header>
+    <main>
+      <div class="heading"><h1>Пульс</h1><div class="controls"><select id="period" aria-label="Период истории"><option value="week">12–18 мая</option><option value="month">1–18 мая</option></select><button type="button" id="previous" aria-label="Прокрутить назад">←</button><button type="button" id="next" aria-label="Прокрутить вперёд">→</button></div></div>
+      <p class="summary"><strong id="total-time">18 ч 42 мин</strong> <span id="total-albums">· 12 альбомов целиком</span></p>
+      <section class="rail" id="rail" role="region" tabindex="0" aria-label="Дни, обложки и время прослушивания"><div class="days" id="days"></div></section>
+      <section class="selection" aria-label="Выбранный альбом и факты">
+        <div><p class="selected-date" id="selected-date"></p><h2 class="album-title" id="selected-title"></h2><p class="artist" id="selected-artist"></p><p class="album-time" id="selected-time"></p></div>
+        <div><p class="fact" id="selected-fact"></p><p class="period-fact" id="period-fact"></p></div>
+      </section>
+    </main>
+    <footer class="player" aria-label="Демонстрационный плеер"><div class="now-playing"><span class="art mezzanine"></span><div><p>Teardrop</p><small>Massive Attack · Mezzanine</small></div></div><div class="transport"><span class="muted" aria-hidden="true">↶</span><button type="button" id="play" class="play" aria-label="Приостановить демо-плеер" aria-pressed="true">Ⅱ</button><span class="muted" aria-hidden="true">↷</span></div><span class="player-time">2:04 / 5:30 · без звука</span></footer>
+    <script>
+      const albums = [
+        { title: "Dive", artist: "Tycho · 2011", art: "dive", minutes: 51 },
+        { title: "Spaces", artist: "Nils Frahm · 2013", art: "spaces", minutes: 44 },
+        { title: "Mezzanine", artist: "Massive Attack · 1998", art: "mezzanine", minutes: 63 },
+        { title: "In Rainbows", artist: "Radiohead · 2007", art: "inrainbows", minutes: 42 },
+        { title: "Black Focus", artist: "Yussef Kamaal · 2016", art: "moon", minutes: 39 },
+      ];
+      const totals = [210, 282, 318, 0, 342, 288, 324, 270, 0, 330, 372, 126, 108, 192, 210, 252, 98, 136];
+      const featured = [2, 3, 1, 2, 4, 2, 1, 3, 1, 4, 2, 2, 3, 0, 1, 2, 3, 4];
+      const weekdays = ["Четверг", "Пятница", "Суббота", "Воскресенье", "Понедельник", "Вторник", "Среда"];
+      const shorts = ["Чт", "Пт", "Сб", "Вс", "Пн", "Вт", "Ср"];
+      // One leading album and one secondary album per active day in this fixture.
+      // Dive first appears on 14 May, so its first-listen fact is derived, not a slogan.
+      const days = totals.map((minutes, index) => {
+        const album = featured[index];
+        const secondary = index === 16 ? 1 : album === 2 ? 3 : 2;
+        return { date: index + 1, minutes, album, secondary, weekday: weekdays[index % 7], short: shorts[index % 7], weekend: index % 7 === 2 || index % 7 === 3 };
+      });
+      let view = "axis", selectedDay = 16, selectedAlbum = 3;
+      const rail = document.getElementById("rail");
+      const text = (id, value) => { document.getElementById(id).textContent = value; };
+      const duration = minutes => `${Math.floor(minutes / 60) ? Math.floor(minutes / 60) + " ч " : ""}${minutes % 60} мин`;
+      const visibleDays = () => document.getElementById("period").value === "week" ? days.slice(11) : days;
+      const containsAlbum = (day, album) => day.minutes > 0 && (day.album === album || day.secondary === album);
+      const dayWord = count => count % 100 >= 11 && count % 100 <= 14 ? "дней" : count % 10 === 1 ? "день" : count % 10 >= 2 && count % 10 <= 4 ? "дня" : "дней";
+      function updateArrows() {
+        document.getElementById("previous").disabled = rail.scrollLeft <= 1;
+        document.getElementById("next").disabled = rail.scrollLeft + rail.clientWidth >= rail.scrollWidth - 1;
+      }
+      function renderSelection() {
+        const day = days[selectedDay], album = albums[selectedAlbum];
+        const previous = days.slice(0, selectedDay).filter(item => containsAlbum(item, selectedAlbum)).at(-1);
+        const active = visibleDays().filter(item => containsAlbum(item, selectedAlbum));
+        text("selected-date", `${day.weekday}, ${day.date} мая`);
+        text("selected-title", album.title);
+        text("selected-artist", album.artist);
+        text("selected-time", `${album.minutes} мин с альбомом · ${duration(day.minutes)} за день`);
+        let fact;
+        if (!previous) fact = `Первое знакомство с ${album.title}.`;
+        else if (day.date - previous.date > 1) {
+          const gap = day.date - previous.date;
+          fact = `Вернулся к ${album.title} спустя ${gap} ${dayWord(gap)}.`;
+        } else {
+          let streak = 1;
+          for (let index = selectedDay - 1; index >= 0 && containsAlbum(days[index], selectedAlbum); index--) streak++;
+          fact = `${album.title} звучит ${streak} ${dayWord(streak)} подряд.`;
+        }
+        if (day.minutes === Math.max(...visibleDays().map(item => item.minutes))) fact = `Самый музыкальный день ${visibleDays().length === 7 ? "недели" : "периода"} — ${duration(day.minutes)}.`;
+        text("selected-fact", fact);
+        text("period-fact", `${album.title} звучал в ${active.length} из ${visibleDays().filter(item => item.minutes).length} дней с музыкой.`);
+        document.querySelectorAll("[data-album]").forEach(button => button.setAttribute("aria-pressed", String(Number(button.dataset.day) === selectedDay && Number(button.dataset.album) === selectedAlbum)));
+        document.querySelectorAll(".day").forEach(element => element.classList.toggle("selected", Number(element.dataset.date) === selectedDay));
+      }
+      function renderPeriod() {
+        const week = visibleDays().length === 7;
+        if (week && selectedDay < 11) { selectedDay = 16; selectedAlbum = days[16].album; }
+        if (view === "axis") selectedAlbum = days[selectedDay].album;
+        text("total-time", duration(visibleDays().reduce((sum, day) => sum + day.minutes, 0)));
+        text("total-albums", week ? "· 12 альбомов целиком" : "· 37 альбомов целиком");
+        document.getElementById("days").innerHTML = visibleDays().map(day => {
+          const cover = (index, secondary = false) => `<button type="button" class="cover${secondary ? " secondary" : ""}" data-day="${day.date - 1}" data-album="${index}" aria-pressed="false" aria-label="${day.weekday}, ${day.date} мая: ${albums[index].title}"><span class="art ${albums[index].art}"></span></button>`;
+          return `<div class="day${day.weekend ? " weekend" : ""}${day.minutes ? "" : " quiet"}" data-date="${day.date - 1}" style="--activity:${day.minutes / 480 * 150}px"><div class="day-heading"><span>${day.short}</span><strong>${day.date}</strong></div><div class="plot"><div class="gallery">${day.minutes ? cover(day.album) + cover(day.secondary, true) : '<div class="empty">—</div>'}</div><div class="stem" aria-hidden="true"></div></div><p class="daily-time">${day.minutes ? duration(day.minutes) : "—"}</p><div class="axis"><small>${day.short}</small><span class="day-number">${day.date}</span></div></div>`;
+        }).join("");
+        renderSelection();
+        requestAnimationFrame(() => {
+          const day = document.querySelector(`[data-date="${selectedDay}"]`);
+          rail.scrollLeft = Math.max(0, day.offsetLeft - rail.offsetLeft - (rail.clientWidth - day.clientWidth) / 2);
+          updateArrows();
+        });
+      }
+      function selectView(value) {
+        view = value === "columns" ? "columns" : "axis";
+        document.body.dataset.view = view;
+        document.querySelectorAll("[data-view]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.view === view)));
+        history.replaceState(null, "", "#" + view);
+        renderPeriod();
+      }
+      document.querySelectorAll("[data-view]").forEach(button => button.addEventListener("click", () => selectView(button.dataset.view)));
+      window.addEventListener("hashchange", () => selectView(location.hash.slice(1)));
+      document.getElementById("period").addEventListener("change", renderPeriod);
+      document.getElementById("days").addEventListener("click", event => {
+        const button = event.target.closest("[data-album]");
+        if (button) { selectedDay = Number(button.dataset.day); selectedAlbum = Number(button.dataset.album); renderSelection(); }
+      });
+      const scroll = direction => rail.scrollBy({ left: direction * rail.clientWidth * .7, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+      document.getElementById("previous").addEventListener("click", () => scroll(-1));
+      document.getElementById("next").addEventListener("click", () => scroll(1));
+      rail.addEventListener("scroll", updateArrows);
+      window.addEventListener("resize", updateArrows);
+      rail.addEventListener("keydown", event => {
+        if (event.target === rail && ["ArrowLeft", "ArrowRight"].includes(event.key)) { event.preventDefault(); scroll(event.key === "ArrowLeft" ? -1 : 1); }
+      });
+      document.getElementById("play").addEventListener("click", event => {
+        const button = event.currentTarget, playing = button.getAttribute("aria-pressed") !== "true";
+        button.setAttribute("aria-pressed", String(playing));
+        button.setAttribute("aria-label", playing ? "Приостановить демо-плеер" : "Продолжить демо-плеер");
+        button.textContent = playing ? "Ⅱ" : "▶";
+      });
+      selectView(location.hash.slice(1));
+    </script>
+  </body>
+</html>

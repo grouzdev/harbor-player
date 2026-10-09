@@ -33,6 +33,7 @@ import {
 } from "../shared/artist-grouping.js";
 import { HttpError, badRequest, conflict, notFound } from "./http-error.js";
 import { runCatalogMigrations } from "./catalog-migrations.js";
+import { PulseStore } from "./pulse.js";
 import { albumIdentityKey } from "./album-identity.js";
 import { normalizedAlbumFolder } from "./album-identity.js";
 import {
@@ -126,6 +127,7 @@ const comparePlaylistTracks = (left: Track, right: Track) => {
 
 export class Catalog {
   private readonly db: Database.Database;
+  readonly pulse: PulseStore;
   private hasLegacyPlaylistOrderColumn = false;
   constructor(readonly dataDir: string) {
     mkdirSync(dataDir, { recursive: true });
@@ -166,6 +168,7 @@ export class Catalog {
     this.db.pragma("foreign_keys = ON");
     this.db.pragma("busy_timeout = 5000");
     runCatalogMigrations(this.db);
+    this.pulse = new PulseStore(this.db, dataDir);
     this.hasLegacyPlaylistOrderColumn = (
       this.db.pragma("table_info(playlists)") as { name: string }[]
     ).some((column) => column.name === "orderMode");

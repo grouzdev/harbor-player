@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>HARBOR — Пульс + Дневник</title>
+    <style>
+      @import url("../../src/client/fonts.css");
+      :root { color-scheme: dark; font-family: "Fira Sans Condensed", "Arial Narrow", sans-serif; color: #dce0e2; background: #171c21; --accent: #c3dbc1; --muted: #929fa7; --line: #ffffff12; }
+      * { box-sizing: border-box; }
+      body { margin: 0; }
+      button, select { font: inherit; color: inherit; }
+      button { border: 0; background: none; cursor: pointer; }
+      button:hover { color: var(--accent); }
+      button:disabled { opacity: .3; cursor: default; }
+      button:focus-visible, select:focus-visible, a:focus-visible, .rail:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+      h1, h2, h3, p { margin: 0; }
+      h1 { font-size: 36px; font-weight: 500; letter-spacing: -.5px; }
+      h2 { font-size: 22px; font-weight: 500; }
+      small, .muted { color: var(--muted); }
+      a { color: var(--muted); text-decoration: none; }
+      .eyebrow { color: var(--accent); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; }
+      .topbar { height: 64px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px; padding: 0 32px; border-bottom: 1px solid var(--line); }
+      .brand { width: 116px; height: 24px; opacity: .75; }
+      .topbar a { font-size: 13px; }
+      .badge { justify-self: end; font-size: 12px; color: var(--accent); }
+      main { max-width: 1440px; margin: auto; padding: 30px 48px 110px; }
+      .heading { display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+      .heading .eyebrow { margin-bottom: 6px; }
+      .subtitle { color: var(--muted); margin-top: 7px; font-size: 15px; }
+      .period { display: flex; align-items: center; gap: 12px; }
+      select { background: #22292f; border: 1px solid #ffffff18; border-radius: 6px; padding: 9px 12px; }
+      .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; padding: 24px 0; margin: 20px 0 24px; border-block: 1px solid var(--line); }
+      .metric { display: flex; align-items: center; gap: 14px; }
+      .metric strong { font-size: 30px; font-weight: 400; white-space: nowrap; font-variant-numeric: tabular-nums; }
+      .metric p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+      .metric em { font-size: 11px; color: var(--accent); font-style: normal; display: block; }
+      .section-heading { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-bottom: 16px; }
+      .section-heading small { font-size: 12px; }
+      .rail-tools { display: flex; gap: 8px; align-items: center; }
+      .rail-tools button { width: 30px; height: 30px; border: 1px solid #ffffff20; border-radius: 50%; }
+      .rail { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-color: #53645b #ffffff05; scrollbar-width: thin; padding: 8px 4px 12px; }
+      .days { display: flex; min-width: 100%; width: max-content; }
+      .day { position: relative; flex: 1; width: 174px; min-width: 174px; padding: 0 16px 12px; text-align: left; }
+      .day::after { content: ""; position: absolute; left: 0; right: 0; top: 206px; height: 1px; background: #ffffff20; }
+      .date { font-size: 14px; color: var(--muted); display: flex; justify-content: space-between; margin-bottom: 15px; }
+      .date span { font-size: 11px; }
+      .covers { position: relative; width: 114px; height: 120px; margin-bottom: 15px; }
+      .covers .art { width: 104px; position: absolute; bottom: 0; left: 0; transition: transform .2s; }
+      .covers .rear { left: 10px; bottom: 9px; opacity: .6; transform: rotate(5deg); }
+      .day:hover .covers .front { transform: translateY(-4px); }
+      .day[aria-pressed="true"] .covers .front { outline: 2px solid var(--accent); outline-offset: 4px; }
+      .day[aria-pressed="true"] .date { color: var(--accent); }
+      .day h3 { font-size: 15px; font-weight: 500; height: 19px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .dot { display: block; position: relative; width: 7px; height: 7px; border-radius: 50%; background: #687b70; margin: 17px 0 12px; z-index: 1; box-shadow: 0 0 0 4px #171c21; }
+      .day[aria-pressed="true"] .dot { background: var(--accent); box-shadow: 0 0 0 4px #171c21, 0 0 16px #c3dbc166; }
+      .day small { display: block; font-size: 12px; }
+      .daily-pulse { display: flex; align-items: end; gap: 3px; height: 30px; margin: 10px 0 6px; }
+      .daily-pulse i { width: 8px; height: var(--height); background: #718e7c; border-radius: 2px 2px 0 0; }
+      .day[aria-pressed="true"] .daily-pulse i { background: var(--accent); }
+      .timeline-legend { display: flex; justify-content: space-between; gap: 16px; margin: 8px 0 24px; font-size: 12px; color: var(--muted); }
+      .selection { display: grid; grid-template-columns: 258px minmax(0, 1fr) 260px; gap: 30px; padding-top: 26px; border-top: 1px solid var(--line); }
+      .selection > * { min-width: 0; }
+      .art { position: relative; aspect-ratio: 1; flex-shrink: 0; overflow: hidden; box-shadow: 0 12px 32px #0004; }
+      .art::before, .art::after { content: ""; position: absolute; }
+      .mezzanine { background: radial-gradient(ellipse at 50% 70%, #6d7269 0, #282d28 25%, #121712 55%); }
+      .mezzanine::before { width: 33%; height: 65%; background: #0a0c09; border: 1px solid #6b786355; border-radius: 46%; left: 34%; top: 20%; transform: rotate(-22deg); }
+      .mezzanine::after { width: 80%; height: 35%; border-top: 2px solid #76826b; border-bottom: 1px solid #76826b; left: 10%; top: 40%; transform: rotate(25deg); }
+      .dive { background: linear-gradient(155deg, #e1a987 0%, #c99d8c 24%, #7e9599 25%, #546d79 55%, #233d51 56%, #152b3d); }
+      .dive::before { width: 130%; height: 25%; left: -15%; top: 49%; background: #d4d1ba44; transform: rotate(-12deg); filter: blur(6px); }
+      .spaces { background: repeating-linear-gradient(75deg, transparent 0 7%, #cad6c71c 7% 8%), linear-gradient(120deg, #1e3033, #73928a); }
+      .spaces::before { inset: 20%; border: 1px solid #dbe7d27a; transform: rotate(25deg); }
+      .inrainbows { background: radial-gradient(ellipse at 20% 0, #f5ba5c, transparent 45%), radial-gradient(ellipse at 80% 70%, #a32d21, transparent 50%), repeating-linear-gradient(30deg, #be6938 0 3%, #40212a 4% 9%); }
+      .inrainbows::after { content: "IN / RAINBOWS"; top: 40%; left: 10%; color: #f1e9c6; font-size: 10px; letter-spacing: 1px; }
+      .moon { background: radial-gradient(circle at 45% 45%, #d9d9c9 0 20%, #869896 21%, #1b3a46 50%, #10232b); }
+      .moon::before { inset: 10%; border: 1px solid #ffffff30; border-radius: 50%; }
+      .selected-art { width: 100%; }
+      .selected-art.inrainbows::after { font-size: 21px; }
+      .cover-caption { margin-top: 12px; display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+      .album-title { font-size: 38px; font-weight: 400; letter-spacing: -.5px; margin: 10px 0 4px; }
+      .artist { color: var(--muted); font-size: 18px; }
+      .description { font-size: 16px; line-height: 1.6; color: #b5bfc4; margin: 16px 0; max-width: 470px; }
+      .facts { display: flex; gap: 26px; padding: 14px 0; border-block: 1px solid var(--line); }
+      .facts strong { display: block; font-size: 22px; font-weight: 400; margin-bottom: 4px; }
+      .facts small { font-size: 11px; }
+      .sessions-heading { margin: 18px 0 10px; display: flex; justify-content: space-between; font-size: 12px; }
+      .sessions { display: flex; gap: 8px; overflow-x: auto; padding: 4px; }
+      .session { display: flex; align-items: center; gap: 9px; padding: 8px; min-width: 155px; text-align: left; background: #20272d; border: 1px solid var(--line); border-radius: 5px; }
+      .session[aria-pressed="true"] { border-color: #c3dbc170; background: #c3dbc10c; }
+      .session .art { width: 36px; }
+      .session p { font-size: 12px; }
+      .session small { font-size: 10px; display: block; margin-top: 3px; }
+      .period-stats { border-left: 1px solid var(--line); padding-left: 24px; }
+      .period-stats h3 { font-size: 16px; font-weight: 500; margin: 8px 0 14px; }
+      .rank { display: grid; grid-template-columns: 32px 1fr auto; gap: 10px; align-items: center; padding: 8px 0; }
+      .rank .art { width: 32px; }
+      .rank p { font-size: 13px; }
+      .rank small { font-size: 11px; }
+      .genres { display: flex; height: 5px; gap: 3px; margin: 18px 0 9px; }
+      .genres i { height: 100%; border-radius: 3px; }
+      .genre-legend { font-size: 11px; color: var(--muted); line-height: 1.6; }
+      .note { color: var(--muted); font-size: 11px; line-height: 1.5; margin-top: 24px; }
+      .player { position: fixed; bottom: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 32px; background: #13191ff5; backdrop-filter: blur(20px); border-top: 1px solid #ffffff16; }
+      .now-playing { display: flex; align-items: center; gap: 12px; }
+      .now-playing .art { width: 40px; }
+      .now-playing p { font-size: 13px; }
+      .now-playing small { font-size: 11px; }
+      .transport { display: flex; gap: 20px; align-items: center; }
+      .play { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #15231b; }
+      .progress { display: flex; align-items: center; gap: 12px; font-size: 11px; color: var(--muted); }
+      .progress-line { width: 130px; height: 3px; background: #ffffff20; }
+      .progress-line i { display: block; width: 37%; height: 100%; background: var(--accent); }
+      @media (max-width: 1100px) {
+        main { padding-inline: 24px; }
+        .metrics { gap: 12px; }
+        .metric { gap: 8px; }
+        .metric strong { font-size: 24px; }
+        .selection { grid-template-columns: 220px minmax(0, 1fr); gap: 24px; }
+        .period-stats { grid-column: 1 / -1; padding: 20px 0 0; border-left: 0; border-top: 1px solid var(--line); }
+        .rank { display: inline-grid; margin-right: 24px; }
+        .genres { max-width: 400px; }
+      }
+      @media (max-width: 640px) {
+        .topbar { padding: 14px 16px; grid-template-columns: 1fr auto; height: auto; gap: 12px; }
+        .topbar a { grid-column: 1 / -1; grid-row: 2; font-size: 12px; }
+        .brand { grid-row: 1; width: 86px; }
+        .badge { grid-row: 1; font-size: 10px; }
+        main { padding: 24px 16px 105px; }
+        .heading { align-items: start; flex-direction: column; gap: 18px; }
+        h1 { font-size: 32px; }
+        .metrics { grid-template-columns: 1fr 1fr; gap: 20px 12px; }
+        .metric { flex-direction: column; align-items: start; gap: 2px; }
+        .metric strong { font-size: 28px; }
+        .metric em { display: none; }
+        .section-heading { align-items: start; }
+        .rail-tools small { display: none; }
+        .day { min-width: 150px; width: 150px; padding-inline: 12px; }
+        .timeline-legend { flex-direction: column; gap: 4px; }
+        .selection { grid-template-columns: minmax(0, 1fr); }
+        .selected-art { max-width: 330px; margin: auto; }
+        .cover-caption { max-width: 330px; margin: 12px auto 0; }
+        .album-title { font-size: 36px; }
+        .period-stats { grid-column: auto; }
+        .rank { display: grid; margin: 0; }
+        .player { padding: 12px 16px; }
+        .progress { display: none; }
+        .transport { gap: 10px; }
+      }
+      @media (prefers-reduced-motion: reduce) { .covers .art { transition: none; } }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <a href="listening-history.html">← Первые три концепции</a>
+      <img class="brand" src="../../assets/HARBOR.svg" alt="HARBOR">
+      <span class="badge">DESIGN LAB / 02 · Пульс + Дневник</span>
+    </header>
+    <main>
+      <div class="heading">
+        <div><p class="eyebrow">У твоей музыки есть история</p><h1>Музыкальный дневник</h1><p class="subtitle">Обложки вместо строк. Твой ритм — на одной временной шкале.</p></div>
+        <div class="period"><label class="muted" for="period">Период</label><select id="period"><option value="week">12–18 мая · неделя</option><option value="month">1–18 мая · месяц</option></select></div>
+      </div>
+      <section class="metrics" aria-label="Статистика периода">
+        <div class="metric"><strong id="total-time">18 ч 42 мин</strong><p>с музыкой<em id="comparison">+23% к прошлой неделе</em></p></div>
+        <div class="metric"><strong id="total-plays">246</strong><p>прослушиваний<em id="unique">183 разных трека</em></p></div>
+        <div class="metric"><strong id="total-artists">32</strong><p>исполнителя<em id="discoveries">8 новых открытий</em></p></div>
+        <div class="metric"><strong id="total-albums">12</strong><p>альбомов целиком<em id="active-days">7 дней из 7 с музыкой</em></p></div>
+      </section>
+      <section aria-label="Горизонтальный таймлайн прослушиваний">
+        <div class="section-heading"><div><h2>Как звучали твои дни</h2><p class="subtitle" id="timeline-range">12–18 мая · от прошлого к настоящему</p></div><div class="rail-tools"><small>Выбери день · листай горизонтально</small><button type="button" id="previous" aria-label="Прокрутить таймлайн назад">←</button><button type="button" id="next" aria-label="Прокрутить таймлайн вперёд">→</button></div></div>
+        <div class="rail" id="rail" tabindex="0" role="region" aria-label="Дни и обложки; прокрутка стрелками"><div class="days" id="days"></div></div>
+        <div class="timeline-legend"><span>Обложка — альбом дня. Стопка — несколько альбомов.</span><span>▥ Пульс под каждым днём — время с музыкой по сессиям</span></div>
+      </section>
+      <section class="selection" aria-label="Детали выбранного прослушивания">
+        <div><div class="art selected-art inrainbows" id="selected-art" role="img" aria-label="Условная обложка In Rainbows"></div><div class="cover-caption"><span id="selected-date">17 МАЯ / СУББОТА</span><span id="selected-time">19:20 — 20:02</span></div></div>
+        <div>
+          <p class="eyebrow" id="selected-label">Альбом дня · прослушан целиком</p>
+          <h2 class="album-title" id="selected-title">In Rainbows</h2><p class="artist" id="selected-artist">Radiohead · 2007</p>
+          <p class="description" id="selected-description">Субботний вечер без перемоток. От 15 Step до Videotape — один альбом, один непрерывный маршрут.</p>
+          <div class="facts"><div><strong id="selected-duration">42 мин</strong><small>в этой сессии</small></div><div><strong id="selected-tracks">10 из 10</strong><small>треков прослушано</small></div><div><strong id="selected-visits">4-й раз</strong><small>в этом месяце</small></div></div>
+          <div class="sessions-heading"><span id="sessions-title">Все прослушивания · 17 мая</span><span class="muted">по времени →</span></div>
+          <div class="sessions" id="sessions" aria-label="Альбомные сессии выбранного дня"></div>
+        </div>
+        <aside class="period-stats">
+          <p class="eyebrow" id="stats-period">Пульс недели</p><h3>Чаще всего звучали</h3><div id="ranking"></div>
+          <div class="genres" id="genres" role="img" aria-label="Доли жанров"></div><p class="genre-legend" id="genre-legend"></p>
+          <p class="note">Статистика относится ко всему периоду. Выбор обложки меняет только детали дня, не сводку.</p>
+        </aside>
+      </section>
+      <p class="note">Интерактивный мокап · вымышленные данные и условные CSS-обложки. История не собирается, API не вызывается, воспроизведение не запускается.</p>
+    </main>
+    <footer class="player" aria-label="Демонстрационный плеер">
+      <div class="now-playing"><div class="art mezzanine"></div><div><p>Teardrop</p><small>Massive Attack · Mezzanine</small></div></div>
+      <div class="transport"><span class="muted" aria-hidden="true">↶</span><button type="button" class="play" id="play" aria-label="Приостановить демо-плеер" aria-pressed="true">Ⅱ</button><span class="muted" aria-hidden="true">↷</span></div>
+      <div class="progress"><span>2:04</span><div class="progress-line"><i></i></div><span>5:30 · без звука</span></div>
+    </footer>
+    <script>
+      const albums = [
+        { title: "Dive", artist: "Tycho · 2011", art: "dive", minutes: 51, tracks: "10 из 10", visits: "1-й раз", description: "Первое знакомство с Dive. Тёплая электроника и медленный дневной ритм — альбом, который захотелось дослушать до конца." },
+        { title: "Spaces", artist: "Nils Frahm · 2013", art: "spaces", minutes: 44, tracks: "6 из 11", visits: "3-й раз", description: "Пауза посреди рабочего дня. Шесть композиций, фортепиано и немного пространства, чтобы перевести дыхание." },
+        { title: "Mezzanine", artist: "Massive Attack · 1998", art: "mezzanine", minutes: 63, tracks: "11 из 11", visits: "5-й раз", description: "Знакомый альбом, глубокий бас и приглушённый свет. Музыка, к которой хочется возвращаться." },
+        { title: "In Rainbows", artist: "Radiohead · 2007", art: "inrainbows", minutes: 42, tracks: "10 из 10", visits: "4-й раз", description: "Субботний вечер без перемоток. От 15 Step до Videotape — один альбом, один непрерывный маршрут." },
+        { title: "Black Focus", artist: "Yussef Kamaal · 2016", art: "moon", minutes: 39, tracks: "8 из 10", visits: "2-й раз", description: "Ломаный ритм и восемь треков, которые сделали этот день чуть менее сонным." },
+      ];
+      const totals = [210, 282, 318, 0, 342, 288, 324, 270, 0, 330, 372, 126, 108, 192, 210, 252, 98, 136];
+      const weekdayNames = ["Четверг", "Пятница", "Суббота", "Воскресенье", "Понедельник", "Вторник", "Среда"];
+      const shortWeekdays = ["Чт", "Пт", "Сб", "Вс", "Пн", "Вт", "Ср"];
+      const featured = [0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 2, 2, 3, 0, 1, 2, 3, 2];
+      const starts = [9 * 60 + 10, 14 * 60 + 32, 19 * 60 + 20];
+      const clock = minutes => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+      const duration = minutes => minutes >= 60 ? `${Math.floor(minutes / 60)} ч${minutes % 60 ? " " + minutes % 60 + " мин" : ""}` : `${minutes} мин`;
+      // Each day's demo sessions partition its total listening time.
+      const days = totals.map((total, index) => {
+        const album = featured[index];
+        const remainder = total - albums[album].minutes;
+        const minutes = total ? [Math.floor(remainder / 2), remainder - Math.floor(remainder / 2), albums[album].minutes] : [];
+        const sessions = minutes.map((value, session) => ({ album: session === 2 ? album : (album + session + 1) % albums.length, minutes: value, start: starts[session] }));
+        return { date: index + 1, weekday: weekdayNames[index % 7], short: shortWeekdays[index % 7], total, sessions };
+      });
+      days[16].sessions = [{ album: 1, minutes: 26, start: 9 * 60 + 10 }, { album: 4, minutes: 30, start: 14 * 60 + 32 }, { album: 3, minutes: 42, start: 19 * 60 + 20 }];
+      days[17].sessions = [{ album: 1, minutes: 44, start: 9 * 60 + 10 }, { album: 0, minutes: 51, start: 14 * 60 + 32 }, { album: 2, minutes: 41, start: 21 * 60 + 4 }];
+      let selectedDay = 16;
+      let selectedSession = 2;
+      const rail = document.getElementById("rail");
+      const text = (id, value) => { document.getElementById(id).textContent = value; };
+      const isWeek = () => document.getElementById("period").value === "week";
+      function renderDetails() {
+        const day = days[selectedDay];
+        const session = day.sessions[selectedSession];
+        const album = albums[session.album];
+        const complete = session.minutes >= album.minutes && album.tracks.split(" из ")[0] === album.tracks.split(" из ")[1];
+        const featuredSession = day.sessions.reduce((largest, current, index) => current.minutes > day.sessions[largest].minutes ? index : largest, 0);
+        document.getElementById("selected-art").className = "art selected-art " + album.art;
+        document.getElementById("selected-art").setAttribute("aria-label", "Условная обложка " + album.title);
+        text("selected-title", album.title);
+        text("selected-artist", album.artist);
+        text("selected-date", `${day.date} МАЯ / ${day.weekday.toUpperCase()}`);
+        text("selected-time", `${clock(session.start)} — ${clock(session.start + session.minutes)}`);
+        text("selected-label", `${selectedSession === featuredSession ? "Альбом дня" : "Прослушивание дня"} · ${complete ? "прослушан целиком" : "часть альбома"}`);
+        text("selected-description", session.minutes >= album.minutes ? album.description : "Часть знакомого альбома в течение дня. Время и треки ниже относятся только к выбранной сессии.");
+        text("selected-duration", duration(session.minutes));
+        text("selected-tracks", session.minutes >= album.minutes ? album.tracks : `${Math.max(1, Math.floor(session.minutes / 6))} треков`);
+        text("selected-visits", album.visits);
+        text("sessions-title", `Все прослушивания · ${day.date} мая`);
+        document.getElementById("sessions").innerHTML = day.sessions.map((item, index) => `<button type="button" class="session" data-session="${index}" aria-pressed="${index === selectedSession}"><div class="art ${albums[item.album].art}"></div><div><p>${albums[item.album].title}</p><small>${clock(item.start)} · ${duration(item.minutes)}</small></div></button>`).join("");
+        document.querySelectorAll("[data-day]").forEach(button => button.setAttribute("aria-pressed", String(Number(button.dataset.day) === selectedDay)));
+      }
+      function selectDay(index) {
+        if (!days[index].sessions.length) return;
+        selectedDay = index;
+        selectedSession = days[index].sessions.reduce((largest, session, current) => session.minutes > days[index].sessions[largest].minutes ? current : largest, 0);
+        renderDetails();
+      }
+      function renderPeriod() {
+        const week = isWeek();
+        const visible = week ? days.slice(11) : days;
+        if (week && selectedDay < 11) { selectedDay = 16; selectedSession = 2; }
+        text("total-time", week ? "18 ч 42 мин" : "64 ч 18 мин");
+        text("total-plays", week ? "246" : "892");
+        text("total-artists", week ? "32" : "68");
+        text("total-albums", week ? "12" : "37");
+        text("comparison", week ? "+23% к прошлой неделе" : "+12% к 1–18 апреля");
+        text("unique", week ? "183 разных трека" : "514 разных треков");
+        text("discoveries", week ? "8 новых открытий" : "21 новое открытие");
+        text("active-days", week ? "7 дней из 7 с музыкой" : "16 дней из 18 с музыкой");
+        text("timeline-range", `${week ? "12" : "1"}–18 мая · от прошлого к настоящему`);
+        text("stats-period", week ? "Пульс недели" : "Пульс месяца");
+        document.getElementById("days").innerHTML = visible.map(day => {
+          const largest = day.sessions.reduce((result, session, index) => session.minutes > (day.sessions[result]?.minutes || 0) ? index : result, 0);
+          const album = albums[day.sessions[largest]?.album ?? featured[day.date - 1]];
+          const rear = albums[day.sessions[0]?.album ?? 0];
+          return `<button type="button" class="day" data-day="${day.date - 1}" aria-pressed="${selectedDay === day.date - 1}" ${day.total ? "" : "disabled"} aria-label="${day.date} мая, ${day.weekday}, ${duration(day.total)}${day.total ? ", " + album.title : ", без прослушиваний"}"><div class="date">${day.date} мая <span>${day.short}</span></div><div class="covers">${day.total ? `<div class="art rear ${rear.art}"></div><div class="art front ${album.art}"></div>` : '<div class="art front" style="background: #20272d"></div>'}</div><h3>${day.total ? album.title : "Тихий день"}</h3><i class="dot"></i><small>${duration(day.total)} · ${day.sessions.length} сессии</small><div class="daily-pulse" aria-hidden="true">${day.sessions.map(session => `<i style="--height:${session.minutes / 180 * 30}px"></i>`).join("")}</div></button>`;
+        }).join("");
+        const ranks = week ? ["3 ч 24 мин", "2 ч 18 мин", "1 ч 52 мин"] : ["11 ч 12 мин", "8 ч 05 мин", "6 ч 41 мин"];
+        document.getElementById("ranking").innerHTML = [2, 3, 1].map((index, rank) => `<div class="rank"><div class="art ${albums[index].art}"></div><p>${albums[index].artist.split(" · ")[0]}</p><small>${ranks[rank]}</small></div>`).join("");
+        const genres = week ? [38, 27, 21, 14] : [32, 31, 23, 14];
+        document.getElementById("genres").innerHTML = genres.map((value, index) => `<i style="width:${value}%;background:${["#c3dbc1", "#91b5b3", "#b9b297", "#8d9bb6"][index]}"></i>`).join("");
+        const legend = `Электроника ${genres[0]}% · Альтернатива ${genres[1]}% · Неоклассика ${genres[2]}% · Джаз и другое ${genres[3]}%`;
+        text("genre-legend", legend);
+        document.getElementById("genres").setAttribute("aria-label", legend);
+        renderDetails();
+        requestAnimationFrame(() => {
+          const selected = document.querySelector(`[data-day="${selectedDay}"]`);
+          rail.scrollLeft = Math.max(0, selected.offsetLeft - rail.offsetLeft - (rail.clientWidth - selected.clientWidth) / 2);
+          updateArrows();
+        });
+      }
+      function updateArrows() {
+        document.getElementById("previous").disabled = rail.scrollLeft <= 1;
+        document.getElementById("next").disabled = rail.scrollLeft + rail.clientWidth >= rail.scrollWidth - 1;
+      }
+      const scrollRail = direction => rail.scrollBy({ left: direction * Math.max(150, rail.clientWidth * .7), behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+      document.getElementById("previous").addEventListener("click", () => scrollRail(-1));
+      document.getElementById("next").addEventListener("click", () => scrollRail(1));
+      rail.addEventListener("scroll", updateArrows);
+      window.addEventListener("resize", updateArrows);
+      rail.addEventListener("keydown", event => {
+        if (event.target === rail && ["ArrowLeft", "ArrowRight"].includes(event.key)) {
+          event.preventDefault();
+          scrollRail(event.key === "ArrowLeft" ? -1 : 1);
+        }
+      });
+      document.getElementById("days").addEventListener("click", event => {
+        const button = event.target.closest("[data-day]");
+        if (button) selectDay(Number(button.dataset.day));
+      });
+      document.getElementById("sessions").addEventListener("click", event => {
+        const button = event.target.closest("[data-session]");
+        if (button) {
+          selectedSession = Number(button.dataset.session);
+          renderDetails();
+          document.querySelector(`[data-session="${selectedSession}"]`).focus({ preventScroll: true });
+        }
+      });
+      document.getElementById("period").addEventListener("change", renderPeriod);
+      document.getElementById("play").addEventListener("click", event => {
+        const button = event.currentTarget;
+        const playing = button.getAttribute("aria-pressed") !== "true";
+        button.setAttribute("aria-pressed", String(playing));
+        button.setAttribute("aria-label", playing ? "Приостановить демо-плеер" : "Продолжить демо-плеер");
+        button.textContent = playing ? "Ⅱ" : "▶";
+      });
+      renderPeriod();
+    </script>
+  </body>
+</html>

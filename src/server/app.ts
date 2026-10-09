@@ -33,6 +33,7 @@ import { AutoScanScheduler } from "./auto-scan-scheduler.js";
 import { readScanSettings } from "./scan-settings.js";
 import { scanSettingsSchema } from "../shared/scan-settings.js";
 import { recoverySettingsSchema } from "../shared/recovery-settings.js";
+import { registerPulseRoutes } from "./pulse-routes.js";
 import {
   pathTemplatePatternSchema,
   playlistEntryInputSchema,
@@ -502,7 +503,10 @@ export async function createApp(options: {
     const id = z
       .object({ id: z.string().regex(/^[a-f0-9]{64}\.(jpg|png)$/) })
       .parse(request.params).id;
-    const file = path.join(service.dataDir, "covers", id);
+    const current = path.join(service.dataDir, "covers", id);
+    const file = existsSync(current)
+      ? current
+      : path.join(service.dataDir, "pulse-covers", id);
     if (!existsSync(file)) return reply.code(404).send();
     return reply
       .header("Cache-Control", "private, max-age=86400")
@@ -1091,6 +1095,7 @@ export async function createApp(options: {
     };
   });
   const clientDir = fileURLToPath(new URL("../client", import.meta.url));
+  registerPulseRoutes(app, service.catalog.pulse);
   if (existsSync(path.join(clientDir, "index.html")))
     await app.register(staticFiles, { root: clientDir });
   app.addHook("preClose", async () => {

@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>HARBOR — история прослушиваний · три концепции</title>
+    <style>
+      @import url("../../src/client/fonts.css");
+      :root {
+        font-family: "Fira Sans Condensed", "Arial Narrow", sans-serif;
+        color-scheme: dark;
+        color: #dce0e2;
+        background: #171c21;
+        --accent: #c3dbc1;
+        --muted: #929fa7;
+        --line: #ffffff10;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; }
+      button, select { font: inherit; color: inherit; }
+      button { cursor: pointer; background: none; border: 0; }
+      button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible {
+        outline: 2px solid var(--accent); outline-offset: 4px;
+      }
+      button:hover { color: var(--accent); }
+      h1, h2, h3, p { margin: 0; }
+      h1 { font-size: 38px; font-weight: 500; letter-spacing: -.8px; }
+      h2 { font-size: 22px; font-weight: 500; }
+      h3 { font-size: 18px; font-weight: 500; }
+      small, .muted { color: var(--muted); }
+      .eyebrow { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); }
+      .lab { padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; background: #101519; border-bottom: 1px solid var(--line); }
+      .lab-title { font-size: 13px; color: var(--muted); }
+      .lab-title b { color: var(--accent); font-weight: 500; margin-right: 12px; letter-spacing: 1px; }
+      .switcher { display: flex; gap: 4px; background: #20272d; padding: 4px; border-radius: 8px; }
+      .switcher button { padding: 7px 16px; border-radius: 5px; font-size: 14px; }
+      .switcher button[aria-pressed="true"] { background: var(--accent); color: #18231b; }
+      .topbar { height: 64px; display: flex; justify-content: space-between; align-items: center; padding: 0 32px; border-bottom: 1px solid var(--line); position: relative; }
+      .brand { width: 116px; height: 24px; opacity: .75; position: absolute; left: 50%; transform: translateX(-50%); }
+      .back { font-size: 14px; color: var(--muted); text-decoration: none; }
+      .badge { font-size: 12px; color: var(--accent); background: #c3dbc110; padding: 5px 10px; border-radius: 20px; }
+      main { max-width: 1336px; margin: auto; padding: 36px 48px 120px; }
+      .heading { display: flex; justify-content: space-between; align-items: end; gap: 24px; margin-bottom: 30px; }
+      .heading .eyebrow { margin-bottom: 8px; }
+      .subtitle { color: var(--muted); margin-top: 8px; font-size: 16px; }
+      .period { display: flex; align-items: center; gap: 10px; }
+      .period select { background: #22292f; border: 1px solid #ffffff18; border-radius: 6px; padding: 9px 12px; }
+      .period-label { font-size: 13px; color: var(--muted); }
+      .metrics { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-bottom: 32px; }
+      .metric { padding: 20px 24px; border-right: 1px solid var(--line); }
+      .metric:first-child { padding-left: 0; }
+      .metric:last-child { border-right: 0; }
+      .metric strong { font-size: 34px; font-weight: 400; display: block; margin: 3px 0 6px; font-variant-numeric: tabular-nums; }
+      .metric strong span { font-size: 20px; color: var(--muted); }
+      .metric small { font-size: 13px; }
+      .positive { color: var(--accent); }
+      .columns { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(260px, 1fr); gap: 46px; }
+      .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+      .section-heading small { font-size: 13px; }
+      .day-label { display: flex; align-items: center; gap: 12px; font-size: 15px; margin-bottom: 20px; }
+      .day-label::after { content: ""; height: 1px; flex: 1; background: var(--line); }
+      .day-label span { color: var(--muted); }
+      .session { position: relative; border-left: 1px solid #ffffff18; padding: 0 0 26px 26px; margin-left: 5px; }
+      .session::before { content: ""; position: absolute; left: -4px; top: 6px; width: 7px; height: 7px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 0 5px #171c21; }
+      .session-meta { color: var(--muted); font-size: 13px; margin-bottom: 12px; display: flex; gap: 12px; align-items: center; }
+      .live { color: var(--accent); }
+      .session-card { background: #20272d; border: 1px solid var(--line); border-radius: 9px; padding: 17px; }
+      .album-row { display: flex; align-items: center; gap: 16px; }
+      .album-info { flex: 1; min-width: 0; }
+      .album-info p { margin-top: 4px; color: var(--muted); font-size: 14px; }
+      .tag { display: inline-block; color: var(--accent); background: #c3dbc10d; border: 1px solid #c3dbc120; border-radius: 4px; padding: 3px 7px; font-size: 11px; margin-top: 10px; }
+      .art { position: relative; width: 70px; aspect-ratio: 1; flex-shrink: 0; overflow: hidden; background: #283744; box-shadow: 0 8px 24px #0003; }
+      .art::before, .art::after { content: ""; position: absolute; }
+      .art.mezzanine { background: radial-gradient(ellipse at 50% 70%, #6d7269 0, #282d28 25%, #121712 55%); }
+      .art.mezzanine::before { width: 33%; height: 65%; background: #0a0c09; border: 1px solid #6b786355; border-radius: 46%; left: 34%; top: 20%; transform: rotate(-22deg); }
+      .art.mezzanine::after { width: 80%; height: 35%; border-top: 2px solid #76826b; border-bottom: 1px solid #76826b; left: 10%; top: 40%; transform: rotate(25deg); }
+      .art.dive { background: linear-gradient(155deg, #e1a987 0%, #c99d8c 24%, #7e9599 25%, #546d79 55%, #233d51 56%, #152b3d); }
+      .art.dive::before { width: 130%; height: 25%; left: -15%; top: 49%; background: #d4d1ba44; transform: rotate(-12deg); filter: blur(6px); }
+      .art.spaces { background: repeating-linear-gradient(75deg, transparent 0 7%, #cad6c71c 7% 8%), linear-gradient(120deg, #1e3033, #73928a); }
+      .art.spaces::before { inset: 20%; border: 1px solid #dbe7d27a; transform: rotate(25deg); }
+      .art.inrainbows { background: radial-gradient(ellipse at 20% 0, #f5ba5c, transparent 45%), radial-gradient(ellipse at 80% 70%, #a32d21, transparent 50%), repeating-linear-gradient(30deg, #be6938 0 3%, #40212a 4% 9%); }
+      .art.inrainbows::after { content: "IN / RAINBOWS"; top: 40%; left: 10%; color: #f1e9c6; font-size: 9px; letter-spacing: 1px; }
+      .art.moon { background: radial-gradient(circle at 45% 45%, #d9d9c9 0 20%, #869896 21%, #1b3a46 50%, #10232b); }
+      .art.moon::before { inset: 10%; border: 1px solid #ffffff30; border-radius: 50%; }
+      .art.large { width: 100%; border-radius: 2px; }
+      .art.large.inrainbows::after { font-size: 32px; }
+      .tracks { margin-top: 15px; padding-top: 8px; border-top: 1px solid var(--line); }
+      .track { display: grid; grid-template-columns: 20px 1fr auto; gap: 10px; padding: 7px 0; font-size: 14px; }
+      .track span:first-child, .track span:last-child { color: var(--muted); font-size: 12px; }
+      details { margin-top: 12px; }
+      summary { color: var(--muted); font-size: 13px; cursor: pointer; }
+      .aside-block { margin-bottom: 28px; }
+      .aside-block h3 { margin-bottom: 16px; }
+      .week-bars { height: 100px; display: flex; align-items: end; gap: 12px; margin-bottom: 12px; }
+      .week-day { flex: 1; text-align: center; font-size: 12px; color: var(--muted); }
+      .week-day i { display: block; height: var(--height); background: #789489; border-radius: 3px 3px 0 0; margin-bottom: 8px; }
+      .week-day:last-child i { background: var(--accent); }
+      .insight { padding: 20px; border: 1px solid #c3dbc124; background: linear-gradient(130deg, #c3dbc10c, transparent); border-radius: 8px; }
+      .insight p { font-size: 17px; line-height: 1.5; margin: 8px 0; }
+      .ranking { display: grid; grid-template-columns: 20px 42px 1fr auto; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+      .ranking .art { width: 42px; }
+      .ranking p { font-size: 15px; }
+      .ranking small { display: block; font-size: 12px; margin-top: 3px; }
+      .rank { color: var(--muted); font-size: 13px; }
+      .chart-panel { background: #1d242a; border: 1px solid var(--line); border-radius: 10px; padding: 24px; }
+      .activity-chart { height: 150px; display: flex; gap: 6px; align-items: end; margin-top: 28px; border-bottom: 1px solid #ffffff20; }
+      .activity-chart div { flex: 1; height: var(--height); background: #8aa597; border-radius: 3px 3px 0 0; }
+      .activity-chart div:nth-child(7n) { background: var(--accent); }
+      .axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 10px; }
+      .stats-bottom { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; margin-top: 26px; }
+      .genre { margin-top: 18px; }
+      .genre-label { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 7px; }
+      .genre-bar { height: 5px; background: #ffffff09; border-radius: 5px; }
+      .genre-bar i { display: block; width: var(--width); height: 100%; background: var(--color, #c3dbc1); border-radius: inherit; }
+      .discovery-count { font-size: 64px; font-weight: 400; margin: 14px 0 4px; color: var(--accent); }
+      .mini-covers { display: flex; gap: 10px; margin: 22px 0 14px; }
+      .mini-covers .art { width: 56px; }
+      .editorial { display: grid; grid-template-columns: 1fr 1.05fr; align-items: center; gap: 64px; margin-top: 36px; }
+      .editorial-cover { position: relative; padding: 16px 30px 30px 0; }
+      .editorial-cover::before { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse, #8c714c44, transparent 70%); filter: blur(30px); }
+      .editorial-cover .art { max-width: 430px; margin: auto; }
+      .cover-caption { display: flex; justify-content: space-between; padding-top: 16px; max-width: 430px; margin: auto; color: var(--muted); font-size: 12px; letter-spacing: 1px; }
+      .editorial h2 { font-size: 58px; font-weight: 400; letter-spacing: -1px; margin: 12px 0 6px; }
+      .editorial .artist { font-size: 24px; color: var(--muted); }
+      .editorial .description { font-size: 19px; color: #b1bdc2; line-height: 1.6; max-width: 410px; margin: 24px 0; }
+      .editorial-facts { display: flex; gap: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
+      .editorial-facts strong { font-size: 24px; font-weight: 400; display: block; margin-bottom: 4px; }
+      .shelf { margin-top: 34px; border-top: 1px solid var(--line); padding-top: 24px; }
+      .shelf-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 24px; }
+      .shelf-item { text-align: left; padding: 0; }
+      .shelf-item .art { width: 100%; aspect-ratio: 1.7; margin-bottom: 10px; opacity: .8; transition: opacity .2s; }
+      .shelf-item:hover .art, .shelf-item[aria-pressed="true"] .art { opacity: 1; }
+      .shelf-item[aria-pressed="true"] { color: var(--accent); }
+      .shelf-item small { display: block; margin-top: 4px; }
+      .player { position: fixed; bottom: 0; left: 0; right: 0; display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; gap: 24px; padding: 15px 32px; background: #13191ff5; backdrop-filter: blur(20px); border-top: 1px solid #ffffff16; z-index: 2; }
+      .player .art { width: 44px; }
+      .player-title p { font-size: 14px; }
+      .player-title small { font-size: 12px; }
+      .transport { display: flex; align-items: center; justify-content: center; gap: 22px; }
+      .play { width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: #15231b; }
+      .progress-area { display: flex; align-items: center; justify-content: end; gap: 12px; font-size: 12px; color: var(--muted); }
+      .progress { width: 180px; height: 3px; background: #ffffff20; }
+      .progress i { display: block; width: 37%; height: 100%; background: var(--accent); }
+      .note { margin-top: 24px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+      [hidden] { display: none !important; }
+      @media (min-width: 1500px) { main { padding-top: 46px; } }
+      @media (max-width: 900px) {
+        main { padding: 28px 24px 120px; }
+        .columns { gap: 24px; grid-template-columns: minmax(0, 1.5fr) minmax(240px, 1fr); }
+        .stats-bottom { grid-template-columns: 1fr 1fr; }
+        .stats-bottom > :last-child { grid-column: 1 / -1; }
+        .editorial { gap: 28px; }
+        .editorial h2 { font-size: 42px; }
+        .editorial .description { font-size: 17px; }
+        .shelf-grid { gap: 14px; }
+        .progress { width: 80px; }
+      }
+      @media (max-width: 640px) {
+        .lab { align-items: stretch; flex-direction: column; padding: 12px 16px; }
+        .switcher button { flex: 1; padding-inline: 8px; }
+        .topbar { padding: 12px 16px; height: auto; display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+        .brand { width: 86px; position: static; transform: none; grid-row: 1; grid-column: 1; }
+        .back { font-size: 12px; grid-row: 2; grid-column: 1 / -1; }
+        .badge { font-size: 10px; padding: 4px 6px; grid-row: 1; grid-column: 2; }
+        main { padding: 24px 16px 105px; }
+        .heading { align-items: start; flex-direction: column; gap: 18px; }
+        h1 { font-size: 32px; }
+        .metrics { grid-template-columns: 1fr 1fr; }
+        .metric { padding: 14px !important; }
+        .metric:nth-child(2) { border-right: 0; }
+        .metric:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+        .metric strong { font-size: 28px; }
+        .columns, .stats-bottom, .editorial { grid-template-columns: 1fr; gap: 28px; }
+        .stats-bottom > :last-child { grid-column: auto; }
+        .session { padding-left: 16px; }
+        .session-card { padding: 12px; }
+        .editorial { margin-top: 0; }
+        .editorial-cover { padding: 0; }
+        .editorial-cover .art { max-width: 330px; }
+        .editorial h2 { font-size: 46px; }
+        .editorial-facts { gap: 24px; }
+        .shelf-grid { grid-template-columns: repeat(2, 1fr); }
+        .player { padding: 12px 16px; grid-template-columns: 1fr auto; gap: 12px; }
+        .player .album-row { gap: 10px; }
+        .transport { gap: 10px; }
+        .progress-area { display: none; }
+        .chart-panel { padding: 18px; }
+        .activity-chart { gap: 4px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="lab">
+      <div class="lab-title"><b>DESIGN LAB / 01</b> История прослушиваний · выбери концепцию</div>
+      <nav class="switcher" aria-label="Вариант дизайна">
+        <button type="button" data-view="timeline" aria-pressed="true">A · Лента</button>
+        <button type="button" data-view="pulse" aria-pressed="false">B · Пульс</button>
+        <button type="button" data-view="journal" aria-pressed="false">C · Дневник</button>
+      </nav>
+    </header>
+    <div class="topbar">
+      <a class="back" href="settings-panels.html">← Другой мокап: настройки</a>
+      <img class="brand" src="../../assets/HARBOR.svg" alt="HARBOR">
+      <span class="badge">Мокап · вымышленные данные</span>
+    </div>
+    <main>
+      <div class="heading">
+        <div>
+          <p class="eyebrow" id="view-eyebrow">Твоя музыка, день за днём</p>
+          <h1 id="view-title">История прослушиваний</h1>
+          <p class="subtitle" id="view-subtitle">Не просто список треков. Маленькая хронология твоего дня.</p>
+        </div>
+        <div class="period">
+          <label class="period-label" for="period">Период</label>
+          <select id="period">
+            <option value="week">Эта неделя · 12–18 мая</option>
+            <option value="month">Этот месяц · май</option>
+          </select>
+        </div>
+      </div>
+      <section class="metrics" aria-label="Сводка выбранного периода">
+        <div class="metric"><small>Время с музыкой</small><strong id="metric-time">18 <span>ч</span> 42 <span>мин</span></strong><small class="positive" id="metric-comparison">+23% к прошлой неделе</small></div>
+        <div class="metric"><small>Прослушиваний</small><strong id="metric-plays">246</strong><small id="metric-unique">183 разных трека</small></div>
+        <div class="metric"><small>Исполнителей</small><strong id="metric-artists">32</strong><small id="metric-new">8 открыты впервые</small></div>
+        <div class="metric"><small>Альбомов целиком</small><strong id="metric-albums">12</strong><small id="metric-days">Музыка каждый день · 7 из 7</small></div>
+      </section>
+
+      <section id="timeline" aria-label="Концепция A: лента">
+        <div class="columns">
+          <div>
+            <div class="section-heading"><h2>Лента прослушиваний</h2><small>По сессиям · от новых к старым</small></div>
+            <div class="day-label">Воскресенье, 18 мая <span>Сегодня · 2 ч 16 мин</span></div>
+            <article class="session">
+              <div class="session-meta"><span>21:04 — сейчас</span><span class="live">● Вечерняя сессия</span></div>
+              <div class="session-card">
+                <div class="album-row"><div class="art mezzanine" role="img" aria-label="Условная обложка Mezzanine"></div><div class="album-info"><h3>Mezzanine</h3><p>Massive Attack · 1998</p><span class="tag">Вернулся спустя 12 дней</span></div><small>3 трека</small></div>
+                <div class="tracks">
+                  <div class="track"><span>01</span><span>Angel</span><span>6:19</span></div>
+                  <div class="track"><span>02</span><span>Risingson</span><span>4:58</span></div>
+                </div>
+                <details><summary>Teardrop · сейчас играет ↓</summary><div class="track"><span>03</span><span>Teardrop</span><span>5:30</span></div></details>
+              </div>
+            </article>
+            <article class="session">
+              <div class="session-meta"><span>14:32 — 15:23</span><span>51 мин · альбом целиком</span></div>
+              <div class="session-card"><div class="album-row"><div class="art dive" role="img" aria-label="Условная обложка Dive"></div><div class="album-info"><h3>Dive</h3><p>Tycho · 2011</p><span class="tag">Первое прослушивание</span></div><small>10 треков</small></div><details><summary>Посмотреть треки сессии</summary><div class="tracks"><div class="track"><span>01</span><span>A Walk</span><span>5:16</span></div><div class="track"><span>02</span><span>Hours</span><span>5:44</span></div><p class="note">В мокапе показаны 2 из 10 треков.</p></div></details></div>
+            </article>
+            <article class="session">
+              <div class="session-meta"><span>09:10 — 09:54</span><span>Утро · 44 мин</span></div>
+              <div class="session-card"><div class="album-row"><div class="art spaces" role="img" aria-label="Условная обложка Spaces"></div><div class="album-info"><h3>Spaces</h3><p>Nils Frahm · 2013</p></div><small>6 треков</small></div></div>
+            </article>
+            <div class="day-label">Суббота, 17 мая <span>1 ч 38 мин</span></div>
+            <article class="session"><div class="session-meta">19:20 — 20:02 · альбом целиком</div><div class="session-card"><div class="album-row"><div class="art inrainbows" role="img" aria-label="Условная обложка In Rainbows"></div><div class="album-info"><h3>In Rainbows</h3><p>Radiohead · 2007</p></div><small>10 треков</small></div></div></article>
+          </div>
+          <aside>
+            <div class="aside-block"><div class="section-heading"><h3>Ритм недели</h3><small>часы / день</small></div><div class="week-bars" id="week-bars"></div><small>Больше всего музыки — в пятницу: 4 ч 12 мин.</small></div>
+            <div class="aside-block insight"><p class="eyebrow">На повторе</p><p>Эта неделя звучит как<br><strong>Massive Attack.</strong></p><small>3 ч 24 мин · 18% времени с музыкой</small></div>
+            <div class="aside-block"><h3>Чаще всего возвращался</h3><div id="timeline-ranking"></div></div>
+            <p class="note" id="timeline-scope">Показаны последние 2 дня недели. В рабочей версии лента подгружается по мере прокрутки.</p>
+          </aside>
+        </div>
+      </section>
+
+      <section id="pulse" aria-label="Концепция B: пульс" hidden>
+        <div class="chart-panel">
+          <div class="section-heading"><div><p class="eyebrow" style="margin-bottom: 8px">Музыка в твоём расписании</p><h2>Активность прослушиваний</h2></div><small id="chart-caption">12–18 мая · часы в день</small></div>
+          <div class="activity-chart" id="activity-chart" role="img" aria-label="Активность по дням"></div>
+          <div class="axis" id="chart-axis"></div>
+        </div>
+        <div class="stats-bottom">
+          <div class="chart-panel"><div class="section-heading"><h3>Твои исполнители</h3><small>по времени</small></div><div id="pulse-ranking"></div></div>
+          <div class="chart-panel"><div class="section-heading"><h3>Палитра жанров</h3><small>доля времени</small></div><div id="genres"></div><p class="note">Жанр берётся из тегов библиотеки. Здесь для каждого прослушивания выбран один основной жанр.</p></div>
+          <div class="chart-panel"><p class="eyebrow">За пределами привычного</p><div class="discovery-count" id="discovery-count">8</div><h3>новых исполнителей</h3><p class="subtitle">Впервые в твоей истории</p><div class="mini-covers"><div class="art dive"></div><div class="art spaces"></div><div class="art moon"></div></div><p class="muted">Tycho, Nils Frahm, Yussef Dayes<br>и ещё <span id="discovery-rest">5</span></p><p class="note">«Новый» — первое прослушивание за всё время ведения истории, не дата добавления в библиотеку.</p></div>
+        </div>
+      </section>
+
+      <section id="journal" aria-label="Концепция C: дневник" hidden>
+        <div class="editorial">
+          <div class="editorial-cover"><div class="art large inrainbows" id="journal-art" role="img" aria-label="Условная обложка In Rainbows"></div><div class="cover-caption"><span id="journal-date">17 МАЯ / СУББОТА</span><span>АЛЬБОМ ДНЯ</span></div></div>
+          <div>
+            <p class="eyebrow">Музыка, к которой возвращаешься</p>
+            <h2 id="journal-album">In Rainbows</h2><p class="artist" id="journal-artist">Radiohead · 2007</p>
+            <p class="description" id="journal-description">Субботний вечер без перемоток. От 15 Step до Videotape — один альбом, один непрерывный маршрут.</p>
+            <div class="editorial-facts"><div><strong id="journal-duration">42 мин</strong><small>время с альбомом</small></div><div><strong id="journal-tracks">10 из 10</strong><small>треков прослушано</small></div><div><strong id="journal-visits">4-й раз</strong><small>в этом месяце</small></div></div>
+            <p class="note">Альбом дня — тот, которому ты уделил больше всего времени. Обложка и история меняются по нажатию на карточку ниже.</p>
+          </div>
+        </div>
+        <div class="shelf"><div class="section-heading"><h2 id="shelf-title">Пять дней, пять настроений</h2><small>Выбери день</small></div><div class="shelf-grid" id="journal-shelf"></div></div>
+      </section>
+      <p class="note">Дизайн-прототип: переключение концепций, периода и альбома работает локально. Это не реальная история аккаунта. Обложки — условные графические заглушки.</p>
+    </main>
+    <footer class="player" aria-label="Демонстрационный плеер">
+      <div class="album-row"><div class="art mezzanine"></div><div class="player-title"><p>Teardrop</p><small>Massive Attack · Mezzanine</small></div></div>
+      <div class="transport"><span class="muted" aria-hidden="true">↶</span><button class="play" type="button" id="play" aria-label="Приостановить демо-плеер" aria-pressed="true">Ⅱ</button><span class="muted" aria-hidden="true">↷</span></div>
+      <div class="progress-area"><span>2:04</span><div class="progress"><i></i></div><span>5:30</span><span> · Демо, без звука</span></div>
+    </footer>
+    <script>
+      const views = {
+        timeline: ["Твоя музыка, день за днём", "История прослушиваний", "Не просто список треков. Маленькая хронология твоего дня."],
+        pulse: ["У каждого слушателя свой ритм", "Твой музыкальный пульс", "Что звучало чаще. Что открылось впервые. Как прошёл твой месяц."],
+        journal: ["Личная коллекция моментов", "Музыкальный дневник", "Дни проходят. Музыка остаётся."],
+      };
+      const profiles = {
+        week: { time: '18 <span>ч</span> 42 <span>мин</span>', plays: 246, unique: 183, artists: 32, discoveries: 8, albums: 12, days: "7 из 7", comparison: "+23% к прошлой неделе", chart: [2.1, 1.8, 3.2, 3.5, 4.2, 98 / 60, 136 / 60], labels: ["12 мая", "13", "14", "15", "16", "17", "18 мая"], ranks: ["3 ч 24 мин", "2 ч 18 мин", "1 ч 52 мин"], genres: [38, 27, 21, 14] },
+        month: { time: '64 <span>ч</span> 18 <span>мин</span>', plays: 892, unique: 514, artists: 68, discoveries: 21, albums: 37, days: "16 из 18", comparison: "+12% к 1–18 апреля", chart: [3.5, 4.7, 5.3, 0, 5.7, 4.8, 5.4, 4.5, 0, 5.5, 6.2, 2.1, 1.8, 3.2, 3.5, 4.2, 98 / 60, 136 / 60], labels: ["1 мая", "5", "10", "15", "18 мая"], ranks: ["11 ч 12 мин", "8 ч 05 мин", "6 ч 41 мин"], genres: [32, 31, 23, 14] },
+      };
+      const artists = [["Massive Attack", "mezzanine"], ["Radiohead", "inrainbows"], ["Nils Frahm", "spaces"]];
+      const albums = [
+        { name: "Dive", artist: "Tycho · 2011", art: "dive", date: "14 МАЯ / СРЕДА", label: "Ср, 14 мая", duration: "51 мин", tracks: "10 из 10", visits: "1-й раз", text: "Первое знакомство с Dive. Тёплая электроника и медленный дневной ритм — альбом, который захотелось дослушать до конца." },
+        { name: "Spaces", artist: "Nils Frahm · 2013", art: "spaces", date: "15 МАЯ / ЧЕТВЕРГ", label: "Чт, 15 мая", duration: "44 мин", tracks: "6 из 11", visits: "3-й раз", text: "Пауза посреди рабочего дня. Шесть композиций, фортепиано и немного пространства, чтобы перевести дыхание." },
+        { name: "Mezzanine", artist: "Massive Attack · 1998", art: "mezzanine", date: "16 МАЯ / ПЯТНИЦА", label: "Пт, 16 мая", duration: "63 мин", tracks: "11 из 11", visits: "5-й раз", text: "Самый музыкальный день недели закончился знакомым альбомом. Глубокий бас, приглушённый свет и никаких случайных треков." },
+        { name: "In Rainbows", artist: "Radiohead · 2007", art: "inrainbows", date: "17 МАЯ / СУББОТА", label: "Сб, 17 мая", duration: "42 мин", tracks: "10 из 10", visits: "4-й раз", text: "Субботний вечер без перемоток. От 15 Step до Videotape — один альбом, один непрерывный маршрут." },
+        { name: "Black Focus", artist: "Yussef Kamaal · 2016", art: "moon", date: "18 МАЯ / ВОСКРЕСЕНЬЕ", label: "Вс, 18 мая", duration: "39 мин", tracks: "8 из 10", visits: "2-й раз", text: "Воскресенье с новым любимым джазом. Ломаный ритм и восемь треков, которые сделали утро чуть менее сонным." },
+      ];
+      const setText = (id, text) => { document.getElementById(id).textContent = text; };
+      function selectView(view) {
+        if (!views[view]) view = "timeline";
+        for (const key of Object.keys(views)) document.getElementById(key).hidden = key !== view;
+        document.querySelectorAll("[data-view]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.view === view)));
+        ["view-eyebrow", "view-title", "view-subtitle"].forEach((id, index) => setText(id, views[view][index]));
+        history.replaceState(null, "", "#" + view);
+      }
+      document.querySelectorAll("[data-view]").forEach(button => button.addEventListener("click", () => selectView(button.dataset.view)));
+      window.addEventListener("hashchange", () => selectView(location.hash.slice(1)));
+      function renderPeriod() {
+        const week = document.getElementById("period").value === "week";
+        const profile = profiles[week ? "week" : "month"];
+        document.getElementById("metric-time").innerHTML = profile.time;
+        setText("metric-plays", profile.plays);
+        setText("metric-unique", profile.unique + " разных трека");
+        setText("metric-artists", profile.artists);
+        setText("metric-new", profile.discoveries + " открыты впервые");
+        setText("metric-albums", profile.albums);
+        setText("metric-days", "Дней с музыкой · " + profile.days);
+        setText("metric-comparison", profile.comparison);
+        setText("discovery-count", profile.discoveries);
+        setText("discovery-rest", profile.discoveries - 3);
+        setText("chart-caption", week ? "12–18 мая · часы в день" : "1–18 мая · неполный месяц · часы в день");
+        setText("timeline-scope", "Показаны последние 2 дня " + (week ? "недели" : "месяца") + ". В рабочей версии лента подгружается по мере прокрутки.");
+        setText("shelf-title", week ? "Пять дней, пять настроений" : "Пять последних дней мая");
+        const chartMax = week ? 6 : 8;
+        document.getElementById("activity-chart").innerHTML = profile.chart.map((value, index) => `<div style="--height:${value / chartMax * 100}%" title="${week ? index + 12 : index + 1} мая: ${value.toFixed(1)} ч"></div>`).join("");
+        document.getElementById("activity-chart").setAttribute("aria-label", profile.chart.map((value, index) => `${week ? index + 12 : index + 1} мая: ${value.toFixed(1)} часа`).join("; "));
+        document.getElementById("chart-axis").innerHTML = profile.labels.map(label => `<span>${label}</span>`).join("");
+        const ranking = artists.map(([name, art], index) => `<div class="ranking"><span class="rank">0${index + 1}</span><div class="art ${art}"></div><div><p>${name}</p><small>${index === 0 ? "Чаще всего в твоих наушниках" : "В личном топе"}</small></div><small>${profile.ranks[index]}</small></div>`).join("");
+        document.getElementById("pulse-ranking").innerHTML = ranking;
+        document.getElementById("timeline-ranking").innerHTML = ranking;
+        document.getElementById("genres").innerHTML = ["Электроника", "Альтернатива", "Неоклассика", "Джаз и другое"].map((genre, index) => `<div class="genre"><div class="genre-label"><span>${genre}</span><span class="muted">${profile.genres[index]}%</span></div><div class="genre-bar"><i style="--width:${profile.genres[index]}%;--color:${["#c3dbc1", "#91b5b3", "#b9b297", "#8d9bb6"][index]}"></i></div></div>`).join("");
+        const insight = document.querySelector(".insight");
+        insight.querySelector("p:not(.eyebrow)").innerHTML = `${week ? "Эта неделя" : "Этот месяц"} звучит как<br><strong>Massive Attack.</strong>`;
+        insight.querySelector("small").textContent = profile.ranks[0] + " · " + (week ? "18%" : "17%") + " времени с музыкой";
+      }
+      document.getElementById("period").addEventListener("change", renderPeriod);
+      document.getElementById("week-bars").innerHTML = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((label, index) => `<div class="week-day"><i style="--height:${profiles.week.chart[index] * 18}px" title="${profiles.week.chart[index].toFixed(1)} ч"></i>${label}</div>`).join("");
+      function selectAlbum(index) {
+        const album = albums[index];
+        document.getElementById("journal-art").className = "art large " + album.art;
+        document.getElementById("journal-art").setAttribute("aria-label", "Условная обложка " + album.name);
+        for (const [id, value] of Object.entries({ "journal-album": album.name, "journal-artist": album.artist, "journal-date": album.date, "journal-description": album.text, "journal-duration": album.duration, "journal-tracks": album.tracks, "journal-visits": album.visits })) setText(id, value);
+        document.querySelectorAll("[data-album]").forEach(button => button.setAttribute("aria-pressed", String(Number(button.dataset.album) === index)));
+      }
+      document.getElementById("journal-shelf").innerHTML = albums.map((album, index) => `<button class="shelf-item" type="button" data-album="${index}" aria-pressed="${index === 3}"><div class="art ${album.art}"></div><p>${album.name}</p><small>${album.label} · ${album.duration}</small></button>`).join("");
+      document.querySelectorAll("[data-album]").forEach(button => button.addEventListener("click", () => selectAlbum(Number(button.dataset.album))));
+      document.getElementById("play").addEventListener("click", event => {
+        const button = event.currentTarget;
+        const playing = button.getAttribute("aria-pressed") !== "true";
+        button.setAttribute("aria-pressed", String(playing));
+        button.setAttribute("aria-label", playing ? "Приостановить демо-плеер" : "Продолжить демо-плеер");
+        button.textContent = playing ? "Ⅱ" : "▶";
+      });
+      renderPeriod();
+      selectView(location.hash.slice(1));
+    </script>
+  </body>
+</html>

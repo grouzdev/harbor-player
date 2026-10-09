@@ -14,6 +14,15 @@ import {
 import { scanSettingsSchema } from "./scan-settings.js";
 import { recoveryStatusSchema } from "./recovery-settings.js";
 import {
+  pulseSettingsSchema,
+  pulseHistoryRangeSchema,
+  pulseLayoutSchema,
+  pulseWindowSchema,
+  pulseDayAlbumPageSchema,
+  pulseAlbumStatsSchema,
+  pulseBatchResultSchema,
+} from "./pulse.js";
+import {
   pathTemplateSchema,
   playlistDetailSchema,
   playlistImportPreviewSchema,
@@ -324,6 +333,16 @@ export const apiResponseSchemas = {
 /** Returns the JSON contract for a successful client API response. */
 export function apiResponseContract(method: string, pathname: string) {
   if (pathname === "/api/session") return sessionResponseSchema;
+  if (pathname === "/api/pulse/settings" || pathname === "/api/pulse/clear")
+    return pulseSettingsSchema;
+  if (pathname === "/api/pulse/history-range") return pulseHistoryRangeSchema;
+  if (pathname === "/api/pulse/layout") return pulseLayoutSchema;
+  if (pathname === "/api/pulse/window") return pulseWindowSchema;
+  if (/^\/api\/pulse\/days\/[^/]+\/albums$/.test(pathname))
+    return pulseDayAlbumPageSchema;
+  if (/^\/api\/pulse\/albums\/[^/]+\/stats$/.test(pathname))
+    return pulseAlbumStatsSchema;
+  if (pathname === "/api/listening-events") return pulseBatchResultSchema;
   if (pathname === "/api/libraries")
     return method === "GET"
       ? apiResponseSchemas.libraries

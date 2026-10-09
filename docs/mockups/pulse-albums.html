@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>HARBOR — Пульс · все альбомы дня</title>
+    <style>
+      @import url("../../src/client/fonts.css");
+      :root { color-scheme: dark; font-family: "Fira Sans Condensed", "Arial Narrow", sans-serif; color: #dce0e2; background: #171c21; --accent: #c3dbc1; --muted: #929fa7; --line: #ffffff12; }
+      * { box-sizing: border-box; }
+      body { margin: 0; height: 100dvh; overflow: hidden; display: flex; flex-direction: column; }
+      button, select { font: inherit; color: inherit; }
+      button { cursor: pointer; border: 0; background: none; }
+      button:hover, a:hover { color: var(--accent); }
+      button:disabled { opacity: .3; cursor: default; }
+      button:focus-visible, select:focus-visible, a:focus-visible, .rail:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; }
+      h1, h2, p { margin: 0; }
+      a { color: var(--muted); text-decoration: none; }
+      small { color: var(--muted); }
+      .topbar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 20px; height: 64px; padding: 0 32px; border-bottom: 1px solid var(--line); }
+      .topbar a { font-size: 12px; }
+      .brand { width: 116px; height: 24px; opacity: .7; }
+      .demo { justify-self: end; color: var(--muted); font-size: 11px; }
+      main { width: 100%; max-width: 1600px; min-height: 0; flex: 1; display: grid; grid-template-rows: auto minmax(0, 1fr) 60px; gap: 24px; padding: 28px 48px 16px; margin: 0 auto; }
+      .topbar { flex-shrink: 0; }
+      .history-range { position: relative; padding-bottom: 24px; }
+      .history-range input { appearance: none; display: block; width: 100%; height: 20px; margin: 0; background: transparent; cursor: ew-resize; }
+      .history-range input::-webkit-slider-runnable-track { height: 4px; background: #ffffff16; }
+      .history-range input::-moz-range-track { height: 4px; background: #ffffff16; }
+      .history-range input::-moz-range-progress { background: transparent; }
+      .history-range input::-webkit-slider-thumb { appearance: none; width: 8px; height: 20px; margin-top: -8px; background: var(--accent); border: 0; border-radius: 2px; }
+      .history-range input::-moz-range-thumb { width: 8px; height: 20px; background: var(--accent); border: 0; border-radius: 2px; }
+      .year-tick { position: absolute; top: 22px; border-left: 1px solid #ffffff30; padding: 8px 0 0 6px; font-size: 11px; color: var(--muted); }
+      .rail { min-height: 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; padding: 10px 6px 0; }
+      .rail::-webkit-scrollbar { display: none; }
+      .rail { cursor: grab; }
+      .rail.dragging, .rail.dragging * { cursor: grabbing; user-select: none; }
+      .days { display: flex; width: max-content; min-width: 100%; }
+      .day { flex: 0 0 auto; position: relative; }
+      .day + .day { border-left: 1px solid #ffffff20; }
+      .albums { display: flex; padding: 0 14px; }
+      .album { display: block; width: 100px; padding: 0 10px; text-align: center; }
+      .plot { height: var(--plot-height, 296px); display: flex; flex-direction: column; justify-content: end; align-items: center; }
+      .art { display: block; width: 80px; aspect-ratio: 1; position: relative; overflow: hidden; background: linear-gradient(145deg, var(--color-a), var(--color-b)); box-shadow: 0 8px 24px #0003; }
+      .art::before { content: ""; position: absolute; inset: 18%; border: 1px solid #ffffff50; transform: rotate(var(--angle)); }
+      .art::after { content: attr(data-mark); position: absolute; left: 9%; right: 9%; top: 44%; color: #eee8d9; font-size: 10px; letter-spacing: 1px; text-align: left; }
+      .art[data-shape="1"] { background: radial-gradient(circle at 35% 35%, var(--color-a), transparent 40%), linear-gradient(120deg, var(--color-b), #10191e); }
+      .art[data-shape="1"]::before { border-radius: 50%; }
+      .art[data-shape="2"] { background: repeating-linear-gradient(var(--angle), var(--color-a) 0 9%, var(--color-b) 10% 20%); }
+      .art[data-shape="2"]::before { border: 0; }
+      .art[data-shape="3"] { background: linear-gradient(155deg, var(--color-a) 0 35%, var(--color-b) 36% 62%, #203647 63%); }
+      .art[data-shape="3"]::before { inset: 55% -10% 10%; border: 0; background: #ffffff12; filter: blur(8px); }
+      .album[aria-pressed="true"] .art { outline: 1px solid var(--accent); outline-offset: 5px; }
+      .stem { flex-shrink: 0; width: 80px; height: calc(var(--minutes) * var(--minute-px, 2px)); margin-top: 10px; background: linear-gradient(#8da99836, #8da99806); border-top: 1px solid #a5c2b330; }
+      .album[aria-pressed="true"] .stem { background: linear-gradient(#c3dbc16a, #c3dbc118); border-color: var(--accent); }
+      .album-time { font-size: 11px; color: var(--muted); margin: 13px 0 18px; }
+      .album[aria-pressed="true"] .album-time { color: var(--accent); }
+      .quiet-space { width: 72px; height: calc(var(--plot-height, 296px) + 45px); }
+      .quiet .albums { padding-inline: 8px; }
+      .quiet .axis { padding-inline: 8px; }
+      .quiet .day-label { gap: 4px; padding-left: 0; }
+      .quiet .day-number { width: 24px; font-size: 16px; }
+      .quiet .day-label small { font-size: 9px; }
+      .axis { border-top: 1px solid #ffffff20; padding: 18px 14px 12px; }
+      .day.selected .axis { border-color: #c3dbc14a; }
+      .day-label { position: sticky; left: 12px; display: flex; align-items: center; gap: 12px; width: max-content; max-width: 100%; padding-left: 4px; }
+      .day-number { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; font-size: 18px; color: #aab6bd; }
+      .day.selected .day-number { background: var(--accent); color: #18231b; }
+      .day-label small { display: block; font-size: 10px; margin-top: 3px; }
+      .weekday { color: var(--muted); text-transform: uppercase; letter-spacing: 1px; font-size: 11px; }
+      .day.selected .weekday { color: var(--accent); }
+      .quiet .axis { opacity: .55; }
+      .selection { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 460px); gap: 48px; }
+      .selected-album { display: flex; align-items: start; gap: 24px; min-width: 0; }
+      #selected-cover { flex-shrink: 0; }
+      #selected-cover .art { width: 144px; }
+      #selected-cover .art::after { font-size: 17px; }
+      .album-copy { min-width: 0; }
+      .selected-date { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+      .album-title { font-size: 30px; font-weight: 400; }
+      .artist { font-size: 15px; color: var(--muted); margin-top: 5px; }
+      .album-details { font-size: 12px; color: var(--muted); margin-top: 16px; }
+      .statistics { min-width: 0; }
+      .stat-context { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
+      .stat-numbers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+      .stat-number strong { display: block; font-size: 23px; font-weight: 400; margin-bottom: 5px; color: #c4d5c5; }
+      .stat-number small { display: block; font-size: 11px; }
+      .share-label { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 20px; }
+      .share-label strong { color: var(--accent); font-weight: 400; }
+      .share-bar { height: 4px; border-radius: 3px; background: #ffffff0a; margin-top: 9px; }
+      .share-bar i { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+      .stat-fact { color: #c4d5c5; font-size: 13px; margin-top: 16px; line-height: 1.5; }
+      .player { flex-shrink: 0; padding: 14px 32px; display: grid; grid-template-columns: 1fr auto 1fr; gap: 24px; align-items: center; background: #13191ff5; backdrop-filter: blur(20px); border-top: 1px solid #ffffff12; }
+      .now-playing { display: flex; align-items: center; gap: 12px; }
+      .now-playing .art { width: 40px; flex-shrink: 0; }
+      .now-playing .art::after { font-size: 5px; }
+      .now-playing p { font-size: 13px; }
+      .now-playing small { font-size: 11px; }
+      .transport { display: flex; gap: 20px; align-items: center; }
+      .play { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #15231b; }
+      .player-time { justify-self: end; font-size: 11px; color: var(--muted); }
+      @media (max-width: 1000px) { main { padding-inline: 24px; } .selection { gap: 24px; } #selected-cover .art { width: 100px; } }
+      @media (max-width: 640px) {
+        .topbar { padding: 14px 16px; grid-template-columns: 1fr auto; height: auto; gap: 10px; }
+        .topbar a { grid-row: 2; grid-column: 1 / -1; }
+        .brand { width: 86px; grid-row: 1; }
+        .demo { grid-row: 1; font-size: 10px; }
+        main { padding: 16px 16px 8px; gap: 16px; }
+        .selection { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+        .selected-album { gap: 16px; }
+        #selected-cover .art { width: 100px; }
+        #selected-cover .art::after { font-size: 12px; }
+        .album-title { font-size: 26px; }
+        .stat-number strong { font-size: 21px; }
+        .player { padding: 12px 16px; grid-template-columns: 1fr auto; gap: 12px; }
+        .player-time { display: none; }
+        .transport { gap: 10px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar"><a href="pulse-days.html#axis">← Предыдущая шкала дней</a><img class="brand" src="../../assets/HARBOR.svg" alt="HARBOR"><span class="demo">Мокап · вымышленные данные</span></header>
+    <main>
+      <section class="selection" aria-label="Выбранный альбом и статистика">
+        <div class="selected-album"><div id="selected-cover" role="img" aria-label="Обложка выбранного альбома"></div><div class="album-copy"><p class="selected-date" id="selected-date"></p><h2 class="album-title" id="selected-title"></h2><p class="artist" id="selected-artist"></p><p class="album-details" id="selected-details"></p></div></div>
+        <aside class="statistics" aria-label="Статистика прослушиваний">
+          <div id="stat-content"></div>
+        </aside>
+      </section>
+      <section class="rail" id="rail" tabindex="0" role="region" aria-label="Все альбомы по дням и прослушанное время"><div class="days" id="days"></div></section>
+      <nav class="history-range" aria-label="Вся история прослушивания"><input id="history-position" type="range" min="0" step="1" aria-label="Дата на таймлайне"><div id="year-ticks"></div></nav>
+    </main>
+    <footer class="player" aria-label="Демонстрационный плеер"><div class="now-playing"><span class="art" data-shape="1" data-mark="M" style="--color-a:#626f5c;--color-b:#18231a;--angle:25deg"></span><div><p>Teardrop</p><small>Massive Attack · Mezzanine</small></div></div><div class="transport"><span aria-hidden="true">↶</span><button type="button" class="play" id="play" aria-pressed="true" aria-label="Приостановить демо-плеер">Ⅱ</button><span aria-hidden="true">↷</span></div><span class="player-time">2:04 / 5:30 · без звука</span></footer>
+    <script>
+      const albums = [
+        ["Spaces", "Nils Frahm", "#91aaa0", "#263c3c"],
+        ["Dive", "Tycho", "#dfac8b", "#527f89"],
+        ["Mezzanine", "Massive Attack", "#626f5c", "#18231a"],
+        ["In Rainbows", "Radiohead", "#d49145", "#68272b"],
+        ["Black Focus", "Yussef Kamaal", "#e0dfc6", "#2c5461"],
+        ["Selected Ambient Works", "Aphex Twin", "#aebbc4", "#364652"],
+        ["Music Has the Right to Children", "Boards of Canada", "#88b4b2", "#2b706b"],
+        ["Rounds", "Four Tet", "#ba9879", "#4b4553"],
+        ["Untrue", "Burial", "#929397", "#252b32"],
+        ["Immunity", "Jon Hopkins", "#90905c", "#354434"],
+        ["Promises", "Floating Points", "#c9c6af", "#817467"],
+        ["Crush", "Floating Points", "#d5a665", "#6b465c"],
+        ["Migration", "Bonobo", "#baada0", "#45646d"],
+        ["We Will Always Love You", "The Avalanches", "#c58e6c", "#53555d"],
+        ["Ágætis byrjun", "Sigur Rós", "#a3b1cf", "#3d537a"],
+        ["Vespertine", "Björk", "#b8bcb0", "#5d655e"],
+        ["Kiwanuka", "Michael Kiwanuka", "#bc8e55", "#67372b"],
+        ["Nurture", "Porter Robinson", "#afbe8d", "#557b69"],
+      ];
+      // Events, not pre-aggregated cards: repeated albums prove the daily sum rule.
+      const events = [
+        [[2, 22], [3, 42]],
+        [[0, 44], [2, 18]],
+        [],
+        [[4, 39], [8, 28]],
+        [[2, 63]],
+        [[1, 51], [3, 19]],
+        [[0, 24], [4, 39]],
+        [[3, 42]],
+        [],
+        [[8, 35], [9, 45]],
+        [[4, 39], [12, 46]],
+        [[0, 44], [2, 31]],
+        [],
+        [[1, 51], [7, 29], [0, 18], [9, 36]],
+        [[8, 35]],
+        [[0, 36], [1, 22], [2, 48], [3, 17], [4, 39], [5, 26], [6, 14], [7, 51], [8, 29], [9, 18], [10, 34], [11, 12], [12, 43], [13, 27], [14, 19], [15, 32], [16, 24], [17, 16], [2, 15], [3, 25]],
+        [[3, 42], [0, 26], [4, 30]],
+        [],
+      ];
+      function aggregateDay(events) {
+        const byAlbum = new Map();
+        for (const [album, minutes] of events) {
+          const item = byAlbum.get(album) || { album, minutes: 0, visits: 0 };
+          item.minutes += minutes;
+          item.visits++;
+          byAlbum.set(album, item);
+        }
+        return [...byAlbum.values()];
+      }
+      const dateFormat = new Intl.DateTimeFormat("ru", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+      const monthFormat = new Intl.DateTimeFormat("ru", { day: "numeric", month: "long", timeZone: "UTC" });
+      const weekdayFormat = new Intl.DateTimeFormat("ru", { weekday: "short", timeZone: "UTC" });
+      const days = [];
+      // A bounded multi-year demo. Production loads/virtualizes the same continuous history.
+      for (let timestamp = Date.UTC(2023, 0, 1); timestamp <= Date.UTC(2025, 4, 18); timestamp += 86400000) {
+        const date = new Date(timestamp), index = days.length;
+        const items = timestamp >= Date.UTC(2025, 4, 1) ? events[date.getUTCDate() - 1]
+          : index % 4 === 0 ? [[index % albums.length, 18 + index % 45], [(index + 3) % albums.length, 22]] : [];
+        days.push({ date: date.getUTCDate(), iso: date.toISOString().slice(0, 10), year: date.getUTCFullYear(),
+          label: dateFormat.format(date), month: monthFormat.formatToParts(date).find(part => part.type === "month").value,
+          short: weekdayFormat.format(date), albums: aggregateDay(items),
+          minutes: items.reduce((sum, event) => sum + event[1], 0) });
+      }
+      let selectedDay = days.findIndex(day => day.iso === "2025-05-12"), selectedAlbum = 0;
+      const rail = document.getElementById("rail");
+      const text = (id, value) => { document.getElementById(id).textContent = value; };
+      const duration = minutes => {
+        const hours = Math.floor(minutes / 60), remainder = minutes % 60;
+        return hours ? `${hours} ч${remainder ? " " + remainder + " мин" : ""}` : `${remainder} мин`;
+      };
+      const art = index => `<span class="art" data-shape="${index % 4}" data-mark="${albums[index][0].split(" ").slice(0, 2).map(word => word[0]).join("")}" style="--color-a:${albums[index][2]};--color-b:${albums[index][3]};--angle:${25 + index * 13}deg"></span>`;
+      const plural = (count, one, few, many) => count % 100 >= 11 && count % 100 <= 14 ? many : count % 10 === 1 ? one : count % 10 >= 2 && count % 10 <= 4 ? few : many;
+      const statNumber = (value, label) => `<div class="stat-number"><strong>${value}</strong><small>${label}</small></div>`;
+      function renderStatistics() {
+        const day = days[selectedDay], item = day.albums.find(item => item.album === selectedAlbum);
+        const albumDays = days.filter(day => day.albums.some(item => item.album === selectedAlbum));
+        const albumMinutes = albumDays.reduce((sum, day) => sum + day.albums.find(item => item.album === selectedAlbum).minutes, 0);
+        const returns = albumDays.reduce((sum, day) => sum + day.albums.find(item => item.album === selectedAlbum).visits - 1, 0);
+        const share = Math.round(item.minutes / day.minutes * 100);
+        document.getElementById("stat-content").innerHTML = `<div class="stat-numbers">${statNumber(duration(albumMinutes), "за всю историю")}${statNumber(albumDays.length, plural(albumDays.length, "день с альбомом", "дня с альбомом", "дней с альбомом"))}${statNumber(returns, plural(returns, "возврат в тот же день", "возврата в тот же день", "возвратов в тот же день"))}</div><p class="share-label"><span>Доля музыки за ${day.label}</span><strong>${share}%</strong></p><div class="share-bar"><i style="width:${share}%"></i></div><p class="stat-fact">Первое прослушивание — ${albumDays[0].label}<br>Последнее — ${albumDays.at(-1).label}</p>`;
+      }
+      function renderSelection() {
+        const day = days[selectedDay], item = day.albums.find(item => item.album === selectedAlbum), album = albums[selectedAlbum];
+        text("selected-date", `${day.short}, ${day.label}`);
+        text("selected-title", album[0]);
+        text("selected-artist", album[1]);
+        text("selected-details", `${duration(item.minutes)} с альбомом${item.visits > 1 ? " · " + item.visits + " прослушивания за день" : ""}`);
+        document.getElementById("selected-cover").innerHTML = art(selectedAlbum);
+        document.getElementById("selected-cover").setAttribute("aria-label", "Условная обложка " + album[0]);
+        renderStatistics();
+        document.querySelectorAll("[data-album]").forEach(button => button.setAttribute("aria-pressed", String(Number(button.dataset.day) === selectedDay && Number(button.dataset.album) === selectedAlbum)));
+        document.querySelectorAll(".day").forEach(element => element.classList.toggle("selected", Number(element.dataset.date) === selectedDay));
+      }
+      function dayAtPosition(position) {
+        const elements = document.getElementById("days").children;
+        let low = 0, high = elements.length - 1;
+        while (low < high) {
+          const mid = Math.ceil((low + high) / 2);
+          if (elements[mid].offsetLeft - rail.offsetLeft <= position) low = mid;
+          else high = mid - 1;
+        }
+        const element = elements[low];
+        return Math.min(days.length - 1, low + Math.max(0, position - (element.offsetLeft - rail.offsetLeft)) / element.offsetWidth);
+      }
+      function updateHistoryPosition() {
+        const start = dayAtPosition(rail.scrollLeft);
+        const input = document.getElementById("history-position");
+        input.value = Math.floor(start);
+        input.setAttribute("aria-valuetext", days[Math.floor(start)].label);
+      }
+      function goToDay(index) {
+        const element = document.querySelector(`[data-date="${index}"]`);
+        if (!element) return;
+        rail.scrollLeft = element.offsetLeft - rail.offsetLeft;
+        updateHistoryPosition();
+      }
+      function renderHistory() {
+        document.getElementById("history-position").max = days.length - 1;
+        document.getElementById("year-ticks").innerHTML = days.map((day, index) => index === 0 || day.year !== days[index - 1].year ? `<span class="year-tick" style="left:${index / (days.length - 1) * 100}%">${day.year}</span>` : "").join("");
+        document.getElementById("days").innerHTML = days.map((day, index) => `<div class="day${day.albums.length ? "" : " quiet"}" data-date="${index}" data-iso="${day.iso}"><div class="albums">${day.albums.length ? day.albums.map(item => `<button type="button" class="album" data-day="${index}" data-album="${item.album}" aria-pressed="false" aria-label="${day.label}: ${albums[item.album][0]}, ${duration(item.minutes)}"><div class="plot">${art(item.album)}<span class="stem" style="--minutes:${item.minutes}" aria-hidden="true"></span></div><p class="album-time">${duration(item.minutes)}</p></button>`).join("") : '<div class="quiet-space"></div>'}</div><div class="axis"><div class="day-label"><span class="day-number">${day.date}</span><div><span class="weekday">${day.short}</span><small>${day.month}</small></div></div></div></div>`).join("");
+        renderSelection();
+        requestAnimationFrame(() => goToDay(selectedDay));
+      }
+      document.getElementById("history-position").addEventListener("input", event => goToDay(Number(event.target.value)));
+      document.getElementById("days").addEventListener("click", event => {
+        const button = event.target.closest("[data-album]");
+        if (button) { selectedDay = Number(button.dataset.day); selectedAlbum = Number(button.dataset.album); renderSelection(); }
+      });
+      let drag = null;
+      rail.addEventListener("pointerdown", event => {
+        if (event.pointerType !== "mouse" || event.button !== 0 || drag ||
+          event.target.closest(".art, .stem, .album-time, button:not(.album), a, input, select, textarea")) return;
+        // Keep native scrollbar interaction; only the content background is draggable.
+        const bounds = rail.getBoundingClientRect();
+        if (event.clientY >= bounds.top + rail.clientTop + rail.clientHeight) return;
+        event.preventDefault();
+        drag = { pointerId: event.pointerId, x: event.clientX, scrollLeft: rail.scrollLeft };
+        rail.setPointerCapture(event.pointerId);
+        rail.classList.add("dragging");
+      });
+      rail.addEventListener("pointermove", event => {
+        if (!drag || event.pointerId !== drag.pointerId) return;
+        rail.scrollLeft = drag.scrollLeft + drag.x - event.clientX;
+      });
+      function endDrag(event) {
+        if (!drag || event.pointerId !== drag.pointerId) return;
+        const pointerId = drag.pointerId;
+        drag = null;
+        rail.classList.remove("dragging");
+        if (rail.hasPointerCapture(pointerId)) rail.releasePointerCapture(pointerId);
+      }
+      rail.addEventListener("pointerup", endDrag);
+      rail.addEventListener("pointercancel", endDrag);
+      rail.addEventListener("lostpointercapture", endDrag);
+      document.querySelector("main").addEventListener("wheel", event => {
+        if (event.ctrlKey) return; // Preserve trackpad/browser pinch zoom.
+        event.preventDefault();
+        const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+        const unit = event.deltaMode === 1 ? 20 : event.deltaMode === 2 ? rail.clientWidth : 1;
+        rail.scrollLeft += delta * unit;
+      }, { passive: false });
+      const tallestAlbumMinutes = Math.max(...days.flatMap(day => day.albums.map(item => item.minutes)));
+      new ResizeObserver(() => {
+        const plotHeight = Math.max(90, rail.clientHeight - 122);
+        rail.style.setProperty("--plot-height", `${plotHeight}px`);
+        // One common scale across the history, fitted to the available screen height.
+        rail.style.setProperty("--minute-px", `${Math.min(2, Math.max(0, plotHeight - 90) / tallestAlbumMinutes)}px`);
+        updateHistoryPosition();
+      }).observe(rail);
+      rail.addEventListener("scroll", updateHistoryPosition);
+      window.addEventListener("resize", updateHistoryPosition);
+      rail.addEventListener("keydown", event => {
+        if (event.target === rail && ["ArrowLeft", "ArrowRight"].includes(event.key)) {
+          event.preventDefault();
+          rail.scrollBy({ left: event.key === "ArrowLeft" ? -200 : 200, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+        }
+      });
+      document.getElementById("play").addEventListener("click", event => {
+        const button = event.currentTarget, playing = button.getAttribute("aria-pressed") !== "true";
+        button.setAttribute("aria-pressed", String(playing));
+        button.setAttribute("aria-label", playing ? "Приостановить демо-плеер" : "Продолжить демо-плеер");
+        button.textContent = playing ? "Ⅱ" : "▶";
+      });
+      renderHistory();
+    </script>
+  </body>
+</html>

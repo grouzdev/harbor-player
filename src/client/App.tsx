@@ -20,6 +20,7 @@ import { useArtistGenreReveal } from "./useArtistGenreReveal";
 import { SettingsWorkspace } from "./SettingsWorkspace";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  Activity,
   AudioLines,
   Bookmark as BookmarkIcon,
   CircleUserRound,
@@ -123,6 +124,8 @@ import {
 } from "./location-selection";
 import { Player, usePlayer } from "./Player";
 import { CoverMode, QuickSearchDialog } from "./CoverMode";
+import type { PulseViewState } from "./PulseMode";
+import { PulseSettingsControl } from "./PulseSettingsControl";
 import { ContextMenu, type ContextMenuState } from "./ContextMenu";
 import { UpdatePanel } from "./UpdatePanel";
 import { BookmarkToggle, type BookmarkChange } from "./BookmarkToggle";
@@ -140,12 +143,16 @@ import { useAppShellLayout } from "./useAppShellLayout";
 import { useCatalogScrollTargets } from "./useCatalogScrollTargets";
 import { PlaylistPanel } from "./PlaylistPanel";
 import { IconToggle } from "./IconToggle";
+import "./styles/pulse-shell.css";
 import type {
   Playlist,
   PlaylistDetail,
   PlaylistImportPreview,
 } from "../shared/playlists";
 
+const PulseMode = lazy(() =>
+  import("./PulseMode").then((module) => ({ default: module.PulseMode })),
+);
 const AppearanceSettingsPanels = lazy(() =>
   import("./AppearanceSettingsPanels").then((module) => ({
     default: module.AppearanceSettingsPanels,
@@ -654,7 +661,28 @@ export function App() {
     useState<FullscreenWindowMode>("default");
   const [fullscreenWindowBounds, setFullscreenWindowBounds] =
     useState<FullscreenWindowBounds | null>(null);
-  const [coverMode, setCoverMode] = useState(false);
+  const [workspaceMode, setWorkspaceMode] = useState<
+    "panels" | "cover" | "pulse"
+  >("panels");
+  const coverMode = workspaceMode === "cover";
+  const pulseMode = workspaceMode === "pulse";
+  const setCoverMode = useCallback((enabled: boolean) => {
+    setWorkspaceMode(enabled ? "cover" : "panels");
+  }, []);
+  const pulseState = useRef<PulseViewState | undefined>(undefined);
+  const catalogFocus = useRef<HTMLElement | null>(null);
+  const previousWorkspaceMode = useRef(workspaceMode);
+  useEffect(() => {
+    const previous = previousWorkspaceMode.current;
+    previousWorkspaceMode.current = workspaceMode;
+    if (workspaceMode !== "panels" || previous !== "pulse") return;
+    const frame = requestAnimationFrame(() => {
+      const target = catalogFocus.current;
+      if (target?.isConnected) target.focus({ preventScroll: true });
+      else workspaceRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [workspaceMode]);
   const [coverSearch, setCoverSearch] = useState("");
   const filterKey = `${navigationEpoch}:${JSON.stringify(filter)}`;
   const {
@@ -3061,6 +3089,8 @@ export function App() {
       ref={appShellRef}
       className={`app-shell fullscreen-window--${fullscreenWindowMode}${
         coverMode && !settingsOpen ? " app-shell--cover-mode" : ""
+      }${
+        pulseMode && !settingsOpen ? " app-shell--pulse-mode" : ""
       }${isPortraitLayout ? " layout--portrait" : ""}${
         visiblePanelIds.length || settingsOpen
           ? ""
@@ -3069,7 +3099,26 @@ export function App() {
       style={fullscreenWindowStyle}
       onKeyDown={(event) => {
         // Settings, the persistent player and update actions all use native Tab.
-        if (settingsOpen && event.key === "Tab") event.stopPropagation();
+        if ((settingsOpen || pulseMode) && event.key === "Tab")
+          event.stopPropagation();
+        if (
+          pulseMode &&
+          !settingsOpen &&
+          !modal &&
+          !contextMenu &&
+          !ratingDialog &&
+          event.key === "Escape" &&
+          !event.defaultPrevented &&
+          !(
+            event.target instanceof HTMLElement &&
+            event.target.closest(
+              "input, textarea, select, [contenteditable='true'], [role='dialog']",
+            )
+          )
+        ) {
+          event.preventDefault();
+          setWorkspaceMode("panels");
+        }
       }}
     >
       {isWebFullscreen && (
@@ -3108,7 +3157,7 @@ export function App() {
             setModal(settingsOpen ? null : "settings");
           }}
         />
-        {!settingsOpen && !coverMode && (
+        {!settingsOpen && workspaceMode === "panels" && (
           <CatalogUserFilters
             filter={savedFilter}
             search={search}
@@ -3166,6 +3215,20 @@ export function App() {
         )}
         {!settingsOpen && (
           <>
+            <button
+              type="button"
+              className="icon-button pulse-mode-toggle"
+              aria-label={pulseMode ? "Вернуться к панелям" : "Открыть Пульс"}
+              title={pulseMode ? "Вернуться к панелям" : "Пульс"}
+              aria-pressed={pulseMode}
+              onClick={() => {
+                setContextMenu(null);
+                setCoverSearch("");
+                setWorkspaceMode(pulseMode ? "panels" : "pulse");
+              }}
+            >
+              <Activity size={21} />
+            </button>
             <IconToggle
               className="cover-mode-toggle"
               checked={coverMode}
@@ -3225,8 +3288,13 @@ export function App() {
       )}
       <main
         ref={workspaceRef}
-        inert={settingsOpen}
-        className={`workspace ${portraitWorkspaceLayout ? "workspace--portrait" : ""} ${coverMode ? "workspace-hidden" : ""} ${visiblePanelIds.length ? "" : "workspace-empty"}`}
+        tabIndex={-1}
+        onFocusCapture={(event) => {
+          if (event.target instanceof HTMLElement)
+            catalogFocus.current = event.target;
+        }}
+        inert={settingsOpen || workspaceMode !== "panels"}
+        className={`workspace ${portraitWorkspaceLayout ? "workspace--portrait" : ""} ${workspaceMode !== "panels" ? "workspace-hidden" : ""} ${visiblePanelIds.length ? "" : "workspace-empty"}`}
         style={
           {
             "--library-weight": `${panelWeights[0]}fr`,
@@ -3711,6 +3779,23 @@ export function App() {
           {panelVisibility.tracks && renderPanelResizer("tracks")}
         </div>
       </main>
+      {!settingsOpen && pulseMode && (
+        <Suspense fallback={<div role="status">Загрузка истории…</div>}>
+          <PulseMode
+            initialState={pulseState.current}
+            onStateChange={(state) => {
+              pulseState.current = state;
+            }}
+            settingsControls={
+              <PulseSettingsControl
+                onCleared={() => {
+                  pulseState.current = undefined;
+                }}
+              />
+            }
+          />
+        </Suspense>
+      )}
       {!settingsOpen && coverMode && player.queue?.track && (
         <CoverMode
           track={player.queue.track}

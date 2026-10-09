@@ -27,11 +27,15 @@ export function reconnectSession(): Promise<void> {
 export async function api<T>(
   url: string,
   body?: unknown,
-  method: "GET" | "POST" | "DELETE" = body === undefined ? "GET" : "POST",
+  method: "GET" | "POST" | "PATCH" | "DELETE" = body === undefined
+    ? "GET"
+    : "POST",
+  options?: { signal?: AbortSignal },
 ): Promise<T> {
   const request = () =>
     fetch(`/api${url}`, {
       method,
+      signal: options?.signal,
       headers:
         method === "GET"
           ? {}

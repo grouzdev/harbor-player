@@ -1,0 +1,23 @@
+.pulse-mode-toggle {
+  margin-left: auto;
+}
+
+.topbar .pulse-mode-toggle + .cover-mode-toggle {
+  margin-left: 8px;
+}
+
+.pulse-mode-toggle[aria-pressed="true"] {
+  color: var(--accent);
+}
+
+.pulse-settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.pulse-settings-error {
+  margin-top: 12px;
+  color: #dfaaa1;
+}

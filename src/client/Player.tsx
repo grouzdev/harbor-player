@@ -16,6 +16,60 @@ import { api, duration } from "./api";
 import { readMigratedStorageValue } from "./storage";
 import { RatingControl, type UserStateChange } from "./RatingControl";
 import { RangeSlider } from "./RangeSlider";
+import { attachPulseRecorder, PulseRecorder } from "./pulse-recorder";
+import {
+  PulseDelivery,
+  PulseOutbox,
+  type PulseTransport,
+} from "./pulse-outbox";
+
+const pulseTransport: PulseTransport = {
+  getSettings: async () => {
+    const settings = await api<{
+      enabled: boolean;
+      historyGeneration: number;
+      timeZone: string | null;
+    }>("/pulse/settings");
+    if (settings.timeZone !== null) return settings;
+    return api(
+      "/pulse/settings",
+      {
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      },
+      "PATCH",
+    );
+  },
+  sendEvents: async (events) => {
+    const result = await api<{
+      historyGeneration: number;
+      acknowledgements: { eventId: string; revision: number }[];
+    }>("/listening-events", {
+      historyGeneration: events[0].historyGeneration,
+      events: events.map((event) => ({
+        eventId: event.eventId,
+        revision: event.revision,
+        trackId: event.track.id,
+        albumKey: event.track.albumKey,
+        snapshot: {
+          title: event.track.albumTitle,
+          artists: event.track.albumArtists.length
+            ? event.track.albumArtists
+            : event.track.artists,
+          year: event.track.year ?? null,
+          coverId: event.track.coverId ?? null,
+        },
+        sessionId: event.sessionId,
+        visitId: event.visitId,
+        startedAtUtc: Math.floor(event.startedAt),
+        endedAtUtc: Math.floor(event.endedAt),
+        playedMs: Math.floor(event.playedMs),
+        final: event.final,
+      })),
+    });
+    window.dispatchEvent(new Event("harbor-pulse-updated"));
+    return result;
+  },
+};
 
 interface Queue {
   id: string;
@@ -30,6 +84,10 @@ interface Queue {
 }
 export function usePlayer(notify: (message: string) => void) {
   const audio = useRef<HTMLAudioElement>(null);
+  const pulse = useRef<PulseRecorder | null>(null);
+  const pulseTrack = useRef<Track | null>(null);
+  const pulseNotify = useRef(notify);
+  pulseNotify.current = notify;
   const [queue, setQueue] = useState<Queue | null>(null);
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(0);
@@ -58,6 +116,106 @@ export function usePlayer(notify: (message: string) => void) {
   const trackAvailable = queue?.track?.available;
   const trackMtimeMs = queue?.track?.mtimeMs;
   const trackDuration = queue?.track?.duration;
+  pulseTrack.current = queue?.track ?? null;
+  useEffect(() => {
+    const element = audio.current;
+    if (!element) return;
+    let disposed = false;
+    let enabled = false;
+    let reported = false;
+    const status = (pending: number, error: string | null) => {
+      if (!disposed)
+        window.dispatchEvent(
+          new CustomEvent("harbor-pulse-status", {
+            detail: { pending, error },
+          }),
+        );
+    };
+    const report = () => {
+      status(0, "Не удалось сохранить или отправить историю прослушивания");
+      if (!reported && !disposed) {
+        reported = true;
+        pulseNotify.current(
+          "Пульс: не удалось сохранить или отправить историю прослушивания",
+        );
+      }
+    };
+    const outbox = new PulseOutbox();
+    const recorder = new PulseRecorder((event) => {
+      if (enabled)
+        void outbox
+          .put(event)
+          .then(async () => {
+            status((await outbox.pending()).length, null);
+          })
+          .catch(report);
+    });
+    pulse.current = recorder;
+    recorder.source(pulseTrack.current);
+    const detach = attachPulseRecorder(element, recorder);
+    const delivery = new PulseDelivery(
+      outbox,
+      pulseTransport,
+      (settings) => {
+        if (disposed) return;
+        enabled = settings.enabled;
+        recorder.setGeneration(settings.historyGeneration);
+        if (!enabled)
+          recorder.close(element.currentTime, element.playbackRate, false);
+        else if (!element.paused && !element.ended)
+          recorder.playing(element.currentTime, element.playbackRate);
+      },
+      report,
+    );
+    const flush = () => {
+      void (async () => {
+        // An idle catalog needs no listening requests. Still restore pending
+        // delivery after restart, and initialize collection on real playback.
+        if (element.paused && (await outbox.pending()).length === 0) return;
+        const success = await delivery.flush();
+        if (success) reported = false;
+        if (!disposed)
+          status(
+            (await outbox.pending()).length,
+            reported ? "Ошибка записи или доставки истории" : null,
+          );
+      })().catch(report);
+    };
+    const settingsChanged = () => {
+      void delivery.flush(true);
+    };
+    const pagehide = () => {
+      recorder.close(element.currentTime, element.playbackRate);
+      flush();
+    };
+    const visibility = () => {
+      if (document.visibilityState === "hidden") {
+        recorder.sample(element.currentTime, element.playbackRate);
+        flush();
+      } else if (enabled && !element.paused)
+        recorder.playing(element.currentTime, element.playbackRate);
+    };
+    const timer = setInterval(flush, 5000);
+    element.addEventListener("playing", flush);
+    window.addEventListener("pagehide", pagehide);
+    window.addEventListener("harbor-pulse-settings-changed", settingsChanged);
+    document.addEventListener("visibilitychange", visibility);
+    flush();
+    return () => {
+      detach();
+      disposed = true;
+      pulse.current = null;
+      clearInterval(timer);
+      element.removeEventListener("playing", flush);
+      window.removeEventListener("pagehide", pagehide);
+      window.removeEventListener(
+        "harbor-pulse-settings-changed",
+        settingsChanged,
+      );
+      document.removeEventListener("visibilitychange", visibility);
+      flush();
+    };
+  }, []);
   useEffect(() => {
     if (audio.current) audio.current.volume = volume;
     localStorage.setItem("harbor-player-volume", String(volume));
@@ -77,6 +235,11 @@ export function usePlayer(notify: (message: string) => void) {
   useEffect(() => {
     const element = audio.current;
     if (!element) return;
+    pulse.current?.source(
+      pulseTrack.current,
+      element.currentTime,
+      element.playbackRate,
+    );
     element.pause();
     setPosition(0);
     if (!trackAvailable || !trackId || !queueId) {

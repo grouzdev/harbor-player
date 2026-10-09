@@ -1,6 +1,7 @@
 import type Database from "better-sqlite3";
+import { migratePulse } from "./pulse-migration.js";
 
-export const catalogSchemaVersion = 12;
+export const catalogSchemaVersion = 13;
 
 export function runCatalogMigrations(db: Database.Database): void {
   db.exec(`
@@ -230,6 +231,11 @@ export function runCatalogMigrations(db: Database.Database): void {
       if (!columns.has("entryIds"))
         db.exec("ALTER TABLE queues ADD COLUMN entryIds TEXT");
       db.pragma("user_version = 12");
+    })();
+  if (version < 13)
+    db.transaction(() => {
+      migratePulse(db);
+      db.pragma("user_version = 13");
     })();
   db.exec(
     "CREATE INDEX IF NOT EXISTS tracks_first_indexed_at ON tracks(firstIndexedAt)",
