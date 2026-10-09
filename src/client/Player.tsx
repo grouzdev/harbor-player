@@ -17,6 +17,7 @@ import { readMigratedStorageValue } from "./storage";
 import { RatingControl, type UserStateChange } from "./RatingControl";
 import { RangeSlider } from "./RangeSlider";
 import { attachPulseRecorder, PulseRecorder } from "./pulse-recorder";
+import { toPulseEvent } from "./pulse-event";
 import {
   PulseDelivery,
   PulseOutbox,
@@ -45,26 +46,7 @@ const pulseTransport: PulseTransport = {
       acknowledgements: { eventId: string; revision: number }[];
     }>("/listening-events", {
       historyGeneration: events[0].historyGeneration,
-      events: events.map((event) => ({
-        eventId: event.eventId,
-        revision: event.revision,
-        trackId: event.track.id,
-        albumKey: event.track.albumKey,
-        snapshot: {
-          title: event.track.albumTitle,
-          artists: event.track.albumArtists.length
-            ? event.track.albumArtists
-            : event.track.artists,
-          year: event.track.year ?? null,
-          coverId: event.track.coverId ?? null,
-        },
-        sessionId: event.sessionId,
-        visitId: event.visitId,
-        startedAtUtc: Math.floor(event.startedAt),
-        endedAtUtc: Math.floor(event.endedAt),
-        playedMs: Math.floor(event.playedMs),
-        final: event.final,
-      })),
+      events: events.map(toPulseEvent),
     });
     window.dispatchEvent(new Event("harbor-pulse-updated"));
     return result;
@@ -123,6 +105,13 @@ export function usePlayer(notify: (message: string) => void) {
     let disposed = false;
     let enabled = false;
     let reported = false;
+    let flushing = false;
+    let settingsRevision = 0;
+    let appliedSettingsRevision = 0;
+    let deliverySettingsRevision = 0;
+    const settingsChannel = new BroadcastChannel(
+      "harbor-player-pulse-settings",
+    );
     const status = (pending: number, error: string | null) => {
       if (!disposed)
         window.dispatchEvent(
@@ -132,7 +121,10 @@ export function usePlayer(notify: (message: string) => void) {
         );
     };
     const report = () => {
-      status(0, "Не удалось сохранить или отправить историю прослушивания");
+      status(
+        outbox.unsavedCount,
+        "Не удалось сохранить или отправить историю прослушивания",
+      );
       if (!reported && !disposed) {
         reported = true;
         pulseNotify.current(
@@ -146,7 +138,7 @@ export function usePlayer(notify: (message: string) => void) {
         void outbox
           .put(event)
           .then(async () => {
-            status((await outbox.pending()).length, null);
+            if (!reported) status((await outbox.pending()).length, null);
           })
           .catch(report);
     });
@@ -157,7 +149,7 @@ export function usePlayer(notify: (message: string) => void) {
       outbox,
       pulseTransport,
       (settings) => {
-        if (disposed) return;
+        if (disposed || deliverySettingsRevision !== settingsRevision) return;
         enabled = settings.enabled;
         recorder.setGeneration(settings.historyGeneration);
         if (!enabled)
@@ -167,23 +159,58 @@ export function usePlayer(notify: (message: string) => void) {
       },
       report,
     );
-    const flush = () => {
+    const flush = (force = false) => {
+      if (force) settingsRevision++;
+      if (flushing) return;
+      flushing = true;
       void (async () => {
-        // An idle catalog needs no listening requests. Still restore pending
-        // delivery after restart, and initialize collection on real playback.
-        if (element.paused && (await outbox.pending()).length === 0) return;
-        const success = await delivery.flush();
-        if (success) reported = false;
-        if (!disposed)
-          status(
-            (await outbox.pending()).length,
-            reported ? "Ошибка записи или доставки истории" : null,
+        let revision: number;
+        do {
+          revision = settingsRevision;
+          const pending = await outbox.pending();
+          // Idle needs no HTTP, but retries failed local writes and restores
+          // pending delivery after restart. Explicit settings changes always run.
+          if (
+            revision === appliedSettingsRevision &&
+            element.paused &&
+            pending.length === 0
+          ) {
+            reported = false;
+            status(0, null);
+            return;
+          }
+          deliverySettingsRevision = revision;
+          const success = await delivery.flush(
+            revision !== appliedSettingsRevision,
           );
-      })().catch(report);
+          if (success) {
+            appliedSettingsRevision = revision;
+            reported = false;
+          }
+          if (!disposed)
+            status(
+              (await outbox.pending()).length,
+              reported ? "Ошибка записи или доставки истории" : null,
+            );
+        } while (revision !== settingsRevision);
+      })()
+        .catch(report)
+        .finally(() => {
+          flushing = false;
+        });
+    };
+    const refreshSettings = () => {
+      // Do not extend a segment through a disable/clear while its GET waits
+      // behind an in-flight POST. The fresh settings restart eligible playback.
+      recorder.close(element.currentTime, element.playbackRate, false);
+      enabled = false;
+      flush(true);
     };
     const settingsChanged = () => {
-      void delivery.flush(true);
+      settingsChannel.postMessage(null);
+      refreshSettings();
     };
+    settingsChannel.onmessage = refreshSettings;
     const pagehide = () => {
       recorder.close(element.currentTime, element.playbackRate);
       flush();
@@ -195,8 +222,9 @@ export function usePlayer(notify: (message: string) => void) {
       } else if (enabled && !element.paused)
         recorder.playing(element.currentTime, element.playbackRate);
     };
-    const timer = setInterval(flush, 5000);
-    element.addEventListener("playing", flush);
+    const scheduledFlush = () => flush();
+    const timer = setInterval(scheduledFlush, 5000);
+    element.addEventListener("playing", scheduledFlush);
     window.addEventListener("pagehide", pagehide);
     window.addEventListener("harbor-pulse-settings-changed", settingsChanged);
     document.addEventListener("visibilitychange", visibility);
@@ -206,7 +234,8 @@ export function usePlayer(notify: (message: string) => void) {
       disposed = true;
       pulse.current = null;
       clearInterval(timer);
-      element.removeEventListener("playing", flush);
+      element.removeEventListener("playing", scheduledFlush);
+      settingsChannel.close();
       window.removeEventListener("pagehide", pagehide);
       window.removeEventListener(
         "harbor-pulse-settings-changed",

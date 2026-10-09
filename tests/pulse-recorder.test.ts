@@ -1,9 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Track } from "../src/shared/contracts";
 import {
   PulseRecorder,
+  attachPulseRecorder,
   type ListeningEvent,
 } from "../src/client/pulse-recorder";
+import { toPulseEvent } from "../src/client/pulse-event";
+import { pulseEventSchema } from "../src/shared/pulse";
 
 function fixture() {
   let clock = 0;
@@ -16,7 +19,13 @@ function fixture() {
     () => 1_700_000_000_000 + clock,
     () => String(++sequence),
   );
-  const track = { id: "track", albumKey: "album" } as Track;
+  const track = {
+    id: "track",
+    albumKey: "album",
+    albumTitle: "Album",
+    albumArtists: ["Artist"],
+    artists: ["Artist"],
+  } as Track;
   recorder.source(track);
   return {
     recorder,
@@ -29,6 +38,137 @@ function fixture() {
 }
 
 describe("PulseRecorder", () => {
+  it.each([0.5, 1, 2])("counts elapsed time, not position at %sx", (rate) => {
+    const f = fixture();
+    f.recorder.playing(0, rate);
+    f.advance(15_000.25);
+    f.recorder.sample(15.00025 * rate, rate);
+    f.advance(0.25);
+    f.recorder.close(15.0005 * rate, rate);
+    const wire = f.events.map(toPulseEvent);
+    expect(wire.map((event) => event.playedMs)).toEqual([15_000, 15_000]);
+    expect(wire.map((event) => event.endedAtUtc)).toEqual([
+      1_700_000_015_000, 1_700_000_015_000,
+    ]);
+    expect(wire.map((event) => event.revision)).toEqual([1, 2]);
+    expect(wire.map((event) => event.final)).toEqual([false, true]);
+    for (const event of wire)
+      expect(pulseEventSchema.safeParse(event).success).toBe(true);
+  });
+  it("accumulates submillisecond samples but drops an entire interval below 1 ms", () => {
+    const f = fixture();
+    f.recorder.playing(0, 1);
+    f.advance(0.5);
+    f.recorder.close(0.0005, 1);
+    expect(f.events).toEqual([]);
+    f.recorder.playing(0, 1);
+    for (let i = 1; i <= 6; i++) {
+      f.advance(0.25);
+      f.recorder.sample(i * 0.00025, 1);
+    }
+    f.recorder.close(0.0015, 1);
+    expect(f.events).toHaveLength(1);
+    expect(toPulseEvent(f.events[0]).playedMs).toBe(1);
+    expect(pulseEventSchema.safeParse(toPulseEvent(f.events[0])).success).toBe(
+      true,
+    );
+  });
+  it.each([-100, 100])(
+    "seek by %ss adds no time and keeps the visit",
+    (seek) => {
+      const f = fixture();
+      f.recorder.playing(200, 1);
+      f.advance(1000);
+      f.recorder.sample(201, 1);
+      f.recorder.close(201 + seek, 1, false);
+      f.recorder.playing(201 + seek, 1);
+      f.advance(1000);
+      f.recorder.close(202 + seek, 1);
+      expect(f.events.map((event) => event.playedMs)).toEqual([1000, 1000]);
+      expect(f.events[0].visitId).toBe(f.events[1].visitId);
+    },
+  );
+  it("anchors UTC to monotonic time despite subsequent wall-clock changes", () => {
+    let clock = 0;
+    let wall = Date.parse("2026-03-08T06:59:59Z");
+    const events: ListeningEvent[] = [];
+    const recorder = new PulseRecorder(
+      (event) => events.push(event),
+      1,
+      () => clock,
+      () => wall,
+    );
+    recorder.source(fixture().track);
+    recorder.playing(0, 1);
+    wall -= 86_400_000;
+    clock = 1000;
+    recorder.sample(1, 1);
+    wall += 2 * 86_400_000;
+    clock = 2000;
+    recorder.close(2, 1);
+    expect(events[0]).toMatchObject({
+      startedAt: Date.parse("2026-03-08T06:59:59Z"),
+      endedAt: Date.parse("2026-03-08T07:00:01Z"),
+      playedMs: 2000,
+    });
+  });
+  it.each(["pause", "waiting", "error", "emptied"])(
+    "%s stops counting until playing; a source replacement retains the album visit",
+    (stop) => {
+      vi.useFakeTimers();
+      const f = fixture();
+      const audio = Object.assign(new EventTarget(), {
+        currentTime: 0,
+        playbackRate: 1,
+        paused: false,
+        ended: false,
+      });
+      const detach = attachPulseRecorder(audio as HTMLAudioElement, f.recorder);
+      try {
+        audio.dispatchEvent(new Event("playing"));
+        f.advance(1000);
+        audio.currentTime = 1;
+        audio.dispatchEvent(new Event("timeupdate"));
+        audio.dispatchEvent(new Event(stop));
+        f.advance(10_000);
+        audio.currentTime = 11;
+        audio.dispatchEvent(new Event("timeupdate"));
+        f.recorder.source({ ...f.track, id: "replaced-source" }, 11, 1);
+        audio.dispatchEvent(new Event("playing"));
+        f.advance(1000);
+        audio.currentTime = 12;
+        audio.dispatchEvent(new Event("pause"));
+        expect(f.events.map((event) => event.playedMs)).toEqual([1000, 1000]);
+        expect(f.events.map((event) => event.track.id)).toEqual([
+          "track",
+          "replaced-source",
+        ]);
+        expect(f.events[0].visitId).toBe(f.events[1].visitId);
+      } finally {
+        detach();
+        vi.useRealTimers();
+      }
+    },
+  );
+  it.each([0.0001, 0.125, 0.9999])(
+    "hour segments remain valid on HTTP with fractional monotonic origin %s",
+    (fraction) => {
+      const f = fixture();
+      f.advance(fraction);
+      f.recorder.playing(0, 2);
+      f.advance(3_600_001.125);
+      f.recorder.sample(7200.00225, 2);
+      f.recorder.close(7200.00225, 2);
+      const events = f.events.map(toPulseEvent);
+      expect(events.map((event) => event.playedMs)).toEqual([3_600_000, 1]);
+      for (const event of events) {
+        expect(pulseEventSchema.safeParse(event).success).toBe(true);
+        expect(event.endedAtUtc - event.startedAtUtc).toBeLessThanOrEqual(
+          3_600_000,
+        );
+      }
+    },
+  );
   it("counts real time at 2x and cumulative checkpoints retain identity", () => {
     const f = fixture();
     f.recorder.playing(0, 2);

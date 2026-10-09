@@ -77,11 +77,7 @@ test("filter menu excludes active filters and restores removed filters", async (
   await page.locator(".topbar").click({ position: { x: 500, y: 10 } });
   await expect(menu).toHaveCount(0);
   await addCatalogFilter(page, "Недавние");
-  await page
-    .getByRole("button", {
-      name: "Закрыть изменение периода недавнего добавления",
-    })
-    .click();
+  await expect(page.locator(".catalog-filter-editor")).toHaveCount(0);
   for (const label of ["Не просмотрено", "Закладки"])
     await addCatalogFilter(page, label);
   await add.click();
@@ -352,6 +348,10 @@ test("bookmark filter retries a failed load and follows external reset", async (
     exact: true,
   });
   await expect(retry).toBeEnabled();
+  await expect(page.locator('[data-filter="bookmarks"]')).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Показать всю музыку", exact: true }),
+  ).toHaveCount(0);
   fail = false;
   await retry.click();
   const bookmarks = page.getByRole("menuitem", {
@@ -363,6 +363,11 @@ test("bookmark filter retries a failed load and follows external reset", async (
   await expect(page.locator('[data-filter="bookmarks"]')).toHaveText(
     "Закладки",
   );
+  // The reset action belongs to a successfully loaded, empty bookmark result,
+  // not to the failed-load state or to a still-loading catalog.
+  await expect(
+    page.getByRole("heading", { name: "В закладках пока пусто", exact: true }),
+  ).toBeVisible();
   await page
     .getByRole("button", { name: "Показать всю музыку", exact: true })
     .click();

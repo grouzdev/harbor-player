@@ -155,8 +155,13 @@ export class PulseStore {
       const source = path.join(this.dataDir, "covers", id);
       const target = path.join(this.dataDir, "pulse-covers", id);
       if (existsSync(source) && !existsSync(target)) {
-        mkdirSync(path.dirname(target), { recursive: true });
-        copyFileSync(source, target);
+        try {
+          mkdirSync(path.dirname(target), { recursive: true });
+          copyFileSync(source, target);
+        } catch {
+          // Covers are best-effort decoration, not a prerequisite for history.
+          // Keep the snapshot and time; a missing historical image uses fallback.
+        }
       }
     }
     return this.db.transaction(() => {

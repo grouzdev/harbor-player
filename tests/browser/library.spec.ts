@@ -145,6 +145,9 @@ test("topbar groups catalog controls in the requested order", async ({
   const rightControls = [
     page
       .locator(".topbar")
+      .getByRole("button", { name: "Открыть Пульс", exact: true }),
+    page
+      .locator(".topbar")
       .getByRole("button", { name: "Открыть режим обложки", exact: true }),
     page.getByRole("button", {
       name: "Развернуть окно на весь экран",
@@ -154,18 +157,15 @@ test("topbar groups catalog controls in the requested order", async ({
   const boxes = await Promise.all(
     rightControls.map((node) => node.boundingBox()),
   );
+  // Cover has an extra 8px margin after the separate Pulse action.
   for (let i = 1; i < boxes.length; i++) {
     expect(boxes[i]!.x - boxes[i - 1]!.x - boxes[i - 1]!.width).toBeCloseTo(
-      7,
+      i === 1 ? 15 : 7,
       1,
     );
   }
   await addCatalogFilter(page, "Недавние");
-  await page
-    .getByRole("button", {
-      name: "Закрыть изменение периода недавнего добавления",
-    })
-    .click();
+  await expect(page.locator(".catalog-filter-editor")).toHaveCount(0);
   await addCatalogFilter(page, "Закладки");
   await addCatalogFilter(page, "Не просмотрено");
   await expect(page.locator(".catalog-filter-chip")).toHaveText([
@@ -1583,15 +1583,12 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await expect(firstTrackRow).not.toHaveClass(/selected/);
   await artistButton.dispatchEvent("click");
   await expect(artistRow).toHaveClass(/selected/);
-  await expect(downloadsTile).not.toHaveClass(/selected/);
+  await expect(downloadsTile).toHaveClass(/selected/);
   await artistButton.dispatchEvent("click", { ctrlKey: true });
   await expect(artistRow).not.toHaveClass(/selected/);
   await artistButton.dispatchEvent("click");
   await expect(artistRow).toHaveClass(/selected/);
-  // Combine panels explicitly; ordinary artist selection clears the library.
-  await downloadsTile.locator(".list-tile-main").click({
-    modifiers: ["Control"],
-  });
+  // Artist selection retains its upstream library context.
   await expect(downloadsTile).toHaveClass(/selected/);
   await expect(artistRow).toHaveClass(/selected/);
 
@@ -2169,8 +2166,10 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await expect(page.locator(".genres-panel .panel-count")).toContainText(
     /^1\/\d+$/,
   );
-  await expect(artistRow).toHaveClass(/selected/);
-  await expect(firstAlbum).toHaveClass(/selected/);
+  await expect(artistRow).not.toHaveClass(/selected/);
+  await expect(firstAlbum).not.toHaveClass(/selected/);
+  await artistButton.dispatchEvent("click");
+  await firstAlbumButton.dispatchEvent("click");
   await page
     .locator(".genres-panel")
     .getByRole("button", { name: "Сбросить жанры" })
@@ -2198,11 +2197,8 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await artistButton.dispatchEvent("click");
   await expect(artistRow).toHaveClass(/selected/);
   await expect(firstAlbum).not.toHaveClass(/selected/);
-  await expect(downloadsTile).not.toHaveClass(/selected/);
+  await expect(downloadsTile).toHaveClass(/selected/);
   await firstAlbumButton.dispatchEvent("click", { ctrlKey: true });
-  await downloadsTile.locator(".list-tile-main").click({
-    modifiers: ["Control"],
-  });
   await expect(page.locator(".artists-panel .panel-count")).toContainText(
     /^1\/\d+$/,
   );
@@ -2217,7 +2213,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     page.getByRole("button", { name: "Сбросить исполнителей" }),
   ).toHaveCount(0);
   await expect(artistRow).not.toHaveClass(/selected/);
-  await expect(firstAlbum).toHaveClass(/selected/);
+  await expect(firstAlbum).not.toHaveClass(/selected/);
 
   await artistButton.dispatchEvent("click", { ctrlKey: true });
   await secondArtistRow
@@ -2234,7 +2230,8 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     .getByRole("menuitem", { name: "Редактировать теги (2)" })
     .dispatchEvent("click");
   const multiArtistTagDialog = page.getByRole("dialog");
-  await expect(multiArtistTagDialog).toContainText("Выбрано треков: 6");
+  // Artist selection clears the previous album restriction: all seven formats.
+  await expect(multiArtistTagDialog).toContainText("Выбрано треков: 7");
   await multiArtistTagDialog
     .getByRole("button", { name: "Отмена" })
     .dispatchEvent("click");
@@ -3063,13 +3060,21 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     "cover-mode",
     "Downloads",
   );
-  const libraryName = `Downloads ${browser}`;
+  let libraryName = `Cover mode Downloads ${browser}`;
   const librariesLoaded = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === "/api/libraries" && response.ok(),
   );
   await page.goto("/");
-  await librariesLoaded;
+  const libraryResponse = await librariesLoaded;
+  const libraries = (await libraryResponse.json()) as {
+    name: string;
+    path: string;
+  }[];
+  const connected = libraries.find(
+    (library) => path.resolve(library.path) === source,
+  );
+  if (connected) libraryName = connected.name;
 
   let libraryTile = page
     .locator(".libraries-panel .list-tile")
@@ -3088,7 +3093,7 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   await libraryTile.locator(".list-tile-main").click();
   await expect
     .poll(() => page.getByTestId("track-row").count(), { timeout: 20_000 })
-    .toBeGreaterThan(0);
+    .toBe(7);
   const coverModeToggle = page.locator(".cover-mode-toggle");
   await expect(coverModeToggle).toBeEnabled();
   await page.route("**/api/queue/*/album-block?*", async (route) => {
