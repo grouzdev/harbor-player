@@ -504,9 +504,12 @@ export async function createApp(options: {
       .object({ id: z.string().regex(/^[a-f0-9]{64}\.(jpg|png)$/) })
       .parse(request.params).id;
     const current = path.join(service.dataDir, "covers", id);
+    const historical = path.join(service.dataDir, "pulse-covers", id);
     const file = existsSync(current)
       ? current
-      : path.join(service.dataDir, "pulse-covers", id);
+      : existsSync(historical)
+        ? historical
+        : path.join(`${historical}.archive`, "image");
     if (!existsSync(file)) return reply.code(404).send();
     return reply
       .header("Cache-Control", "private, max-age=86400")

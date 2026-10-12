@@ -308,9 +308,13 @@ test("historical album title and time remain visible when both cover copies are 
   await progressAudio(page, 1);
   const { total } = await finishListening(page, ledger);
   const albumId = [...ledger.albums][0];
-  const files = ["covers", "pulse-covers"].map((folder) =>
-    path.resolve(".test-data/browser/data", folder, fixture.track.coverId!),
-  );
+  const files = [
+    path.resolve(".test-data/browser/data/covers", fixture.track.coverId!),
+    path.resolve(
+      ".test-data/browser/data/pulse-covers",
+      `${fixture.track.coverId!}.archive`,
+    ),
+  ];
   const moved: string[] = [];
   try {
     for (const file of files) {

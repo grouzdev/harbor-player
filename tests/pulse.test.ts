@@ -1,5 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  mkdir,
+  mkdtemp,
+  rm,
+  writeFile,
+  readFile,
+  readdir,
+} from "node:fs/promises";
 import path from "node:path";
 import type Database from "better-sqlite3";
 import { Catalog } from "../dist/server/database.js";
@@ -38,11 +45,162 @@ beforeEach(async () => {
   catalog.pulse.updateSettings({ timeZone: "UTC" });
 });
 afterEach(async () => {
+  vi.restoreAllMocks();
   catalog.close();
   await rm(root, { recursive: true, force: true });
 });
 
 describe("Pulse storage", () => {
+  it.each(["clear", "disable", "re-enable", "timeZone"])(
+    "allows reads during preparation and rejects stale commit after %s",
+    async (change) => {
+      let release!: () => void;
+      const paused = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const artwork = catalog.pulse as unknown as {
+        copyCover(id: string): Promise<void>;
+      };
+      vi.spyOn(artwork, "copyCover").mockImplementation(() => paused);
+      const pending = send(
+        event({
+          snapshot: { ...event().snapshot, coverId: `${"c".repeat(64)}.jpg` },
+        }),
+      );
+      expect(catalog.pulse.range().firstDay).toBeNull();
+      expect(catalog.pulse.layout("2026-03-07", "2026-03-08").days).toEqual([]);
+      if (change === "clear")
+        catalog.pulse.clear(catalog.pulse.settings().historyGeneration);
+      else if (change === "timeZone")
+        db()
+          .prepare("UPDATE pulse_settings SET timeZone='Europe/Berlin'")
+          .run();
+      else {
+        catalog.pulse.updateSettings({ enabled: false });
+        if (change === "re-enable")
+          catalog.pulse.updateSettings({ enabled: true });
+      }
+      const rejected = expect(pending).rejects.toThrow(
+        change === "disable"
+          ? "отключён"
+          : change === "timeZone"
+            ? "пояс"
+            : "Поколение",
+      );
+      release();
+      await rejected;
+      expect(
+        db().prepare("SELECT count(*) n FROM pulse_intervals").get(),
+      ).toEqual({ n: 0 });
+    },
+  );
+
+  it("bounds artwork work across batches, deduplicates concurrent covers and keeps retry sums", async () => {
+    let release!: () => void;
+    const paused = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const artwork = catalog.pulse as unknown as {
+      copyCover(id: string): Promise<void>;
+    };
+    const prepare = vi
+      .spyOn(artwork, "copyCover")
+      .mockImplementation(() => paused);
+    const events = Array.from({ length: 8 }, (_, i) =>
+      event({
+        eventId: `bounded-${i}`,
+        snapshot: {
+          ...event().snapshot,
+          coverId: `${String(i).repeat(64)}.jpg`,
+        },
+      }),
+    );
+    const first = send(...events);
+    const retry = send(...events);
+    await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(4));
+    release();
+    const [accepted, retried] = await Promise.all([first, retry]);
+    expect(prepare).toHaveBeenCalledTimes(8);
+    expect(retried).toEqual(accepted);
+    expect(
+      db().prepare("SELECT sum(playedMs) n FROM pulse_days").get(),
+    ).toEqual({ n: 120000 });
+  });
+
+  it("drains the artwork queue after rejected preparation and permits retry", async () => {
+    const artwork = catalog.pulse as unknown as {
+      copyCover(id: string): Promise<void>;
+    };
+    const prepare = vi
+      .spyOn(artwork, "copyCover")
+      .mockRejectedValue(new Error("Artwork adapter failed"));
+    const events = Array.from({ length: 8 }, (_, index) =>
+      event({
+        eventId: `rejected-cover-${index}`,
+        snapshot: {
+          ...event().snapshot,
+          coverId: `${String(index).repeat(64)}.jpg`,
+        },
+      }),
+    );
+    const first = await send(...events);
+    expect(first.acknowledgements).toHaveLength(8);
+    expect(prepare).toHaveBeenCalledTimes(8);
+    expect(await send(...events)).toEqual(first);
+    expect(prepare).toHaveBeenCalledTimes(16);
+    expect(
+      db().prepare("SELECT sum(playedMs) n FROM pulse_days").get(),
+    ).toEqual({ n: 120000 });
+  });
+
+  it("acknowledges an existing flat cover while unrelated heavy copies are paused", async () => {
+    const coverId = `${"e".repeat(64)}.jpg`;
+    await mkdir(path.join(root, "pulse-covers"));
+    await writeFile(path.join(root, "pulse-covers", coverId), "legacy cover");
+    let release!: () => void;
+    const paused = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const artwork = catalog.pulse as unknown as {
+      copyCover(id: string): Promise<void>;
+    };
+    const prepare = vi
+      .spyOn(artwork, "copyCover")
+      .mockImplementation(() => paused);
+    const batch = send(
+      ...Array.from({ length: 8 }, (_, index) =>
+        event({
+          eventId: `slow-cover-${index}`,
+          snapshot: {
+            ...event().snapshot,
+            coverId: `${String(index).repeat(64)}.jpg`,
+          },
+        }),
+      ),
+    );
+    let acknowledged = false;
+    let checkpoint: Promise<unknown> | undefined;
+    try {
+      await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(4));
+      checkpoint = send(
+        event({
+          eventId: "existing-cover",
+          snapshot: { ...event().snapshot, coverId },
+        }),
+      ).then(() => {
+        acknowledged = true;
+      });
+      await vi.waitFor(() => expect(acknowledged).toBe(true));
+      expect(prepare).toHaveBeenCalledTimes(4);
+    } finally {
+      release();
+      await Promise.all([batch, checkpoint]);
+    }
+    expect(
+      await readFile(path.join(root, "pulse-covers", coverId), "utf8"),
+    ).toBe("legacy cover");
+  });
+
   it("preserves aliases and the first snapshot through actual catalog lifecycle operations", async () => {
     const library = catalog.addLibrary("Lifecycle", path.join(root, "music"));
     const track: Track = {
@@ -74,16 +232,18 @@ describe("Pulse storage", () => {
       "synthetic audio",
     );
     catalog.upsert(track);
-    const albumId = send(event()).acknowledgements[0].albumId;
+    const albumId = (await send(event())).acknowledgements[0].albumId;
     catalog.renameLibrary(library.id, "Renamed library");
     catalog.upsert({ ...track, albumKey: "retagged", albumTitle: "Retagged" });
     expect(
-      send(
-        event({
-          eventId: "retagged",
-          albumKey: "retagged",
-          snapshot: { ...event().snapshot, title: "Retagged" },
-        }),
+      (
+        await send(
+          event({
+            eventId: "retagged",
+            albumKey: "retagged",
+            snapshot: { ...event().snapshot, title: "Retagged" },
+          }),
+        )
       ).acknowledgements[0].albumId,
     ).toBe(albumId);
     const { rename } = await import("node:fs/promises");
@@ -98,7 +258,7 @@ describe("Pulse storage", () => {
       albumTitle: "Retagged",
     });
     expect(
-      send(event({ eventId: "moved", albumKey: "retagged" }))
+      (await send(event({ eventId: "moved", albumKey: "retagged" })))
         .acknowledgements[0].albumId,
     ).toBe(albumId);
     catalog.removeLibrary(library.id);
@@ -135,14 +295,15 @@ describe("Pulse storage", () => {
         // Copying a directory as a file fails even with elevated privileges.
         await mkdir(path.join(root, "covers", coverId), { recursive: true });
       }
-      const albumId = send(
-        event({ snapshot: { ...event().snapshot, coverId } }),
+      const albumId = (
+        await send(event({ snapshot: { ...event().snapshot, coverId } }))
       ).acknowledgements[0].albumId;
       expect(catalog.pulse.albumStats(albumId)).toMatchObject({
         title: "Album",
         playedMs: 15000,
         coverId,
       });
+      expect(await readdir(path.join(root, "pulse-covers"))).toEqual([]);
       if (fault === "copy-error")
         await rm(path.join(root, "covers"), { recursive: true });
       const context = await createApp({ dataDir: root });
@@ -167,31 +328,31 @@ describe("Pulse storage", () => {
 
   it.each(["ingest-first", "clear-first"])(
     "rejects old generation after clear with %s ordering",
-    (ordering) => {
+    async (ordering) => {
       const generation = catalog.pulse.settings().historyGeneration;
       const ingest = () =>
         catalog.pulse.ingest({
           historyGeneration: generation,
           events: [event()],
         });
-      if (ordering === "ingest-first") ingest();
+      if (ordering === "ingest-first") await ingest();
       const cleared = catalog.pulse.clear(generation);
-      expect(() => ingest()).toThrow("Поколение");
+      await expect(ingest()).rejects.toThrow("Поколение");
       expect(catalog.pulse.range().firstDay).toBeNull();
       catalog.close();
       catalog = new Catalog(root);
-      expect(() => ingest()).toThrow("Поколение");
+      await expect(ingest()).rejects.toThrow("Поколение");
       expect(catalog.pulse.settings().historyGeneration).toBe(
         cleared.historyGeneration,
       );
-      send(event());
+      await send(event());
       expect(
         db().prepare("SELECT sum(playedMs) n FROM pulse_days").get(),
       ).toEqual({ n: 15000 });
     },
   );
 
-  it("counts independent sessions once despite retry and equal-duration final revisions", () => {
+  it("counts independent sessions once despite retry and equal-duration final revisions", async () => {
     const a = event({ startedAtUtc: start - 60000, endedAtUtc: start - 45000 });
     const b = {
       ...a,
@@ -199,13 +360,13 @@ describe("Pulse storage", () => {
       sessionId: "session-b",
       visitId: "visit-b",
     };
-    const albumId = send(a, b).acknowledgements[0].albumId;
-    send(b, a);
-    send(
+    const albumId = (await send(a, b)).acknowledgements[0].albumId;
+    await send(b, a);
+    await send(
       { ...a, revision: 2, final: true },
       { ...b, revision: 2, final: true },
     );
-    send(a, b);
+    await send(a, b);
     expect(catalog.pulse.albumStats(albumId)).toMatchObject({
       playedMs: 30000,
       sameDayReturns: 1,
@@ -232,7 +393,7 @@ describe("Pulse storage", () => {
     ["2026-11-01T05:59:50Z", "2026-11-01"],
   ])(
     "retains exact milliseconds across actual DST transition at %s",
-    (timestamp, dayKey) => {
+    async (timestamp, dayKey) => {
       const time = Date.parse(timestamp);
       expect(
         splitPulseInterval(
@@ -249,16 +410,18 @@ describe("Pulse storage", () => {
       let albumId: string;
       try {
         dst.pulse.updateSettings({ timeZone: "America/New_York" });
-        albumId = dst.pulse.ingest({
-          historyGeneration: dst.pulse.settings().historyGeneration,
-          events: [
-            event({
-              startedAtUtc: time,
-              endedAtUtc: time + 20000,
-              playedMs: 20000,
-            }),
-          ],
-        }).acknowledgements[0].albumId;
+        albumId = (
+          await dst.pulse.ingest({
+            historyGeneration: dst.pulse.settings().historyGeneration,
+            events: [
+              event({
+                startedAtUtc: time,
+                endedAtUtc: time + 20000,
+                playedMs: 20000,
+              }),
+            ],
+          })
+        ).acknowledgements[0].albumId;
       } finally {
         dst.close();
       }
@@ -275,13 +438,15 @@ describe("Pulse storage", () => {
     },
   );
 
-  it("migrates to version 13 and retains exact milliseconds through retries and checkpoints", () => {
+  it("migrates to version 13 and retains exact milliseconds through retries and checkpoints", async () => {
     expect(db().pragma("user_version", { simple: true })).toBe(13);
-    const albumId = send(event()).acknowledgements[0].albumId;
-    send(event());
-    send(event({ revision: 2, endedAtUtc: start + 30000, playedMs: 30000 }));
-    expect(send(event()).acknowledgements[0].revision).toBe(2);
-    send(
+    const albumId = (await send(event())).acknowledgements[0].albumId;
+    await send(event());
+    await send(
+      event({ revision: 2, endedAtUtc: start + 30000, playedMs: 30000 }),
+    );
+    expect((await send(event())).acknowledgements[0].revision).toBe(2);
+    await send(
       event({
         revision: 3,
         endedAtUtc: start + 30000,
@@ -315,31 +480,31 @@ describe("Pulse storage", () => {
     });
   });
 
-  it("rolls the entire batch back on conflicting revisions or identities", () => {
-    send(event());
-    expect(() =>
+  it("rolls the entire batch back on conflicting revisions or identities", async () => {
+    await send(event());
+    await expect(
       send(event({ eventId: "second" }), event({ playedMs: 14000 })),
-    ).toThrow("Несовместимая");
+    ).rejects.toThrow("Несовместимая");
     expect(
       db().prepare("SELECT count(*) n FROM pulse_intervals").get(),
     ).toEqual({ n: 1 });
-    expect(() => send(event({ revision: 2, albumKey: "other" }))).toThrow(
-      "идентичность",
-    );
-    expect(() =>
+    await expect(
+      send(event({ revision: 2, albumKey: "other" })),
+    ).rejects.toThrow("идентичность");
+    await expect(
       send(event({ revision: 2, endedAtUtc: start + 14000, playedMs: 14000 })),
-    ).toThrow("продолжение");
-    send(event({ revision: 2, final: true }));
-    expect(() =>
+    ).rejects.toThrow("продолжение");
+    await send(event({ revision: 2, final: true }));
+    await expect(
       send(event({ revision: 3, endedAtUtc: start + 16000, playedMs: 16000 })),
-    ).toThrow("продолжение");
+    ).rejects.toThrow("продолжение");
   });
 
-  it("deduplicates album visits across tracks and counts same-day returns once", () => {
-    const albumId = send(event()).acknowledgements[0].albumId;
-    send(event({ eventId: "next-track", trackId: "track2" }));
-    send(event({ eventId: "return", visitId: "visit2" }));
-    send(event({ eventId: "return-next", visitId: "visit2" }));
+  it("deduplicates album visits across tracks and counts same-day returns once", async () => {
+    const albumId = (await send(event())).acknowledgements[0].albumId;
+    await send(event({ eventId: "next-track", trackId: "track2" }));
+    await send(event({ eventId: "return", visitId: "visit2" }));
+    await send(event({ eventId: "return-next", visitId: "visit2" }));
     expect(catalog.pulse.albumStats(albumId)).toMatchObject({
       playedMs: 60000,
       dayCount: 2,
@@ -350,29 +515,33 @@ describe("Pulse storage", () => {
     );
   });
 
-  it("keeps historical identity and snapshot across tag renames and catalog removal", () => {
-    const first = send(event()).acknowledgements[0].albumId;
+  it("keeps historical identity and snapshot across tag renames and catalog removal", async () => {
+    const first = (await send(event())).acknowledgements[0].albumId;
     const renamed = event({
       eventId: "renamed",
       albumKey: "new-key",
       snapshot: { ...event().snapshot, title: "Renamed" },
     });
-    expect(send(renamed).acknowledgements[0].albumId).toBe(first);
+    expect((await send(renamed)).acknowledgements[0].albumId).toBe(first);
     expect(
-      send(
-        event({ eventId: "next", trackId: "new-track", albumKey: "new-key" }),
+      (
+        await send(
+          event({ eventId: "next", trackId: "new-track", albumKey: "new-key" }),
+        )
       ).acknowledgements[0].albumId,
     ).toBe(first);
     expect(catalog.pulse.dayAlbums("2026-03-07", 20).items[0].title).toBe(
       "Album",
     );
     expect(
-      send(
-        event({
-          eventId: "edition",
-          trackId: "other-track",
-          albumKey: "other-key",
-        }),
+      (
+        await send(
+          event({
+            eventId: "edition",
+            trackId: "other-track",
+            albumKey: "other-key",
+          }),
+        )
       ).acknowledgements[0].albumId,
     ).not.toBe(first);
     catalog.close();
@@ -384,12 +553,36 @@ describe("Pulse storage", () => {
     const coverId = `${"a".repeat(64)}.jpg`;
     await mkdir(path.join(root, "covers"));
     await writeFile(path.join(root, "covers", coverId), "cover");
-    send(event({ snapshot: { ...event().snapshot, coverId } }));
+    const withCover = event({ snapshot: { ...event().snapshot, coverId } });
+    const secondStore = new Catalog(root);
+    try {
+      const [first, retry] = await Promise.all([
+        send(withCover),
+        secondStore.pulse.ingest({
+          historyGeneration: secondStore.pulse.settings().historyGeneration,
+          events: [withCover],
+        }),
+      ]);
+      expect(retry).toEqual(first);
+      expect(
+        catalog.pulse.albumStats(first.acknowledgements[0].albumId).playedMs,
+      ).toBe(15000);
+    } finally {
+      secondStore.close();
+    }
+    await writeFile(path.join(root, "covers", coverId), "replacement");
+    await send(event({ snapshot: { ...event().snapshot, coverId } }));
+    expect(await readdir(path.join(root, "pulse-covers"))).toEqual([
+      `${coverId}.archive`,
+    ]);
     await rm(path.join(root, "covers"), { recursive: true });
     expect(
-      await readFile(path.join(root, "pulse-covers", coverId), "utf8"),
+      await readFile(
+        path.join(root, "pulse-covers", `${coverId}.archive`, "image"),
+        "utf8",
+      ),
     ).toBe("cover");
-    send(
+    await send(
       event({
         eventId: "missing-cover",
         snapshot: { ...event().snapshot, coverId },
@@ -415,17 +608,17 @@ describe("Pulse storage", () => {
     }
   });
 
-  it("defaults enabled and invalidates pending events after clear and re-enable", () => {
+  it("defaults enabled and invalidates pending events after clear and re-enable", async () => {
     expect(catalog.pulse.settings().enabled).toBe(true);
-    send(event());
+    await send(event());
     const old = catalog.pulse.settings().historyGeneration;
     expect(catalog.pulse.clear(old).historyGeneration).toBe(old + 1);
     expect(catalog.pulse.range().firstDay).toBeNull();
-    expect(() =>
+    await expect(
       catalog.pulse.ingest({ historyGeneration: old, events: [event()] }),
-    ).toThrow("Поколение");
+    ).rejects.toThrow("Поколение");
     catalog.pulse.updateSettings({ enabled: false });
-    expect(() => send(event())).toThrow("отключён");
+    await expect(send(event())).rejects.toThrow("отключён");
     expect(
       catalog.pulse.updateSettings({ enabled: true }).historyGeneration,
     ).toBe(old + 2);
@@ -437,9 +630,9 @@ describe("Pulse storage", () => {
     );
   });
 
-  it("provides sparse windows, cursor pagination and direct ranks for a busy day", () => {
+  it("provides sparse windows, cursor pagination and direct ranks for a busy day", async () => {
     for (let batch = 0; batch < 11; batch++) {
-      send(
+      await send(
         ...Array.from({ length: 100 }, (_, i) => {
           const n = batch * 100 + i;
           return event({
@@ -499,12 +692,14 @@ describe("Pulse storage", () => {
     },
   );
 
-  it("keeps subsecond allocations stable when later checkpoints have wall-clock drift", () => {
+  it("keeps subsecond allocations stable when later checkpoints have wall-clock drift", async () => {
     const time = Date.parse("2026-03-07T23:59:59.999Z");
-    const albumId = send(
-      event({ startedAtUtc: time, endedAtUtc: time + 2, playedMs: 2 }),
+    const albumId = (
+      await send(
+        event({ startedAtUtc: time, endedAtUtc: time + 2, playedMs: 2 }),
+      )
     ).acknowledgements[0].albumId;
-    send(
+    await send(
       event({
         revision: 2,
         startedAtUtc: time,

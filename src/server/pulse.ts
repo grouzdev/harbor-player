@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import { createHash, randomUUID } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { access, copyFile, mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import {
   pulseBatchSchema,
@@ -74,6 +74,10 @@ export function splitPulseInterval(
 }
 
 export class PulseStore {
+  private readonly coverCopies = new Map<string, Promise<void>>();
+  private readonly coverQueue: (() => void)[] = [];
+  private activeCoverCopies = 0;
+
   constructor(
     private readonly db: Database.Database,
     private readonly dataDir: string,
@@ -139,7 +143,7 @@ export class PulseStore {
     })();
   }
 
-  ingest(input: unknown): PulseBatchResult {
+  async ingest(input: unknown): Promise<PulseBatchResult> {
     const batch = pulseBatchSchema.parse(input);
     const settings = this.settings();
     if (!settings.enabled) throw conflict("Сбор истории отключён");
@@ -147,32 +151,95 @@ export class PulseStore {
       throw conflict("Поколение истории изменилось");
     if (!settings.timeZone)
       throw conflict("Сначала задайте часовой пояс истории");
-    // Filesystem work happens before the write transaction. Hash-addressed copies are
-    // shared by all snapshots and remain available when the catalog drops its cache.
-    for (const event of batch.events) {
-      const id = event.snapshot.coverId;
-      if (!id) continue;
-      const source = path.join(this.dataDir, "covers", id);
-      const target = path.join(this.dataDir, "pulse-covers", id);
-      if (existsSync(source) && !existsSync(target)) {
-        try {
-          mkdirSync(path.dirname(target), { recursive: true });
-          copyFileSync(source, target);
-        } catch {
-          // Covers are best-effort decoration, not a prerequisite for history.
-          // Keep the snapshot and time; a missing historical image uses fallback.
-        }
-      }
-    }
+    // No filesystem work or await inside the SQLite write transaction.
+    await Promise.all(
+      [...new Set(batch.events.map((event) => event.snapshot.coverId))]
+        .filter((id): id is string => id !== null)
+        .map((id) => this.prepareCover(id)),
+    );
     return this.db.transaction(() => {
+      const current = this.settings();
+      if (!current.enabled) throw conflict("Сбор истории отключён");
+      if (current.historyGeneration !== batch.historyGeneration)
+        throw conflict("Поколение истории изменилось");
+      if (!current.timeZone || current.timeZone !== settings.timeZone)
+        throw conflict("Часовой пояс истории изменился");
       const acknowledgements = batch.events.map((event) =>
-        this.apply(event, settings.timeZone!),
+        this.apply(event, current.timeZone!),
       );
       return {
         historyGeneration: settings.historyGeneration,
         acknowledgements,
       };
     })();
+  }
+
+  private prepareCover(id: string): Promise<void> {
+    const pending = this.coverCopies.get(id);
+    if (pending) return pending;
+    const copy = this.hasCover(id)
+      .then(async (exists) => {
+        // A checkpoint for an already archived image must not wait behind an
+        // unrelated batch's heavy copies. No accumulating existence cache.
+        if (exists) return;
+        await new Promise<void>((resolve) => {
+          const run = () => {
+            this.activeCoverCopies++;
+            void this.copyCover(id)
+              .catch(() => {
+                // Preparation stays best-effort if a future adapter rejects.
+              })
+              .finally(() => {
+                this.activeCoverCopies--;
+                resolve();
+                this.coverQueue.shift()?.();
+              });
+          };
+          if (this.activeCoverCopies < 4) run();
+          else this.coverQueue.push(run);
+        });
+      })
+      .finally(() => this.coverCopies.delete(id));
+    this.coverCopies.set(id, copy);
+    return copy;
+  }
+
+  private async hasCover(id: string): Promise<boolean> {
+    const target = path.join(this.dataDir, "pulse-covers", id);
+    for (const file of [target, path.join(`${target}.archive`, "image")]) {
+      try {
+        await access(file);
+        return true;
+      } catch {
+        // Missing or unreadable images remain best-effort decoration.
+      }
+    }
+    return false;
+  }
+
+  private async copyCover(id: string): Promise<void> {
+    const directory = path.join(this.dataDir, "pulse-covers");
+    const target = path.join(directory, id);
+    let staging: string | undefined;
+    try {
+      if (await this.hasCover(id)) return;
+      await mkdir(directory, { recursive: true });
+      staging = path.join(directory, `.pulse-${id}-${randomUUID()}.tmp`);
+      await mkdir(staging);
+      await copyFile(
+        path.join(this.dataDir, "covers", id),
+        path.join(staging, "image"),
+      );
+      // Publish a complete, nonempty directory on all filesystems. Directory
+      // rename cannot replace another nonempty winner, unlike flat-file rename.
+      // This also works on FAT/exFAT where hard links are unavailable.
+      await rename(staging, `${target}.archive`);
+    } catch {
+      // Artwork is best-effort; preserve the snapshot and listening time.
+    } finally {
+      if (staging)
+        await rm(staging, { recursive: true, force: true }).catch(() => {});
+    }
   }
 
   private apply(event: PulseEvent, timeZone: string) {
