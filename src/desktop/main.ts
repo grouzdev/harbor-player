@@ -31,6 +31,7 @@ const { autoUpdater } = electronUpdater;
 
 const appId = "app.harborplayer.desktop";
 const buildCommit = "__HARBOR_BUILD_COMMIT__";
+const pulseBenchmark = process.env.HARBOR_PLAYER_PULSE_BENCHMARK === "1";
 const smokeFixture = process.argv
   .find((argument) => argument.startsWith("--smoke-test="))
   ?.slice("--smoke-test=".length);
@@ -125,7 +126,7 @@ function configureUpdates() {
     },
     prepareInstall: quitApplication,
   });
-  if (isPortable) return;
+  if (isPortable || pulseBenchmark) return;
   initialUpdateTimer = setTimeout(() => void updates.check(), 30_000);
   initialUpdateTimer.unref();
   updateTimer = setInterval(() => void updates.check(), 6 * 60 * 60 * 1000);
@@ -327,6 +328,11 @@ function createWindow(url: string) {
   });
   mainWindow.on("close", (event) => {
     if (isQuitting) return;
+    if (pulseBenchmark) {
+      event.preventDefault();
+      void quitApplication();
+      return;
+    }
     event.preventDefault();
     mainWindow?.hide();
   });
@@ -511,6 +517,15 @@ async function bootstrap() {
           version: app.getVersion(),
           commit: buildCommit,
           portable: isPortable,
+          ...(pulseBenchmark
+            ? {
+                pulseBenchmark: true,
+                userData: app.getPath("userData"),
+                sessionData: app.getPath("sessionData"),
+                dataRoot,
+                electronVersion: process.versions.electron,
+              }
+            : {}),
         };
       });
       const requireDesktopSender = (event: Electron.IpcMainInvokeEvent) => {
@@ -681,7 +696,7 @@ async function bootstrap() {
       });
       if (!startupBenchmarkReport) configureUpdates();
       createWindow(url);
-      if (!startupBenchmarkReport) createTray();
+      if (!startupBenchmarkReport && !pulseBenchmark) createTray();
     }
   } catch (error) {
     await failApplication(errorText(error));

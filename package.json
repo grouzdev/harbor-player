@@ -23,6 +23,8 @@
     "test:pulse:process": "npm run build && node scripts/pulse-process-check.mjs",
     "test:pulse:desktop": "npm run desktop:pack && node scripts/pulse-desktop-check.mjs",
     "test:pulse:sleep": "npm run desktop:pack && node scripts/pulse-sleep-check.mjs",
+    "test:pulse:ui": "npm run build && node scripts/pulse-ui-benchmark.mjs",
+    "benchmark:pulse:ingest": "npm run build:server && node scripts/pulse-ingest-benchmark.mjs",
     "verify:pulse:migration": "npm run build:server && node scripts/pulse-migrate-check.mjs",
     "desktop:prepare": "install-electron",
     "desktop:start": "npm run desktop:prepare && npm run build && electron .",
