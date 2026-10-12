@@ -75,6 +75,7 @@ export function PulseSettingsControl({
         historyGeneration: settings.data.historyGeneration,
       });
       onCleared?.();
+      window.dispatchEvent(new Event("harbor-pulse-cleared"));
       window.dispatchEvent(new Event("harbor-pulse-settings-changed"));
       await queryClient.invalidateQueries({ queryKey: ["pulse"] });
       setConfirmClear(false);

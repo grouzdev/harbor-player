@@ -124,7 +124,7 @@ import {
 } from "./location-selection";
 import { Player, usePlayer } from "./Player";
 import { CoverMode, QuickSearchDialog } from "./CoverMode";
-import type { PulseViewState } from "./PulseMode";
+import { PulseMode, type PulseViewState } from "./PulseMode";
 import { PulseSettingsControl } from "./PulseSettingsControl";
 import { ContextMenu, type ContextMenuState } from "./ContextMenu";
 import { UpdatePanel } from "./UpdatePanel";
@@ -150,9 +150,6 @@ import type {
   PlaylistImportPreview,
 } from "../shared/playlists";
 
-const PulseMode = lazy(() =>
-  import("./PulseMode").then((module) => ({ default: module.PulseMode })),
-);
 const AppearanceSettingsPanels = lazy(() =>
   import("./AppearanceSettingsPanels").then((module) => ({
     default: module.AppearanceSettingsPanels,
@@ -673,12 +670,24 @@ export function App() {
   const catalogFocus = useRef<HTMLElement | null>(null);
   const previousWorkspaceMode = useRef(workspaceMode);
   useEffect(() => {
+    const cleared = () => {
+      pulseState.current = undefined;
+    };
+    window.addEventListener("harbor-pulse-cleared", cleared);
+    return () => window.removeEventListener("harbor-pulse-cleared", cleared);
+  }, []);
+  useEffect(() => {
     const previous = previousWorkspaceMode.current;
     previousWorkspaceMode.current = workspaceMode;
     if (workspaceMode !== "panels" || previous !== "pulse") return;
     const frame = requestAnimationFrame(() => {
       const target = catalogFocus.current;
-      if (target?.isConnected) target.focus({ preventScroll: true });
+      if (
+        target?.isConnected &&
+        target.getClientRects().length &&
+        !target.closest("[inert]")
+      )
+        target.focus({ preventScroll: true });
       else workspaceRef.current?.focus({ preventScroll: true });
     });
     return () => cancelAnimationFrame(frame);
@@ -3112,7 +3121,7 @@ export function App() {
           !(
             event.target instanceof HTMLElement &&
             event.target.closest(
-              "input, textarea, select, [contenteditable='true'], [role='dialog']",
+              "input, textarea, select, [contenteditable='true'], dialog[open], [role='dialog']",
             )
           )
         ) {
@@ -3147,13 +3156,23 @@ export function App() {
           type="button"
           className="topbar-brand"
           aria-label={
-            settingsOpen ? "Вернуться в каталог" : "Открыть настройки"
+            settingsOpen
+              ? pulseMode
+                ? "Вернуться в Пульс"
+                : "Вернуться в каталог"
+              : "Открыть настройки"
           }
           aria-pressed={settingsOpen}
-          title={settingsOpen ? "Вернуться в каталог" : "Настройки"}
+          title={
+            settingsOpen
+              ? pulseMode
+                ? "Вернуться в Пульс"
+                : "Вернуться в каталог"
+              : "Настройки"
+          }
           onClick={() => {
             setContextMenu(null);
-            if (settingsOpen) setCoverMode(false);
+            if (settingsOpen && !pulseMode) setCoverMode(false);
             setModal(settingsOpen ? null : "settings");
           }}
         />
@@ -3780,21 +3799,13 @@ export function App() {
         </div>
       </main>
       {!settingsOpen && pulseMode && (
-        <Suspense fallback={<div role="status">Загрузка истории…</div>}>
-          <PulseMode
-            initialState={pulseState.current}
-            onStateChange={(state) => {
-              pulseState.current = state;
-            }}
-            settingsControls={
-              <PulseSettingsControl
-                onCleared={() => {
-                  pulseState.current = undefined;
-                }}
-              />
-            }
-          />
-        </Suspense>
+        <PulseMode
+          initialState={pulseState.current}
+          onStateChange={(state) => {
+            pulseState.current = state;
+          }}
+          settingsControls={<PulseSettingsControl />}
+        />
       )}
       {!settingsOpen && coverMode && player.queue?.track && (
         <CoverMode

@@ -2,6 +2,11 @@
   margin-left: auto;
 }
 
+.app-shell.app-shell--pulse-mode,
+html:not(:fullscreen) .app-shell.app-shell--pulse-mode {
+  min-height: 0;
+}
+
 .topbar .pulse-mode-toggle + .cover-mode-toggle {
   margin-left: 8px;
 }

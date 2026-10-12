@@ -65,6 +65,7 @@ export interface PulseAdapter {
 export interface PulseViewState {
   date: string;
   offset: number;
+  generation?: string | number;
   selectedAlbumId?: string;
   selectedDay?: string;
 }
@@ -121,6 +122,12 @@ export function createPulseApiAdapter(): PulseAdapter {
   const statistics = boundedCache<PulseAlbumStats>(16);
   let generation: string | number | undefined;
   let timeZone = "UTC";
+  let epoch = 0;
+  const invalidate = () => {
+    epoch++;
+    pages.clear();
+    statistics.clear();
+  };
   const localDate = (timestamp: number) => {
     const parts = new Intl.DateTimeFormat("en", {
       year: "numeric",
@@ -133,14 +140,10 @@ export function createPulseApiAdapter(): PulseAdapter {
     return `${value("year")}-${value("month")}-${value("day")}`;
   };
   return {
-    invalidate() {
-      pages.clear();
-      statistics.clear();
-    },
+    invalidate,
     async history(signal) {
       // Listening may have changed while this screen was unmounted.
-      pages.clear();
-      statistics.clear();
+      invalidate();
       const range = await pulseGet<{
         firstDay: string | null;
         lastDay: string | null;
@@ -176,18 +179,20 @@ export function createPulseApiAdapter(): PulseAdapter {
       const key = `${generation}:${day}:${start}:${limit}`;
       const cached = pages.get(key);
       if (cached) return cached;
+      const requestEpoch = epoch;
       const result = await pulseGet<{ items: WireAlbum[] }>(
         `/api/pulse/days/${day}/albums?offset=${start}&limit=${limit}`,
         signal,
       );
       const cards = result.items.map(mapAlbum);
-      if (!signal.aborted) pages.set(key, cards);
+      if (!signal.aborted && requestEpoch === epoch) pages.set(key, cards);
       return cards;
     },
     async stats(albumId, day, signal) {
       const key = `${generation}:${albumId}:${day}`;
       const cached = statistics.get(key);
       if (cached) return cached;
+      const requestEpoch = epoch;
       const result = await pulseGet<
         WireAlbum & {
           album?: WireAlbum;
@@ -213,7 +218,7 @@ export function createPulseApiAdapter(): PulseAdapter {
         dayPlayedMs: result.dayPlayedMs,
         dayTotalMs: result.dayTotalMs,
       };
-      if (!signal.aborted) statistics.set(key, stats);
+      if (!signal.aborted && requestEpoch === epoch) statistics.set(key, stats);
       return stats;
     },
   };
@@ -285,26 +290,8 @@ function AlbumDay({
   const focusedCard = useRef<{ index: number; album: PulseAlbumCard } | null>(
     null,
   );
-  const virtual = useVirtualizer({
-    count,
-    horizontal: true,
-    getScrollElement: () => rail.current,
-    estimateSize: () => ALBUM_WIDTH,
-    scrollMargin: start + DAY_PADDING,
-    // This is an observer of the shared rail, not a second scroll owner.
-    // A newly mounted day's default scrollTo would reset the whole timeline.
-    scrollToFn: () => {},
-    overscan: 3,
-    rangeExtractor: (range) => {
-      const visible = defaultRangeExtractor(range);
-      return focusedCard.current === null
-        ? visible
-        : [...new Set([...visible, focusedCard.current.index])].sort(
-            (a, b) => a - b,
-          );
-    },
-  });
-  const items = virtual.getVirtualItems();
+  const [pendingRank, setPendingRank] = useState<number | null>(null);
+  const dayElement = useRef<HTMLDivElement>(null);
   const first = Math.max(
     0,
     Math.floor((left - start - DAY_PADDING) / ALBUM_WIDTH) - 3,
@@ -313,6 +300,18 @@ function AlbumDay({
     count - 1,
     Math.ceil((left + viewport - start - DAY_PADDING) / ALBUM_WIDTH) + 3,
   );
+  // One shared viewport drives both rendered ranks and page requests. A second
+  // scroll observer can start at zero when a day mounts at a nonzero rail offset.
+  const ranks = [
+    ...new Set([
+      ...Array.from(
+        { length: Math.max(0, last - first + 1) },
+        (_, i) => first + i,
+      ),
+      ...(focusedCard.current ? [focusedCard.current.index] : []),
+      ...(pendingRank === null ? [] : [pendingRank]),
+    ]),
+  ].sort((a, b) => a - b);
   const [cards, setCards] = useState<{
     start: number;
     cards: PulseAlbumCard[];
@@ -336,6 +335,22 @@ function AlbumDay({
       });
     return () => controller.abort();
   }, [adapter, layout, day, count, page, end]);
+  useEffect(() => {
+    if (pendingRank === null) return;
+    const button = dayElement.current?.querySelector<HTMLButtonElement>(
+      `[data-rank="${pendingRank}"]`,
+    );
+    if (button) {
+      button.focus({ preventScroll: true });
+      setPendingRank(null);
+    }
+  }, [cards, pendingRank]);
+  const entryRank =
+    focusedCard.current?.index ??
+    Math.min(
+      count - 1,
+      Math.max(0, Math.floor((left - start - DAY_PADDING) / ALBUM_WIDTH)),
+    );
   const date = new Date(`${day}T00:00:00Z`);
   const labelLeft = Math.max(
     8,
@@ -343,22 +358,23 @@ function AlbumDay({
   );
   return (
     <div
+      ref={dayElement}
       className={`pulse-day ${count ? "" : "pulse-quiet"}`}
       data-day={day}
       style={{ left: start, width: layout.width(index) }}
     >
       <div className="pulse-albums" style={{ height: plotHeight + 28 }}>
-        {items.map((item) => {
+        {ranks.map((rank) => {
           const album =
-            focusedCard.current?.index === item.index
+            focusedCard.current?.index === rank
               ? focusedCard.current.album
-              : cards.cards[item.index - cards.start];
+              : cards.cards[rank - cards.start];
           return (
             <div
-              key={item.key}
+              key={rank}
               className="pulse-card-slot"
               style={{
-                left: DAY_PADDING + item.index * ALBUM_WIDTH,
+                left: DAY_PADDING + rank * ALBUM_WIDTH,
                 width: ALBUM_WIDTH,
               }}
             >
@@ -366,8 +382,38 @@ function AlbumDay({
                 <button
                   type="button"
                   className="pulse-album"
+                  data-rank={rank}
+                  data-album-id={album.albumId}
+                  tabIndex={rank === entryRank ? 0 : -1}
+                  onKeyDown={(event) => {
+                    let nextRank = rank;
+                    if (event.key === "ArrowRight") nextRank++;
+                    else if (event.key === "ArrowLeft") nextRank--;
+                    else if (event.key === "Home") nextRank = 0;
+                    else if (event.key === "End") nextRank = count - 1;
+                    else if (event.key === "PageDown")
+                      nextRank += Math.max(
+                        1,
+                        Math.floor(viewport / ALBUM_WIDTH),
+                      );
+                    else if (event.key === "PageUp")
+                      nextRank -= Math.max(
+                        1,
+                        Math.floor(viewport / ALBUM_WIDTH),
+                      );
+                    else return;
+                    event.preventDefault();
+                    nextRank = Math.max(0, Math.min(count - 1, nextRank));
+                    if (rail.current)
+                      rail.current.scrollLeft =
+                        start +
+                        DAY_PADDING +
+                        nextRank * ALBUM_WIDTH -
+                        Math.max(0, (viewport - ALBUM_WIDTH) / 2);
+                    setPendingRank(nextRank);
+                  }}
                   onFocus={() => {
-                    focusedCard.current = { index: item.index, album };
+                    focusedCard.current = { index: rank, album };
                   }}
                   onBlur={() => {
                     focusedCard.current = null;
@@ -445,6 +491,7 @@ export function PulseMode({
   notify.current = onStateChange;
   const [layout, setLayout] = useState<PulseLayout>();
   const [history, setHistory] = useState<PulseHistory>();
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   const [position, setPosition] = useState({ left: 0, width: 0, height: 0 });
@@ -462,10 +509,24 @@ export function PulseMode({
   const [stats, setStats] = useState<PulseAlbumStats>();
   const [statsError, setStatsError] = useState(false);
   const focusedDay = useRef<number | null>(null);
-  const historyGeneration = useRef<string | number | undefined>(undefined);
+  const historyGeneration = useRef<string | number | undefined>(
+    initialState?.generation,
+  );
   const autoSelected = useRef(false);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const cleared = () => {
+      clearTimeout(timer);
+      adapter.invalidate?.();
+      state.current = undefined;
+      autoSelected.current = false;
+      focusedDay.current = null;
+      setSelection(undefined);
+      setStats(undefined);
+      setHistory(undefined);
+      setLayout(undefined);
+      setRevision((value) => value + 1);
+    };
     const refresh = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
@@ -475,15 +536,18 @@ export function PulseMode({
     };
     window.addEventListener("harbor-pulse-settings-changed", refresh);
     window.addEventListener("harbor-pulse-updated", refresh);
+    window.addEventListener("harbor-pulse-cleared", cleared);
     return () => {
       clearTimeout(timer);
       window.removeEventListener("harbor-pulse-settings-changed", refresh);
       window.removeEventListener("harbor-pulse-updated", refresh);
+      window.removeEventListener("harbor-pulse-cleared", cleared);
     };
   }, [adapter]);
   useEffect(() => {
     const controller = new AbortController();
     setError("");
+    setLoading(true);
     void (async () => {
       const range = await adapter.history(controller.signal);
       if (controller.signal.aborted) return;
@@ -499,6 +563,9 @@ export function PulseMode({
       historyGeneration.current = range.generation;
       setHistory(range);
       if (!range.from) {
+        setSelection(undefined);
+        setStats(undefined);
+        state.current = undefined;
         setLayout(undefined);
         return;
       }
@@ -519,14 +586,18 @@ export function PulseMode({
       }
       const next = new PulseLayout(range.from, range.to, entries);
       setLayout(next);
-    })().catch((reason: unknown) => {
-      if (!controller.signal.aborted)
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "Не удалось загрузить историю",
-        );
-    });
+    })()
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted)
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Не удалось загрузить историю",
+          );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
     return () => controller.abort();
   }, [adapter, revision]);
   const days = useVirtualizer({
@@ -562,6 +633,7 @@ export function PulseMode({
         offset: located.offset,
         selectedAlbumId: state.current?.selectedAlbumId,
         selectedDay: state.current?.selectedDay,
+        generation: historyGeneration.current,
       };
       state.current = next;
       setPosition({
@@ -598,7 +670,7 @@ export function PulseMode({
     };
   }, [layout]);
   useEffect(() => {
-    if (!selection) return;
+    if (!selection || !history) return;
     const controller = new AbortController();
     setStats(undefined);
     setStatsError(false);
@@ -611,7 +683,7 @@ export function PulseMode({
         if (!controller.signal.aborted) setStatsError(true);
       });
     return () => controller.abort();
-  }, [adapter, selection, revision]);
+  }, [adapter, selection, revision, history]);
   function select(album: PulseAlbumCard, day: string) {
     setSelection({ albumId: album.albumId, day, album });
     if (state.current) {
@@ -760,7 +832,7 @@ export function PulseMode({
         </div>
       ) : !layout ? (
         <div className="pulse-empty" role="status">
-          {history
+          {!loading && history
             ? history.enabled
               ? "История прослушивания пока пуста"
               : "Сбор истории отключён"
@@ -883,7 +955,21 @@ export function PulseMode({
             onPointerUp={(event) =>
               jump(Number(event.currentTarget.value), true)
             }
-            onKeyUp={(event) => jump(Number(event.currentTarget.value), true)}
+            onKeyUp={(event) => {
+              if (
+                [
+                  "ArrowLeft",
+                  "ArrowRight",
+                  "ArrowUp",
+                  "ArrowDown",
+                  "Home",
+                  "End",
+                  "PageUp",
+                  "PageDown",
+                ].includes(event.key)
+              )
+                jump(Number(event.currentTarget.value), true);
+            }}
           />
           {years.map(({ year, index }) => (
             <span
