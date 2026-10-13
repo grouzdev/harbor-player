@@ -1,4 +1,11 @@
-import { useRef, useState, type CSSProperties, type PointerEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent,
+} from "react";
+import { ValueBubble } from "./ValueBubble";
 
 type CommonRangeSliderProps = {
   className?: string;
@@ -6,6 +13,8 @@ type CommonRangeSliderProps = {
   max: number;
   step: number;
   disabled?: boolean;
+  /** Enables the standard value preview at the pointer position. */
+  formatValue?: (value: number) => string;
 };
 
 type SingleRangeSliderProps = CommonRangeSliderProps & {
@@ -41,31 +50,88 @@ export function RangeSlider(props: RangeSliderProps) {
     "minimum" | "maximum" | null
   >(null);
   const [isSliderHovered, setIsSliderHovered] = useState(false);
+  const [preview, setPreview] = useState<{
+    ratio: number;
+    x: number;
+    y: number;
+  } | null>(null);
   const sliderRef = useRef<HTMLDivElement>(null);
   const valuesRef = useRef<readonly [minimum: number, maximum: number] | null>(
     null,
   );
   const className = `range-slider range-slider--${props.variant || "single"}${props.variant === "double" && isSliderHovered ? " is-hovered" : ""}${props.className ? ` ${props.className}` : ""}`;
 
+  const hasPreview = preview !== null;
+  useEffect(() => {
+    if (!hasPreview) return;
+    const dismiss = () => setPreview(null);
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") dismiss();
+    };
+    window.addEventListener("resize", dismiss);
+    window.addEventListener("scroll", dismiss, true);
+    window.addEventListener("keydown", dismissOnEscape);
+    return () => {
+      window.removeEventListener("resize", dismiss);
+      window.removeEventListener("scroll", dismiss, true);
+      window.removeEventListener("keydown", dismissOnEscape);
+    };
+  }, [hasPreview]);
+
+  const ratioAtPointer = (
+    event: PointerEvent<HTMLElement>,
+    slider: HTMLDivElement,
+  ) => {
+    const rect = slider.getBoundingClientRect();
+    return rect.width > 0
+      ? Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
+      : 0;
+  };
+  const valueAtRatio = (ratio: number) =>
+    Math.min(
+      props.max,
+      Math.max(
+        props.min,
+        props.min +
+          Math.round(((props.max - props.min) * ratio) / props.step) *
+            props.step,
+      ),
+    );
+  const showPreview = (event: PointerEvent<HTMLDivElement>) => {
+    if (props.disabled || !props.formatValue || event.pointerType === "touch") {
+      setPreview(null);
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const ratio = ratioAtPointer(event, event.currentTarget);
+    setPreview({ ratio, x: rect.left + ratio * rect.width, y: rect.top });
+  };
+  const leavePreview = () => {
+    if (!isSingleDragging && !draggingHandle) setPreview(null);
+  };
+  const endPreview = (event: PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (
+      event.clientX < rect.left ||
+      event.clientX > rect.right ||
+      event.clientY < rect.top ||
+      event.clientY > rect.bottom
+    )
+      setPreview(null);
+  };
+  const bubble =
+    preview && !props.disabled && props.formatValue ? (
+      <ValueBubble anchor={preview}>
+        {props.formatValue(valueAtRatio(preview.ratio))}
+      </ValueBubble>
+    ) : null;
+
   if (props.variant !== "double") {
     const end = 100 - progress(props.value, props.min, props.max);
     const valueAtPointer = (event: PointerEvent<HTMLElement>) => {
       const slider = sliderRef.current;
       if (!slider) return props.value;
-      const rect = slider.getBoundingClientRect();
-      const ratio = Math.min(
-        1,
-        Math.max(0, (event.clientX - rect.left) / rect.width),
-      );
-      return Math.min(
-        props.max,
-        Math.max(
-          props.min,
-          props.min +
-            Math.round(((props.max - props.min) * ratio) / props.step) *
-              props.step,
-        ),
-      );
+      return valueAtRatio(ratioAtPointer(event, slider));
     };
     const beginSingleDrag = (event: PointerEvent<HTMLSpanElement>) => {
       const slider = sliderRef.current;
@@ -83,7 +149,10 @@ export function RangeSlider(props: RangeSliderProps) {
         style={
           { "--range-start": "0%", "--range-end": `${end}%` } as CSSProperties
         }
+        onPointerEnter={showPreview}
+        onPointerLeave={leavePreview}
         onPointerMove={(event) => {
+          showPreview(event);
           if (
             !isSingleDragging ||
             !event.currentTarget.hasPointerCapture(event.pointerId)
@@ -95,11 +164,13 @@ export function RangeSlider(props: RangeSliderProps) {
           if (event.currentTarget.hasPointerCapture(event.pointerId))
             event.currentTarget.releasePointerCapture(event.pointerId);
           setIsSingleDragging(false);
+          endPreview(event);
         }}
         onPointerCancel={(event) => {
           if (event.currentTarget.hasPointerCapture(event.pointerId))
             event.currentTarget.releasePointerCapture(event.pointerId);
           setIsSingleDragging(false);
+          setPreview(null);
         }}
       >
         <input
@@ -111,6 +182,7 @@ export function RangeSlider(props: RangeSliderProps) {
           value={props.value}
           disabled={props.disabled}
           aria-label={props.ariaLabel}
+          aria-valuetext={props.formatValue?.(props.value)}
           onChange={(event) => props.onChange(Number(event.target.value))}
         />
         <span
@@ -123,6 +195,7 @@ export function RangeSlider(props: RangeSliderProps) {
           aria-hidden="true"
           onPointerDown={beginSingleDrag}
         />
+        {bubble}
       </div>
     );
   }
@@ -133,21 +206,7 @@ export function RangeSlider(props: RangeSliderProps) {
     event: PointerEvent<HTMLElement>,
     slider: HTMLDivElement,
   ) => {
-    const rect = slider.getBoundingClientRect();
-    const ratio = Math.min(
-      1,
-      Math.max(0, (event.clientX - rect.left) / rect.width),
-    );
-    const value = Math.min(
-      props.max,
-      Math.max(
-        props.min,
-        props.min +
-          Math.round(((props.max - props.min) * ratio) / props.step) *
-            props.step,
-      ),
-    );
-    return value;
+    return valueAtRatio(ratioAtPointer(event, slider));
   };
   const updateHandle = (
     handle: "minimum" | "maximum",
@@ -218,11 +277,26 @@ export function RangeSlider(props: RangeSliderProps) {
         } as CSSProperties
       }
       onPointerDown={moveNearestHandle}
-      onPointerMove={moveDrag}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-      onPointerEnter={() => setIsSliderHovered(true)}
-      onPointerLeave={() => setIsSliderHovered(false)}
+      onPointerMove={(event) => {
+        showPreview(event);
+        moveDrag(event);
+      }}
+      onPointerUp={(event) => {
+        endDrag(event);
+        endPreview(event);
+      }}
+      onPointerCancel={(event) => {
+        endDrag(event);
+        setPreview(null);
+      }}
+      onPointerEnter={(event) => {
+        setIsSliderHovered(true);
+        showPreview(event);
+      }}
+      onPointerLeave={() => {
+        setIsSliderHovered(false);
+        leavePreview();
+      }}
     >
       <input
         className={`range-slider-input range-slider-input--minimum ${activeHandle === "minimum" ? "active" : ""}`}
@@ -233,6 +307,7 @@ export function RangeSlider(props: RangeSliderProps) {
         value={minimum}
         disabled={props.disabled}
         aria-label={props.ariaLabels[0]}
+        aria-valuetext={props.formatValue?.(minimum)}
         onFocus={() => setActiveHandle("minimum")}
         onPointerDown={() => setActiveHandle("minimum")}
         onChange={(event) =>
@@ -251,6 +326,7 @@ export function RangeSlider(props: RangeSliderProps) {
         value={maximum}
         disabled={props.disabled}
         aria-label={props.ariaLabels[1]}
+        aria-valuetext={props.formatValue?.(maximum)}
         onFocus={() => setActiveHandle("maximum")}
         onPointerDown={() => setActiveHandle("maximum")}
         onChange={(event) =>
@@ -284,6 +360,7 @@ export function RangeSlider(props: RangeSliderProps) {
         onPointerEnter={() => setHoveredHandle("maximum")}
         onPointerLeave={() => setHoveredHandle(null)}
       />
+      {bubble}
     </div>
   );
 }

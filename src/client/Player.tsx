@@ -649,6 +649,7 @@ export function Player({
               value={player.position}
               disabled={!track}
               ariaLabel="Позиция воспроизведения"
+              formatValue={duration}
               onChange={player.seek}
             />
             <span className="seek-time">{duration(player.length)}</span>
@@ -675,6 +676,7 @@ export function Player({
             step={0.01}
             value={player.volume}
             ariaLabel="Громкость"
+            formatValue={(value) => `${Math.round(value * 100)}%`}
             onChange={player.setVolume}
           />
           <button
