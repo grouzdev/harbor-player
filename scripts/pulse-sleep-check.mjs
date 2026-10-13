@@ -21,6 +21,7 @@ const { values } = parseArgs({
   options: {
     smoke: { type: "boolean", default: false },
     "background-only": { type: "boolean", default: false },
+    "physical-only": { type: "boolean", default: false },
     "power-mode": {
       type: "string",
       default: "operator-selected Windows Sleep (not hibernate)",
@@ -32,7 +33,9 @@ const mode = values.smoke
   ? "smoke"
   : values["background-only"]
     ? "background-only"
-    : "physical";
+    : values["physical-only"]
+      ? "physical-only"
+      : "physical";
 const executable = path.resolve(
   process.env.HARBOR_PLAYER_DESKTOP_EXECUTABLE ||
     "release/win-unpacked/Harbor Player.exe",
@@ -43,7 +46,9 @@ const root = await mkdtemp(path.join(rootBase, "pulse-sleep-"));
 const library = path.join(root, "library");
 await mkdir(library);
 const powerFile = path.join(root, "power.jsonl");
+const lifecycleFile = path.join(root, "lifecycle.jsonl");
 await writeFile(powerFile, "");
+await writeFile(lifecycleFile, "");
 const evidence = {
   mode,
   root,
@@ -107,6 +112,7 @@ let child,
   page,
   inspector,
   db,
+  browser,
   cancelled = false;
 const responseTasks = new Set();
 process.once("SIGINT", () => {
@@ -117,6 +123,7 @@ process.once("SIGTERM", () => {
 });
 async function save(state) {
   evidence.state = state;
+  evidence.lifecycle = await lifecycleEvents();
   await writeFile(
     path.join(root, "evidence.json"),
     JSON.stringify(evidence, null, 2),
@@ -151,6 +158,12 @@ async function until(read, label, timeout = 45000) {
     await delay(250);
   }
   throw new Error(`Timeout: ${label}`);
+}
+async function lifecycleEvents() {
+  return (await readFile(lifecycleFile, "utf8"))
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
 }
 async function freePort() {
   const server = createServer();
@@ -301,6 +314,16 @@ async function pauseAndDrain() {
       audio.pause();
     });
   });
+  const paused = await page.locator("audio").evaluate((audio) => ({
+    position: audio.currentTime,
+    rate: audio.playbackRate,
+    paused: audio.paused,
+    ended: audio.ended,
+    readyState: audio.readyState,
+    mono: performance.now(),
+  }));
+  assert(paused.paused, "Native audio did not pause");
+  evidence.samples.push({ ...paused, name: "pause", wall: Date.now() });
   await until(
     async () =>
       (await pending()).length === 0 &&
@@ -318,19 +341,15 @@ async function play() {
   await page.locator("audio").evaluate((audio) => audio.play());
 }
 async function boundary() {
-  await page.locator("audio").evaluate(async (audio) => {
-    await window.__pulseSleepObserve({
-      kind: "native",
-      name: "boundary",
-      wall: Date.now(),
-      mono: performance.now(),
-      position: audio.currentTime,
-      rate: audio.playbackRate,
-      paused: audio.paused,
-      ended: audio.ended,
-      readyState: audio.readyState,
-    });
-  });
+  const sample = await page.locator("audio").evaluate((audio) => ({
+    position: audio.currentTime,
+    rate: audio.playbackRate,
+    paused: audio.paused,
+    ended: audio.ended,
+    readyState: audio.readyState,
+    mono: performance.now(),
+  }));
+  evidence.samples.push({ ...sample, name: "boundary", wall: Date.now() });
 }
 async function waitWithoutRenderer(ms) {
   const started = Date.now();
@@ -405,10 +424,13 @@ try {
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
+  evidence.process = { pid: child.pid, apiPort, cdpPort, mainPort, output: "" };
+  child.once("exit", (code, signal) => {
+    evidence.process.exit = { code, signal, wall: Date.now() };
+  });
   child.once("error", (error) => {
     evidence.errors.push(error.message);
   });
-  evidence.process = { pid: child.pid, apiPort, cdpPort, mainPort, output: "" };
   child.stdout.on("data", (bytes) => {
     evidence.process.output += bytes;
   });
@@ -423,32 +445,57 @@ try {
       return false;
     }
   }, "owned Electron CDP");
-  const browser = await chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
-  page = await until(
-    () =>
-      browser
-        .contexts()[0]
-        .pages()
-        .find((candidate) =>
-          candidate.url().startsWith(`http://127.0.0.1:${apiPort}/`),
-        ),
-    "renderer",
-  );
-  await page.locator(".workspace").waitFor();
+  async function reconnectRenderer(label) {
+    if (!browser?.isConnected()) {
+      browser = await until(async () => {
+        try {
+          return await chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
+        } catch {
+          return null;
+        }
+      }, `${label} CDP`);
+      browser.once("disconnected", () => {
+        evidence.browserDisconnectedAt = Date.now();
+      });
+    }
+    page = await until(
+      () =>
+        browser
+          .contexts()[0]
+          .pages()
+          .find((candidate) =>
+            candidate.url().startsWith(`http://127.0.0.1:${apiPort}/`),
+          ),
+      label,
+    );
+    await page.locator(".workspace").waitFor();
+  }
+  await reconnectRenderer("renderer");
   inspector = await connectInspector(mainPort);
   Object.assign(
     evidence.environment,
     await inspector.evaluate(`(() => {
     const require = process.getBuiltinModule("module").createRequire(process.execPath);
-    const {powerMonitor, BrowserWindow} = require("electron");
+    const {app, powerMonitor, BrowserWindow} = require("electron");
     const fs = require("node:fs");
     const record = (name) => fs.appendFileSync(${JSON.stringify(powerFile)},
       JSON.stringify({name, source:"electron.powerMonitor", wall:Date.now(),
+        mono:Number(process.hrtime.bigint())/1e6})+"\\n");
+    const lifecycle = (name, detail) => fs.appendFileSync(${JSON.stringify(lifecycleFile)},
+      JSON.stringify({name, detail, wall:Date.now(),
         mono:Number(process.hrtime.bigint())/1e6})+"\\n");
     powerMonitor.on("suspend", () => record("suspend"));
     powerMonitor.on("resume", () => record("resume"));
     globalThis.__pulseSleepWindow = BrowserWindow.getAllWindows()[0];
     __pulseSleepWindow.setTitle("Pulse sleep check — isolated test data");
+    app.on("before-quit", () => lifecycle("app-before-quit"));
+    app.on("will-quit", () => lifecycle("app-will-quit"));
+    __pulseSleepWindow.on("closed", () => lifecycle("window-closed"));
+    __pulseSleepWindow.webContents.on("render-process-gone", (_event, details) =>
+      lifecycle("renderer-gone", details));
+    __pulseSleepWindow.webContents.on("did-fail-load",
+      (_event, code, description, url, isMainFrame) =>
+        lifecycle("did-fail-load", {code, description, url, isMainFrame}));
     return {electron:process.versions.electron, chromium:process.versions.chrome,
       appVersion:require("electron").app.getVersion(),
       backgroundThrottling:__pulseSleepWindow.webContents.getLastWebPreferences().backgroundThrottling};
@@ -580,24 +627,28 @@ try {
   });
   await pauseAndDrain();
 
-  const backgroundBefore = snapshot(),
-    backgroundStart = evidence.samples.length;
-  await play();
-  await inspector.evaluate("__pulseSleepWindow.minimize()");
-  await save("background playback — do NOT sleep the PC yet");
-  await waitWithoutRenderer(values.smoke ? 2000 : 10 * 60_000);
-  await inspector.evaluate(
-    "__pulseSleepWindow.restore(); __pulseSleepWindow.show()",
-  );
-  await pauseAndDrain();
-  finishPhase("background", backgroundBefore, backgroundStart);
-  await save(
-    values.smoke
-      ? "smoke complete — NOT a physical sleep PASS"
-      : "10-minute background complete",
-  );
+  if (mode !== "physical-only") {
+    const backgroundBefore = snapshot(),
+      backgroundStart = evidence.samples.length;
+    await play();
+    await inspector.evaluate("__pulseSleepWindow.minimize()");
+    await save("background playback — do NOT sleep the PC yet");
+    await waitWithoutRenderer(values.smoke ? 2000 : 10 * 60_000);
+    await inspector.evaluate(
+      "__pulseSleepWindow.restore(); __pulseSleepWindow.show()",
+    );
+    await pauseAndDrain();
+    finishPhase("background", backgroundBefore, backgroundStart);
+    await save(
+      values.smoke
+        ? "smoke complete — NOT a physical sleep PASS"
+        : "10-minute background complete",
+    );
+  } else {
+    await save("physical-only diagnostic — background stage skipped");
+  }
 
-  if (mode === "physical") {
+  if (mode === "physical" || mode === "physical-only") {
     const before = snapshot(),
       start = evidence.samples.length;
     await play();
@@ -617,56 +668,102 @@ try {
       (await powerEvents()).length,
       "READY_SLEEP_PLAYBACK",
     );
+    await reconnectRenderer("renderer after playback wake");
     const resumed = await page.locator("audio").evaluate((audio) => ({
       paused: audio.paused,
       position: audio.currentTime,
+      rate: audio.playbackRate,
+      ended: audio.ended,
+      readyState: audio.readyState,
+      mono: performance.now(),
     }));
-    if (resumed.paused)
+    if (resumed.paused) {
+      evidence.samples.push({ ...resumed, name: "pause", wall: Date.now() });
       console.log(
         "MANUAL ACTION: click Play in the isolated Electron window; no automatic resume.",
       );
+    } else {
+      evidence.samples.push({ ...resumed, name: "playing", wall: Date.now() });
+    }
+    let postWakePlayingObserved = !resumed.paused;
     await until(
-      () =>
-        evidence.samples.some(
-          (sample) =>
-            sample.wall >= pair[1].wall &&
-            !sample.paused &&
-            sample.position >= resumed.position + 20,
-        ),
+      async () => {
+        const sample = await page.locator("audio").evaluate((audio) => ({
+          position: audio.currentTime,
+          rate: audio.playbackRate,
+          paused: audio.paused,
+          ended: audio.ended,
+          readyState: audio.readyState,
+          mono: performance.now(),
+        }));
+        evidence.samples.push({
+          ...sample,
+          name:
+            !sample.paused && !postWakePlayingObserved
+              ? "playing"
+              : "post-wake-poll",
+          wall: Date.now(),
+        });
+        if (!sample.paused) postWakePlayingObserved = true;
+        return !sample.paused && sample.position >= resumed.position + 20;
+      },
       "20s confirmed post-wake playback",
       15 * 60_000,
     );
     await pauseAndDrain();
     finishPhase("sleep-playing", before, start, pair);
-    const idleBefore = snapshot(),
-      idleStart = evidence.samples.length;
-    await boundary();
-    const idleRequests = evidence.requests.length;
-    const idlePair = await waitPowerCycle(
-      (await powerEvents()).length,
-      "READY_SLEEP_PAUSED",
-    );
-    await delay(16000); // Three real idle flush periods after wake.
-    await boundary();
-    assert(await page.locator("audio").evaluate((audio) => audio.paused));
-    assert.equal((await pending()).length, 0);
-    assert.equal(
-      evidence.requests.length,
-      idleRequests,
-      "Idle history HTTP after wake",
-    );
-    finishPhase("sleep-paused", idleBefore, idleStart, idlePair, true);
-    const recoveryBefore = snapshot(),
-      recoveryStart = evidence.samples.length;
-    await play();
-    const position = evidence.samples.at(-1).position;
-    await until(
-      () => evidence.samples.at(-1)?.position > position + 2,
-      "explicit recovery playback",
-    );
-    await pauseAndDrain();
-    finishPhase("recovery", recoveryBefore, recoveryStart);
-    evidence.sleepGatePassed = true;
+    if (mode === "physical") {
+      const idleBefore = snapshot(),
+        idleStart = evidence.samples.length;
+      await boundary();
+      const idleRequests = evidence.requests.length;
+      const idlePair = await waitPowerCycle(
+        (await powerEvents()).length,
+        "READY_SLEEP_PAUSED",
+      );
+      await reconnectRenderer("renderer after paused wake");
+      await delay(16000); // Three real idle flush periods after wake.
+      await boundary();
+      assert(await page.locator("audio").evaluate((audio) => audio.paused));
+      assert.equal((await pending()).length, 0);
+      assert.equal(
+        evidence.requests.length,
+        idleRequests,
+        "Idle history HTTP after wake",
+      );
+      finishPhase("sleep-paused", idleBefore, idleStart, idlePair, true);
+      const recoveryBefore = snapshot(),
+        recoveryStart = evidence.samples.length;
+      await play();
+      const recovery = await page.locator("audio").evaluate((audio) => ({
+        position: audio.currentTime,
+        rate: audio.playbackRate,
+        paused: audio.paused,
+        ended: audio.ended,
+        readyState: audio.readyState,
+        mono: performance.now(),
+      }));
+      evidence.samples.push({ ...recovery, name: "playing", wall: Date.now() });
+      await until(async () => {
+        const sample = await page.locator("audio").evaluate((audio) => ({
+          position: audio.currentTime,
+          rate: audio.playbackRate,
+          paused: audio.paused,
+          ended: audio.ended,
+          readyState: audio.readyState,
+          mono: performance.now(),
+        }));
+        evidence.samples.push({
+          ...sample,
+          name: "recovery-poll",
+          wall: Date.now(),
+        });
+        return !sample.paused && sample.position > recovery.position + 2;
+      }, "explicit recovery playback");
+      await pauseAndDrain();
+      finishPhase("recovery", recoveryBefore, recoveryStart);
+      evidence.sleepGatePassed = true;
+    }
   }
   evidence.power = await powerEvents();
   assert(!cancelled, "Cancelled; verification cannot be marked passed");
