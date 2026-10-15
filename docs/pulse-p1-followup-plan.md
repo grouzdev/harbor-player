@@ -5,6 +5,10 @@
 Исходная версия для следующего прогона — `14b705b`; каждый результат должен
 содержать фактический SHA, executable hash и build info измеренной сборки.
 Результаты выполнения: [журнал доработок](../verification/pulse-p1-followup.md).
+Код находится в `wip/pulse-p1-followup`; с новым `main` пока не объединялся.
+Автоматизированные прогоны завершены, кроме чистого native-memory cohort:
+полная попытка остановлена как INCONCLUSIVE при потере foreground.
+Edge cold outliers и ручные проверки также остаются открытыми.
 
 ## Что уже закрыто и что осталось
 
@@ -145,6 +149,10 @@ npm run benchmark:pulse:ingest
 limits, LRU/TTL, memory before/plateau/idle, retained objects и long tasks > 50 мс.
 JS heap не заменяет renderer/image/GPU memory; неподдержанное измерение
 отмечать явно. Trace может быть большим: заранее проверить свободное место.
+Network-инспектор сам удерживает `NetworkResourcesData`; его native-memory
+график не является доказательством утечки. Чистый отдельный cohort:
+`npm run test:pulse:memory` (по 1800 с на dataset), либо `-- --smoke`
+для проверки harness без long acceptance. Renderer debugger не подключается.
 
 Добавить permitted-image fixture mode с manifest bytes/resolutions и decode
 errors; текущие solid PNG не доказывают работу настоящих оригиналов.

@@ -41,8 +41,10 @@ playback и paused-контролем. Фактические результат
 [журнале P0](../verification/pulse-p0.md#физический-sleepwake-pass).
 Поиск пользовательской копии v12 снят как неприменимый к первой поставке.
 P1 ещё не закрыт: browser-фиксы и измерительные harness реализованы,
-но cold UI budget не достигнут; installed/manual и длительные профили остаются
-открытыми. Результаты — в [журнале P1](../verification/pulse-p1.md).
+foreground cold guide в packaged Electron подтверждён отдельным cohort,
+но Edge outliers, чистый native-memory прогон и installed/manual остаются
+открытыми. Результаты первого этапа — в [журнале P1](../verification/pulse-p1.md),
+последующие измерения — в [журнале доработок](../verification/pulse-p1-followup.md).
 Автоматические проверки и их пределы записаны в
 [журнале P0](../verification/pulse-p0.md). Выборочный прогон не заменяет полный.
 

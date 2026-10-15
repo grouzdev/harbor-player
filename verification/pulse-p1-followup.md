@@ -1,7 +1,8 @@
 # Пульс: доработки P1 после первого этапа
 
 План: [pulse-p1-followup-plan.md](../docs/pulse-p1-followup-plan.md).
-База исходных изменений — `14b705b`, доработки пока в working tree.
+База исходных изменений — `14b705b`; пользователь сохранил первый этап
+в `37d0820` на `wip/pulse-p1-followup`. Завершение harness — `7374eb4`.
 Raw evidence содержит SHA, dirty flag, source hashes и hash executable;
 результат относится к конкретным артефактам, а не к будущей сборке.
 Рабочая БД, обычный Electron profile и power settings не менялись.
@@ -94,23 +95,129 @@ Trace — ограниченные start/end windows, завершающиеся
 валидное `.heapsnapshot` имя. Native memory — working/private/peak KiB,
 не image/GPU/VRAM. Mutation latency собирается отдельно через `--latency-only`.
 
-## Проверки и текущий статус
+## Полный navigation и latency
 
-- Build/typecheck, 55 focused tests до последних review-уточнений — PASS.
-- После review: UI evidence 6/6, artwork 20/20; полный format check — PASS.
-- Свежие `desktop:pack` и native foreground smoke с heaps — PASS.
-- Длительный `npm run test:pulse:ui -- --electron` — **IN PROGRESS**,
-  отдельная видимая задача `Run full Pulse follow-up verification`.
-- Следом в той же последовательной задаче: foreground native latency,
-  Edge latency, 365-дневная модель.
-- Итоговые full tests/build/lint/e2e/process/desktop — **NOT RUN**
-  после последних изменений; выполняются после длительного прогона.
-- Installed/manual, physical input/FAT и настоящие пользовательские обложки —
-  **NOT RUN**. P0 sleep закрыт; recorder не менялся.
+Четыре команды выполнены последовательно с exit code 0; originals manifest
+был отключён, использованы generated-only fixtures.
+Логи: `.test-data/pulse-p1-ui-bWr26W/verification-{1,2,3,4}-*.log`
+и соседние `.result`.
 
-Замечание для анализа long tasks: raw navigation collector пока захватывает
-также idle/последующий heap diagnostic. Проверять хронологию по points/trace;
-не объявлять эти записи автоматически scrolling defects или clean budget.
-Точный конец окна измерения требует отдельного уточнения после frozen run.
+1. `npm run test:pulse:ui -- --electron`: 62 мин 54 с,
+   `.test-data/pulse-p1-ui-sUpUa5/summary.json`.
+   Каждый dataset прошёл 1800 секунд навигации. Ordinary: 22 644 points,
+   max 5 days / 8 cards. Ten-year: 42 731 points, max 10 days / 16 cards.
+   Все page limits соблюдены; longtask observer записал 0 entries.
+   Старый collector захватывал также post-navigation idle/heap; в текущем
+   коде добавлена точная renderer-clock граница конца navigation.
+   Нулевые entries — наблюдение этого API, не гарантия GPU/frame smoothness.
+2. `node scripts/pulse-ui-benchmark.mjs --latency-only --electron --cold=ready-panels`:
+   `.test-data/pulse-p1-ui-bAFFfu`.
+3. `node scripts/pulse-ui-benchmark.mjs --latency-only --channel=msedge --cold=ready-panels`:
+   `.test-data/pulse-p1-ui-xvtIl5`.
+4. `PULSE_BENCH_DAYS=365 npm run benchmark:pulse:ingest`:
+   `.test-data/pulse-p1-ingest-Lwz1VM`.
 
-Релизный gate не закрыт; публикация не выполнялась.
+Latency samples: по 10 cold, 30 warm-immediate и 41 return на dataset;
+TTL/listening/clear/clear-recovery выполнены отдельными одиночными samples
+без navigation/forced-GC. Это real HTTP над aggregate-seeded fixture,
+не actual audio recorder.
+
+| Foreground target / dataset | cold dataReady p95, мс | warm p95 | return p95 |
+| --- | --- | --- | --- |
+| Electron / ordinary | 75,3 | 36,3 | 29,3 |
+| Electron / ten-year | 98,5 | 59,5 | 28,8 |
+| Edge / ordinary | 453,5 | 36,0 | 28,7 |
+| Edge / ten-year | 460,9 | 64,3 | 29,2 |
+
+Native guide в этих условиях соблюдён. Edge cold outliers сохранены и
+**не закрыты**; median 70,7/100,6 мс не заменяет p95.
+Startup-overlap raw cold p95 631/634,8 мс также сохранены отдельно и
+не выдаются за foreground first-entry.
+
+## Память: выявлена инструментальная контаминация
+
+В полном network-enabled ten-year профиле native private memory достигла
+~1,1 GiB. После GC DOM Nodes 722 и JS heap 8 439 336 bytes, но heap содержит
+469 273 `blink::NetworkResourcesData::ResourceData` / 135 150 624 self bytes.
+Это удержание ресурсов сетевым инспектором; данный профиль **не доказывает**
+утечку продукта или bounded native-memory acceptance.
+
+Добавлен отдельный `test:pulse:memory`: main Node inspector, native inputs,
+без Playwright, renderer debugger, Network domain и forced GC.
+Он ждёт нормального native show и видимого готового UI, не форсирует ранний
+show. Intermediate range targets задаются стандартным HTML setter/event
+с native keyboard commit и проверкой достигнутой даты. Поток тысяч Arrow
+без подтверждения значения удалён как недостоверный способ навигации.
+
+- Native smoke `.test-data/pulse-p1-ui-memory-1wqRC5` — COMPLETED,
+  оба dataset, без long acceptance.
+- Точная команда `npm run test:pulse:memory` на `7374eb4` запущена в полном режиме.
+  `.test-data/pulse-p1-ui-memory-vSYSK2/evidence.json` — **INCONCLUSIVE**.
+  Ordinary: 971,699 с / 3694 settled targets; окно стало
+  `visible=false`, `focused=false`, renderer `visibility=hidden`.
+  Renderer private KiB: before 50 696, максимум 52 480, последний sample 51 160.
+  Это частичный результат, не полчаса и не ten-year acceptance.
+- Инструмент сохранил диагностику и завершил только собственное дерево PID.
+  Ни throttling, ни power policy не отключались; hidden window не считается
+  успешным foreground прогоном.
+
+Повтор полного memory cohort требует активного видимого тестового окна на
+свободном Windows-сеансе. Он остаётся открытым gate, а не новым долгим
+автоматическим retry. Не интерпретировать частичные числа как PASS.
+
+## Годовая модель
+
+Реально overlapping read p95 **33,052 мс**, 1552 запроса; baseline **26,889 мс**.
+Maximum observed synchronous segment **29,312 мс**, sampled loop max **39,780 мс**.
+Во всех четырёх слоях final **2 667 886 000 мс** точно.
+12 042 intervals, 3293 albums, 366 active days, 7661 day-albums.
+SQLite после checkpoint **12 640 256 bytes**, WAL 0, peak sampled WAL
+**4 614 432 bytes**. 2565 images / **26 360 745 bytes**, staging 0.
+Это accelerated 365-дневная модель с обычными revisions и отдельным paced
+сегментом, не год наблюдения playback.
+
+## Итоговая проверка WIP-ветки
+
+`main` оставлен на `690afd0`; merge/push/публикация не выполнялись.
+
+| Проверка | Результат |
+| --- | --- |
+| `npm test` | PASS: 49 файлов, 397 тестов |
+| `npm run build` / typecheck | PASS |
+| `npm run lint` | PASS |
+| `npm run format:check` | PASS |
+| `git diff --check` | PASS |
+| `npm run test:e2e` | Chrome 140/140; общая команда прервана во время Edge №49 |
+| `npx playwright test --project=edge` | PASS: полный Edge 140/140 на неизменённом UI-коде |
+| `npm run test:pulse:desktop` | PASS, свежая packaged-сборка |
+| `npm run test:desktop:smoke` | PASS |
+| `npm run test:pulse:process` | PASS: Chrome + Edge |
+| `npm run test:pulse:memory` | INCONCLUSIVE, потеря foreground после ~16 мин |
+
+Прерванный Edge №49 содержал только `Target page, context or browser has been
+closed`; оставшихся тестовых процессов не было. Это не assertion failure;
+timeouts/skip не менялись. Полный последующий Edge прошёл.
+Не объявлять, что точная общая `test:e2e` команда завершилась exit 0.
+
+Desktop evidence `.test-data/pulse-desktop-yWGyi2`: checkpoint 15 009 мс
+восстановлен точно; crash tail ~4366 мс; pending replay once; два playback
+сеанса, точная сумма 82 915 мс.
+Process evidence `.test-data/pulse-process-3g5uWm`: суммы 33 011 мс Chrome /
+33 158 мс Edge.
+
+Также исправлена selected cover recovery: ошибка старого URL не оставляет
+новую картинку скрытой; ресурсный key меняется вместе с URL.
+Регрессия реального API + управляемого image HTTP проверена в обоих браузерах.
+Тест явно переходит к исторической дате и нажимает painted time, не drag zone.
+
+## Что не закрыто
+
+- Полный memory cohort без renderer-инспектора в активном Windows-сеансе.
+- Cold outliers Edge и отдельная установленная manual приёмка.
+- Настоящие permitted изображения, image/GPU memory, physical touch/trackpad/FAT.
+- Совместная непрерванная `npm run test:e2e`, новый CI на финальном SHA и
+  проверки после будущего merge с изменившимся `main`.
+- Staging recovery остаётся отдельным follow-up: накопление staging в текущих
+  моделях не обнаружено; retention опубликованных ресурсов не добавлялся.
+
+P0 sleep закрыт; recorder не менялся. Релизный gate не закрыт.
