@@ -581,6 +581,21 @@ test("workspace switches to rows below the fixed visible-panel width threshold",
   }
 });
 
+test("catalog panels have equal widths by default", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.removeItem("harbor-player-panel-weights-v1");
+    localStorage.removeItem("mml-panel-weights-v1");
+  });
+  await page.setViewportSize({ width: 1400, height: 800 });
+  await page.goto("/");
+
+  const widths = await page.locator(".panel").evaluateAll((panels) =>
+    panels.map((panel) => panel.getBoundingClientRect().width),
+  );
+  expect(widths).toHaveLength(5);
+  expect(widths.every((width) => Math.abs(width - widths[0]!) < 1)).toBe(true);
+});
+
 test("portrait workspace uses two independently resizable rows", async ({
   page,
 }) => {

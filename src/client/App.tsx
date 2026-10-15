@@ -1101,7 +1101,7 @@ export function App() {
         readMigratedStorageValue(
           "harbor-player-panel-weights-v1",
           "mml-panel-weights-v1",
-        ) || "[1.05,0.9,1,1.45,1.6,1.8]",
+        ) || "[1,1,1,1,1,1]",
       );
       return Array.isArray(weights) &&
         weights.length === 6 &&
@@ -1111,9 +1111,9 @@ export function App() {
         ? weights
         : Array.isArray(weights) && weights.length === 5
           ? [...weights, 1.8]
-          : [1.05, 0.9, 1, 1.45, 1.6, 1.8];
+          : [1, 1, 1, 1, 1, 1];
     } catch {
-      return [1.05, 0.9, 1, 1.45, 1.6, 1.8];
+      return [1, 1, 1, 1, 1, 1];
     }
   });
   const [rowWeights, setRowWeights] = useState<number[]>(() => {
