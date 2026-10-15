@@ -284,9 +284,16 @@ body.selection-dragging * {
   margin-left: auto;
   flex: 0 0 auto;
   text-align: right;
+}
+.panel-count,
+.list-tile-suffix,
+.track-album-duration,
+.playlist-entity-duration {
+  font-family: "Fira Mono", "Cascadia Mono", Consolas, monospace;
   font-size: var(--type-caption);
-  color: #74818a;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
+  color: #63727c;
 }
 .resizer {
   background: #ffffff06;
@@ -913,7 +920,6 @@ body.selection-dragging * {
   position: absolute;
   right: 20px;
   width: 29px;
-  color: #8a9aa4;
 }
 .track-row.has-end-action:hover .list-tile-suffix,
 .track-row.has-end-action:focus-within .list-tile-suffix {
@@ -2113,7 +2119,16 @@ body {
 }
 .panel-heading {
   padding-left: 16px;
-  padding-right: 16px;
+  padding-right: 11px;
+}
+.libraries-panel .panel-heading {
+  padding-right: 12px;
+}
+.albums-panel .panel-heading {
+  padding-right: 14px;
+}
+.tracks-panel .panel-heading {
+  padding-right: 20px;
 }
 .section-label {
   line-height: 1.6;
@@ -2765,10 +2780,7 @@ html[data-theme="light"] .topbar-brand::after {
 }
 .track-album-duration {
   min-width: 29px;
-  color: #8a9aa4;
-  font-size: var(--type-caption);
   text-align: right;
-  font-variant-numeric: tabular-nums;
 }
 .unviewed-filter-switch {
   position: relative;
@@ -3133,9 +3145,7 @@ html[data-theme="light"] .topbar-brand::after {
 }
 .playlist-entity-duration {
   flex: 0 0 auto;
-  color: #8a9aa4;
-  font-size: var(--type-caption);
-  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 .playlist-entity-row.selected .playlist-entity-main {
   background: #9da35f1b;
@@ -4318,10 +4328,7 @@ input[type="range"] {
     0 1px #f1f1e31a inset;
 }
 
-.panel-count,
 .list-tile-prefix,
-.list-tile-suffix,
-.playlist-entity-duration,
 .seek span,
 .queue-count,
 .format-badge,
