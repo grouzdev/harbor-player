@@ -41,6 +41,7 @@ import {
   Play,
   Plus,
   RefreshCw,
+  Settings,
   Eye,
   EyeOff,
   Star,
@@ -142,7 +143,7 @@ import { useAppShellLayout } from "./useAppShellLayout";
 import { CatalogSidebar } from "./CatalogSidebar";
 import { usePanelTransitions } from "./usePanelTransitions";
 import { useCatalogScrollTargets } from "./useCatalogScrollTargets";
-import { PlaylistPanel } from "./PlaylistPanel";
+import { PlaylistPanel, PlaylistSettingsDialog } from "./PlaylistPanel";
 import { IconToggle } from "./IconToggle";
 import "./styles/pulse-shell.css";
 import type {
@@ -627,6 +628,8 @@ export function App() {
   const [toast, setToast] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
+  const [playlistForSettings, setPlaylistForSettings] =
+    useState<Playlist | null>(null);
   const [pendingBookmarkKeys, setPendingBookmarkKeys] = useState<Set<string>>(
     new Set(),
   );
@@ -2762,13 +2765,43 @@ export function App() {
           undefined,
           "DELETE",
         );
-        setActivePlaylistId(null);
+        setActivePlaylistId((current) =>
+          current === playlist.id ? null : current,
+        );
         await refreshPlaylists();
       } catch (error) {
         notify((error as Error).message);
       }
     },
     [notify, refreshPlaylists],
+  );
+  const showPlaylistMenu = useCallback(
+    (event: React.MouseEvent, playlist: Playlist) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        items: [
+          {
+            label: "Переименовать",
+            icon: <Pencil size={16} />,
+            onSelect: () => renamePlaylist(playlist),
+          },
+          {
+            label: "Настройки",
+            icon: <Settings size={16} />,
+            onSelect: () => setPlaylistForSettings(playlist),
+          },
+          {
+            label: "Удалить",
+            icon: <Trash2 size={16} />,
+            onSelect: () => deletePlaylist(playlist),
+          },
+        ],
+      });
+    },
+    [renamePlaylist, deletePlaylist],
   );
   const addCurrentSelectionToPlaylist = useCallback(
     async (beforeEntryId?: string) => {
@@ -3365,8 +3398,6 @@ export function App() {
                     }
                   : undefined
               }
-              onRename={(playlist) => void renamePlaylist(playlist)}
-              onDelete={(playlist) => void deletePlaylist(playlist)}
               notify={notify}
               onClose={() => togglePanelVisibility("playlists")}
             />
@@ -3416,6 +3447,7 @@ export function App() {
               playlists={playlists.data || []}
               activePlaylistId={activePlaylistId}
               onSelectPlaylist={selectPlaylist}
+              onPlaylistContextMenu={showPlaylistMenu}
               onPlayPlaylist={(playlistId) =>
                 void player.startPlaylist(playlistId)
               }
@@ -3565,8 +3597,6 @@ export function App() {
                     }
                   : undefined
               }
-              onRename={(playlist) => void renamePlaylist(playlist)}
-              onDelete={(playlist) => void deletePlaylist(playlist)}
               notify={notify}
               onClose={() => togglePanelVisibility("playlists")}
             />
@@ -3851,6 +3881,14 @@ export function App() {
         pendingUserStateKeys={pendingUserStateKeys}
       />
       <ContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
+      {playlistForSettings && (
+        <PlaylistSettingsDialog
+          key={playlistForSettings.id}
+          playlist={playlistForSettings}
+          onClose={() => setPlaylistForSettings(null)}
+          notify={notify}
+        />
+      )}
       <UpdatePanel />
       {toast && (
         <div className="toast" role="status">

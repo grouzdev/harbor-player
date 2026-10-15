@@ -3038,12 +3038,6 @@ html[data-theme="light"] .topbar-brand::after {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.playlist-heading-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--topbar-button-gap);
-  margin-left: auto;
-}
 .playlist-toolbar {
   display: flex;
   align-items: center;

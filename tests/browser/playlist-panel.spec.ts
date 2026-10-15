@@ -582,3 +582,202 @@ test("automatic next opens collapsed ancestors and scrolls to the exact occurren
     panel.locator('[data-testid="playlist-track-row"].current'),
   ).toBeInViewport();
 });
+
+test("playlist header keeps only hide control in landscape, portrait and empty state", async ({
+  page,
+}) => {
+  const { panel } = await playlistFixture(page);
+  for (const viewport of [
+    { width: 1600, height: 1000 },
+    { width: 800, height: 1200 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(panel.locator(".panel-heading button")).toHaveCount(1);
+    await expect(
+      panel.getByRole("button", { name: "Закрыть панель «Плейлист»" }),
+    ).toBeVisible();
+    await expect(
+      panel.getByRole("heading", { name: "Playlist redesign" }),
+    ).toBeVisible();
+  }
+  await page.reload();
+  await expect(panel.getByText("Выберите или создайте плейлист")).toBeVisible();
+  await expect(panel.locator(".panel-heading button")).toHaveCount(1);
+  await panel
+    .getByRole("button", { name: "Закрыть панель «Плейлист»" })
+    .click();
+  await expect(panel).toHaveCount(0);
+});
+
+async function playlistManagementFixture(page: Page) {
+  const { panel } = await playlistFixture(page);
+  let otherName = "Other playlist";
+  let removed = false;
+  const writes: { method: string; name?: string; cleanup?: string | null }[] =
+    [];
+  await page.route("**/api/playlists", async (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: "redesign",
+          name: "Playlist redesign",
+          createdAt: "2025-01-01",
+          updatedAt: "2025-01-01",
+          entryCount: 3,
+          trackCount: 9,
+          unavailableCount: 0,
+        },
+        ...(removed
+          ? []
+          : [
+              {
+                id: "other",
+                name: otherName,
+                createdAt: "2025-01-01",
+                updatedAt: "2025-01-01",
+                entryCount: 0,
+                trackCount: 0,
+                unavailableCount: 0,
+              },
+            ]),
+      ],
+    }),
+  );
+  await page.route("**/api/playlists/other?*", async (route) => {
+    removed = true;
+    writes.push({
+      method: route.request().method(),
+      cleanup: new URL(route.request().url()).searchParams.get("cleanup"),
+    });
+    await route.fulfill({ json: { ok: true } });
+  });
+  await page.route("**/api/playlists/other", async (route) => {
+    otherName = route.request().postDataJSON().name;
+    writes.push({ method: route.request().method(), name: otherName });
+    await route.fulfill({
+      json: {
+        playlist: {
+          id: "other",
+          name: otherName,
+          createdAt: "2025-01-01",
+          updatedAt: "2025-01-01",
+          entryCount: 0,
+          trackCount: 0,
+          unavailableCount: 0,
+        },
+        entries: [],
+      },
+    });
+  });
+  await page.route("**/api/playlists/other/sync", async (route) =>
+    route.fulfill({
+      json: {
+        playlistId: "other",
+        targetPath: null,
+        templateId: "default-album-artist",
+        autoSync: false,
+        state: "idle",
+        lastSyncedAt: null,
+        message: "Not synced",
+      },
+    }),
+  );
+  await page.route("**/api/path-templates", async (route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.reload();
+  await page
+    .locator(".playlist-library-tile")
+    .filter({ hasText: "Playlist redesign" })
+    .click();
+  await expect(panel.getByTestId("playlist-entry").first()).toBeVisible();
+  return {
+    panel,
+    writes,
+    other: page
+      .locator(".playlist-library-tile")
+      .filter({ hasText: "Other playlist" }),
+  };
+}
+
+test("playlist context menu targets inactive row and opens settings with panel hidden", async ({
+  page,
+}) => {
+  const { panel, other } = await playlistManagementFixture(page);
+  const menu = page.getByRole("menu", {
+    name: "Контекстное меню",
+    exact: true,
+  });
+  await other.click({ button: "right" });
+  await expect(menu.getByRole("menuitem")).toHaveText([
+    "Переименовать",
+    "Настройки",
+    "Удалить",
+  ]);
+  await expect(
+    panel.getByRole("heading", { name: "Playlist redesign" }),
+  ).toBeVisible();
+  await expect(other).not.toHaveClass(/selected/);
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await other.click({ button: "right" });
+  await panel.getByRole("heading").click();
+  await expect(menu).toHaveCount(0);
+  for (const hidePanel of [false, true]) {
+    if (hidePanel)
+      await panel
+        .getByRole("button", { name: "Закрыть панель «Плейлист»" })
+        .click();
+    await other.click({ button: "right" });
+    await menu
+      .getByRole("menuitem", { name: "Настройки", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "Сборка и экспорт" });
+    await expect(dialog.locator(".modal-header p")).toHaveText(
+      "Other playlist",
+    );
+    await expect(dialog.getByLabel("Папка сборки")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  }
+});
+
+test("playlist menu renames and deletes inactive playlist without clearing active selection", async ({
+  page,
+}) => {
+  const { panel, other, writes } = await playlistManagementFixture(page);
+  const menu = page.getByRole("menu", {
+    name: "Контекстное меню",
+    exact: true,
+  });
+  await other.click({ button: "right" });
+  page.once("dialog", (dialog) => dialog.accept("Renamed playlist"));
+  await menu
+    .getByRole("menuitem", { name: "Переименовать", exact: true })
+    .click();
+  const renamed = page
+    .locator(".playlist-library-tile")
+    .filter({ hasText: "Renamed playlist" });
+  await expect(renamed).toBeVisible();
+  expect(writes).toEqual([{ method: "POST", name: "Renamed playlist" }]);
+  await renamed.click({ button: "right" });
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await menu.getByRole("menuitem", { name: "Удалить", exact: true }).click();
+  await expect(renamed).toBeVisible();
+  expect(writes).toHaveLength(1);
+  await renamed.click({ button: "right" });
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("Renamed playlist");
+    page.once("dialog", (cleanup) => cleanup.dismiss());
+    await dialog.accept();
+  });
+  await menu.getByRole("menuitem", { name: "Удалить", exact: true }).click();
+  await expect(renamed).toHaveCount(0);
+  expect(writes.at(-1)).toEqual({ method: "DELETE", cleanup: "false" });
+  await expect(
+    panel.getByRole("heading", { name: "Playlist redesign" }),
+  ).toBeVisible();
+  await expect(page.locator(".playlist-library-tile.selected")).toContainText(
+    "Playlist redesign",
+  );
+});
