@@ -3,6 +3,70 @@ import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 
+/** Interval union is elapsed coverage, unlike summed overlapping I/O durations. */
+export function phaseEvidence(spans) {
+  const tail = spans
+    .filter((s) => s.phase === "copySlot")
+    .reduce(
+      (last, span) => (!last || span.endMs > last.endMs ? span : last),
+      null,
+    );
+  const coverage = (items) => {
+    const points = items
+      .flatMap(({ startMs, endMs }) => [
+        [startMs, 1],
+        [endMs, -1],
+      ])
+      .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    let active = 0,
+      peakConcurrency = 0,
+      coveredMs = 0,
+      previous = 0;
+    for (const [time, delta] of points) {
+      if (active) coveredMs += time - previous;
+      active += delta;
+      peakConcurrency = Math.max(peakConcurrency, active);
+      previous = time;
+    }
+    return { coveredMs, peakConcurrency };
+  };
+  return {
+    spans,
+    // The final copy job gates Promise.all's artwork barrier. Its ordered
+    // queue/FS intervals expose the observed tail without adding parallel jobs.
+    barrierTail: tail
+      ? {
+          coverId: tail.path,
+          completionMs: tail.endMs,
+          spans: spans
+            .filter((s) => s.path?.includes(tail.path))
+            .sort((a, b) => a.startMs - b.startMs),
+        }
+      : null,
+    ...coverage(spans),
+    phases: Object.fromEntries(
+      [...new Set(spans.map((s) => s.phase))].map((phase) => {
+        const items = spans.filter((s) => s.phase === phase);
+        return [
+          phase,
+          {
+            calls: items.length,
+            summedDurationMs: items.reduce(
+              (sum, s) => sum + s.endMs - s.startMs,
+              0,
+            ),
+            ...coverage(items),
+          },
+        ];
+      }),
+    ),
+    lastCompletion: spans.reduce(
+      (last, span) => (!last || span.endMs > last.endMs ? span : last),
+      null,
+    ),
+  };
+}
+
 /** Count actual image bytes for both legacy flat files and published archives. */
 export async function artworkStorage(directory) {
   const entries = await readdir(directory, { withFileTypes: true }).catch(

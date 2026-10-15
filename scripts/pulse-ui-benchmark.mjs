@@ -4,14 +4,24 @@
 // --electron uses HARBOR_PLAYER_DESKTOP_EXECUTABLE (Windows packaged artifact).
 // --channel=chrome|msedge or HARBOR_PLAYER_CHROMIUM_EXECUTABLE for browser.
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { spawn, execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, writeFile, readFile, open } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  writeFile,
+  readFile,
+  open,
+  rename,
+  rm,
+  statfs,
+} from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { seedUiDataset } from "./pulse-ui-dataset.mjs";
+import { inspectPermittedArtwork } from "./pulse-artwork-fixture.mjs";
 import {
   installUiProbe,
   summarize,
@@ -24,14 +34,22 @@ assert(
     (a) =>
       a === "--smoke" ||
       a === "--latency-only" ||
+      a === "--diagnostic" ||
       a === "--electron" ||
+      /^--cold=(startup-overlap|ready-panels)$/.test(a) ||
       /^--channel=(chrome|msedge)$/.test(a),
   ),
   "Unknown argument",
 );
 const smoke = args.includes("--smoke");
 const latencyOnly = args.includes("--latency-only");
-assert(!(smoke && latencyOnly), "Choose --smoke or --latency-only, not both");
+const diagnostic = args.includes("--diagnostic");
+assert(
+  !diagnostic || smoke,
+  "--diagnostic requires --smoke; not budget samples",
+);
+const coldScenario =
+  args.find((a) => a.startsWith("--cold="))?.split("=")[1] ?? "startup-overlap";
 const electron = args.includes("--electron");
 assert(
   !electron || process.platform === "win32",
@@ -43,6 +61,49 @@ const { chromium } = await import(
 const productionHtml = await readFile("dist/client/index.html"); // Fail before launch if production assets absent.
 await mkdir(".test-data", { recursive: true });
 const root = await mkdtemp(path.resolve(".test-data/pulse-p1-ui-"));
+const artworkBudget = await inspectPermittedArtwork(undefined, {
+  retainedCopies: smoke ? 2 : 20,
+});
+const disk = await statfs(root);
+const freeBytes = disk.bavail * disk.bsize;
+const evidenceReserveBytes = 2 * 1024 * 1024 * 1024;
+assert(
+  freeBytes >= artworkBudget.projectedRetainedBytes + evidenceReserveBytes,
+  "Insufficient disk space for retained fixtures and diagnostic evidence",
+);
+let gitCommit = null;
+let dirty = null;
+try {
+  gitCommit = execFileSync("git", ["rev-parse", "HEAD"], {
+    encoding: "utf8",
+  }).trim();
+  dirty = Boolean(
+    execFileSync("git", ["--no-optional-locks", "status", "--porcelain"], {
+      encoding: "utf8",
+    }).trim(),
+  );
+} catch {
+  // Exported sources may not have Git metadata; source hashes remain available.
+}
+const sourceHashes = Object.fromEntries(
+  await Promise.all(
+    [
+      "scripts/pulse-ui-benchmark.mjs",
+      "scripts/pulse-ui-evidence.mjs",
+      "scripts/pulse-ui-dataset.mjs",
+      "scripts/pulse-artwork-fixture.mjs",
+      "src/client/App.tsx",
+      "src/client/PulseMode.tsx",
+      "src/desktop/main.ts",
+      "src/server/pulse.ts",
+    ].map(async (file) => [
+      file,
+      createHash("sha256")
+        .update(await readFile(file))
+        .digest("hex"),
+    ]),
+  ),
+);
 const evidence = {
   version: 1,
   productionHtmlSha256: createHash("sha256")
@@ -52,6 +113,10 @@ const evidence = {
   target: electron ? "windows-packaged-electron" : "browser",
   smoke,
   latencyOnly,
+  diagnostic,
+  coldScenario,
+  provenance: { gitCommit, dirty, sourceHashes },
+  diskPreflight: { freeBytes, evidenceReserveBytes, artworkBudget },
   environment: {
     node: process.version,
     platform: process.platform,
@@ -61,7 +126,7 @@ const evidence = {
     otherLoad: "NOT CONTROLLED; record target-PC load separately",
   },
   protocol: {
-    cold: "new owned server/Electron process + new browser process/profile per sample; OS filesystem cache not cleared",
+    cold: "new owned process/profile; startup-overlap is early/pre-show injected input; ready-panels is foreground first entry without Pulse prewarm",
     start: "capturing real click event, performance.now renderer clock",
     paint:
       "double requestAnimationFrame rendering opportunity; not hardware presentation time",
@@ -72,12 +137,16 @@ const evidence = {
     return:
       "panels visible, prior scroll restored and attached visible focus target restored; next rendering opportunity",
     profiling: "separate navigation trace, not latency samples",
+    memory: "Network/Playwright inspector overhead is included; not an uncontaminated native-memory acceptance",
+    mutations: latencyOnly
+      ? "real HTTP ingest/clear latency cohort before heavy profiling"
+      : "NOT RUN: use --latency-only for mutation samples",
   },
   limitations: [
     "Installed Windows manual acceptance NOT RUN",
-    "Synthetic generated artwork fixture; real artwork/image/GPU memory NOT RUN",
+    "Generated artwork by default; permitted manifest provenance is recorded per fixture. Image/GPU memory is not covered by JS heap.",
     "Adapter LRU/TTL internal bounds not observable without runtime instrumentation; separate unit coverage required",
-    "warm after listening events and clear NOT RUN (aggregate fixture has no raw ingestion history)",
+    "Warm mutation samples use real HTTP ingest/clear over an aggregate-seeded fixture, not actual audio/recorder integration",
     "read p95 budget belongs to server benchmark, not UI readiness",
     ...(latencyOnly
       ? ["Navigation/trace/memory protocol NOT RUN (--latency-only)"]
@@ -237,6 +306,7 @@ async function launch(dataset, index) {
   const executableSha256 = createHash("sha256")
     .update(await readFile(executable))
     .digest("hex");
+  const launchedAt = performance.now();
   owned = spawn(executable, launchArgs, {
     env: {
       ...process.env,
@@ -256,6 +326,7 @@ async function launch(dataset, index) {
     cdpPort,
     runRoot,
     output: "",
+    lifecycle: { clock: "parent Node elapsed since spawn" },
   };
   evidence.runs.push(run);
   owned.once("error", (e) => {
@@ -273,6 +344,7 @@ async function launch(dataset, index) {
       return false;
     }
   }, "isolated API");
+  run.lifecycle.backendReadyMs = performance.now() - launchedAt;
   let page;
   if (electron) {
     await until(async () => {
@@ -291,7 +363,7 @@ async function launch(dataset, index) {
           .find((p) => p.url().startsWith(origin)),
       "owned renderer",
     );
-    await page.evaluate(installUiProbe);
+    await page.evaluate(installUiProbe, { diagnostic });
     run.appInfo = await page.evaluate(() =>
       window.harborPlayerDesktop.getAppInfo(),
     );
@@ -299,6 +371,11 @@ async function launch(dataset, index) {
       run.appInfo.pulseBenchmark,
       true,
       "Packaged main must honor benchmark isolation",
+    );
+    assert.equal(
+      run.appInfo.pulseBenchmarkProtocol,
+      2,
+      "Rebuild packaged benchmark main",
     );
     assert.equal(path.resolve(run.appInfo.dataRoot), path.resolve(data));
     assert.equal(
@@ -320,12 +397,10 @@ async function launch(dataset, index) {
     const context = await browser.newContext({
       viewport: { width: 1366, height: 900 },
     });
-    await context.addInitScript(installUiProbe);
+    await context.addInitScript(installUiProbe, { diagnostic });
     page = await context.newPage();
-    await page.goto(origin);
   }
   evidence.environment.browserVersion = browser.version();
-  await page.locator(".workspace").waitFor();
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Network.enable");
   const http = [];
@@ -364,18 +439,63 @@ async function launch(dataset, index) {
       inflight.delete(e.requestId);
     }
   });
-  return { page, cdp, http, inflight, runRoot, manifest, origin, run };
+  if (!electron) await page.goto(origin);
+  await page.locator(".workspace").waitFor();
+  run.lifecycle.workspaceDomMs = performance.now() - launchedAt;
+  return {
+    page,
+    cdp,
+    http,
+    inflight,
+    runRoot,
+    manifest,
+    origin,
+    run,
+    launchedAt,
+  };
 }
-async function activation(session, dataset, kind) {
+async function finishTrace(cdp, filename) {
+  const completion = new Promise((resolve) =>
+    cdp.once("Tracing.tracingComplete", resolve),
+  );
+  await cdp.send("Tracing.end");
+  const { stream, dataLossOccurred } = await completion;
+  const file = await open(filename, "w");
+  try {
+    while (true) {
+      const part = await cdp.send("IO.read", { handle: stream });
+      await file.write(
+        part.base64Encoded ? Buffer.from(part.data, "base64") : part.data,
+      );
+      if (part.eof) break;
+    }
+  } finally {
+    await file.close();
+    await cdp.send("IO.close", { handle: stream });
+  }
+  assert(!dataLossOccurred, "Trace data was lost; profile is incomplete");
+}
+async function activation(session, dataset, kind, options = {}) {
   const { page, http, inflight } = session;
+  const nativeBefore =
+    electron && kind === "cold"
+      ? await page.evaluate(() => window.harborPlayerDesktop.getAppInfo())
+      : null;
+  const tracing = diagnostic && kind === "cold";
+  if (tracing)
+    await session.cdp.send("Tracing.start", {
+      categories: "devtools.timeline,v8,blink.user_timing,cc",
+      transferMode: "ReturnAsStream",
+    });
   const first = http.length;
   if (!(await page.locator(".pulse-mode").count()))
     await page.locator(".workspace").focus();
-  await page.evaluate(() => {
+  await page.evaluate((empty) => {
     window.__pulseUiProbe.sample = null;
-  });
-  await page.locator(".pulse-mode-toggle").click();
+    window.__pulseUiProbe.expected = { empty };
+  }, options.empty === true);
   try {
+    await page.locator(".pulse-mode-toggle").click();
     await page.waitForFunction(
       () => window.__pulseUiProbe.sample?.coversReady != null,
       null,
@@ -394,10 +514,17 @@ async function activation(session, dataset, kind) {
       })),
     };
     throw error;
+  } finally {
+    if (tracing)
+      await finishTrace(
+        session.cdp,
+        path.join(session.runRoot, `cold-${coldScenario}-trace.json`),
+      );
   }
   const sample = await page.evaluate(() => window.__pulseUiProbe.sample);
-  if (!sample.returning) {
-    const expected = session.manifest.representatives.at(-1);
+  if (!sample.returning && !options.empty) {
+    const expected =
+      options.expected ?? session.manifest.representatives.at(-1);
     await page
       .locator(`.pulse-day[data-day="${session.manifest.busyDay}"]`)
       .getByRole("button", { name: expected.title, pressed: true })
@@ -413,9 +540,20 @@ async function activation(session, dataset, kind) {
       title: expected.title,
       day: session.manifest.busyDay,
     };
+  } else if (!sample.returning) {
+    assert.equal(await page.locator(".pulse-copy h2").count(), 0);
+    assert.equal(await page.locator(".pulse-stat-numbers").count(), 0);
+    sample.fixture = { empty: true };
   }
   sample.dataset = dataset;
   sample.kind = kind;
+  sample.coldScenario = coldScenario;
+  if (nativeBefore) {
+    sample.nativeWindowBeforeCommand = nativeBefore.nativeWindow;
+    sample.nativeWindowAfterReadiness = (
+      await page.evaluate(() => window.harborPlayerDesktop.getAppInfo())
+    ).nativeWindow;
+  }
   sample.http = http.slice(first);
   sample.network = networkSummary(sample.http);
   sample.pendingRequests = inflight.size;
@@ -435,7 +573,95 @@ async function activation(session, dataset, kind) {
     JSON.stringify(evidence.samples, null, 2),
   );
 }
-async function memory(cdp, phase) {
+async function mutationSamples(session, dataset) {
+  const { page, origin, manifest } = session;
+  if (await page.locator(".pulse-mode").count()) {
+    await page.locator(".pulse-rail").focus();
+    await page.keyboard.press("End");
+    await activation(session, dataset, "return-before-mutations");
+  }
+  const response = await fetch(`${origin}/api/session`);
+  const sessionInfo = await response.json();
+  const headers = {
+    cookie: response.headers.get("set-cookie").split(";")[0],
+    "X-CSRF-Token": sessionInfo.csrf,
+    "content-type": "application/json",
+  };
+  const api = async (endpoint, body) => {
+    const result = await fetch(`${origin}${endpoint}`, {
+      method: body ? "POST" : "GET",
+      headers,
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    const value = await result.json();
+    assert.equal(result.status, 200, JSON.stringify(value));
+    return value;
+  };
+  const last = manifest.representatives.at(-1);
+  const statsEndpoint = `/api/pulse/albums/${last.albumId}/stats?day=${manifest.busyDay}`;
+  const before = await api(statsEndpoint);
+  let settings = await api("/api/pulse/settings");
+  const snapshot = {
+    title: before.title,
+    artists: before.artists,
+    year: before.year ?? null,
+    coverId: before.coverId ?? null,
+  };
+  const ingest = async (title) => {
+    const start = Date.parse(`${manifest.busyDay}T12:00:00Z`);
+    return api("/api/listening-events", {
+      historyGeneration: settings.historyGeneration,
+      events: [
+        {
+          eventId: randomUUID(),
+          revision: 1,
+          trackId: null,
+          albumKey: last.albumId,
+          sessionId: randomUUID(),
+          visitId: randomUUID(),
+          snapshot: { ...snapshot, title },
+          startedAtUtc: start,
+          endedAtUtc: start + 90_000,
+          playedMs: 90_000,
+          final: true,
+        },
+      ],
+    });
+  };
+  await ingest(snapshot.title);
+  const updated = await api(statsEndpoint);
+  assert.equal(updated.playedMs, before.playedMs + 90_000);
+  assert.equal(updated.dayTotalMs, before.dayTotalMs + 90_000);
+  await activation(session, dataset, "warm-after-listening");
+  await activation(session, dataset, "return-after-listening");
+  settings = await api("/api/pulse/clear", {
+    confirm: true,
+    historyGeneration: settings.historyGeneration,
+  });
+  const range = await api("/api/pulse/history-range");
+  assert.equal(range.firstDay, null);
+  await activation(session, dataset, "warm-after-clear", { empty: true });
+  await activation(session, dataset, "return-after-clear");
+  const title = `${snapshot.title} recovered`;
+  const recovered = await ingest(title);
+  const albumId = recovered.acknowledgements[0].albumId;
+  assert.notEqual(albumId, last.albumId);
+  const stats = await api(
+    `/api/pulse/albums/${albumId}/stats?day=${manifest.busyDay}`,
+  );
+  assert.equal(stats.playedMs, 90_000);
+  await activation(session, dataset, "warm-after-clear-recovery", {
+    expected: { albumId, title },
+  });
+  await activation(session, dataset, "return-after-clear-recovery");
+  session.run.mutations = {
+    addedMs: 90_000,
+    clearedGeneration: settings.historyGeneration,
+    recoveredAlbumId: albumId,
+  };
+}
+async function memory(session, phase) {
+  const { cdp, page } = session;
   try {
     await cdp.send("Performance.enable");
     const result = await cdp.send("Performance.getMetrics");
@@ -450,32 +676,106 @@ async function memory(cdp, phase) {
           "LayoutCount",
         ].includes(m.name),
       ),
-      rendererProcessMemory: "NOT SUPPORTED by this portable CDP probe",
+      rendererProcessMemory: electron
+        ? (await page.evaluate(() => window.harborPlayerDesktop.getAppInfo()))
+            .rendererMemoryKiB
+        : "NOT SUPPORTED by this portable browser probe",
+      rendererProcessMemoryUnits: {
+        workingSetSize: "KiB",
+        peakWorkingSetSize: "KiB",
+        privateBytes: "KiB",
+      },
       imageGpuMemory: "NOT MEASURED",
-      gc: "natural; no forced GC in latency run",
+      gc: phase.endsWith("-forced-gc")
+        ? "forced GC in separate navigation diagnostic only"
+        : "natural; no forced GC in latency run",
     };
   } catch (e) {
     return { phase, unsupported: String(e) };
   }
+}
+async function heapEvidence(session, phase) {
+  const { cdp, runRoot } = session;
+  await cdp.send("HeapProfiler.enable");
+  await cdp.send("HeapProfiler.collectGarbage");
+  const filename = path.join(runRoot, `${phase}.heapsnapshot`);
+  const partial = `${filename}.partial`;
+  const file = await open(partial, "w");
+  let bytes = 0;
+  let failure;
+  let complete = false;
+  let pending = Promise.resolve();
+  const append = ({ chunk }) => {
+    bytes += Buffer.byteLength(chunk);
+    if (bytes > 256 * 1024 * 1024) {
+      failure = new Error("Heap snapshot exceeded the 256 MiB evidence bound");
+      return;
+    }
+    pending = pending
+      .then(() => file.write(chunk))
+      .catch((error) => {
+        failure = error;
+      });
+  };
+  cdp.on("HeapProfiler.addHeapSnapshotChunk", append);
+  try {
+    await cdp.send("HeapProfiler.takeHeapSnapshot", { reportProgress: false });
+    await pending;
+    if (failure) throw failure;
+    complete = true;
+  } finally {
+    cdp.off("HeapProfiler.addHeapSnapshotChunk", append);
+    await pending;
+    await file.close();
+    if (!complete) await rm(partial, { force: true }).catch(() => {});
+  }
+  await rename(partial, filename);
+  return {
+    filename,
+    bytes,
+    memory: await memory(session, `${phase}-forced-gc`),
+  };
 }
 async function navigation(session, dataset) {
   const { page, cdp, http, inflight, runRoot } = session;
   const record = {
     dataset,
     durationMs: smoke ? 2000 : 1800000,
-    memory: [await memory(cdp, "before")],
+    memory: [await memory(session, "before")],
+    heaps: [],
+    traces: [],
     points: [],
     httpStart: http.length,
     completed: false,
   };
+  record.heaps.push(await heapEvidence(session, "before-navigation"));
   const taskStart = await page.evaluate(() => performance.now());
   evidence.navigation.push(record);
+  console.error(
+    `Navigation ${dataset}: ${record.durationMs / 1000}s; artifacts ${runRoot}`,
+  );
   await cdp.send("Tracing.start", {
     categories: "devtools.timeline,v8,blink.user_timing",
     transferMode: "ReturnAsStream",
   });
+  let tracing = true;
+  let traceWindow = { phase: "start", start: Date.now() };
+  const endTraceWindow = async () => {
+    const filename = path.join(
+      runRoot,
+      `navigation-${traceWindow.phase}-trace.json`,
+    );
+    tracing = false;
+    await finishTrace(cdp, filename);
+    record.traces.push({
+      ...traceWindow,
+      end: Date.now(),
+      filename,
+    });
+  };
   try {
     const start = Date.now();
+    let nextProgress = start + 300_000;
     while (Date.now() - start < record.durationMs) {
       const range = page.locator(".pulse-history-range input");
       await range.focus();
@@ -554,29 +854,67 @@ async function navigation(session, dataset) {
       );
       await page.mouse.up();
       await delay(100);
-      record.points.push(
-        await page.evaluate(() => ({
-          time: performance.now(),
-          days: document.querySelectorAll(".pulse-day").length,
-          cards: document.querySelectorAll(".pulse-album").length,
-          images: document.querySelectorAll(".pulse-mode img").length,
-          scroll: document.querySelector(".pulse-rail").scrollLeft,
-        })),
+      const point = await page.evaluate(() => ({
+        time: performance.now(),
+        days: document.querySelectorAll(".pulse-day").length,
+        cards: document.querySelectorAll(".pulse-album").length,
+        images: document.querySelectorAll(".pulse-mode img").length,
+        scroll: document.querySelector(".pulse-rail").scrollLeft,
+        viewport: document.querySelector(".pulse-rail").clientWidth,
+      }));
+      // Fixture-specific, viewport-scaled envelope; never proportional to years
+      // or the 1000-album count. Exact LRU/overscan behavior has unit coverage.
+      const dayBound = Math.ceil(point.viewport / 64) + 8;
+      assert(
+        point.days <= dayBound,
+        "Day DOM grew beyond its viewport envelope",
       );
+      assert(point.cards <= dayBound * 4 + 32, "Album DOM is not bounded");
+      record.points.push(point);
+      if (Date.now() >= nextProgress) {
+        console.error(
+          `Navigation ${dataset}: ${Math.round((Date.now() - start) / 1000)}s; ` +
+            `days=${point.days}, cards=${point.cards}, requests=${http.length}`,
+        );
+        nextProgress = Date.now() + 300_000;
+      }
       if (record.points.length % 100 === 0)
-        record.memory.push(await memory(cdp, "plateau"));
+        record.memory.push(await memory(session, "plateau"));
+      if (!smoke && tracing && Date.now() - traceWindow.start >= 30_000)
+        await endTraceWindow();
+      if (
+        !smoke &&
+        !tracing &&
+        traceWindow.phase === "start" &&
+        Date.now() - start >= record.durationMs - 30_000
+      ) {
+        traceWindow = { phase: "end", start: Date.now() };
+        await cdp.send("Tracing.start", {
+          categories: "devtools.timeline,v8,blink.user_timing",
+          transferMode: "ReturnAsStream",
+        });
+        tracing = true;
+      }
     }
-    record.memory.push(await memory(cdp, "end"));
+    const taskEnd = await page.evaluate(() => performance.now());
+    record.taskWindow = {
+      clock: "renderer performance.now",
+      start: taskStart,
+      end: taskEnd,
+    };
+    if (tracing) await endTraceWindow();
+    record.memory.push(await memory(session, "end"));
     await delay(smoke ? 100 : 10000);
-    record.memory.push(await memory(cdp, "idle"));
+    record.memory.push(await memory(session, "idle"));
+    record.heaps.push(await heapEvidence(session, "after-navigation"));
     record.longtasks = await page.evaluate(
-      (start) => ({
+      ({ start, end }) => ({
         supported: window.__pulseUiProbe.supportedLongtask,
         entries: window.__pulseUiProbe.tasks.filter(
-          (t) => t.startTime >= start,
+          (t) => t.startTime >= start && t.startTime < end,
         ),
       }),
-      taskStart,
+      { start: taskStart, end: taskEnd },
     );
     record.longtasks.countOver50Ms = record.longtasks.entries.filter(
       (t) => t.duration > 50,
@@ -598,36 +936,76 @@ async function navigation(session, dataset) {
         within100:
           Number(new URLSearchParams(r.query).get("limit") || 20) <= 100,
       }));
+    assert(
+      record.pageLimits.every((entry) => entry.within100),
+      "Unbounded page request",
+    );
     record.completed = true;
   } catch (error) {
     record.error = String(error);
     throw error;
   } finally {
-    const completion = new Promise((resolve) =>
-      cdp.once("Tracing.tracingComplete", resolve),
-    );
-    await cdp.send("Tracing.end");
-    const { stream } = await completion;
-    const file = await open(path.join(runRoot, "navigation-trace.json"), "w");
-    try {
-      while (true) {
-        const part = await cdp.send("IO.read", { handle: stream });
-        await file.write(
-          part.base64Encoded ? Buffer.from(part.data, "base64") : part.data,
-        );
-        if (part.eof) break;
-      }
-    } finally {
-      await file.close();
-      await cdp.send("IO.close", { handle: stream });
-    }
+    if (tracing) await endTraceWindow();
   }
 }
 try {
   for (const dataset of ["ordinary", "ten-year"]) {
     for (let index = 0; index < (smoke ? 1 : 10); index++) {
+      console.error(
+        `Pulse UI ${dataset}: launch ${index + 1}/${smoke ? 1 : 10}, ${coldScenario}`,
+      );
       const session = await launch(dataset, index);
+      if (coldScenario === "ready-panels") {
+        if (electron) {
+          await until(async () => {
+            const info = await session.page.evaluate(() =>
+              window.harborPlayerDesktop.getAppInfo(),
+            );
+            session.run.preColdAppInfo = info;
+            return (
+              info.nativeWindow.visible &&
+              info.nativeWindow.focused &&
+              !info.nativeWindow.minimized
+            );
+          }, "visible foreground native window");
+        }
+        await session.page.evaluate(() => document.fonts.ready);
+        await until(
+          async () =>
+            [...session.inflight.values()].every(
+              (request) => request.endpoint === "/api/events",
+            ) &&
+            (await session.page.evaluate(() => {
+              const workspace = document.querySelector(".workspace");
+              return (
+                document.fonts.status === "loaded" &&
+                document.visibilityState !== "hidden" &&
+                document.hasFocus() &&
+                !!workspace &&
+                workspace.getAttribute("aria-busy") === "false" &&
+                !workspace.querySelector("[role='alert']")
+              );
+            })),
+          "ready panels without Pulse prewarm",
+        );
+        await session.page.evaluate(
+          () =>
+            new Promise((resolve) =>
+              requestAnimationFrame(() => requestAnimationFrame(resolve)),
+            ),
+        );
+        session.run.lifecycle.panelsReadyMs =
+          performance.now() - session.launchedAt;
+      }
+      session.run.lifecycle.coldCommandStartMs =
+        performance.now() - session.launchedAt;
       await activation(session, dataset, "cold");
+      session.run.lifecycle.coldCommandEndMs =
+        performance.now() - session.launchedAt;
+      if (electron && diagnostic)
+        session.run.postColdAppInfo = await session.page.evaluate(() =>
+          window.harborPlayerDesktop.getAppInfo(),
+        );
       // Validate after the cold sample so SQLite/statement caches are not warmed
       // by the evidence checks. A wrong fixture still makes the run incomplete.
       session.run.fixtureVerified = await verifyFixture(
@@ -649,6 +1027,7 @@ try {
           await activation(session, dataset, "navigation-setup");
           await navigation(session, dataset);
         }
+        if (latencyOnly) await mutationSamples(session, dataset);
       }
       await stop();
     }

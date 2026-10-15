@@ -7,14 +7,17 @@ import {
 } from "../scripts/pulse-ui-evidence.mjs";
 
 describe("Pulse UI evidence", () => {
-  it("waits rendering opportunities relative to async readiness and revalidates DOM", async () => {
+  it.each([false, true])("probe lifecycle %s", async (diagnostic) => {
     const queue: FrameRequestCallback[] = [];
     let clock = 0;
     let loaded = false;
     let loading = false;
+    let hidden = false;
+    let mutation = () => {};
     let click: (event: unknown) => void = () => {};
     const element = {
       isConnected: true,
+      textContent: "initial card and stats",
       closest: () => null,
       getBoundingClientRect: () => ({
         width: 100,
@@ -25,16 +28,42 @@ describe("Pulse UI evidence", () => {
         bottom: 100,
       }),
     };
+    let statsElement = element;
+    const image = {
+      ...element,
+      currentSrc: "http://127.0.0.1/api/covers/corrupt.png",
+      decode: () => Promise.reject(new Error("Corrupt fixture")),
+      complete: true,
+    };
     const windowMock: Record<string, any> = {};
     vi.stubGlobal("window", windowMock);
     vi.stubGlobal("innerWidth", 900);
     vi.stubGlobal("innerHeight", 900);
-    vi.stubGlobal("performance", { now: () => clock });
+    vi.stubGlobal("performance", {
+      now: () => clock,
+      getEntriesByType: () => [],
+    });
     vi.stubGlobal("PerformanceObserver", { supportedEntryTypes: [] });
+    vi.stubGlobal(
+      "MutationObserver",
+      class {
+        constructor(callback: () => void) {
+          mutation = callback;
+        }
+        observe = vi.fn();
+        disconnect = vi.fn();
+      },
+    );
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
       queue.push(callback),
     );
     vi.stubGlobal("document", {
+      documentElement: {},
+      get visibilityState() {
+        return hidden ? "hidden" : "visible";
+      },
+      hasFocus: () => true,
+      fonts: { status: "loaded" },
       addEventListener: (_name: string, handler: typeof click) => {
         click = handler;
       },
@@ -42,14 +71,16 @@ describe("Pulse UI evidence", () => {
         selector === ".pulse-mode" || selector === ".pulse-rail"
           ? element
           : selector === ".pulse-stat-numbers" && loaded
-            ? element
+            ? statsElement
             : null,
       querySelectorAll: (selector: string) =>
         selector === ".pulse-album" && loaded
           ? [element]
           : selector === ".pulse-card-loading" && loading
             ? [element]
-            : [],
+            : selector === ".pulse-mode img" && diagnostic
+              ? [image]
+              : [],
     });
     const frame = async () => {
       clock += 16;
@@ -58,11 +89,13 @@ describe("Pulse UI evidence", () => {
       await Promise.resolve();
     };
     try {
-      installUiProbe();
+      installUiProbe({ diagnostic });
       // Initial click must see no Pulse DOM (activation, not return).
       const doc = globalThis.document;
       const query = doc.querySelector;
       doc.querySelector = (() => null) as typeof query;
+      click({ target: { closest: () => element } });
+      const cancelled = windowMock.__pulseUiProbe.sample;
       click({ target: { closest: () => element } });
       doc.querySelector = query;
       await frame();
@@ -70,11 +103,24 @@ describe("Pulse UI evidence", () => {
       await frame();
       expect(windowMock.__pulseUiProbe.sample.dataReady).toBeNull();
       loaded = true;
+      mutation();
+      hidden = true;
+      for (let i = 0; i < 3; i++) await frame();
+      expect(windowMock.__pulseUiProbe.sample.dataReady).toBeNull();
+      hidden = false;
       await frame();
       expect(windowMock.__pulseUiProbe.sample.dataReady).toBeNull();
       loading = true;
       await frame();
       loading = false;
+      await frame();
+      await frame();
+      expect(windowMock.__pulseUiProbe.sample.dataReady).toBeNull();
+      element.textContent = "mutated card and stats";
+      await frame();
+      await frame();
+      expect(windowMock.__pulseUiProbe.sample.dataReady).toBeNull();
+      statsElement = { ...element, textContent: "replaced statistics" };
       await frame();
       await frame();
       expect(windowMock.__pulseUiProbe.sample.dataReady).toBeNull();
@@ -90,6 +136,70 @@ describe("Pulse UI evidence", () => {
       expect(windowMock.__pulseUiProbe.sample.coversReady).toBeGreaterThan(
         windowMock.__pulseUiProbe.sample.dataReady,
       );
+      expect(cancelled.dataReady).toBeNull();
+      if (diagnostic) {
+        expect(
+          windowMock.__pulseUiProbe.sample.phases.shellDomObserved,
+        ).toBeLessThan(windowMock.__pulseUiProbe.sample.dataReady);
+        expect(windowMock.__pulseUiProbe.sample.covers[0].status).toBe("error");
+      }
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+  it("requires a confirmed empty state without stale selection or statistics", async () => {
+    const frames: FrameRequestCallback[] = [];
+    let clock = 0;
+    let entered = false;
+    let staleStats = true;
+    let staleTitle = true;
+    let message = "Загрузка истории…";
+    let click: (event: unknown) => void = () => {};
+    const windowMock: Record<string, any> = {};
+    vi.stubGlobal("window", windowMock);
+    vi.stubGlobal("performance", { now: () => clock });
+    vi.stubGlobal("PerformanceObserver", { supportedEntryTypes: [] });
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
+      frames.push(callback),
+    );
+    vi.stubGlobal("document", {
+      visibilityState: "visible",
+      addEventListener: (_name: string, callback: typeof click) => {
+        click = callback;
+      },
+      querySelectorAll: () => [],
+      querySelector: (selector: string) => {
+        if (selector === ".pulse-mode") return entered ? {} : null;
+        if (selector === ".pulse-empty[role='status']")
+          return { textContent: message };
+        if (selector === ".pulse-stat-numbers") return staleStats ? {} : null;
+        if (selector === ".pulse-copy h2") return staleTitle ? {} : null;
+        return null;
+      },
+    });
+    const advance = async (count: number) => {
+      for (let index = 0; index < count; index++) {
+        clock += 16;
+        frames.splice(0).forEach((callback) => callback(clock));
+        await Promise.resolve();
+      }
+    };
+    try {
+      installUiProbe();
+      windowMock.__pulseUiProbe.expected = { empty: true };
+      click({ target: { closest: () => ({}) } });
+      entered = true;
+      await advance(5);
+      expect(windowMock.__pulseUiProbe.sample.dataReady).toBeNull();
+      message = "История прослушивания пока пуста";
+      await advance(4);
+      expect(windowMock.__pulseUiProbe.sample.dataReady).toBeNull();
+      staleStats = false;
+      await advance(4);
+      expect(windowMock.__pulseUiProbe.sample.dataReady).toBeNull();
+      staleTitle = false;
+      await advance(6);
+      expect(windowMock.__pulseUiProbe.sample.coversReady).not.toBeNull();
     } finally {
       vi.unstubAllGlobals();
     }
@@ -143,5 +253,33 @@ describe("Pulse UI evidence", () => {
     expect(
       summarize(samples, "electron")["ordinary/cold"].budgetAcceptance,
     ).toContain("NOT RUN");
+    const foreground = {
+      ...samples[0],
+      coldScenario: "ready-panels",
+      contextAtClick: { visible: true, focused: true },
+      contextAtReady: { visible: true, focused: true },
+      nativeWindowBeforeCommand: {
+        visible: false,
+        focused: false,
+        minimized: false,
+      },
+      nativeWindowAfterReadiness: {
+        visible: true,
+        focused: true,
+        minimized: false,
+      },
+    };
+    expect(
+      summarize([foreground], "browser")["ordinary/cold"].guideApplicable,
+    ).toBe(true);
+    expect(
+      summarize([foreground], "electron")["ordinary/cold"].guideApplicable,
+    ).toBe(false);
+    expect(
+      summarize(
+        [{ ...foreground, coldScenario: "startup-overlap" }],
+        "browser",
+      )["ordinary/cold"].diagnosticP95WithinGuide,
+    ).toBeNull();
   });
 });

@@ -1,5 +1,10 @@
 # Пульс P1: журнал реализации и проверок
 
+Текущая реализация доработок и новые измерения:
+[журнал follow-up](pulse-p1-followup.md).
+Приведённые ниже числа относятся к первому этапу; native cold затем
+уточнён как startup/pre-show cohort, не foreground first entry.
+
 Методика: [рабочий план P1](../docs/pulse-p1-plan.md).
 Это журнал фактов, не разрешение на релиз. Отсутствующая проверка — `NOT RUN`.
 Рабочая пользовательская БД не использовалась для seed, очистки или нагрузки.
@@ -15,7 +20,9 @@
 - Локально: `git cat-file -e 72403c6…^{tree}`,
   `npm run build:server`, `npx vitest run tests/pulse-migration.test.ts` —
   успешно, 3/3.
-- Новый GitHub `verify`: **NOT RUN**, push из этой работы не выполнялся.
+- На момент исходной работы новый GitHub `verify`: **NOT RUN**, push не выполнялся.
+  Позднее [run 38303905680](https://github.com/grouzdev/harbor-player/actions/runs/38303905680)
+  на `0fcb964` завершился успешно. Он не проверяет последующие коммиты.
 
 ## Исходный локальный прогон до UI-изменений
 
@@ -44,7 +51,7 @@ Git сообщил о CRLF → LF. Это локальный baseline оконч
 | Ingest, влияние на каталог и рост storage | PARTIAL: финальная 30-дневная модель ниже |
 | Установленный Electron: ручной checklist | NOT RUN |
 | Настоящий trackpad/touch и Ctrl+wheel zoom | NOT RUN |
-| Физический sleep/wake P0 | NOT RUN в этой работе; остаётся открытым |
+| Физический sleep/wake P0 | PASS в отдельной работе, evidence в журнале P0 |
 
 Новые результаты добавляются после соответствующего прогона на новой сборке.
 
@@ -242,10 +249,15 @@ Evidence `.test-data/pulse-p1-ingest-F1AvDp/result.json`:
 
 ## Оставшиеся работы
 
+Актуальный исходный HEAD для доработок — `14b705b`.
+Порядок, точки изменений и приёмка:
+[план доработок P1](../docs/pulse-p1-followup-plan.md).
+
 - Cold renderer/paint профиль и устранение причины отклонения бюджета.
 - Полный navigation/memory/artwork protocol и ручная установленная приёмка.
-- Новый GitHub `verify` после отдельного согласованного push.
-- Физический sleep/wake P0.
+- GitHub `verify` на финальном SHA после доработок; `0fcb964` уже зелёный.
+- Физический sleep/wake P0 закрыт отдельным реальным S3-прогоном:
+  [результаты](pulse-p0.md#физический-sleepwake-pass), commit `14b705b`.
 - Follow-up: восстановление/консервативная уборка owned staging после crash
   или Windows sharing errors. Обычный `finally` не гарантирует cleanup при kill;
   не удалять staging другого живого процесса и не смешивать это с retention

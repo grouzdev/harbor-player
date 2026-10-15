@@ -9,7 +9,38 @@ import {
   verifySums,
   measureInvocation,
   artworkStorage,
+  phaseEvidence,
 } from "../scripts/pulse-ingest-evidence.mjs";
+
+test("overlapping phase evidence reports union and concurrency, not additive wall time", () => {
+  const result = phaseEvidence([
+    { phase: "copy", startMs: 1, endMs: 10 },
+    { phase: "copy", startMs: 2, endMs: 8 },
+    { phase: "cleanup", startMs: 9, endMs: 12 },
+  ]);
+  assert.equal(result.coveredMs, 11);
+  assert.equal(result.peakConcurrency, 2);
+  assert.equal(result.phases.copy.summedDurationMs, 15);
+  assert.equal(result.phases.copy.coveredMs, 9);
+  assert.equal(result.lastCompletion.phase, "cleanup");
+});
+
+test("barrier tail retains the last copy job's queue and filesystem intervals", () => {
+  const spans = [
+    { phase: "queueWait", path: "a.png", startMs: 1, endMs: 3 },
+    { phase: "copySlot", path: "a.png", startMs: 3, endMs: 8 },
+    { phase: "copy", path: "/covers/a.png", startMs: 4, endMs: 7 },
+    { phase: "copySlot", path: "b.png", startMs: 1, endMs: 6 },
+  ];
+  const result = phaseEvidence(spans);
+  assert.equal(result.barrierTail.coverId, "a.png");
+  assert.equal(result.barrierTail.completionMs, 8);
+  assert.deepEqual(result.barrierTail.spans, spans.slice(0, 3));
+  assert.equal(result.phases.copySlot.peakConcurrency, 2);
+  assert.equal(result.phases.copySlot.coveredMs, 7);
+  assert.equal(phaseEvidence([]).coveredMs, 0);
+  assert.equal(phaseEvidence([]).barrierTail, null);
+});
 
 test("artwork evidence counts image bytes, not archive directory sizes or staging", async () => {
   await mkdir(".test-data", { recursive: true });

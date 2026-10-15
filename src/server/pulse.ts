@@ -223,13 +223,14 @@ export class PulseStore {
     let staging: string | undefined;
     try {
       if (await this.hasCover(id)) return;
+      // Avoid staging for absent sources, without caching absence across retries.
+      // Copy still handles disappearance after access as best-effort artwork.
+      const source = path.join(this.dataDir, "covers", id);
+      await access(source);
       await mkdir(directory, { recursive: true });
       staging = path.join(directory, `.pulse-${id}-${randomUUID()}.tmp`);
       await mkdir(staging);
-      await copyFile(
-        path.join(this.dataDir, "covers", id),
-        path.join(staging, "image"),
-      );
+      await copyFile(source, path.join(staging, "image"));
       // Publish a complete, nonempty directory on all filesystems. Directory
       // rename cannot replace another nonempty winner, unlike flat-file rename.
       // This also works on FAT/exFAT where hard links are unavailable.

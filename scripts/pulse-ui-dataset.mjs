@@ -5,9 +5,14 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { Catalog } from "../dist/server/database.js";
+import {
+  assertArtworkRoot,
+  seedPermittedArtwork,
+} from "./pulse-artwork-fixture.mjs";
 
 export async function seedUiDataset(root, dataset) {
   assert(["ordinary", "ten-year"].includes(dataset));
+  await assertArtworkRoot(root);
   const relative = path.relative(
     path.resolve(".test-data"),
     path.resolve(root),
@@ -54,7 +59,9 @@ export async function seedUiDataset(root, dataset) {
             .toBuffer()
         : Buffer.from("deliberately corrupt UI fixture");
       const id = `${createHash("sha256").update(bytes).digest("hex")}.png`;
-      await writeFile(path.join(root, "pulse-covers", id), bytes);
+      await writeFile(path.join(root, "pulse-covers", id), bytes, {
+        flag: "wx",
+      });
       covers.push({
         id,
         size,
@@ -62,6 +69,9 @@ export async function seedUiDataset(root, dataset) {
         status: size ? "valid-synthetic" : "corrupt",
       });
     }
+    const artwork = await seedPermittedArtwork(root);
+    covers.push(...artwork.files);
+    const coverCycle = [...covers.slice(0, 4), null, ...artwork.files];
     const coverCounts = { missing: 0, valid: 0, corrupt: 0 };
     db.transaction(() => {
       const album = db.prepare("INSERT INTO pulse_albums VALUES (?,?)");
@@ -71,8 +81,10 @@ export async function seedUiDataset(root, dataset) {
       );
       for (let i = 0; i < busyCount; i++) {
         const id = `pulse-ui-${i}`;
-        const cover = covers[i % 5];
-        coverCounts[!cover ? "missing" : cover.size ? "valid" : "corrupt"]++;
+        const cover = coverCycle[i % coverCycle.length];
+        coverCounts[
+          !cover ? "missing" : cover.status === "corrupt" ? "corrupt" : "valid"
+        ]++;
         album.run(
           id,
           JSON.stringify({
@@ -125,8 +137,11 @@ export async function seedUiDataset(root, dataset) {
       historyDays:
         Math.ceil((Date.parse(to) - Date.parse(from)) / 86400000 / 3) + 1,
       busyTotalMs: busyCount * 60000 + (busyCount * (busyCount - 1)) / 2,
-      covers: { ...coverCounts, files: covers },
-      note: "Deterministic aggregate-only fixture, generated solid-color PNGs; real artwork transfer/decode requires a separate permitted-image run.",
+      covers: { ...coverCounts, files: covers, artwork },
+      note:
+        artwork.mode === "generated-only"
+          ? "Deterministic aggregate-only fixture, generated solid-color PNGs; real artwork transfer/decode requires a separate permitted-image run."
+          : "Aggregate-only fixture with explicitly permitted local files; sharp decode is not browser decode or actual recorder evidence.",
     };
   } finally {
     catalog.close();

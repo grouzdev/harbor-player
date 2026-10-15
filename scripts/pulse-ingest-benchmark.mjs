@@ -2,7 +2,7 @@
 // Default accelerated model: 30 days. PULSE_BENCH_DAYS=365 selects the year model.
 // Evidence tests: npx vitest run tests/pulse-ingest-evidence.test.ts
 import assert from "node:assert/strict";
-import { fork } from "node:child_process";
+import { fork, execFileSync } from "node:child_process";
 import { once } from "node:events";
 import { mkdir, mkdtemp, writeFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -17,6 +17,7 @@ import {
   modelTracks,
   measureInvocation,
   artworkStorage,
+  phaseEvidence,
 } from "./pulse-ingest-evidence.mjs";
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -96,6 +97,70 @@ if (process.argv[2] === "--worker") {
       available: true,
     });
   let active = null;
+  // Diagnostic-only wrappers in this disposable process. Offsets share the
+  // worker's clock; never subtract them from the parent's HTTP clock.
+  for (const name of ["access", "mkdir", "copyFile", "rename", "rm"]) {
+    const original = fs.promises[name];
+    fs.promises[name] = async (...args) => {
+      const timing = active;
+      const startMs = performance.now();
+      let outcome = "ok";
+      try {
+        return await original(...args);
+      } catch (error) {
+        outcome = error.code ?? "error";
+        throw error;
+      } finally {
+        if (timing)
+          timing.spans.push({
+            phase: {
+              access: "metadata",
+              mkdir: "staging",
+              copyFile: "copy",
+              rename: "publication",
+              rm: "cleanup",
+            }[name],
+            operation: name,
+            path: String(args[0]),
+            startMs: startMs - timing.originMs,
+            endMs: performance.now() - timing.originMs,
+            outcome,
+          });
+      }
+    };
+  }
+  for (const name of ["hasCover", "copyCover"]) {
+    const original = catalog.pulse[name].bind(catalog.pulse);
+    catalog.pulse[name] = async (id) => {
+      const timing = active;
+      const startMs = performance.now();
+      if (name === "copyCover" && timing) {
+        const ready = timing.queueReady.get(id);
+        if (ready !== undefined)
+          timing.spans.push({
+            phase: "queueWait",
+            operation: "copySlot",
+            path: id,
+            startMs: ready - timing.originMs,
+            endMs: startMs - timing.originMs,
+          });
+      }
+      try {
+        return await original(id);
+      } finally {
+        if (timing && name === "hasCover" && !timing.queueReady.has(id))
+          timing.queueReady.set(id, performance.now());
+        if (timing && name === "copyCover")
+          timing.spans.push({
+            phase: "copySlot",
+            operation: name,
+            path: id,
+            startMs: startMs - timing.originMs,
+            endMs: performance.now() - timing.originMs,
+          });
+      }
+    };
+  }
   /** @type {IngestTiming[]} */
   const timings = [];
   // Only this disposable process changes builtin bindings; runtime sources stay intact.
@@ -141,6 +206,9 @@ if (process.argv[2] === "--worker") {
       "Harness permits only one in-flight ingest for phase attribution",
     );
     active = {
+      originMs: performance.now(),
+      spans: [],
+      queueReady: new Map(),
       validationMs: 0,
       artworkFilesystemSyncMs: 0,
       transactionCommitMs: 0,
@@ -149,6 +217,9 @@ if (process.argv[2] === "--worker") {
     try {
       return await measureInvocation(() => ingest(input), active);
     } finally {
+      active.asyncArtwork = phaseEvidence(active.spans);
+      delete active.queueReady;
+      delete active.spans;
       timings.push(active);
       active = null;
     }
@@ -237,13 +308,19 @@ if (process.argv[2] === "--worker") {
 } else {
   const days = Number(process.env.PULSE_BENCH_DAYS ?? 30);
   assert([30, 365].includes(days), "PULSE_BENCH_DAYS must be 30 or 365");
+  const repetitions = Number(process.env.PULSE_BENCH_REPETITIONS ?? 3);
+  assert(
+    Number.isInteger(repetitions) && repetitions >= 1 && repetitions <= 20,
+  );
+  const stressCoverPool = 121 * repetitions;
   await mkdir(".test-data", { recursive: true });
   const root = await mkdtemp(path.resolve(".test-data/pulse-p1-ingest-"));
   await mkdir(path.join(root, "covers"));
   const sharp = (await import("sharp")).default;
   const { createHash } = await import("node:crypto");
   const covers = [];
-  for (let i = 0; i < 121 + 12 + days * 6; i++) {
+  const artworkManifest = [];
+  for (let i = 0; i < stressCoverPool + 12 + days * 6; i++) {
     const bytes = await sharp({
       create: {
         width: i % 2 ? 512 : 1024,
@@ -257,8 +334,14 @@ if (process.argv[2] === "--worker") {
     const id = `${createHash("sha256").update(bytes).digest("hex")}.png`;
     await writeFile(path.join(root, "covers", id), bytes);
     covers.push(id);
+    artworkManifest.push({
+      id,
+      bytes: bytes.length,
+      width: i % 2 ? 512 : 1024,
+      height: i % 2 ? 512 : 1024,
+    });
   }
-  const modelCovers = covers.slice(121);
+  const modelCovers = covers.slice(stressCoverPool);
   const child = fork(self, ["--worker", root], {
     stdio: ["ignore", "pipe", "pipe", "ipc"],
   });
@@ -332,12 +415,12 @@ if (process.argv[2] === "--worker") {
     }
     const expected = () =>
       [...latest.values()].reduce((sum, e) => sum + e.playedMs, 0);
-    async function catalogReads(count) {
+    async function catalogReads(count, continueWhile = () => false) {
       const samples = [];
       const requests = [];
       await Promise.all(
         Array.from({ length: 4 }, async (_, worker) => {
-          for (let i = worker; i < count; i += 4) {
+          for (let i = worker; i < count || continueWhile(); i += 4) {
             const endpoint = [
               "/api/tracks?limit=100",
               "/api/albums?limit=20",
@@ -367,40 +450,51 @@ if (process.argv[2] === "--worker") {
     const baseline = await catalogReads(240);
     const baselineServer = await exchange({ command: "snapshot", expected: 0 });
     await exchange({ command: "reset" });
-    const loadedReads = catalogReads(480);
+    let matrixRunning = true;
+    const loadedReads = catalogReads(480, () => matrixRunning);
     let coverOffset = 0;
-    for (const n of [1, 20, 100]) {
-      for (const artwork of ["first-copy", "existing"]) {
-        const events = Array.from({ length: n }, (_, i) => ({
-          ...modelTracks(0, covers)[0],
-          eventId: `${n}-${artwork}-${i}`,
-          albumKey: `${n}-${artwork}-${i}`,
-          visitId: `${n}-${artwork}-${i}`,
-          snapshot: {
-            title: `Generated ${i}`,
-            artists: ["Benchmark"],
-            year: 2025,
-            coverId: covers[coverOffset + i],
-          },
-          playedMs: 15000,
-          endedAtUtc: modelTracks(0, covers)[0].startedAtUtc + 15000,
-          final: false,
-        }));
-        await send(events, `${n}/${artwork}/new`);
-        const revised = events.map((e) => ({
-          ...e,
-          revision: 2,
-          endedAtUtc: e.startedAtUtc + 30000,
-          playedMs: 30000,
-        }));
-        await send(revised, `${n}/${artwork}/checkpoint`);
-        const finals = revised.map((e) => ({ ...e, revision: 3, final: true }));
-        await send(finals, `${n}/${artwork}/final`);
-        await send(finals, `${n}/${artwork}/retry`);
-        await send(events, `${n}/${artwork}/old-checkpoint`);
+    for (let repetition = 0; repetition < repetitions; repetition++) {
+      for (const n of [1, 20, 100]) {
+        for (const artwork of ["first-copy", "existing", "missing"]) {
+          const events = Array.from({ length: n }, (_, i) => ({
+            ...modelTracks(0, covers)[0],
+            eventId: `${repetition}-${n}-${artwork}-${i}`,
+            albumKey: `${repetition}-${n}-${artwork}-${i}`,
+            visitId: `${repetition}-${n}-${artwork}-${i}`,
+            snapshot: {
+              title: `Generated ${i}`,
+              artists: ["Benchmark"],
+              year: 2025,
+              coverId:
+                artwork === "missing"
+                  ? `${(100000 + coverOffset + i).toString(16).padStart(64, "0")}.png`
+                  : covers[coverOffset + i],
+            },
+            playedMs: 15000,
+            endedAtUtc: modelTracks(0, covers)[0].startedAtUtc + 15000,
+            final: false,
+          }));
+          await send(events, `${n}/${artwork}/new`);
+          const revised = events.map((e) => ({
+            ...e,
+            revision: 2,
+            endedAtUtc: e.startedAtUtc + 30000,
+            playedMs: 30000,
+          }));
+          await send(revised, `${n}/${artwork}/checkpoint`);
+          const finals = revised.map((e) => ({
+            ...e,
+            revision: 3,
+            final: true,
+          }));
+          await send(finals, `${n}/${artwork}/final`);
+          await send(finals, `${n}/${artwork}/retry`);
+          await send(events, `${n}/${artwork}/old-checkpoint`);
+        }
+        coverOffset += n;
       }
-      coverOffset += n;
     }
+    matrixRunning = false;
     const loaded = await loadedReads;
     const ingestServer = await exchange({
       command: "snapshot",
@@ -488,10 +582,12 @@ if (process.argv[2] === "--worker") {
       expected: expected(),
     });
     const coversStorage = await artworkStorage(path.join(root, "pulse-covers"));
-    const measuredBatches = httpSamples.slice(0, 30).map((sample, index) => ({
-      ...sample,
-      ...ingestServer.timings[index],
-    }));
+    const measuredBatches = httpSamples
+      .slice(0, 45 * repetitions)
+      .map((sample, index) => ({
+        ...sample,
+        ...ingestServer.timings[index],
+      }));
     assert.equal(ingestServer.timings.length, measuredBatches.length);
     const overlappingReads = loaded.requests
       .map((request) => ({
@@ -511,6 +607,24 @@ if (process.argv[2] === "--worker") {
     const report = {
       version: 1,
       environment: {
+        gitSha: execFileSync("git", ["rev-parse", "HEAD"], {
+          encoding: "utf8",
+        }).trim(),
+        executable: process.execPath,
+        executableSha256: createHash("sha256")
+          .update(fs.readFileSync(process.execPath))
+          .digest("hex"),
+        sourceSha256: Object.fromEntries(
+          [
+            "src/server/pulse.ts",
+            "dist/server/pulse.js",
+            "scripts/pulse-ingest-benchmark.mjs",
+            "scripts/pulse-ingest-evidence.mjs",
+          ].map((file) => [
+            file,
+            createHash("sha256").update(fs.readFileSync(file)).digest("hex"),
+          ]),
+        ),
         node: process.version,
         platform: process.platform,
         arch: process.arch,
@@ -531,7 +645,9 @@ if (process.argv[2] === "--worker") {
         newAlbumFraction: 0.2,
         newUniqueArtworkFraction: 0.2,
         modelCoverPool: modelCovers.length,
-        stressCoverPool: 121,
+        repetitions,
+        stressCoverPool,
+        artworkManifest,
         generatedArtwork:
           "solid-color PNG, alternating 512/1024 square; no user material",
         longListen: "two one-hour parts with 15-second cumulative revisions",
@@ -556,6 +672,19 @@ if (process.argv[2] === "--worker") {
       peakWalBytes,
       covers: coversStorage,
       measuredBatches,
+      scenarios: Object.fromEntries(
+        [...new Set(measuredBatches.map((s) => s.label))].map((label) => {
+          const samples = measuredBatches.filter((s) => s.label === label);
+          return [
+            label,
+            {
+              http: summary(samples.map((s) => s.httpMs)),
+              ingest: summary(samples.map((s) => s.fullIngestMs)),
+              transaction: summary(samples.map((s) => s.transactionCommitMs)),
+            },
+          ];
+        }),
+      ),
       overlappingReads: {
         requests: overlappingReads,
         ...summary(overlappingReads.map((r) => r.latencyMs)),
@@ -567,7 +696,8 @@ if (process.argv[2] === "--worker") {
         samples: httpSamples,
       },
       limitations: [
-        "Local generated workload; not target Windows/Electron results or a year of observation.",
+        "Async diagnostic spans overlap and include OS/threadpool scheduling; summed durations are NOT wall time. copySlot includes nested FS spans; queueWait is first hasCover completion to copyCover entry (including microtask scheduling). lastCompletion identifies the observed tail, not a causal CPU trace. Worker offsets and parent HTTP timestamps are separate clocks.",
+        "Local generated workload; not packaged Electron or a year of observation. Solid PNG bytes/resolutions are recorded, but permitted real images and physical FAT/exFAT were not exercised. This diagnostic run includes instrumentation overhead; three samples per scenario do not establish a stable population p95.",
         "Paced segment uses real wall time and HTTP but is not actual audio playback/recorder integration.",
         "Preparation residual includes settings, artwork preparation, scheduling and wrapper overhead; not isolated filesystem-only timing. artworkFilesystemSyncMs instruments only synchronous APIs and is zero when preparation uses asynchronous filesystem APIs.",
         "fullIngestMs is awaited elapsed time, not continuous blocking. Loop delay is a 1ms sampling estimate; maxObservedSynchronousSegmentMs covers initial invocation and transaction callable, not all server work or continuations.",

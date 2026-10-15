@@ -248,6 +248,7 @@ function duration(ms: number): string {
 function Cover({ album }: { album: PulseAlbumCard }) {
   return album.coverUrl ? (
     <img
+      key={album.coverUrl}
       className="pulse-cover"
       src={album.coverUrl}
       alt=""

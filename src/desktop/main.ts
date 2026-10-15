@@ -80,9 +80,15 @@ let updates: ReturnType<typeof createUpdateController>;
 const startupStartedAt = process.hrtime.bigint();
 let startupReadyToShowMs: number | undefined;
 let startupBenchmarkReported = false;
+const pulseLifecycle: { phase: string; ms: number }[] = [];
 
 function startupElapsedMs() {
   return Number(process.hrtime.bigint() - startupStartedAt) / 1_000_000;
+}
+
+function recordPulseLifecycle(phase: string) {
+  if (pulseBenchmark && pulseLifecycle.length < 100)
+    pulseLifecycle.push({ phase, ms: startupElapsedMs() });
 }
 
 async function reportStartupBenchmark() {
@@ -336,8 +342,19 @@ function createWindow(url: string) {
     event.preventDefault();
     mainWindow?.hide();
   });
+  if (pulseBenchmark) {
+    recordPulseLifecycle("window-configured");
+    mainWindow.on("show", () => recordPulseLifecycle("show"));
+    mainWindow.on("focus", () => recordPulseLifecycle("focus"));
+    mainWindow.on("hide", () => recordPulseLifecycle("hide"));
+    mainWindow.on("blur", () => recordPulseLifecycle("blur"));
+    mainWindow.webContents.once("did-finish-load", () =>
+      recordPulseLifecycle("did-finish-load"),
+    );
+  }
   mainWindow.once("ready-to-show", () => {
     startupReadyToShowMs = startupElapsedMs();
+    recordPulseLifecycle("ready-to-show");
     mainWindow?.show();
   });
   void mainWindow.loadURL(url);
@@ -520,10 +537,26 @@ async function bootstrap() {
           ...(pulseBenchmark
             ? {
                 pulseBenchmark: true,
+                pulseBenchmarkProtocol: 2,
+                nativeLifecycle: {
+                  clock: "main startupElapsedMs; not the renderer clock",
+                  entries: [...pulseLifecycle],
+                },
                 userData: app.getPath("userData"),
                 sessionData: app.getPath("sessionData"),
                 dataRoot,
                 electronVersion: process.versions.electron,
+                nativeWindow: {
+                  visible: mainWindow.isVisible(),
+                  focused: mainWindow.isFocused(),
+                  minimized: mainWindow.isMinimized(),
+                  readyToShowMs: startupReadyToShowMs,
+                },
+                rendererMemoryKiB: app
+                  .getAppMetrics()
+                  .find(
+                    (metric) => metric.pid === event.sender.getOSProcessId(),
+                  )?.memory,
               }
             : {}),
         };
@@ -692,6 +725,7 @@ async function bootstrap() {
       );
       ipcMain.handle("desktop:report-client-ready", async (event) => {
         requireDesktopSender(event);
+        recordPulseLifecycle("client-first-raf");
         await reportStartupBenchmark();
       });
       if (!startupBenchmarkReport) configureUpdates();

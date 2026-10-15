@@ -230,6 +230,77 @@ test("Pulse collection controls do not let Escape close both dialog and screen",
   await expect(page.locator(".pulse-copy h2")).toHaveCount(0);
 });
 
+test("Pulse recovers the selected artwork after a failed image", async ({
+  page,
+}) => {
+  const { busyDate } = await prepareHistory(page);
+  const session = await (await page.request.get("/api/session")).json();
+  const settings = await (await page.request.get("/api/pulse/settings")).json();
+  const id = randomUUID();
+  const badCover = `${"1".repeat(64)}.png`;
+  const goodCover = `${"2".repeat(64)}.png`;
+  const sharp = (await import("sharp")).default;
+  const png = await sharp({
+    create: { width: 8, height: 8, channels: 3, background: "blue" },
+  })
+    .png()
+    .toBuffer();
+  await page.route(`**/api/covers/${badCover}`, (route) =>
+    route.fulfill({ status: 404, body: "" }),
+  );
+  await page.route(`**/api/covers/${goodCover}`, (route) =>
+    route.fulfill({ status: 200, contentType: "image/png", body: png }),
+  );
+  const titles = [`Artwork failed ${id}`, `Artwork recovered ${id}`];
+  const response = await page.request.post("/api/listening-events", {
+    headers: { "X-CSRF-Token": session.csrf },
+    data: {
+      historyGeneration: settings.historyGeneration,
+      events: titles.map((title, index) => {
+        const start = Date.parse(`${busyDate}T13:00:00Z`) + index * 60_000;
+        return {
+          eventId: randomUUID(),
+          revision: 1,
+          trackId: null,
+          albumKey: `artwork-${id}-${index}`,
+          snapshot: {
+            title,
+            artists: ["Artwork fixture"],
+            year: 2025,
+            coverId: index ? goodCover : badCover,
+          },
+          sessionId: id,
+          visitId: randomUUID(),
+          startedAtUtc: start,
+          endedAtUtc: start + 30_000,
+          playedMs: 30_000,
+          final: true,
+        };
+      }),
+    },
+  });
+  expect(response.ok(), await response.text()).toBe(true);
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Открыть Пульс", exact: true })
+    .click();
+  const range = await (await page.request.get("/api/pulse/history-range")).json();
+  const dayIndex = (Date.parse(busyDate) - Date.parse(range.firstDay)) / 86_400_000;
+  await page
+    .getByRole("slider", { name: "Дата на таймлайне" })
+    .fill(String(dayIndex));
+  const image = page.locator(".pulse-selected img");
+  await page.getByRole("button", { name: titles[0] }).locator(".pulse-time").click();
+  await expect(page.locator(".pulse-copy h2")).toHaveText(titles[0]);
+  await expect(image).toHaveCSS("visibility", "hidden");
+  await page.getByRole("button", { name: titles[1] }).locator(".pulse-time").click();
+  await expect(image).toHaveAttribute("src", `/api/covers/${goodCover}`);
+  await expect(image).toBeVisible();
+  await expect
+    .poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth))
+    .toBe(8);
+});
+
 test("Pulse records real audio and mode switches preserve playback", async ({
   page,
 }, info) => {

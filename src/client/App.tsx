@@ -3308,6 +3308,15 @@ export function App() {
       <main
         ref={workspaceRef}
         tabIndex={-1}
+        aria-busy={
+          !ready ||
+          searchPending ||
+          libraries.isFetching ||
+          genres.isFetching ||
+          artists.isFetching ||
+          albums.isFetching ||
+          tracks.isFetching
+        }
         onFocusCapture={(event) => {
           if (event.target instanceof HTMLElement)
             catalogFocus.current = event.target;
