@@ -18,6 +18,11 @@ import {
   measureInvocation,
   artworkStorage,
   phaseEvidence,
+  batchReadEvidence,
+  isolatedFirstCopyEvents,
+  scenarioEvidence,
+  verifyArtworkStorage,
+  verifyCohortCoverage,
 } from "./pulse-ingest-evidence.mjs";
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -313,6 +318,7 @@ if (process.argv[2] === "--worker") {
     Number.isInteger(repetitions) && repetitions >= 1 && repetitions <= 20,
   );
   const stressCoverPool = 121 * repetitions;
+  const isolatedCoverPool = 100 * repetitions;
   await mkdir(".test-data", { recursive: true });
   const root = await mkdtemp(path.resolve(".test-data/pulse-p1-ingest-"));
   await mkdir(path.join(root, "covers"));
@@ -320,7 +326,11 @@ if (process.argv[2] === "--worker") {
   const { createHash } = await import("node:crypto");
   const covers = [];
   const artworkManifest = [];
-  for (let i = 0; i < stressCoverPool + 12 + days * 6; i++) {
+  for (
+    let i = 0;
+    i < stressCoverPool + isolatedCoverPool + 12 + days * 6;
+    i++
+  ) {
     const bytes = await sharp({
       create: {
         width: i % 2 ? 512 : 1024,
@@ -341,7 +351,7 @@ if (process.argv[2] === "--worker") {
       height: i % 2 ? 512 : 1024,
     });
   }
-  const modelCovers = covers.slice(stressCoverPool);
+  const modelCovers = covers.slice(stressCoverPool + isolatedCoverPool);
   const child = fork(self, ["--worker", root], {
     stdio: ["ignore", "pipe", "pipe", "ipc"],
   });
@@ -376,7 +386,7 @@ if (process.argv[2] === "--worker") {
     const latest = new Map();
     let peakWalBytes = 0;
     const httpSamples = [];
-    async function send(events, label) {
+    async function send(events, label, cohort = "unloaded") {
       const start = performance.now();
       const response = await request(`${url}/api/listening-events`, {
         method: "POST",
@@ -387,7 +397,8 @@ if (process.argv[2] === "--worker") {
         }),
       });
       const body = await response.json();
-      const httpMs = performance.now() - start;
+      const end = performance.now();
+      const httpMs = end - start;
       assert.equal(response.status, 200, JSON.stringify(body));
       assert.equal(body.acknowledgements.length, events.length);
       for (const event of events) {
@@ -403,9 +414,10 @@ if (process.argv[2] === "--worker") {
       }
       httpSamples.push({
         label,
+        cohort,
         batchSize: events.length,
         startMs: start,
-        endMs: performance.now(),
+        endMs: end,
         httpMs,
       });
       peakWalBytes = Math.max(
@@ -474,32 +486,121 @@ if (process.argv[2] === "--worker") {
             endedAtUtc: modelTracks(0, covers)[0].startedAtUtc + 15000,
             final: false,
           }));
-          await send(events, `${n}/${artwork}/new`);
+          await send(events, `${n}/${artwork}/new`, "read-load-period");
           const revised = events.map((e) => ({
             ...e,
             revision: 2,
             endedAtUtc: e.startedAtUtc + 30000,
             playedMs: 30000,
           }));
-          await send(revised, `${n}/${artwork}/checkpoint`);
+          await send(revised, `${n}/${artwork}/checkpoint`, "read-load-period");
           const finals = revised.map((e) => ({
             ...e,
             revision: 3,
             final: true,
           }));
-          await send(finals, `${n}/${artwork}/final`);
-          await send(finals, `${n}/${artwork}/retry`);
-          await send(events, `${n}/${artwork}/old-checkpoint`);
+          await send(finals, `${n}/${artwork}/final`, "read-load-period");
+          await send(finals, `${n}/${artwork}/retry`, "read-load-period");
+          await send(
+            events,
+            `${n}/${artwork}/old-checkpoint`,
+            "read-load-period",
+          );
         }
         coverOffset += n;
       }
     }
     matrixRunning = false;
     const loaded = await loadedReads;
+    for (let repetition = 0; repetition < repetitions; repetition++) {
+      const offset = stressCoverPool + repetition * 100;
+      await send(
+        isolatedFirstCopyEvents(repetition, covers.slice(offset, offset + 100)),
+        "100/first-copy/new",
+        "isolated",
+      );
+    }
     const ingestServer = await exchange({
       command: "snapshot",
       expected: expected(),
     });
+    const measuredBatches = httpSamples
+      .slice(0, 46 * repetitions)
+      .map((sample, index) => ({
+        ...sample,
+        ...ingestServer.timings[index],
+        batchIndex: index,
+        readOverlap: batchReadEvidence(sample, loaded.requests),
+      }));
+    // Local diagnostic checkpoint, deliberately before any artwork/coverage
+    // assertion. ACK success does not imply successful best-effort publication.
+    await writeFile(
+      path.join(root, "matrix-diagnostic.json"),
+      JSON.stringify(
+        {
+          version: 1,
+          status: "diagnostic-before-artwork-assertions",
+          timestampUtc: new Date().toISOString(),
+          provenance: {
+            gitSha: execFileSync("git", ["rev-parse", "HEAD"], {
+              encoding: "utf8",
+            }).trim(),
+            dirty:
+              execFileSync("git", ["status", "--porcelain"], {
+                encoding: "utf8",
+              }).trim().length > 0,
+            node: process.version,
+            platform: process.platform,
+            arch: process.arch,
+            executableSha256: createHash("sha256")
+              .update(fs.readFileSync(process.execPath))
+              .digest("hex"),
+            sourceSha256: Object.fromEntries(
+              [
+                "src/server/pulse.ts",
+                "dist/server/pulse.js",
+                "scripts/pulse-ingest-benchmark.mjs",
+                "scripts/pulse-ingest-evidence.mjs",
+              ].map((file) => [
+                file,
+                createHash("sha256")
+                  .update(fs.readFileSync(file))
+                  .digest("hex"),
+              ]),
+            ),
+          },
+          repetitions,
+          stressCoverPool,
+          isolatedCoverPool,
+          expectedPlayedMs: expected(),
+          expectedArtworkManifest: artworkManifest.slice(
+            0,
+            stressCoverPool + isolatedCoverPool,
+          ),
+          generatedEvents: [...latest.values()],
+          ingestServer,
+          measuredBatches,
+          httpSamples,
+          catalog: { baseline, loaded },
+          clocks: {
+            readOverlap: "Parent performance.now HTTP intervals only",
+            spans:
+              "Worker offsets from each ingest origin; not subtracted from parent timestamps",
+          },
+          limitations: [
+            "Local diagnostic evidence, not acceptance or a shared report; spans can contain local generated paths.",
+            "Saved before artwork gates; successful ACK does not establish successful artwork publication.",
+            "Observed last copy slot is not necessarily the artwork barrier; lastCompletion is independent. Concurrent durations are not additive elapsed time.",
+          ],
+        },
+        null,
+        2,
+      ),
+    );
+    verifyArtworkStorage(
+      ingestServer.covers,
+      artworkManifest.slice(0, stressCoverPool + isolatedCoverPool),
+    );
     // Real elapsed server-side cadence, not audio/recorder validation.
     const paced = {
       ...modelTracks(0, covers)[0],
@@ -582,20 +683,22 @@ if (process.argv[2] === "--worker") {
       expected: expected(),
     });
     const coversStorage = await artworkStorage(path.join(root, "pulse-covers"));
-    const measuredBatches = httpSamples
-      .slice(0, 45 * repetitions)
-      .map((sample, index) => ({
-        ...sample,
-        ...ingestServer.timings[index],
-      }));
+    verifyArtworkStorage(final.covers, artworkManifest);
+    assert.deepEqual(
+      coversStorage,
+      final.covers,
+      "Final storage agrees with worker",
+    );
     assert.equal(ingestServer.timings.length, measuredBatches.length);
+    verifyCohortCoverage(measuredBatches, repetitions);
     const overlappingReads = loaded.requests
       .map((request) => ({
         ...request,
         overlappingBatches: measuredBatches
           .filter(
             (batch) =>
-              request.startMs <= batch.endMs && request.endMs >= batch.startMs,
+              Math.max(request.startMs, batch.startMs) <
+              Math.min(request.endMs, batch.endMs),
           )
           .map((batch) => batch.label),
       }))
@@ -647,6 +750,9 @@ if (process.argv[2] === "--worker") {
         modelCoverPool: modelCovers.length,
         repetitions,
         stressCoverPool,
+        isolatedCoverPool,
+        isolatedCohort:
+          "Fresh 100/first-copy/new after all reads finish; same repetitions; fixed order and caches not flushed, not randomized A/B",
         artworkManifest,
         generatedArtwork:
           "solid-color PNG, alternating 512/1024 square; no user material",
@@ -672,19 +778,13 @@ if (process.argv[2] === "--worker") {
       peakWalBytes,
       covers: coversStorage,
       measuredBatches,
-      scenarios: Object.fromEntries(
-        [...new Set(measuredBatches.map((s) => s.label))].map((label) => {
-          const samples = measuredBatches.filter((s) => s.label === label);
-          return [
-            label,
-            {
-              http: summary(samples.map((s) => s.httpMs)),
-              ingest: summary(samples.map((s) => s.fullIngestMs)),
-              transaction: summary(samples.map((s) => s.transactionCommitMs)),
-            },
-          ];
-        }),
+      scenariosCohort: "read-load-period",
+      scenarios: scenarioEvidence(measuredBatches, "read-load-period"),
+      observedOverlapScenarios: scenarioEvidence(
+        measuredBatches.filter((batch) => batch.readOverlap.count > 0),
+        "read-load-period",
       ),
+      isolatedScenarios: scenarioEvidence(measuredBatches, "isolated"),
       overlappingReads: {
         requests: overlappingReads,
         ...summary(overlappingReads.map((r) => r.latencyMs)),

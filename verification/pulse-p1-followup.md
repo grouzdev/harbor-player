@@ -6,6 +6,9 @@
 Raw evidence содержит SHA, dirty flag, source hashes и hash executable;
 результат относится к конкретным артефактам, а не к будущей сборке.
 Рабочая БД, обычный Electron profile и power settings не менялись.
+Следующий этап на базе `b967ca6` записан отдельно:
+[layout concurrency, Tab reentry, publication retries и новые проверки](pulse-p1-stage2.md).
+Статусы ниже относятся к первому этапу; новая сводка не переписывает его evidence.
 
 ## D1: уточнение cold measurement
 

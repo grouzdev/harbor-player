@@ -3,6 +3,107 @@ import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 
+/** Half-open parent HTTP intervals; worker timestamps are deliberately unused. */
+export function batchReadEvidence(batch, requests) {
+  const reads = requests.filter(
+    (read) =>
+      Math.max(read.startMs, batch.startMs) < Math.min(read.endMs, batch.endMs),
+  );
+  const overlaps = reads.map(
+    (read) =>
+      Math.min(read.endMs, batch.endMs) - Math.max(read.startMs, batch.startMs),
+  );
+  return {
+    clock: "parent performance.now / HTTP request through parsed response",
+    count: reads.length,
+    requestIndices: requests.flatMap((read, index) =>
+      reads.includes(read) ? [index] : [],
+    ),
+    latency: reads.length ? summary(reads.map((r) => r.latencyMs)) : null,
+    overlapDuration: overlaps.length ? summary(overlaps) : null,
+    endpoints: Object.fromEntries(
+      [...new Set(reads.map((r) => r.endpoint))].map((endpoint) => [
+        endpoint,
+        summary(
+          reads.filter((r) => r.endpoint === endpoint).map((r) => r.latencyMs),
+        ),
+      ]),
+    ),
+  };
+}
+
+/** Disjoint generated identities and artwork, reserved outside the overlap pool. */
+export function isolatedFirstCopyEvents(repetition, coverIds) {
+  assert.equal(coverIds.length, 100);
+  assert.equal(new Set(coverIds).size, 100);
+  return coverIds.map((coverId, i) => ({
+    ...modelTracks(0, coverIds)[0],
+    eventId: `isolated-${repetition}-${i}`,
+    albumKey: `isolated-${repetition}-${i}`,
+    visitId: `isolated-${repetition}-${i}`,
+    snapshot: {
+      title: `Generated ${i}`,
+      artists: ["Benchmark"],
+      year: 2025,
+      coverId,
+    },
+    playedMs: 15000,
+    endedAtUtc: modelTracks(0, coverIds)[0].startedAtUtc + 15000,
+    final: false,
+  }));
+}
+
+/** Verify publication against generated image bytes, not directory sizes. */
+export function verifyArtworkStorage(actual, manifest) {
+  assert.equal(
+    new Set(manifest.map((image) => image.id)).size,
+    manifest.length,
+  );
+  assert.deepEqual(actual, {
+    count: manifest.length,
+    bytes: manifest.reduce((sum, image) => sum + image.bytes, 0),
+    stagingEntries: 0,
+  });
+}
+
+export function verifyCohortCoverage(batches, repetitions) {
+  const isolated = batches.filter((batch) => batch.cohort === "isolated");
+  assert.equal(isolated.length, repetitions, "Isolated sample count");
+  assert(isolated.every((batch) => batch.readOverlap.count === 0));
+  const loaded = batches.filter(
+    (batch) =>
+      batch.cohort === "read-load-period" &&
+      batch.label === "100/first-copy/new",
+  );
+  assert.equal(
+    loaded.length,
+    repetitions,
+    "Load-period first-copy sample count",
+  );
+  assert(
+    loaded.every((batch) => batch.readOverlap.count > 0),
+    "Every load-period first-copy 100 sample must have observed read overlap",
+  );
+}
+
+/** Keep legacy scenario keys load-period-only; isolated samples never dilute them. */
+export function scenarioEvidence(batches, cohort) {
+  const selected = batches.filter((batch) => batch.cohort === cohort);
+  return Object.fromEntries(
+    [...new Set(selected.map((batch) => batch.label))].map((label) => {
+      const samples = selected.filter((batch) => batch.label === label);
+      return [
+        label,
+        {
+          http: summary(samples.map((s) => s.httpMs)),
+          ingest: summary(samples.map((s) => s.fullIngestMs)),
+          transaction: summary(samples.map((s) => s.transactionCommitMs)),
+        },
+      ];
+    }),
+  );
+}
+
 /** Interval union is elapsed coverage, unlike summed overlapping I/O durations. */
 export function phaseEvidence(spans) {
   const tail = spans
@@ -13,6 +114,7 @@ export function phaseEvidence(spans) {
     );
   const coverage = (items) => {
     const points = items
+      .filter(({ startMs, endMs }) => endMs > startMs)
       .flatMap(({ startMs, endMs }) => [
         [startMs, 1],
         [endMs, -1],
@@ -30,10 +132,45 @@ export function phaseEvidence(spans) {
     }
     return { coveredMs, peakConcurrency };
   };
+  const publications = spans.filter((s) => s.phase === "publication");
+  const errors = spans.filter((s) => s.outcome && s.outcome !== "ok");
+  const outcomes = (items) =>
+    Object.fromEntries(
+      [...new Set(items.map((s) => s.outcome ?? "unknown"))].map((outcome) => [
+        outcome,
+        items.filter((s) => (s.outcome ?? "unknown") === outcome).length,
+      ]),
+    );
   return {
     spans,
-    // The final copy job gates Promise.all's artwork barrier. Its ordered
-    // queue/FS intervals expose the observed tail without adding parallel jobs.
+    publication: {
+      attempts: publications.length,
+      succeeded: publications.filter((s) => s.outcome === "ok").length,
+      failed: publications.filter((s) => s.outcome && s.outcome !== "ok")
+        .length,
+      outcomes: outcomes(publications),
+    },
+    errors: { count: errors.length, outcomes: outcomes(errors) },
+    observedLastCopySlot: tail
+      ? {
+          interpretation:
+            "Observed final copy-slot tail, not a causal trace or sum of concurrent durations",
+          completionMs: tail.endMs,
+          slotElapsedMs: tail.endMs - tail.startMs,
+          phases: Object.fromEntries(
+            [...new Set(spans.map((s) => s.phase))].map((phase) => [
+              phase,
+              coverage(
+                spans.filter(
+                  (s) => s.phase === phase && s.path?.includes(tail.path),
+                ),
+              ).coveredMs,
+            ]),
+          ),
+        }
+      : null,
+    // Legacy field: the last observed copy slot, not necessarily the artwork
+    // barrier. Metadata-only work can finish later; lastCompletion is independent.
     barrierTail: tail
       ? {
           coverId: tail.path,

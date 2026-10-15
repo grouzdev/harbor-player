@@ -474,6 +474,14 @@ test("all 1000 busy-day ranks are keyboard reachable with bounded DOM", async ({
   await expect(active).toHaveAttribute("data-rank", "999");
   await page.keyboard.press("Tab");
   await expect(slider).toBeFocused();
+  // A viewport update after blur must not replace the day's roving Tab entry
+  // with its first visible card. Re-enter the last focused rank without pinning
+  // offscreen cards indefinitely.
+  await page.setViewportSize({ width: 641, height: 480 });
+  await expect(page.locator('.pulse-album[data-rank="999"]')).toHaveAttribute(
+    "tabindex",
+    "0",
+  );
   await page.keyboard.press("Shift+Tab");
   await expect(active).toHaveAttribute("data-rank", "999");
 });

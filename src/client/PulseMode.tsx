@@ -62,6 +62,49 @@ export interface PulseAdapter {
     signal: AbortSignal,
   ): Promise<PulseAlbumStats>;
 }
+
+/** Fresh metadata, in request-window order, with at most three reads in flight. */
+export async function readPulseLayout(
+  adapter: Pick<PulseAdapter, "layout">,
+  from: string,
+  to: string,
+  signal: AbortSignal,
+): Promise<PulseDayLayout[]> {
+  const controller = new AbortController();
+  const abort = () => controller.abort(signal.reason);
+  signal.addEventListener("abort", abort, { once: true });
+  if (signal.aborted) abort();
+  const first = calendarDay(from);
+  const last = calendarDay(to);
+  const count = Math.ceil((last - first + 1) / 366);
+  const results: PulseDayLayout[][] = new Array(count);
+  let next = 0;
+  const worker = async () => {
+    while (next < count) {
+      controller.signal.throwIfAborted();
+      const index = next++;
+      const day = first + index * 366;
+      results[index] = await adapter.layout(
+        calendarKey(day),
+        calendarKey(Math.min(day + 365, last)),
+        controller.signal,
+      );
+      controller.signal.throwIfAborted();
+    }
+  };
+  try {
+    await Promise.all(
+      Array.from({ length: Math.min(3, count) }, () => worker()),
+    );
+    return results.flat();
+  } catch (error) {
+    controller.abort(); // Stop sibling reads, not just publication of stale data.
+    throw error;
+  } finally {
+    signal.removeEventListener("abort", abort);
+  }
+}
+
 export interface PulseViewState {
   date: string;
   offset: number;
@@ -291,6 +334,7 @@ function AlbumDay({
   const focusedCard = useRef<{ index: number; album: PulseAlbumCard } | null>(
     null,
   );
+  const [lastFocusedRank, setLastFocusedRank] = useState<number | null>(null);
   const [pendingRank, setPendingRank] = useState<number | null>(null);
   const dayElement = useRef<HTMLDivElement>(null);
   const first = Math.max(
@@ -348,10 +392,14 @@ function AlbumDay({
   }, [cards, pendingRank]);
   const entryRank =
     focusedCard.current?.index ??
-    Math.min(
-      count - 1,
-      Math.max(0, Math.floor((left - start - DAY_PADDING) / ALBUM_WIDTH)),
-    );
+    (lastFocusedRank !== null &&
+    lastFocusedRank >= first &&
+    lastFocusedRank <= last
+      ? lastFocusedRank
+      : Math.min(
+          count - 1,
+          Math.max(0, Math.floor((left - start - DAY_PADDING) / ALBUM_WIDTH)),
+        ));
   const date = new Date(`${day}T00:00:00Z`);
   const labelLeft = Math.max(
     8,
@@ -415,6 +463,7 @@ function AlbumDay({
                   }}
                   onFocus={() => {
                     focusedCard.current = { index: rank, album };
+                    setLastFocusedRank(rank);
                   }}
                   onBlur={() => {
                     focusedCard.current = null;
@@ -570,21 +619,14 @@ export function PulseMode({
         setLayout(undefined);
         return;
       }
-      const entries: PulseDayLayout[] = [];
       // Metadata only: no album snapshots or images outside the viewport.
-      for (
-        let day = calendarDay(range.from);
-        day <= calendarDay(range.to);
-        day += 366
-      ) {
-        const result = await adapter.layout(
-          calendarKey(day),
-          calendarKey(Math.min(day + 365, calendarDay(range.to))),
-          controller.signal,
-        );
-        if (controller.signal.aborted) return;
-        entries.push(...result);
-      }
+      const entries = await readPulseLayout(
+        adapter,
+        range.from,
+        range.to,
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
       const next = new PulseLayout(range.from, range.to, entries);
       setLayout(next);
     })()
