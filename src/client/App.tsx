@@ -204,6 +204,7 @@ type PanelVisibility = Record<PanelId, boolean>;
 const panelVisibilityStorageKey = "harbor-player-panel-visibility-v1";
 const legacyPanelVisibilityStorageKey = "mml-panel-visibility-v1";
 const virtualPanelTopInset = 14;
+const defaultPanelWeights = [1, 1, 1, 1, 1, 1];
 
 function updateUserStateCache(
   value: unknown,
@@ -1101,7 +1102,7 @@ export function App() {
         readMigratedStorageValue(
           "harbor-player-panel-weights-v1",
           "mml-panel-weights-v1",
-        ) || "[1,1,1,1,1,1]",
+        ) || JSON.stringify(defaultPanelWeights),
       );
       return Array.isArray(weights) &&
         weights.length === 6 &&
@@ -1111,9 +1112,9 @@ export function App() {
         ? weights
         : Array.isArray(weights) && weights.length === 5
           ? [...weights, 1.8]
-          : [1, 1, 1, 1, 1, 1];
+          : [...defaultPanelWeights];
     } catch {
-      return [1, 1, 1, 1, 1, 1];
+      return [...defaultPanelWeights];
     }
   });
   const [rowWeights, setRowWeights] = useState<number[]>(() => {
@@ -2896,6 +2897,14 @@ export function App() {
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
   };
+  const resetPanelWidths = () => {
+    const weights = [...defaultPanelWeights];
+    setPanelWeights(weights);
+    localStorage.setItem(
+      "harbor-player-panel-weights-v1",
+      JSON.stringify(weights),
+    );
+  };
   const libraryListRef = useRef<HTMLDivElement>(null);
   const genreListRef = useRef<HTMLDivElement>(null);
   const locationSelectionKeys = useMemo(
@@ -3089,6 +3098,7 @@ export function App() {
         role="separator"
         aria-label={`Ширина: ${leftPanel.label} — ${rightPanel.label}`}
         onPointerDown={(event) => resize(leftId, rightId, event)}
+        onDoubleClick={resetPanelWidths}
       />
     );
   };

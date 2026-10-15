@@ -589,11 +589,59 @@ test("catalog panels have equal widths by default", async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 800 });
   await page.goto("/");
 
-  const widths = await page.locator(".panel").evaluateAll((panels) =>
-    panels.map((panel) => panel.getBoundingClientRect().width),
-  );
+  const widths = await page
+    .locator(".panel")
+    .evaluateAll((panels) =>
+      panels.map((panel) => panel.getBoundingClientRect().width),
+    );
   expect(widths).toHaveLength(5);
   expect(widths.every((width) => Math.abs(width - widths[0]!) < 1)).toBe(true);
+});
+
+test("double-clicking a panel divider restores and saves default widths", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.removeItem("harbor-player-panel-weights-v1");
+    localStorage.removeItem("mml-panel-weights-v1");
+  });
+  await page.setViewportSize({ width: 1600, height: 800 });
+  await page.goto("/");
+
+  const divider = page.getByRole("separator", {
+    name: "Ширина: Библиотеки — Жанры",
+  });
+  const box = await divider.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + box!.width / 2 + 80, box!.y + box!.height / 2);
+  await page.mouse.up();
+
+  await divider.dblclick();
+  const widths = await page
+    .locator(".panel")
+    .evaluateAll((panels) =>
+      panels.map((panel) => panel.getBoundingClientRect().width),
+    );
+  expect(widths.every((width) => Math.abs(width - widths[0]!) < 1)).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        localStorage.getItem("harbor-player-panel-weights-v1"),
+      ),
+    )
+    .toBe("[1,1,1,1,1,1]");
+
+  await page.reload();
+  const restoredWidths = await page
+    .locator(".panel")
+    .evaluateAll((panels) =>
+      panels.map((panel) => panel.getBoundingClientRect().width),
+    );
+  expect(
+    restoredWidths.every((width) => Math.abs(width - restoredWidths[0]!) < 1),
+  ).toBe(true);
 });
 
 test("portrait workspace uses two independently resizable rows", async ({
