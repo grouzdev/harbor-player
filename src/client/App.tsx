@@ -3665,14 +3665,9 @@ export function App() {
               onSelectArtist={selectAlbumArtist}
               onCoverDrop={prepareDroppedCover}
               bookmarkKeys={bookmarkKeys}
-              bookmarksUnavailable={bookmarksUnavailable}
-              pendingBookmarkKeys={pendingBookmarkKeys}
-              onBookmarkChange={changeBookmark}
-              pendingUserStateKeys={pendingUserStateKeys}
               playlistDragEnabled={Boolean(
                 activePlaylistId && panelVisibility.playlists,
               )}
-              onUserStateChange={changeUserState}
               scrollTarget={
                 albumScrollTarget?.filterKey === filterKey
                   ? albumScrollTarget
@@ -3791,11 +3786,6 @@ export function App() {
                 }}
                 onContextMenu={showCatalogMenu}
                 bookmarkKeys={bookmarkKeys}
-                bookmarksUnavailable={bookmarksUnavailable}
-                pendingBookmarkKeys={pendingBookmarkKeys}
-                onBookmarkChange={changeBookmark}
-                pendingUserStateKeys={pendingUserStateKeys}
-                onUserStateChange={changeUserState}
                 bookmarksOnly={filter.bookmarksOnly}
                 bookmarkCount={bookmarks.data?.length || 0}
                 hasOtherFilters={

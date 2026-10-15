@@ -14,7 +14,7 @@ export type AlbumHeaderProps = Omit<
   details?: ReactNode;
   cover?: ReactNode;
   duration?: ReactNode;
-  actions?: ReactNode;
+  indicators?: ReactNode;
   collapseControl?: ReactNode;
   statusIcon?: ReactNode;
   contentButton?: ComponentPropsWithoutRef<"button">;
@@ -32,7 +32,7 @@ export function AlbumHeader({
   details,
   cover,
   duration,
-  actions,
+  indicators,
   collapseControl,
   statusIcon,
   contentButton,
@@ -77,6 +77,7 @@ export function AlbumHeader({
           ) : (
             <CoverPlaceholder />
           ))}
+        {indicators}
       </div>
       {contentButton ? (
         <button
@@ -90,7 +91,6 @@ export function AlbumHeader({
         <div className="track-album-copy">{copy}</div>
       )}
       <div className="track-album-state" data-selection-ignore>
-        <div className="track-album-actions">{actions}</div>
         <span className="track-album-duration">{duration}</span>
       </div>
     </div>
