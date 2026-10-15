@@ -284,16 +284,25 @@ test("Pulse recovers the selected artwork after a failed image", async ({
   await page
     .getByRole("button", { name: "Открыть Пульс", exact: true })
     .click();
-  const range = await (await page.request.get("/api/pulse/history-range")).json();
-  const dayIndex = (Date.parse(busyDate) - Date.parse(range.firstDay)) / 86_400_000;
+  const range = await (
+    await page.request.get("/api/pulse/history-range")
+  ).json();
+  const dayIndex =
+    (Date.parse(busyDate) - Date.parse(range.firstDay)) / 86_400_000;
   await page
     .getByRole("slider", { name: "Дата на таймлайне" })
     .fill(String(dayIndex));
   const image = page.locator(".pulse-selected img");
-  await page.getByRole("button", { name: titles[0] }).locator(".pulse-time").click();
+  await page
+    .getByRole("button", { name: titles[0] })
+    .locator(".pulse-time")
+    .click();
   await expect(page.locator(".pulse-copy h2")).toHaveText(titles[0]);
   await expect(image).toHaveCSS("visibility", "hidden");
-  await page.getByRole("button", { name: titles[1] }).locator(".pulse-time").click();
+  await page
+    .getByRole("button", { name: titles[1] })
+    .locator(".pulse-time")
+    .click();
   await expect(image).toHaveAttribute("src", `/api/covers/${goodCover}`);
   await expect(image).toBeVisible();
   await expect

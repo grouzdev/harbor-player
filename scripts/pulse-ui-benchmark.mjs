@@ -137,7 +137,8 @@ const evidence = {
     return:
       "panels visible, prior scroll restored and attached visible focus target restored; next rendering opportunity",
     profiling: "separate navigation trace, not latency samples",
-    memory: "Network/Playwright inspector overhead is included; not an uncontaminated native-memory acceptance",
+    memory:
+      "Network/Playwright inspector overhead is included; not an uncontaminated native-memory acceptance",
     mutations: latencyOnly
       ? "real HTTP ingest/clear latency cohort before heavy profiling"
       : "NOT RUN: use --latency-only for mutation samples",
