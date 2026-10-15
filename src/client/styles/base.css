@@ -3684,6 +3684,12 @@ html[data-theme="light"] .topbar-brand::after {
   --metal-edge: #e9e9d91c;
   --metal-line: #f0f0e40d;
   --metal-shadow: #010101bd;
+  --panel-divider-shading: linear-gradient(
+    90deg,
+    #0000005e,
+    #eeeee209,
+    #0000005e
+  );
   --soft-highlight: #f1f0db10;
   --accent: #b8bd82;
   --teal: #a8ad91;
@@ -3941,7 +3947,8 @@ select {
 .artists-panel,
 .albums-panel,
 .tracks-panel,
-.settings-panel {
+.settings-panel,
+.catalog-sidebar {
   background:
     var(--fine-noise) 0 0 / 180px 180px repeat,
     #181917;
@@ -4028,7 +4035,7 @@ select {
 
 .resizer,
 .row-resizer {
-  background: linear-gradient(90deg, #0000005e, #eeeee209, #0000005e);
+  background: var(--panel-divider-shading);
 }
 
 .resizer:hover,
@@ -4388,6 +4395,7 @@ html[data-theme="light"] .genres-panel,
 html[data-theme="light"] .artists-panel,
 html[data-theme="light"] .albums-panel,
 html[data-theme="light"] .tracks-panel,
+html[data-theme="light"] .catalog-sidebar,
 html[data-theme="light"] .modal-content,
 html[data-theme="light"] .context-menu,
 html[data-theme="light"] .toast {

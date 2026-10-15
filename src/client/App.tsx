@@ -20,7 +20,6 @@ import { useArtistGenreReveal } from "./useArtistGenreReveal";
 import { SettingsWorkspace } from "./SettingsWorkspace";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
-  Activity,
   AudioLines,
   Bookmark as BookmarkIcon,
   CircleUserRound,
@@ -140,6 +139,8 @@ import {
   type CatalogContextMenuHandler,
 } from "./CatalogVirtualViews";
 import { useAppShellLayout } from "./useAppShellLayout";
+import { CatalogSidebar } from "./CatalogSidebar";
+import { usePanelTransitions } from "./usePanelTransitions";
 import { useCatalogScrollTargets } from "./useCatalogScrollTargets";
 import { PlaylistPanel } from "./PlaylistPanel";
 import { IconToggle } from "./IconToggle";
@@ -1049,20 +1050,34 @@ export function App() {
     window.addEventListener("resize", constrainToRoom);
     return () => window.removeEventListener("resize", constrainToRoom);
   }, [fullscreenWindowMode, getFullscreenRoom, isWebFullscreen]);
-  const setPanelVisible = useCallback((id: PanelId, visible: boolean) => {
-    setPanelVisibility((current) => {
-      if (current[id] === visible) return current;
-      const next = { ...current, [id]: visible };
-      try {
-        localStorage.setItem(panelVisibilityStorageKey, JSON.stringify(next));
-      } catch {
-        // Visibility remains usable for the current session.
-      }
-      return next;
-    });
-  }, []);
+  const workspaceRef = useRef<HTMLElement>(null);
+  const { busy: panelsTransitioning, prepare: preparePanelTransition } =
+    usePanelTransitions(
+      workspaceRef,
+      appShellRef,
+      panelVisibility,
+      `${workspaceMode}:${modal === "settings" || modal === "history"}`,
+    );
+  const setPanelVisible = useCallback(
+    (id: PanelId, visible: boolean) => {
+      if (panelVisibility[id] === visible) return;
+      if (!preparePanelTransition(id, visible)) return;
+      setPanelVisibility((current) => {
+        if (current[id] === visible) return current;
+        const next = { ...current, [id]: visible };
+        try {
+          localStorage.setItem(panelVisibilityStorageKey, JSON.stringify(next));
+        } catch {
+          // Visibility remains usable for the current session.
+        }
+        return next;
+      });
+    },
+    [panelVisibility, preparePanelTransition],
+  );
   const togglePanelVisibility = useCallback(
     (id: PanelId) => {
+      if (panelsTransitioning) return;
       const visible = !panelVisibility[id];
       setPanelVisible(id, visible);
       if (visible) return;
@@ -1087,6 +1102,7 @@ export function App() {
     },
     [
       panelVisibility,
+      panelsTransitioning,
       setPanelVisible,
       setFilter,
       setSelectedArtists,
@@ -1095,7 +1111,6 @@ export function App() {
       setSelectedAlbumId,
     ],
   );
-  const workspaceRef = useRef<HTMLElement>(null);
   const [panelWeights, setPanelWeights] = useState<number[]>(() => {
     try {
       const weights = JSON.parse(
@@ -2811,6 +2826,7 @@ export function App() {
     rightId: PanelId,
     e: React.PointerEvent<HTMLDivElement>,
   ) => {
+    if (panelsTransitioning) return;
     const start = e.clientX;
     const initial = panelWeights;
     const leftPanel = getPanelDefinition(leftId);
@@ -2862,6 +2878,7 @@ export function App() {
     window.addEventListener("pointerup", stop);
   };
   const resizeRows = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (panelsTransitioning) return;
     const start = e.clientY;
     const initial = rowWeights;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -3103,6 +3120,11 @@ export function App() {
     );
   };
   const settingsOpen = modal === "settings" || modal === "history";
+  const toggleSettings = () => {
+    setContextMenu(null);
+    if (settingsOpen && !pulseMode) setCoverMode(false);
+    setModal(settingsOpen ? null : "settings");
+  };
   return (
     <div
       ref={appShellRef}
@@ -3180,11 +3202,7 @@ export function App() {
                 : "Вернуться в каталог"
               : "Настройки"
           }
-          onClick={() => {
-            setContextMenu(null);
-            if (settingsOpen && !pulseMode) setCoverMode(false);
-            setModal(settingsOpen ? null : "settings");
-          }}
+          onClick={toggleSettings}
         />
         {!settingsOpen && workspaceMode === "panels" && (
           <CatalogUserFilters
@@ -3198,31 +3216,6 @@ export function App() {
             onRetryBookmarks={() => {
               void bookmarks.refetch();
             }}
-            trailingControls={
-              panelDefinitions.some(({ id }) => !panelVisibility[id]) && (
-                <div
-                  className="panel-visibility-controls"
-                  role="group"
-                  aria-label="Видимость панелей каталога"
-                >
-                  {panelDefinitions
-                    .filter(({ id }) => !panelVisibility[id])
-                    .map(({ id, label, Icon }) => (
-                      <button
-                        key={id}
-                        type="button"
-                        className="icon-button panel-visibility-button is-hidden"
-                        aria-label={`Показать панель «${label}»`}
-                        aria-pressed={false}
-                        title={`Показать панель «${label}»`}
-                        onClick={() => togglePanelVisibility(id)}
-                      >
-                        <Icon size={19} />
-                      </button>
-                    ))}
-                </div>
-              )
-            }
           />
         )}
         {!settingsOpen && coverMode && (
@@ -3244,20 +3237,6 @@ export function App() {
         )}
         {!settingsOpen && (
           <>
-            <button
-              type="button"
-              className="icon-button pulse-mode-toggle"
-              aria-label={pulseMode ? "Вернуться к панелям" : "Открыть Пульс"}
-              title={pulseMode ? "Вернуться к панелям" : "Пульс"}
-              aria-pressed={pulseMode}
-              onClick={() => {
-                setContextMenu(null);
-                setCoverSearch("");
-                setWorkspaceMode(pulseMode ? "panels" : "pulse");
-              }}
-            >
-              <Activity size={21} />
-            </button>
             <IconToggle
               className="cover-mode-toggle"
               checked={coverMode}
@@ -3288,6 +3267,21 @@ export function App() {
           </>
         )}
       </header>
+      <CatalogSidebar
+        panels={panelDefinitions.filter(({ id }) => !panelVisibility[id])}
+        showPanels={!settingsOpen && workspaceMode === "panels"}
+        settingsOpen={settingsOpen}
+        pulseMode={pulseMode && !settingsOpen}
+        busy={panelsTransitioning}
+        onShowPanel={(id) => togglePanelVisibility(id as PanelId)}
+        onToggleSettings={toggleSettings}
+        onTogglePulse={() => {
+          setContextMenu(null);
+          setCoverSearch("");
+          setModal(null);
+          setWorkspaceMode(pulseMode && !settingsOpen ? "panels" : "pulse");
+        }}
+      />
       {settingsOpen && (
         <SettingsWorkspace>
           {(renderSeparator) => (

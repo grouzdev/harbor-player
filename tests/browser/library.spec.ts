@@ -67,6 +67,10 @@ test("settings panels allow native Tab navigation to actions", async ({
     .getByRole("button", { name: "Вернуться в каталог", exact: true })
     .focus();
   await page.keyboard.press("Tab");
+  await expect(page.locator(".pulse-mode-toggle")).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.locator(".sidebar-settings")).toBeFocused();
+  await page.keyboard.press("Tab");
   await expect(firstColor).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(
@@ -117,7 +121,7 @@ test("topbar keeps the settings logo centered", async ({ page }) => {
   await expect(brand).toHaveAttribute("aria-label", "Открыть настройки");
 });
 
-test("topbar groups catalog controls in the requested order", async ({
+test("topbar groups catalog controls and sidebar holds hidden panels", async ({
   page,
 }) => {
   await page.goto("/");
@@ -135,17 +139,14 @@ test("topbar groups catalog controls in the requested order", async ({
   expect(addBox.x - searchBox.x - searchBox.width).toBeCloseTo(7, 1);
   const sectionControls = page.locator(".panel-visibility-controls");
   const firstSectionControl = sectionControls.getByRole("button").first();
-  const [initialAddBox, firstSectionControlBox] = await Promise.all([
-    add.boundingBox(),
-    firstSectionControl.boundingBox(),
-  ]);
-  expect(
-    firstSectionControlBox!.x - initialAddBox!.x - initialAddBox!.width,
-  ).toBeCloseTo(7, 1);
+  const firstSectionControlBox = (await firstSectionControl.boundingBox())!;
+  const sidebarBox = (await page.locator(".catalog-sidebar").boundingBox())!;
+  expect(firstSectionControlBox.x).toBeGreaterThan(sidebarBox.x);
+  expect(firstSectionControlBox.y).toBeGreaterThanOrEqual(65);
+  await expect(page.locator(".topbar .panel-visibility-controls")).toHaveCount(
+    0,
+  );
   const rightControls = [
-    page
-      .locator(".topbar")
-      .getByRole("button", { name: "Открыть Пульс", exact: true }),
     page
       .locator(".topbar")
       .getByRole("button", { name: "Открыть режим обложки", exact: true }),
@@ -157,10 +158,9 @@ test("topbar groups catalog controls in the requested order", async ({
   const boxes = await Promise.all(
     rightControls.map((node) => node.boundingBox()),
   );
-  // Cover has an extra 8px margin after the separate Pulse action.
   for (let i = 1; i < boxes.length; i++) {
     expect(boxes[i]!.x - boxes[i - 1]!.x - boxes[i - 1]!.width).toBeCloseTo(
-      i === 1 ? 15 : 7,
+      7,
       1,
     );
   }
@@ -173,13 +173,9 @@ test("topbar groups catalog controls in the requested order", async ({
     "Закладки",
     "Не просмотрено",
   ]);
-  const [activeAddBox, activeFirstSectionControlBox] = await Promise.all([
-    add.boundingBox(),
-    firstSectionControl.boundingBox(),
-  ]);
-  expect(
-    activeFirstSectionControlBox!.x - activeAddBox!.x - activeAddBox!.width,
-  ).toBeCloseTo(7, 1);
+  expect(await firstSectionControl.boundingBox()).toEqual(
+    firstSectionControlBox,
+  );
   expect((await rightControls[0].boundingBox())!.x).toBe(boxes[0]!.x);
   await page
     .locator(".genres-panel")
@@ -189,7 +185,7 @@ test("topbar groups catalog controls in the requested order", async ({
     2,
   );
   await page
-    .locator(".topbar")
+    .locator(".catalog-sidebar")
     .getByRole("button", { name: "Показать панель «Жанры»" })
     .click();
   await expect(page.locator(".panel-visibility-controls button")).toHaveCount(
@@ -799,7 +795,7 @@ test("panel visibility controls reshape and persist the catalog", async ({
   await page.mouse.move(500, 500);
   await expect(
     page.getByRole("button", { name: "Показать панель «Жанры»" }),
-  ).toHaveCSS("opacity", "0.55");
+  ).toHaveCSS("opacity", "1");
   await expect(
     page.getByRole("separator", {
       name: "Ширина: Библиотеки — Исполнители",
@@ -878,6 +874,7 @@ test("panel visibility controls reshape and persist the catalog", async ({
   await expect(
     page.getByRole("separator", { name: "Высота строк" }),
   ).toBeVisible();
+  await expect(workspace).not.toHaveAttribute("data-panel-transition");
   const twoRowHeights = await page
     .locator(".workspace-row")
     .evaluateAll((rows) =>
@@ -910,7 +907,7 @@ test("panel headers close their own panels", async ({ page }) => {
   await page.goto("/");
 
   await page
-    .locator(".topbar")
+    .locator(".catalog-sidebar")
     .getByRole("button", { name: "Показать панель «Плейлист»" })
     .click();
 
@@ -923,8 +920,11 @@ test("panel headers close their own panels", async ({ page }) => {
     ["Треки", ".tracks-panel"],
   ] as const;
 
+  await expect(page.locator(".workspace")).not.toHaveAttribute(
+    "data-panel-transition",
+  );
   for (const [label, selector] of panels) {
-    const panel = page.locator(selector);
+    const panel = page.locator(".workspace").locator(selector);
     const heading = panel.locator(".panel-heading");
     const closeButton = heading.getByRole("button", {
       name: `Закрыть панель «${label}»`,
@@ -936,10 +936,13 @@ test("panel headers close their own panels", async ({ page }) => {
       `Закрыть панель «${label}»`,
     );
     await closeButton.click();
+    await expect(page.locator(".workspace")).not.toHaveAttribute(
+      "data-panel-transition",
+    );
     await expect(panel).toBeHidden();
     await expect(
       page
-        .locator(".topbar")
+        .locator(".catalog-sidebar")
         .getByRole("button", { name: `Показать панель «${label}»` }),
     ).toBeVisible();
   }
@@ -954,6 +957,9 @@ test("playlist panel and its visibility button are first", async ({ page }) => {
     "Показать панель «Плейлист»",
   );
   await controls.first().click();
+  await expect(page.locator(".workspace")).not.toHaveAttribute(
+    "data-panel-transition",
+  );
 
   const positions = await page.locator(".panel:visible").evaluateAll((panels) =>
     panels.map((panel) => ({
@@ -966,7 +972,7 @@ test("playlist panel and its visibility button are first", async ({ page }) => {
   expect(playlist!.x).toBe(Math.min(...positions.map(({ x }) => x)));
 });
 
-test("portrait workspace places the playlist before albums without reordering topbar controls", async ({
+test("portrait workspace places the playlist before albums without reordering sidebar controls", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1000, height: 1200 });
@@ -977,6 +983,9 @@ test("portrait workspace places the playlist before albums without reordering to
     "Показать панель «Плейлист»",
   );
   await controls.first().click();
+  await expect(page.locator(".workspace")).not.toHaveAttribute(
+    "data-panel-transition",
+  );
 
   const layout = await page.locator(".workspace").evaluate((workspace) => {
     const rect = (selector: string) => {
