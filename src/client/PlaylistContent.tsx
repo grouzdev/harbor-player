@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -6,15 +7,19 @@ import {
   type CSSProperties,
   type Dispatch,
   type DragEvent,
+  type MouseEvent,
   type SetStateAction,
 } from "react";
+import { createPortal } from "react-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowDown,
   ArrowUp,
   CircleUserRound,
+  DiscAlbum,
   Drama,
   FolderOpen,
+  Music,
   Play,
   Trash2,
 } from "lucide-react";
@@ -22,7 +27,7 @@ import type { PlaylistEntry, ResolvedPlaylistTrack } from "../shared/playlists";
 import { AlbumHeader } from "./AlbumHeader";
 import { DiscHeader } from "./DiscHeader";
 import { ListTile } from "./ListTile";
-import { CoverPlaceholder } from "./CoverPlaceholder";
+import { ContextMenu, type ContextMenuState } from "./ContextMenu";
 import { CollapseToggle } from "./CollapseToggle";
 import { duration } from "./api";
 import {
@@ -33,6 +38,13 @@ import {
 } from "./playlist-grouping";
 
 const playlistDragType = "application/x-harbor-playlist-entry";
+const entryIcons = {
+  folder: FolderOpen,
+  genre: Drama,
+  artist: CircleUserRound,
+  album: DiscAlbum,
+  track: Music,
+};
 
 export type PlaylistCurrentTrack = {
   entryId?: string;
@@ -66,6 +78,12 @@ export function PlaylistContent({
   const ref = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [dropBefore, setDropBefore] = useState<string | null>(null);
+  const [context, setContext] = useState<{
+    entryId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const closeContext = useCallback(() => setContext(null), []);
   const rows = useMemo(
     () => buildPlaylistRows(entries, items),
     [entries, items],
@@ -82,10 +100,7 @@ export function PlaylistContent({
     count: visible.length,
     getScrollElement: () => ref.current,
     getItemKey: (index) => visible[index].key,
-    estimateSize: (index) =>
-      visible[index].type === "entry" || visible[index].type === "album"
-        ? 78
-        : 36,
+    estimateSize: (index) => (visible[index].type === "album" ? 78 : 36),
     paddingStart: 14,
     paddingEnd: 14,
     overscan: 8,
@@ -133,46 +148,43 @@ export function PlaylistContent({
     () => new Map(entries.map((entry, index) => [entry.id, index])),
     [entries],
   );
-  const actions = (entry: PlaylistEntry) => {
-    const index = entryIndices.get(entry.id)!;
-    return (
-      <div
-        className="playlist-item-actions"
-        onClick={(event) => event.stopPropagation()}
-        onDoubleClick={(event) => event.stopPropagation()}
-      >
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Переместить вверх"
-          title="Переместить вверх"
-          disabled={editingDisabled || index === 0}
-          onClick={() => onReorder(entry.id, entries[index - 1].id)}
-        >
-          <ArrowUp size={15} />
-        </button>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Переместить вниз"
-          title="Переместить вниз"
-          disabled={editingDisabled || index === entries.length - 1}
-          onClick={() => onReorder(entry.id, entries[index + 2]?.id ?? null)}
-        >
-          <ArrowDown size={15} />
-        </button>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Удалить из плейлиста"
-          title="Удалить из плейлиста"
-          disabled={editingDisabled}
-          onClick={() => onRemove(entry.id)}
-        >
-          <Trash2 size={15} />
-        </button>
-      </div>
-    );
+  const contextIndex = context ? entryIndices.get(context.entryId) : undefined;
+  const menu: ContextMenuState | null =
+    context && contextIndex !== undefined
+      ? {
+          x: context.x,
+          y: context.y,
+          items: [
+            {
+              label: "Переместить вверх",
+              icon: <ArrowUp size={16} />,
+              disabled: editingDisabled || contextIndex === 0,
+              onSelect: () =>
+                onReorder(context.entryId, entries[contextIndex - 1].id),
+            },
+            {
+              label: "Переместить вниз",
+              icon: <ArrowDown size={16} />,
+              disabled: editingDisabled || contextIndex === entries.length - 1,
+              onSelect: () =>
+                onReorder(
+                  context.entryId,
+                  entries[contextIndex + 2]?.id ?? null,
+                ),
+            },
+            {
+              label: "Удалить из плейлиста",
+              icon: <Trash2 size={16} />,
+              disabled: editingDisabled,
+              onSelect: () => onRemove(context.entryId),
+            },
+          ],
+        }
+      : null;
+  const openContext = (event: MouseEvent, entryId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setContext({ entryId, x: event.clientX, y: event.clientY });
   };
   const dropOn = (entryId: string) => (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -217,7 +229,7 @@ export function PlaylistContent({
             width: "100%",
             height: position.size,
             transform: `translateY(${position.start}px)`,
-            paddingLeft: 20 + row.depth * 12,
+            paddingLeft: row.type === "entry" ? 0 : 20 + row.depth * 12,
           };
           const isCurrent = target?.key === row.key;
           if (row.type === "disc")
@@ -264,30 +276,110 @@ export function PlaylistContent({
               />
             );
 
-          const album = row.album;
-          const track =
-            row.type === "entry" && row.entry.kind === "track"
-              ? row.track
-              : undefined;
-          const KindIcon =
-            row.entry.kind === "folder"
-              ? FolderOpen
-              : row.entry.kind === "genre"
-                ? Drama
-                : row.entry.kind === "artist"
-                  ? CircleUserRound
-                  : undefined;
-          const isEntry = row.type === "entry";
-          const isTrackEntry = isEntry && row.entry.kind === "track";
+          if (row.type === "entry") {
+            const KindIcon = entryIcons[row.entry.kind];
+            const album = row.album;
+            const title = album?.track.albumTitle || row.entry.snapshot.title;
+            const hasSubtitle = ["track", "album", "folder"].includes(
+              row.entry.kind,
+            );
+            const subtitle = album
+              ? album.artists.join(", ") || "Неизвестный исполнитель"
+              : row.entry.snapshot.subtitle;
+            const year =
+              row.entry.kind === "album" ? album?.track.year : undefined;
+            return (
+              <div
+                key={row.key}
+                data-testid="playlist-entry"
+                data-entry-id={row.entry.id}
+                className={`playlist-item playlist-added-item playlist-entity-row ${selected === row.key ? "selected" : ""} ${isCurrent ? "current playing" : ""} ${dropBefore === row.entry.id ? "playlist-drop-before" : ""}`}
+                style={style}
+                role="group"
+                aria-label={title}
+                onContextMenu={(event) => openContext(event, row.entry.id)}
+                draggable={!editingDisabled}
+                onDragStart={(event) => {
+                  event.dataTransfer.setData(playlistDragType, row.entry.id);
+                  event.dataTransfer.effectAllowed = "move";
+                }}
+                onDragEnd={() => setDropBefore(null)}
+                onDragOver={dragOver(row.entry.id)}
+                onDrop={dropOn(row.entry.id)}
+              >
+                <button
+                  type="button"
+                  className="playlist-entity-main"
+                  aria-label={[
+                    subtitle && hasSubtitle ? subtitle : null,
+                    title,
+                    year,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  aria-pressed={selected === row.key}
+                  aria-expanded={
+                    row.collapsible ? !collapsed.has(row.key) : undefined
+                  }
+                  onClick={(event) => {
+                    setSelected(row.key);
+                    if (row.collapsible && event.detail < 2) toggle(row.key);
+                  }}
+                  onDoubleClick={() => play(row)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      play(row);
+                    } else if (
+                      event.key === "ContextMenu" ||
+                      (event.shiftKey && event.key === "F10")
+                    ) {
+                      event.preventDefault();
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      setContext({
+                        entryId: row.entry.id,
+                        x: rect.left,
+                        y: rect.bottom,
+                      });
+                    }
+                  }}
+                >
+                  <KindIcon
+                    size={16}
+                    className="playlist-entity-icon"
+                    aria-hidden="true"
+                  />
+                  <span className="playlist-entity-copy">
+                    {hasSubtitle && (subtitle || year) ? (
+                      <span className="playlist-entity-subtitle">
+                        <span title={subtitle}>{subtitle}</span>
+                        {year ? (
+                          <span className="playlist-entity-year">{year}</span>
+                        ) : null}
+                      </span>
+                    ) : null}
+                    <span className="playlist-entity-title" title={title}>
+                      {title}
+                    </span>
+                  </span>
+                  <span className="playlist-entity-duration">
+                    {duration(row.duration)}
+                  </span>
+                </button>
+              </div>
+            );
+          }
           return (
             <AlbumHeader
               key={row.key}
-              data-testid={isEntry ? "playlist-entry" : "playlist-album"}
+              data-testid="playlist-album"
               data-entry-id={row.entry.id}
-              className={`playlist-item ${isEntry ? "playlist-added-item" : ""} ${isCurrent ? "current playing" : ""} ${dropBefore === row.entry.id && isEntry ? "playlist-drop-before" : ""}`}
+              className={`playlist-item ${isCurrent ? "current playing" : ""}`}
               style={style}
               role="group"
-              aria-label={album?.track.albumTitle || row.entry.snapshot.title}
+              aria-label={
+                row.album.track.albumTitle || row.entry.snapshot.title
+              }
               selected={selected === row.key}
               contentButton={{
                 "aria-pressed": selected === row.key,
@@ -306,81 +398,18 @@ export function PlaylistContent({
                   }
                 },
               }}
-              title={album?.track.albumTitle || row.entry.snapshot.title}
+              title={row.album.track.albumTitle || row.entry.snapshot.title}
               subtitle={
-                album
-                  ? album.artists.join(", ") || "Неизвестный исполнитель"
-                  : row.entry.snapshot.subtitle
+                row.album.artists.join(", ") || "Неизвестный исполнитель"
               }
-              details={
-                album
-                  ? [album.track.year, ...album.genres]
-                      .filter(Boolean)
-                      .join(" · ")
-                  : track
-                    ? [track.albumTitle, track.year].filter(Boolean).join(" · ")
-                    : undefined
-              }
-              coverId={album?.track.coverId ?? row.entry.snapshot.coverId}
-              cover={
-                isTrackEntry ? (
-                  <>
-                    {row.entry.snapshot.coverId ? (
-                      <img
-                        src={`/api/covers/${row.entry.snapshot.coverId}`}
-                        alt=""
-                      />
-                    ) : (
-                      <CoverPlaceholder />
-                    )}
-                    <button
-                      type="button"
-                      className="icon-button row-play playlist-entry-play"
-                      aria-label={`Воспроизвести ${row.entry.snapshot.title}`}
-                      disabled={!row.firstTrack}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        play(row);
-                      }}
-                      onDoubleClick={(event) => event.stopPropagation()}
-                    >
-                      <Play size={14} fill="currentColor" />
-                    </button>
-                  </>
-                ) : !album && !row.entry.snapshot.coverId && KindIcon ? (
-                  <KindIcon size={24} />
-                ) : undefined
-              }
-              statusIcon={
-                isTrackEntry && isCurrent ? (
-                  <Play size={13} fill="currentColor" />
-                ) : isEntry && row.entry.snapshot.coverId && KindIcon ? (
-                  <KindIcon size={13} />
-                ) : undefined
-              }
-              duration={duration(
-                row.type === "album" ? row.album.duration : row.duration,
-              )}
-              collapseControl={
-                row.type === "album" || row.collapsible
-                  ? collapseControl(row)
-                  : undefined
-              }
-              actions={isEntry ? actions(row.entry) : undefined}
+              details={[row.album.track.year, ...row.album.genres]
+                .filter(Boolean)
+                .join(" · ")}
+              coverId={row.album.track.coverId ?? row.entry.snapshot.coverId}
+              duration={duration(row.album.duration)}
+              collapseControl={collapseControl(row)}
               onClick={() => setSelected(row.key)}
               onDoubleClick={() => play(row)}
-              draggable={isEntry && !editingDisabled}
-              onDragStart={
-                isEntry
-                  ? (event) => {
-                      event.dataTransfer.setData(
-                        playlistDragType,
-                        row.entry.id,
-                      );
-                      event.dataTransfer.effectAllowed = "move";
-                    }
-                  : undefined
-              }
               onDragEnd={() => setDropBefore(null)}
               onDragOver={dragOver(row.entry.id)}
               onDrop={dropOn(row.entry.id)}
@@ -388,6 +417,10 @@ export function PlaylistContent({
           );
         })}
       </div>
+      {createPortal(
+        <ContextMenu menu={menu} onClose={closeContext} />,
+        document.body,
+      )}
     </div>
   );
 }

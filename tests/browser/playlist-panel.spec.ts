@@ -7,7 +7,7 @@ import type {
 
 // Keep session/settings on the local test server, but make duplicate occurrences,
 // multi-disc metadata and a long virtualized playlist deterministic.
-async function playlistFixture(page: Page, long = false) {
+async function playlistFixture(page: Page, long = false, allKinds = false) {
   const tracks: Track[] = Array.from({ length: long ? 60 : 4 }, (_, index) => ({
     id: `song-${index}`,
     libraryId: "library",
@@ -28,22 +28,29 @@ async function playlistFixture(page: Page, long = false) {
     coverId: null,
     available: true,
   }));
-  let entries: PlaylistEntry[] = ["folder", "genre", "track"].map(
-    (kind, index) => ({
-      id: `entry-${kind}`,
-      playlistId: "redesign",
-      kind: kind as PlaylistEntry["kind"],
-      targetId: kind === "track" ? tracks[0].id : kind,
-      position: index,
-      snapshot: { title: `${kind} entry`, subtitle: "Artist", coverId: null },
-      resolvedCount: kind === "track" ? 1 : tracks.length,
-      unavailableCount: 0,
-    }),
-  );
+  let entries: PlaylistEntry[] = (
+    allKinds
+      ? ["folder", "genre", "track", "album", "artist"]
+      : ["folder", "genre", "track"]
+  ).map((kind, index) => ({
+    id: `entry-${kind}`,
+    playlistId: "redesign",
+    kind: kind as PlaylistEntry["kind"],
+    targetId: kind === "track" ? tracks[0].id : kind,
+    position: index,
+    snapshot: { title: `${kind} entry`, subtitle: "Artist", coverId: null },
+    resolvedCount: kind === "track" ? 1 : tracks.length,
+    unavailableCount: 0,
+  }));
   const items = (): ResolvedPlaylistTrack[] =>
     entries
       .flatMap((entry) =>
-        (entry.kind === "track" ? [tracks[0]] : tracks).map((track) => ({
+        (entry.kind === "track"
+          ? [tracks[0]]
+          : entry.kind === "album"
+            ? tracks.slice(0, 2)
+            : tracks
+        ).map((track) => ({
           entryId: entry.id,
           track,
           position: 0,
@@ -203,6 +210,105 @@ test("catalog playback does not page through a different filtered track result",
   expect(offsets).toEqual([0]);
 });
 
+test("top-level entries are compact, keep type icons and put album year beside artist", async ({
+  page,
+}) => {
+  const { panel } = await playlistFixture(page, false, true);
+  // Collapse the outer groups so all five types fit in the virtual viewport.
+  for (const id of ["folder", "genre", "album", "artist"]) {
+    const row = panel.locator(
+      `[data-testid="playlist-entry"][data-entry-id="entry-${id}"]`,
+    );
+    await row.locator(".playlist-entity-main").click();
+  }
+  const entries = panel.getByTestId("playlist-entry");
+  await expect(entries).toHaveCount(5);
+  const catalogDuration = await page
+    .getByTestId("track-row")
+    .first()
+    .locator(".list-tile-suffix")
+    .evaluate((element) => {
+      const style = getComputedStyle(element);
+      return [style.fontFamily, style.fontSize, style.fontWeight, style.color];
+    });
+  for (const [kind, icon] of Object.entries({
+    folder: "folder-open",
+    genre: "drama",
+    track: "music",
+    album: "disc-album",
+    artist: "circle-user-round",
+  })) {
+    const row = panel.locator(
+      `[data-testid="playlist-entry"][data-entry-id="entry-${kind}"]`,
+    );
+    await expect(
+      row.locator(`.playlist-entity-icon.lucide-${icon}`),
+    ).toBeVisible();
+    expect((await row.boundingBox())?.height).toBe(36);
+    await expect(
+      row.locator("img, .tiny-cover, .collapse-toggle, .icon-button"),
+    ).toHaveCount(0);
+    await expect(row.locator(".playlist-entity-duration")).toBeVisible();
+    await row.hover();
+    await expect(row.locator(".playlist-entity-icon")).toBeVisible();
+    const bounds = await row.evaluate((element) => {
+      const content = element.closest(".playlist-content")!;
+      const main = element.querySelector(".playlist-entity-main")!;
+      return {
+        left:
+          main.getBoundingClientRect().left -
+          content.getBoundingClientRect().left,
+        width: main.getBoundingClientRect().width,
+        panelWidth: content.clientWidth,
+        background: getComputedStyle(main).backgroundColor,
+      };
+    });
+    expect(bounds.left).toBe(0);
+    expect(bounds.width).toBe(bounds.panelWidth);
+    expect(bounds.background).not.toBe("rgba(0, 0, 0, 0)");
+    if (kind === "track") {
+      const durationStyle = await row
+        .locator(".playlist-entity-duration")
+        .evaluate((element) => {
+          const style = getComputedStyle(element);
+          return [
+            style.fontFamily,
+            style.fontSize,
+            style.fontWeight,
+            style.color,
+          ];
+        });
+      expect(durationStyle).toEqual(catalogDuration);
+    }
+  }
+  const album = panel.locator(
+    '[data-entry-id="entry-album"][data-testid="playlist-entry"]',
+  );
+  await expect(album.locator(".playlist-entity-subtitle")).toHaveText(
+    "Artist2025",
+  );
+  await expect(album.locator(".playlist-entity-title")).toHaveText(
+    "Double album",
+  );
+  for (const kind of ["artist", "genre"])
+    await expect(
+      panel.locator(
+        `[data-entry-id="entry-${kind}"] .playlist-entity-subtitle`,
+      ),
+    ).toHaveCount(0);
+  const track = panel.locator(
+    '[data-entry-id="entry-track"][data-testid="playlist-entry"]',
+  );
+  await expect(track.locator(".playlist-entity-main")).not.toHaveAttribute(
+    "aria-expanded",
+  );
+  await track.locator(".playlist-entity-main").dblclick();
+  await expect(track).toHaveClass(/playing/);
+  await expect(
+    track.locator(".playlist-entity-icon.lucide-music"),
+  ).toBeVisible();
+});
+
 test("playlist entities show nested albums/discs, durations and entry-only actions", async ({
   page,
 }) => {
@@ -210,7 +316,7 @@ test("playlist entities show nested albums/discs, durations and entry-only actio
   const folder = panel.locator(
     '[data-testid="playlist-entry"][data-entry-id="entry-folder"]',
   );
-  await expect(folder.locator(".track-album-duration")).toHaveText("12:00");
+  await expect(folder.locator(".playlist-entity-duration")).toHaveText("12:00");
   const album = panel.getByTestId("playlist-album").first();
   await expect(album).toContainText("Double album");
   await expect(album.locator(".track-album-duration")).toHaveText("6:00");
@@ -227,11 +333,13 @@ test("playlist entities show nested albums/discs, durations and entry-only actio
       .first()
       .getByRole("button", { name: "Переместить вверх" }),
   ).toHaveCount(0);
+  await folder.click({ button: "right" });
   await expect(
-    folder.getByRole("button", { name: "Переместить вверх" }),
+    page.getByRole("menuitem", { name: "Переместить вверх" }),
   ).toBeDisabled();
+  await page.keyboard.press("Escape");
   if (process.env.HARBOR_PLAYLIST_SCREENSHOT) {
-    await folder.hover();
+    await folder.click({ button: "right" });
     await page.screenshot({ path: process.env.HARBOR_PLAYLIST_SCREENSHOT });
   }
   await album.getByRole("button", { name: "Свернуть", exact: true }).click();
@@ -239,7 +347,7 @@ test("playlist entities show nested albums/discs, durations and entry-only actio
     album.getByRole("button", { name: "Развернуть" }),
   ).toHaveAttribute("aria-expanded", "false");
   await expect(panel.getByTestId("playlist-track-row")).toHaveCount(6);
-  await folder.getByRole("button", { name: "Свернуть", exact: true }).click();
+  await folder.locator(".playlist-entity-main").click();
   await expect(
     panel.locator(
       '[data-testid="playlist-album"][data-entry-id="entry-folder"]',
@@ -249,7 +357,7 @@ test("playlist entities show nested albums/discs, durations and entry-only actio
     '[data-testid="playlist-entry"][data-entry-id="entry-genre"]',
   );
   await expect(genre).toBeVisible();
-  await expect(genre.locator(".track-album-duration")).toHaveText("12:00");
+  await expect(genre.locator(".playlist-entity-duration")).toHaveText("12:00");
   await expect(
     panel
       .locator('[data-testid="playlist-album"][data-entry-id="entry-genre"]')
@@ -265,7 +373,7 @@ test("up/down/remove mutate only added entries and retain whole nested groups", 
   for (const id of ["entry-folder", "entry-genre"])
     await panel
       .locator(`[data-testid="playlist-entry"][data-entry-id="${id}"]`)
-      .getByRole("button", { name: "Свернуть", exact: true })
+      .locator(".playlist-entity-main")
       .click();
   const ids = () =>
     panel
@@ -276,21 +384,21 @@ test("up/down/remove mutate only added entries and retain whole nested groups", 
   const folder = panel.locator(
     '[data-testid="playlist-entry"][data-entry-id="entry-folder"]',
   );
-  await folder.hover();
-  await folder.getByRole("button", { name: "Переместить вниз" }).click();
+  await folder.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Переместить вниз" }).click();
   await expect
     .poll(ids)
     .toEqual(["entry-genre", "entry-folder", "entry-track"]);
   expect(requests.at(-1)).toEqual({
     entryIds: ["entry-genre", "entry-folder", "entry-track"],
   });
-  await folder.hover();
-  await folder.getByRole("button", { name: "Переместить вверх" }).click();
+  await folder.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Переместить вверх" }).click();
   await expect
     .poll(ids)
     .toEqual(["entry-folder", "entry-genre", "entry-track"]);
-  await folder.hover();
-  await folder.getByRole("button", { name: "Удалить из плейлиста" }).click();
+  await folder.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Удалить из плейлиста" }).click();
   await expect.poll(ids).toEqual(["entry-genre", "entry-track"]);
   expect(requests.at(-1)).toEqual({ removed: "entry-folder" });
 });
@@ -305,12 +413,12 @@ test("dropping an added entity onto a nested track moves it before the owning en
   const genre = panel.locator(
     '[data-testid="playlist-entry"][data-entry-id="entry-genre"]',
   );
-  await folder.getByRole("button", { name: "Свернуть", exact: true }).click();
-  await genre.getByRole("button", { name: "Свернуть", exact: true }).click();
+  await folder.locator(".playlist-entity-main").click();
+  await genre.locator(".playlist-entity-main").click();
   const addedTrack = panel.locator(
     '[data-testid="playlist-entry"][data-entry-id="entry-track"]',
   );
-  await folder.getByRole("button", { name: "Развернуть", exact: true }).click();
+  await folder.locator(".playlist-entity-main").click();
   const transfer = await page.evaluateHandle(() => new DataTransfer());
   await addedTrack.dispatchEvent("dragstart", { dataTransfer: transfer });
   await panel
@@ -350,22 +458,23 @@ test("management actions remain disabled until reorder and refresh finish", asyn
     await pending;
     await route.fallback();
   });
-  await folder.hover();
-  await folder.getByRole("button", { name: "Переместить вниз" }).click();
+  await folder.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Переместить вниз" }).click();
   await received;
+  await folder.click({ button: "right" });
   try {
     await expect(
-      folder.getByRole("button", { name: "Переместить вниз" }),
+      page.getByRole("menuitem", { name: "Переместить вниз" }),
     ).toBeDisabled();
     await expect(
-      folder.getByRole("button", { name: "Удалить из плейлиста" }),
+      page.getByRole("menuitem", { name: "Удалить из плейлиста" }),
     ).toBeDisabled();
     await expect(folder).toHaveAttribute("draggable", "false");
   } finally {
     release();
   }
   await expect(
-    folder.getByRole("button", { name: "Переместить вверх" }),
+    page.getByRole("menuitem", { name: "Переместить вверх" }),
   ).toBeEnabled();
   await expect(folder).toHaveAttribute("draggable", "true");
 });
@@ -376,14 +485,14 @@ test("entity double click selects exact duplicate occurrence and catalog playbac
   const { panel, requests } = await playlistFixture(page);
   await panel
     .locator('[data-testid="playlist-entry"][data-entry-id="entry-folder"]')
-    .getByRole("button", { name: "Свернуть", exact: true })
+    .locator(".playlist-entity-main")
     .click();
   const genre = panel.locator(
     '[data-testid="playlist-entry"][data-entry-id="entry-genre"]',
   );
-  await genre.locator(".track-album-copy").click();
+  await genre.locator(".playlist-entity-main").click();
   expect(requests).toHaveLength(0);
-  await genre.locator(".track-album-copy").dblclick();
+  await genre.locator(".playlist-entity-main").dblclick();
   await expect
     .poll(() => requests.at(-1))
     .toEqual({
@@ -408,11 +517,11 @@ test("entity double click selects exact duplicate occurrence and catalog playbac
     startId: "song-0",
     startEntryId: "entry-genre",
   });
-  await genre.getByRole("button", { name: "Свернуть", exact: true }).click();
+  await genre.locator(".playlist-entity-main").click();
   const trackEntry = panel.locator(
     '[data-testid="playlist-entry"][data-entry-id="entry-track"]',
   );
-  await trackEntry.locator(".track-album-copy").dblclick();
+  await trackEntry.locator(".playlist-entity-main").dblclick();
   await expect.poll(() => requests.length).toBe(3);
   expect(requests.at(-1)).toEqual({
     playlistId: "redesign",
@@ -440,7 +549,7 @@ test("automatic next opens collapsed ancestors and scrolls to the exact occurren
   await firstAlbum
     .getByRole("button", { name: "Свернуть", exact: true })
     .click();
-  await folder.getByRole("button", { name: "Свернуть", exact: true }).click();
+  await folder.locator(".playlist-entity-main").click();
   await page
     .locator("audio")
     .evaluate((audio) => audio.dispatchEvent(new Event("ended")));
@@ -449,9 +558,10 @@ test("automatic next opens collapsed ancestors and scrolls to the exact occurren
     .filter({ hasText: "Song 1" });
   await expect(current).toHaveClass(/current/);
   await expect(current).toBeInViewport();
-  await expect(
-    folder.getByRole("button", { name: "Свернуть", exact: true }),
-  ).toHaveAttribute("aria-expanded", "true");
+  await expect(folder.locator(".playlist-entity-main")).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
   // Advance to a distant queue position using real ended transitions.
   for (let position = 2; position <= 40; position++) {
     const response = page.waitForResponse((response) =>
