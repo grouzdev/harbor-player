@@ -6,9 +6,11 @@
 содержать фактический SHA, executable hash и build info измеренной сборки.
 Результаты выполнения: [журнал доработок](../verification/pulse-p1-followup.md).
 Код находится в `wip/pulse-p1-followup`; с новым `main` пока не объединялся.
-Автоматизированные прогоны завершены, кроме чистого native-memory cohort:
-полная попытка остановлена как INCONCLUSIVE при потере foreground.
-Edge cold outliers и ручные проверки также остаются открытыми.
+Длительная navigation и чистый native-memory cohort завершены:
+по 1800 секунд на оба dataset, bounded DOM и post-warmup memory проверены.
+Прежние прерванные попытки остаются INCONCLUSIVE в журнале.
+Edge cold outliers, непрерванный общий e2e/новый CI и ручные проверки
+остаются открытыми.
 
 ## Что уже закрыто и что осталось
 

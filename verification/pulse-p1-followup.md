@@ -161,9 +161,51 @@ show. Intermediate range targets задаются стандартным HTML se
   Ни throttling, ни power policy не отключались; hidden window не считается
   успешным foreground прогоном.
 
-Повтор полного memory cohort требует активного видимого тестового окна на
-свободном Windows-сеансе. Он остаётся открытым gate, а не новым долгим
-автоматическим retry. Не интерпретировать частичные числа как PASS.
+Предыдущие частичные попытки остаются INCONCLUSIVE, а не PASS.
+Повтор после подтверждения оператора завершён ниже.
+
+### Полный native-memory cohort: завершён
+
+Точная команда `npm run test:pulse:memory` на `4e17de4` завершилась exit 0:
+`.test-data/pulse-p1-ui-memory-Ciqug8/evidence.json`.
+`status=COMPLETED`, `completed=true`, `longDurationCompleted=true`.
+Свежая packaged Electron 44.4.1, Node 24.20.0; executable SHA-256:
+`652255726053c45657d751eff7286257f2fa1f3bb1b6543f7ccbffe816c59357`.
+
+| Dataset | Navigation, с | Settled targets | Контрольные samples | Max days/cards |
+| --- | --- | --- | --- | --- |
+| Ordinary | 1800,723 | 6824 | 122 | 5 / 8 |
+| Ten-year, 1000 albums/day | 1803,245 | 5100 | 121 | 19 / 17 |
+
+Во всех контрольных samples окно visible/focused, не minimized;
+renderer debugger не подключён. Playwright, renderer Network domain и
+forced GC не использовались. Достигнутые даты/sentinels и DOM envelope проверены.
+
+Renderer private memory, **KiB**, не суммарная память всех процессов:
+
+| Dataset | Before | End | После 10 с idle | Median Q1 / Q2 / Q3 / Q4 |
+| --- | --- | --- | --- | --- |
+| Ordinary | 50 272 | 53 348 | 53 312 | 51 312 / 52 496 / 52 900 / 52 940 |
+| Ten-year | 55 008 | 132 876 | 84 704 | 122 788 / 126 756 / 129 104 / 129 520 |
+
+Q1–Q4 — последовательные 7,5-минутные окна. Ordinary вышел на плато около
+52–53 тысяч KiB. Ten-year после прогрева стабилизировался около 129 тысяч KiB:
+median Q3 → Q4 вырос на 416 KiB, после idle освободилось 48 172 KiB относительно
+end. Working set ten-year: before 109 352 KiB, end 222 080, idle 148 908;
+peak 283 832 KiB.
+
+**Вывод для проверенного сценария:** полный memory-замер закрыт; ранее
+наблюдавшийся рост примерно до 1,1 GiB в Network-enabled профиле не повторился.
+DOM и post-warmup memory остаются ограниченными в этом получасовом повторении.
+Это не гарантия отсутствия любых утечек, не GPU-memory proof и не одинаковый
+A/B тест: pace и состав действий двух harness различаются.
+Уменьшение относительно Network-enabled профиля — изменение инструмента
+измерения, не заявленная оптимизация продукта.
+
+Raw `longAcceptance=false` сохранён: harness намеренно не принимает продукт
+автоматически только по длительности. Вывод выше основан на просмотре тренда,
+а не подмене этого флага. Реальные пользовательские изображения и installed
+manual по-прежнему не проверены.
 
 ## Годовая модель
 
@@ -192,7 +234,7 @@ SQLite после checkpoint **12 640 256 bytes**, WAL 0, peak sampled WAL
 | `npm run test:pulse:desktop` | PASS, свежая packaged-сборка |
 | `npm run test:desktop:smoke` | PASS |
 | `npm run test:pulse:process` | PASS: Chrome + Edge |
-| `npm run test:pulse:memory` | INCONCLUSIVE, потеря foreground после ~16 мин |
+| `npm run test:pulse:memory` | COMPLETED: оба dataset ≥1800 с; предыдущие потерявшие foreground попытки — INCONCLUSIVE |
 
 Прерванный Edge №49 содержал только `Target page, context or browser has been
 closed`; оставшихся тестовых процессов не было. Это не assertion failure;
@@ -212,7 +254,6 @@ Process evidence `.test-data/pulse-process-3g5uWm`: суммы 33 011 мс Chrom
 
 ## Что не закрыто
 
-- Полный memory cohort без renderer-инспектора в активном Windows-сеансе.
 - Cold outliers Edge и отдельная установленная manual приёмка.
 - Настоящие permitted изображения, image/GPU memory, physical touch/trackpad/FAT.
 - Совместная непрерванная `npm run test:e2e`, новый CI на финальном SHA и
