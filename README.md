@@ -170,7 +170,9 @@ SQLite backup учитывает WAL, мигрируется только вре
 дождитесь `READY_SLEEP_PLAYBACK`, вручную сделайте sleep/wake на 1–2 минуты,
 затем повторите при `READY_SLEEP_PAUSED`. `--smoke` — только короткая проверка
 harness, не доказательство сна; отсутствие power events не считается PASS.
-Результаты и ограничения записаны в [журнале P0](verification/pulse-p0.md).
+Текущий статус и оставшиеся работы: [roadmap Pulse](docs/pulse-roadmap.md)
+и [порядок завершения](docs/pulse-next-steps.md).
+Результаты и ограничения записаны в [журнале P0](docs/pulse/measurements/pulse-p0.md).
 
 `verify:tags` создаёт `verification/tag-support.json`. Редактор разрешён только для форматов, прошедших проверку с установленной версией библиотеки записи. Проверяются MP3 (ID3v2.3/2.4), FLAC, M4A, AAC, Ogg Vorbis, Opus и WAV: кириллица, множественные значения, большие обложки, сохранность неизвестных тегов, SHA-256 аудиоданных и независимое декодирование через FFmpeg.
 

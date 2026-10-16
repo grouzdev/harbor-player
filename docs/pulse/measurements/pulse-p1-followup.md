@@ -1,6 +1,8 @@
 # Пульс: доработки P1 после первого этапа
 
-План: [pulse-p1-followup-plan.md](../docs/pulse-p1-followup-plan.md).
+Исторический журнал доработок. Старый план заменён
+[roadmap](../../pulse-roadmap.md); актуальные работы не определяются
+промежуточными статусами этого журнала.
 База исходных изменений — `14b705b`; пользователь сохранил первый этап
 в `37d0820` на `wip/pulse-p1-followup`. Завершение harness — `7374eb4`.
 Raw evidence содержит SHA, dirty flag, source hashes и hash executable;

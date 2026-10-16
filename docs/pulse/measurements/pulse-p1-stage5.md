@@ -1,7 +1,7 @@
 # Пульс P1: ownership, staging recovery и недостающие UI-регрессии
 
-Продолжение [четвёртого этапа](pulse-p1-stage4.md) по
-[плану закрытия релиза](../docs/pulse-release-completion-plan.md).
+Продолжение [четвёртого этапа](pulse-p1-stage4.md) по историческому
+плану закрытия релиза. Текущий статус — в [roadmap](../../pulse-roadmap.md).
 База — `00f9342f98086f553a0b6bbf21371da848f9d106`,
 `wip/pulse-p1-followup`; проверяются dirty-изменения поверх неё.
 Windows 10.0.22621, Node v24.20.0, Electron 44.4.1.
@@ -24,7 +24,7 @@ same-process double acquire и repeated/late release.
 **Операционная граница:** `server.lock` теперь постоянный точный protocol marker,
 который старые бинарники отвергают. Старые PID/неполные/неизвестные файлы
 не мигрируются автоматически, даже если PID кажется мёртвым.
-[Протокол и offline migration](../docs/data-dir-ownership.md).
+[Протокол и offline migration](../../data-dir-ownership.md).
 Рабочая блокировка пользователя не удалялась и не мигрировалась.
 Пользовательский dev watcher действительно встретил этот fail-closed отказ;
 ожидание окончания тестов само по себе не мигрирует старый marker.
