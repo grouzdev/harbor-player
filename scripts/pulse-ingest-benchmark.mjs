@@ -22,6 +22,7 @@ import {
   isolatedFirstCopyEvents,
   scenarioEvidence,
   verifyArtworkStorage,
+  verifyArtworkManifest,
   verifyCohortCoverage,
 } from "./pulse-ingest-evidence.mjs";
 
@@ -683,6 +684,10 @@ if (process.argv[2] === "--worker") {
       expected: expected(),
     });
     const coversStorage = await artworkStorage(path.join(root, "pulse-covers"));
+    const artworkIntegrity = await verifyArtworkManifest(
+      path.join(root, "pulse-covers"),
+      artworkManifest,
+    );
     verifyArtworkStorage(final.covers, artworkManifest);
     assert.deepEqual(
       coversStorage,
@@ -777,6 +782,7 @@ if (process.argv[2] === "--worker") {
       final,
       peakWalBytes,
       covers: coversStorage,
+      artworkIntegrity,
       measuredBatches,
       scenariosCohort: "read-load-period",
       scenarios: scenarioEvidence(measuredBatches, "read-load-period"),

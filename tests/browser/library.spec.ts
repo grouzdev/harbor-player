@@ -1136,7 +1136,7 @@ test("library root can be added to any playlist", async ({ page }, info) => {
   const source = path.resolve(
     ".test-data/browser",
     browser,
-    "file-operations",
+    "root-menu",
     "Downloads",
   );
   await page.goto("/");
@@ -1186,8 +1186,37 @@ test("library root can be added to any playlist", async ({ page }, info) => {
   await expect(
     page.getByRole("menuitem", { name: "Создать новый", exact: true }),
   ).toBeVisible();
+  // A parent render must not reinitialize the open submenu just because the
+  // caller supplies a new onClose callback. Change real player state while the
+  // pointer stays over the menu, without dispatching a click outside it.
+  const volume = page.getByRole("slider", { name: "Громкость", exact: true });
+  const previousVolume = await volume.inputValue();
+  const nextVolume = previousVolume === "0.3" ? "0.4" : "0.3";
+  const openItem = await page
+    .getByRole("menuitem", { name: playlistName })
+    .elementHandle();
+  expect(openItem).not.toBeNull();
+  await volume.fill(nextVolume);
+  await expect(volume).toHaveValue(nextVolume);
+  await expect
+    .poll(() =>
+      page.evaluate(() => localStorage.getItem("harbor-player-volume")),
+    )
+    .toBe(nextVolume);
+  expect(
+    await openItem!.evaluate(async (item) => {
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
+      return item.isConnected;
+    }),
+  ).toBe(true);
+  await expect(
+    page.getByRole("menuitem", { name: playlistName }),
+  ).toBeVisible();
   await page.getByRole("menuitem", { name: playlistName }).click();
   await expect(page.getByText("Добавлено в плейлист")).toBeVisible();
+  await volume.fill(previousVolume);
 
   const libraryTile = page
     .locator(".libraries-panel .library-container")

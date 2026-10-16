@@ -382,6 +382,8 @@ describe("Pulse storage", () => {
 
   it.each([
     { code: "EPERM", attempts: 4 },
+    { code: "EBUSY", attempts: 4 },
+    { code: "EACCES", attempts: 4 },
     { code: "EIO", attempts: 1 },
   ])(
     "bounds failed $code publication, cleans staging and allows later retry",
@@ -411,6 +413,83 @@ describe("Pulse storage", () => {
       ).toEqual({ total: 15000 });
     },
   );
+
+  it("never publishes a partial failed copy or touches unrelated staging", async () => {
+    const coverId = `${"c".repeat(64)}.png`;
+    const directory = path.join(root, "pulse-covers");
+    await mkdir(path.join(root, "covers"));
+    await mkdir(directory);
+    await writeFile(path.join(root, "covers", coverId), "complete original");
+    const foreign = ".pulse-foreign.tmp";
+    await mkdir(path.join(directory, foreign));
+    await writeFile(path.join(directory, foreign, "image"), "live foreign");
+    await writeFile(path.join(directory, "flat.png"), "published flat");
+    await mkdir(path.join(directory, "prior.png.archive"));
+    await writeFile(
+      path.join(directory, "prior.png.archive", "image"),
+      "published archive",
+    );
+    let release!: () => void;
+    let written!: () => void;
+    const paused = new Promise<void>((resolve) => (release = resolve));
+    const partialWritten = new Promise<void>((resolve) => (written = resolve));
+    const originalCopy = fs.promises.copyFile;
+    vi.spyOn(fs.promises, "copyFile").mockImplementationOnce(
+      async (_source, destination) => {
+        await writeFile(destination, "partial");
+        written();
+        await paused;
+        throw Object.assign(new Error("interrupted copy"), { code: "EIO" });
+      },
+    );
+    const rename = vi.spyOn(fs.promises, "rename");
+    syncBuiltinESMExports();
+    const input = event({ snapshot: { ...event().snapshot, coverId } });
+    let acknowledged = false;
+    const pending = send(input).then((result) => {
+      acknowledged = true;
+      return result;
+    });
+    try {
+      await partialWritten;
+      expect(acknowledged).toBe(false);
+      expect(rename).not.toHaveBeenCalled();
+      expect(await readdir(directory)).not.toContain(`${coverId}.archive`);
+    } finally {
+      release();
+      await pending;
+    }
+    expect(rename).not.toHaveBeenCalled();
+    expect((await readdir(directory)).sort()).toEqual(
+      [foreign, "flat.png", "prior.png.archive"].sort(),
+    );
+    expect(await readFile(path.join(directory, foreign, "image"), "utf8")).toBe(
+      "live foreign",
+    );
+    expect(await readFile(path.join(directory, "flat.png"), "utf8")).toBe(
+      "published flat",
+    );
+    expect(
+      await readFile(
+        path.join(directory, "prior.png.archive", "image"),
+        "utf8",
+      ),
+    ).toBe("published archive");
+    // Best-effort decoration ACKs time after failure; exact retry can still
+    // prepare the complete image, without counting that time a second time.
+    fs.promises.copyFile = originalCopy;
+    syncBuiltinESMExports();
+    await send(input);
+    expect(
+      await readFile(
+        path.join(directory, `${coverId}.archive`, "image"),
+        "utf8",
+      ),
+    ).toBe("complete original");
+    expect(
+      db().prepare("SELECT sum(playedMs) total FROM pulse_days").get(),
+    ).toEqual({ total: 15000 });
+  });
 
   it.each(["missing", "copy-error"])(
     "records time and snapshot when cover is %s",

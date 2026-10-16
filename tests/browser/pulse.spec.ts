@@ -319,6 +319,129 @@ test("Pulse recovers the selected artwork after a failed image", async ({
     .toBe(8);
 });
 
+test("Pulse decodes wide PNG and portrait JPEG and keeps metadata after truncated artwork", async ({
+  page,
+}) => {
+  const { busyDate } = await prepareHistory(page);
+  const session = await (await page.request.get("/api/session")).json();
+  const settings = await (await page.request.get("/api/pulse/settings")).json();
+  const sharp = (await import("sharp")).default;
+  const wide = await sharp({
+    create: { width: 1024, height: 64, channels: 3, background: "blue" },
+  })
+    .png()
+    .toBuffer();
+  const portrait = await sharp({
+    create: { width: 64, height: 1024, channels: 3, background: "green" },
+  })
+    .jpeg({ quality: 85 })
+    .toBuffer();
+  const id = randomUUID();
+  const fixtures = [
+    { suffix: "png", type: "image/png", body: wide, width: 1024, height: 64 },
+    {
+      suffix: "jpg",
+      type: "image/jpeg",
+      body: portrait,
+      width: 64,
+      height: 1024,
+    },
+    {
+      suffix: "png",
+      type: "image/png",
+      body: wide.subarray(0, 24),
+      width: 0,
+      height: 0,
+    },
+  ].map((fixture, index) => ({
+    ...fixture,
+    title: `Generated artwork ${index} ${id}`,
+    coverId: `${String(index + 4).repeat(64)}.${fixture.suffix}`,
+  }));
+  for (const fixture of fixtures)
+    await page.route(`**/api/covers/${fixture.coverId}`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: fixture.type,
+        body: fixture.body,
+      }),
+    );
+  const start = pulseFixtureInstant(busyDate, settings.timeZone ?? "UTC");
+  const response = await page.request.post("/api/listening-events", {
+    headers: { "X-CSRF-Token": session.csrf },
+    data: {
+      historyGeneration: settings.historyGeneration,
+      events: fixtures.map((fixture, index) => ({
+        eventId: randomUUID(),
+        revision: 1,
+        trackId: null,
+        albumKey: `generated-artwork-${id}-${index}`,
+        snapshot: {
+          title: fixture.title,
+          artists: ["Generated artwork fixture"],
+          year: 2025,
+          coverId: fixture.coverId,
+        },
+        sessionId: id,
+        visitId: randomUUID(),
+        startedAtUtc: start + index * 60_000,
+        endedAtUtc: start + index * 60_000 + 30_000,
+        playedMs: 30_000,
+        final: true,
+      })),
+    },
+  });
+  expect(response.ok(), await response.text()).toBe(true);
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Открыть Пульс", exact: true })
+    .click();
+  const history = await (
+    await page.request.get("/api/pulse/history-range")
+  ).json();
+  await page
+    .getByRole("slider", { name: "Дата на таймлайне" })
+    .fill(
+      String(
+        (Date.parse(busyDate) - Date.parse(history.firstDay)) / 86_400_000,
+      ),
+    );
+  for (const fixture of fixtures) {
+    await page
+      .getByRole("button", { name: fixture.title })
+      .locator(".pulse-time")
+      .click();
+    await expect(page.locator(".pulse-copy h2")).toHaveText(fixture.title);
+    const image = page.locator(".pulse-selected img");
+    await expect(image).toHaveAttribute(
+      "src",
+      `/api/covers/${fixture.coverId}`,
+    );
+    const decoded = await image.evaluate(async (image: HTMLImageElement) => {
+      try {
+        await image.decode();
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    expect(decoded).toBe(fixture.width > 0);
+    expect(
+      await image.evaluate((image: HTMLImageElement) => ({
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+      })),
+    ).toEqual({ width: fixture.width, height: fixture.height });
+    if (!decoded) {
+      await expect(image).toHaveCSS("visibility", "hidden");
+      await expect(page.locator(".pulse-stat-numbers")).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: fixture.title }),
+      ).toHaveAttribute("aria-pressed", "true");
+    }
+  }
+});
+
 test("Pulse records real audio and mode switches preserve playback", async ({
   page,
 }, info) => {

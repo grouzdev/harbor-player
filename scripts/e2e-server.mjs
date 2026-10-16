@@ -79,6 +79,7 @@ for (const browser of ["chrome", "edge"]) {
   for (const scenario of [
     "player",
     "file-operations",
+    "root-menu",
     "cover-mode",
     "folders",
     "selection",

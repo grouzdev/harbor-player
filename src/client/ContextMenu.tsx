@@ -38,7 +38,14 @@ export function ContextMenu({
     if (!menu) return;
     setOpenSubmenu(null);
     setSubmenuSide("right");
-    requestAnimationFrame(() => firstItemRef.current?.focus());
+    const frame = requestAnimationFrame(() => firstItemRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [menu]);
+
+  // Callback identity can change on any parent render (playback/scan updates).
+  // Refresh dismissal listeners without resetting an already targeted submenu.
+  useEffect(() => {
+    if (!menu) return;
     const closeForOutsidePress = (event: PointerEvent) => {
       if (!ref.current?.contains(event.target as Node)) onClose();
     };

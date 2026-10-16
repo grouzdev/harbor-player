@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readdir, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { lstat, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 
@@ -64,6 +65,55 @@ export function verifyArtworkStorage(actual, manifest) {
     bytes: manifest.reduce((sum, image) => sum + image.bytes, 0),
     stagingEntries: 0,
   });
+}
+
+/** Check every publication's identity/content, not just matching aggregate sizes. */
+export async function verifyArtworkManifest(directory, manifest) {
+  const actual = await artworkStorage(directory);
+  verifyArtworkStorage(actual, manifest);
+  const entries = await readdir(directory, { withFileTypes: true });
+  const published = new Map();
+  for (const entry of entries) {
+    const flat = /^[a-f0-9]{64}\.(jpg|png)$/.test(entry.name);
+    const archive = /^[a-f0-9]{64}\.(jpg|png)\.archive$/.test(entry.name);
+    if (!flat && !archive) continue;
+    assert(
+      flat ? entry.isFile() : entry.isDirectory(),
+      `Publication-shaped entry must be a regular file/directory: ${entry.name}`,
+    );
+    let id, file;
+    if (flat) {
+      id = entry.name;
+      file = path.join(directory, id);
+    } else {
+      id = entry.name.replace(/\.archive$/, "");
+      file = path.join(directory, entry.name, "image");
+    }
+    assert(!published.has(id), `Duplicate flat/archive publication: ${id}`);
+    published.set(id, file);
+  }
+  assert.deepEqual(
+    [...published.keys()].sort(),
+    manifest.map((image) => image.id).sort(),
+    "Published artwork IDs match manifest",
+  );
+  for (const image of manifest) {
+    assert.match(image.id, /^[a-f0-9]{64}\.(jpg|png)$/);
+    const file = published.get(image.id);
+    const info = await lstat(file);
+    assert(
+      info.isFile(),
+      `Published image must be a regular file: ${image.id}`,
+    );
+    assert.equal(info.size, image.bytes, `Published bytes: ${image.id}`);
+    const bytes = await readFile(file);
+    assert.equal(
+      createHash("sha256").update(bytes).digest("hex"),
+      image.id.slice(0, 64),
+      `Published content hash: ${image.id}`,
+    );
+  }
+  return { ...actual, contentSha256Verified: manifest.length };
 }
 
 export function verifyCohortCoverage(batches, repetitions) {

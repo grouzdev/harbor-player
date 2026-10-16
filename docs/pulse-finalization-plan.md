@@ -51,8 +51,12 @@ foreground cold guide в packaged Electron подтверждён отдельн
 eager/lazy A/B завершён в пользу eager, actual playback/storage проверен без
 реальных обложек. Это не закрывает весь P1: installed/manual, permitted originals,
 причина исторического Edge startup хвоста и финальный CI остаются открытыми.
-Последний общий e2e — FAIL двух общих library-сценариев в Edge; прежний PASS
-не заменяет проверку финального кандидата.
+Автономное продолжение на базе `675ec67`:
+[четвёртый этап](../verification/pulse-p1-stage4.md). Причина удаления подменю
+исправлена, library-фикстура изолирована; последний общий e2e — PASS 141+141.
+Generated artwork integrity и partial publication при реальном kill/restart
+проверены. Автоматический staging recovery не включён: сначала нужен безопасный
+stale-lock takeover. Ручной checklist подготовлен, но не выполнен.
 Автоматические проверки и их пределы записаны в
 [журнале P0](../verification/pulse-p0.md). Выборочный прогон не заменяет полный.
 
@@ -232,6 +236,9 @@ backup и не очищать единственную рабочую БД ра�
     ([третий этап](../verification/pulse-p1-stage3.md#actual-playback--storage)).
   - [ ] Actual artwork/storage с разрешёнными originals; generated WAV без
     обложек не закрывают весь пункт.
+  - [ ] Owned-staging recovery после crash: real kill/restart подтвердил orphan;
+    автоматическая очистка заблокирована непроверенным эксклюзивным takeover
+    ([четвёртый этап](../verification/pulse-p1-stage4.md#реальный-kill-during-copy-и-граница-recovery)).
 
 **Ориентиры, не гарантии:** тёплое открытие/возврат < 100 мс,
 холодное открытие < 300 мс на локальном API, read p95 < 50 мс,
@@ -259,11 +266,9 @@ backup и не очищать единственную рабочую БД ра�
 - [x] `npm run build`.
 - [x] `npm run lint`.
 - [x] `npm run format:check` — итоговый повтор после P1 успешен.
-- [ ] `npm run test:e2e` — последний повтор Chrome 140/140, Edge 138/140.
-  Открыты `library root can be added to any playlist` и
-  `local library: readable UI, playback, tags, move and permanent delete`.
-  Нужен новый полный PASS без исключений; прежние успешные прогоны сохранены
-  в журналах как исторические результаты.
+- [x] `npm run test:e2e` — последний общий повтор Chrome 141/141, Edge 141/141,
+  без исключений. Library submenu render-регрессия исправлена и покрыта;
+  прежние FAIL сохранены в журнале третьего этапа.
 - [x] `git diff --check`.
 - [x] Обновить документацию: ограничения, default локального сбора,
   дата начала истории, отсутствие восстановления старого прослушивания.

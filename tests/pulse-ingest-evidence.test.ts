@@ -1,6 +1,14 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+  mkdir,
+  mkdtemp,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import Database from "better-sqlite3";
 import {
@@ -14,6 +22,7 @@ import {
   isolatedFirstCopyEvents,
   scenarioEvidence,
   verifyArtworkStorage,
+  verifyArtworkManifest,
   verifyCohortCoverage,
 } from "../scripts/pulse-ingest-evidence.mjs";
 
@@ -33,6 +42,57 @@ test("artwork publication gates check exact manifest count, bytes and no staging
   assert.throws(() =>
     verifyArtworkStorage(storage, [manifest[0], manifest[0]]),
   );
+});
+
+test("artwork integrity rejects substitutions and corruption with unchanged count/bytes", async () => {
+  await mkdir(".test-data", { recursive: true });
+  const root = await mkdtemp(path.resolve(".test-data/artwork-integrity-"));
+  const id = (bytes: string) =>
+    `${createHash("sha256").update(bytes).digest("hex")}.png`;
+  const first = id("first");
+  const second = id("other");
+  const manifest = [
+    { id: first, bytes: 5 },
+    { id: second, bytes: 5 },
+  ];
+  try {
+    await writeFile(path.join(root, first), "first");
+    await mkdir(path.join(root, `${second}.archive`));
+    const archived = path.join(root, `${second}.archive`, "image");
+    await writeFile(archived, "other");
+    assert.deepEqual(await verifyArtworkManifest(root, manifest), {
+      count: 2,
+      bytes: 10,
+      stagingEntries: 0,
+      contentSha256Verified: 2,
+    });
+    await writeFile(archived, "wrong");
+    await assert.rejects(verifyArtworkManifest(root, manifest), /content hash/);
+    await writeFile(archived, "other");
+    const substituted = id("third");
+    await rename(path.join(root, first), path.join(root, substituted));
+    await assert.rejects(
+      verifyArtworkManifest(root, manifest),
+      /IDs match manifest/,
+    );
+    await rename(path.join(root, substituted), path.join(root, first));
+    await symlink(
+      path.join(root, `${second}.archive`),
+      path.join(root, `${first}.archive`),
+      "junction",
+    );
+    await assert.rejects(
+      verifyArtworkManifest(root, manifest),
+      /Publication-shaped entry must be a regular/,
+    );
+    await rm(path.join(root, `${first}.archive`));
+    await mkdir(path.join(root, `${first}.archive`));
+    await writeFile(path.join(root, `${first}.archive`, "image"), "first");
+    await rm(path.join(root, second + ".archive"), { recursive: true });
+    await assert.rejects(verifyArtworkManifest(root, manifest), /Duplicate/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("cohort coverage requires matching counts and actual first-copy read overlap", () => {

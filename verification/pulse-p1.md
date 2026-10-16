@@ -274,6 +274,28 @@ P1 и общий релизный gate не закрыты. Релиз/публ�
 Окружение: версия/build ID, Windows/Electron, путь к установленному executable,
 DPI/zoom, CSS viewport, доступные мышь/trackpad/touch — **NOT RUN**.
 
+Перед прогоном записать идентичность **согласованной установленной** сборки.
+Не подставлять SHA/hash последнего `win-unpacked` вместо реально установленного
+артефакта. Установка и доступ к permitted originals требуют отдельного согласования.
+
+| Поле | Значение |
+| --- | --- |
+| Версия, build ID, source SHA | NOT RUN |
+| SHA-256 установленного executable | NOT RUN |
+| Windows/Electron | NOT RUN |
+| DPI, zoom, CSS viewport и размеры окна | NOT RUN |
+| Тема и accent | NOT RUN |
+| Доступные устройства ввода | NOT RUN |
+| Изолированный test data dir/profile для clear/error сценариев | NOT RUN |
+| Локальный evidence и разрешённый artwork manifest | NOT RUN |
+
+Автоматическая поддержка есть, но не заменяет ручной результат:
+`tests/browser/pulse.spec.ts` — transitions/focus/states/geometry и generated
+artwork; `tests/browser/player-value-bubble.spec.ts` — общие player controls;
+native-memory и ingest reports — отдельные нагрузочные cohorts.
+Для каждого ручного результата записать фактические шаги, окружение и наблюдение,
+а не только ссылку на успешный browser test.
+
 | Сценарий | Статус | Evidence/замечания |
 | --- | --- | --- |
 | Панели → Пульс → панели; focus/scroll и playback/queue | NOT RUN | |
@@ -283,6 +305,9 @@ DPI/zoom, CSS viewport, доступные мышь/trackpad/touch — **NOT RUN
 | Низкое и portrait окно; видимы статистика, лента и годы | NOT RUN | |
 | Fullscreen, DPI и zoom; отсутствие обрезанных controls | NOT RUN | |
 | Light/dark и custom accent; без окраски выходных | NOT RUN | |
+| Длинные title/artist и empty/disabled состояния | NOT RUN | |
+| API errors/retry, missing/corrupt cover, смена выбранного artwork | NOT RUN | |
+| Общие player controls/value bubbles, seek/volume без прерывания playback | NOT RUN | |
 | Trackpad: инерция, горизонтальные/вертикальные delta, границы | NOT RUN | |
 | Touch-pan и отмена жеста при наличии устройства | NOT RUN | |
 | Ctrl+wheel оставлен масштабированию Chromium/Electron | NOT RUN | |

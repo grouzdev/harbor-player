@@ -21,6 +21,7 @@
     "test": "npm run build:server && vitest run",
     "test:e2e": "npm run build && playwright test --project=chrome && playwright test --project=edge",
     "test:pulse:process": "npm run build && node scripts/pulse-process-check.mjs",
+    "test:pulse:publication": "npm run build:server && node scripts/pulse-publication-crash-check.mjs",
     "test:pulse:desktop": "npm run desktop:pack && node scripts/pulse-desktop-check.mjs",
     "test:pulse:sleep": "npm run desktop:pack && node scripts/pulse-sleep-check.mjs",
     "test:pulse:ui": "npm run build && node scripts/pulse-ui-benchmark.mjs",

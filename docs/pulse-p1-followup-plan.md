@@ -9,6 +9,8 @@
 [изменения, измерения и оставшиеся gates](../verification/pulse-p1-stage2.md).
 Продолжение на базе `f0078fc`:
 [startup A/B, actual storage и завершённые раздельные memory cohorts](../verification/pulse-p1-stage3.md).
+Автономное продолжение на базе `675ec67`:
+[e2e fix, generated artwork integrity и crash publication](../verification/pulse-p1-stage4.md).
 Код находится в `wip/pulse-p1-followup`; с новым `main` пока не объединялся.
 Длительная navigation и чистый native-memory cohort завершены:
 по 1800 секунд на оба dataset, bounded DOM и post-warmup memory проверены.
