@@ -50,10 +50,19 @@ Thumbnail/переработка image pipeline нужна только при �
 По решению пользователя Pulse получает новую минорную версию:
 опубликована **0.4.0-beta.2**, не stable 0.4.0:
 [release и artifact identity](pulse/measurements/pulse-p1.md#опубликована-040-beta2).
-CI/release workflow прошли на `4058653`; обновление Feather и ручной checklist
-ещё NOT RUN. Следующий шаг — записать старую версию на Feather и обновиться.
+CI/release workflow прошли на `4058653`. На Feather подтверждены штатное
+обновление с beta.4, playback/запись/disable/restart, переходы/диалоги,
+доступные размеры/fullscreen при 125%, физический тачпад и player controls.
+Сняты hashes установленного EXE/app.asar и build ID. Installed automation
+проверила API error/retry и missing/corrupt cover fallback на отдельном
+профиле; [результаты и ограничения](pulse/measurements/pulse-p1.md#feather-installed-errorfallback--pass).
 FAT/exFAT — **NOT RUN, согласованный пропуск**; доступность физических
-устройств ввода ещё уточняется. Остальной checklist пока **NOT RUN**.
+устройств: только тачпад, touch и физический Ctrl+wheel NOT RUN.
+Keyboard/focus согласованно отложены; темы отключены ранее и NOT RUN.
+Полный checklist не объявляется PASS: остаются не проверенные вручную
+длинные имена, общий диалог операций/истории и отдельный Chromium zoom.
+Новые общие прогоны без конкретного дефекта не нужны; остаточные риски
+этапа 3 требуют решения пользователя.
 
 **Нужно от пользователя:** целевой Windows-ПК, разрешение на установку,
 время для ручной проверки; доступные мышь/trackpad/touch и тестовый FAT/exFAT

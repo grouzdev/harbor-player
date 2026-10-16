@@ -30,7 +30,7 @@ Mutation cohort снят до последующей diagnostics-only правк
 | Этап | Статус | Участие пользователя |
 | --- | --- | --- |
 | 1. Реальные обложки и actual storage | Выполнен bounded local cohort: 7 originals, actual Chrome/Edge storage, exact hashes/sums, UI fallback, отдельные HTTP/decode/native/GPU samples и 30/365 comparison. [Отчёт и ограничения](pulse/measurements/pulse-originals.md) | Разрешение на локальные копии и короткий foreground получено; дополнительный полный memory cohort не нужен без relevant изменения |
-| 2. Установленная сборка и физическая приёмка | NOT RUN; beta 0.4.0-beta.2 опубликована для Feather с существующим тестовым профилем; FAT/exFAT — согласованный пропуск | Обновиться через beta updater, пройти checklist и доступные устройства ввода |
+| 2. Установленная сборка и физическая приёмка | PARTIAL: Feather beta.2 — updater, основные ручные блоки, физический тачпад, artifact identity и installed error/fallback PASS в зафиксированных границах | FAT/exFAT пропущен, keyboard/focus отложен по решению пользователя; темы отключены, touch/Ctrl+wheel недоступны; оставшиеся NOT RUN перечислены в checklist |
 | 3. Остаточные риски | Старый process timeout и Edge startup хвост INCONCLUSIVE, причина не доказана | Выбрать ограниченную дополнительную диагностику или явно принять риск |
 | 4. Финальная интеграция и CI | Beta 0.4.0-beta.2 на `4058653`: локальный gate, PR CI и release workflow PASS, prerelease опубликован; main не менялся | Интеграция в main отдельно не согласована; общий gate открыт до ручной приёмки и решения по рискам |
 
