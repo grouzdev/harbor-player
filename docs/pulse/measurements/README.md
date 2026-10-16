@@ -14,6 +14,7 @@
 | [Этап 4](pulse-p1-stage4.md) | E2e regression, generated artwork integrity, crash publication |
 | [Этап 5](pulse-p1-stage5.md) | Ownership, owned-staging recovery, взаимодействия, startup и последующие исправления |
 | [Этап 6](pulse-p1-stage6.md) | Lifecycle/diagnostics, полный packaged mutation cohort и завершающий correctness gate |
+| [Разрешённые originals](pulse-originals.md) | Локальный permitted fixture, actual storage и отдельная image/native/GPU диагностика; статусы внутри |
 
 Журналы перенесены из `verification/`; численные результаты, неудачные попытки,
 SHA/dirty, hashes, окружение и ограничения сохранены. Удалённые старые планы

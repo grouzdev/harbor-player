@@ -33,9 +33,9 @@ export async function assertArtworkRoot(root) {
   const parts = relative.split(path.sep);
   assert(
     !path.isAbsolute(relative) &&
-      /^pulse-p1-ui-[\w-]+$/.test(parts[0]) &&
+      /^(pulse-p1-ui-|pulse-process-)[\w-]+$/.test(parts[0]) &&
       parts.every((part) => part && part !== "." && part !== ".."),
-    "Artwork requires an isolated UI fixture root",
+    "Artwork requires an isolated UI or process fixture root",
   );
   await mkdir(base, { recursive: true });
   assert.equal(

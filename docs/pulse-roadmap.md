@@ -6,8 +6,9 @@
 
 Это единственный актуальный roadmap Pulse. [Порядок завершения и участие
 пользователя](pulse-next-steps.md) — рабочая инструкция к нему.
-Статус сверен с кодом и журналами на `cdd9f73`; при этой ревизии документации
-новые runtime-проверки не запускались.
+Статус дополнен permitted-originals измерениями на dirty `2742aed`;
+artifact identity и границы новых runtime-проверок — в
+[отчёте originals](pulse/measurements/pulse-originals.md).
 
 ## Что уже сделано
 
@@ -28,7 +29,7 @@ Mutation cohort снят до последующей diagnostics-only правк
 
 | Этап | Статус | Участие пользователя |
 | --- | --- | --- |
-| 1. Реальные обложки и actual storage | NOT RUN для разрешённых originals; generated модели и короткий audio baseline уже есть | Дать разрешённые JPEG/PNG и согласовать локальный manifest |
+| 1. Реальные обложки и actual storage | Выполнен bounded local cohort: 7 originals, actual Chrome/Edge storage, exact hashes/sums, UI fallback, отдельные HTTP/decode/native/GPU samples и 30/365 comparison. [Отчёт и ограничения](pulse/measurements/pulse-originals.md) | Разрешение на локальные копии и короткий foreground получено; дополнительный полный memory cohort не нужен без relevant изменения |
 | 2. Установленная сборка и физическая приёмка | NOT RUN; automation не заменяет ручную проверку | Согласовать установку, пройти checklist и доступные устройства/носитель |
 | 3. Остаточные риски | Старый process timeout и Edge startup хвост INCONCLUSIVE, причина не доказана | Выбрать ограниченную дополнительную диагностику или явно принять риск |
 | 4. Финальная интеграция и CI | Открыто; старый CI не проверяет окончательный SHA | Согласовать целевую ветку, интеграцию/push; отдельно решить о релизе |

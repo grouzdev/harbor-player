@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -27,6 +28,23 @@ test("storage samples retain exact ledger/aggregates, sizes and staging", async 
     await writeFile(path.join(covers, `${"a".repeat(64)}.png`), "abc");
     await mkdir(path.join(covers, ".pulse-test"));
     const sample = await playbackStorage(db, root, "final");
+    assert(
+      sample.databaseObjects.some(
+        (item) => item.name === "pulse_intervals_start" && item.bytes > 0,
+      ),
+    );
+    const image = Buffer.from("exact original");
+    const hash = createHash("sha256").update(image).digest("hex");
+    const archive = path.join(covers, `${hash}.png.archive`);
+    await mkdir(archive);
+    await writeFile(path.join(archive, "image"), image);
+    const archived = await playbackStorage(db, root, "archived");
+    assert.deepEqual(archived.archiveHashes, [
+      { id: `${hash}.png`, bytes: image.length, sha256: hash },
+    ]);
+    await writeFile(path.join(archive, "image"), "corrupt");
+    await assert.rejects(playbackStorage(db, root, "corrupt"), /archive hash/);
+    await rm(archive, { recursive: true });
     assert.equal(sample.expectedMs, 1234);
     assert.equal(sample.ledger.length, 1);
     assert.equal(sample.visits.length, 1);

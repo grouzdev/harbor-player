@@ -1,15 +1,28 @@
 // Run after: npm run build:server && npx vite build
-// No mocked routes: two windows preload their own real WAV before the outage.
+// No mocked routes: each window preloads its own real WAV before the outage.
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  writeFile,
+} from "node:fs/promises";
 import { createServer } from "node:net";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import Database from "better-sqlite3";
 import { playbackStorage } from "./pulse-playback-storage.mjs";
+import {
+  inspectPermittedArtwork,
+  seedPermittedArtwork,
+} from "./pulse-artwork-fixture.mjs";
+import { artworkWav } from "./pulse-process-artwork.mjs";
+import { observeStorageLoad } from "./pulse-process-storage-observer.mjs";
 import {
   captureCheckpointFailure,
   observeRequests,
@@ -17,7 +30,36 @@ import {
 } from "./pulse-process-diagnostics.mjs";
 
 await mkdir(path.resolve(".test-data"), { recursive: true });
+const preflight = await inspectPermittedArtwork(undefined, {
+  retainedCopies: 7,
+  maxFileBytes: 10 * 1024 * 1024,
+});
+assert(
+  preflight.fileCount <= 4,
+  "Use manifests of at most four originals per run: each playback window holds an HTTP/1 SSE connection; leave capacity for audio, recorder and catalog reads",
+);
 const root = await mkdtemp(path.resolve(".test-data/pulse-process-"));
+const artwork = await seedPermittedArtwork(
+  path.join(root, "originals"),
+  undefined,
+  {
+    retainedCopies: 7,
+    maxFileBytes: 10 * 1024 * 1024,
+  },
+);
+const originals = [
+  ...new Map(artwork.files.map((file) => [file.id, file])).values(),
+];
+if (originals.length)
+  assert(
+    originals.length >= 2,
+    "Storage scenarios require two distinct permitted originals",
+  );
+assert(
+  originals.every((original) => original.status === "valid-permitted"),
+  "Actual playback storage requires decodable permitted originals; corrupt UI checks are separate",
+);
+const trackCount = originals.length || 2;
 async function hashFile(file) {
   return createHash("sha256")
     .update(await readFile(file))
@@ -59,6 +101,9 @@ const provenance = {
           "scripts/pulse-process-diagnostics.mjs",
           "scripts/pulse-playback-storage.mjs",
           "scripts/pulse-ingest-evidence.mjs",
+          "scripts/pulse-artwork-fixture.mjs",
+          "scripts/pulse-process-artwork.mjs",
+          "scripts/pulse-process-storage-observer.mjs",
           "package-lock.json",
         ].map(async (file) => [file, await hashFile(file)]),
       ),
@@ -132,17 +177,27 @@ for (const channel of ["chrome", "msedge"]) {
   const dataDir = path.join(dir, "data");
   const library = path.join(dir, "music");
   await mkdir(library, { recursive: true });
-  for (let i = 0; i < 2; i++)
+  for (let i = 0; i < trackCount; i++)
     await writeFile(
-      path.join(library, `Track-${i + 1}.wav`),
-      wav(60, 220 + i * 110),
+      path.join(library, `Track-${String(i + 1).padStart(4, "0")}.wav`),
+      originals.length
+        ? artworkWav(
+            wav(60, 220 + i * 110),
+            await readFile(
+              path.join(root, "originals", "pulse-covers", originals[i].id),
+            ),
+            originals[i].format,
+            `Original ${String(i + 1).padStart(4, "0")}`,
+          )
+        : wav(60, 220 + i * 110),
     );
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
-  let child, exited, browser, observer;
+  let child, exited, browser, observer, loadObserver;
   let serverLog = "";
   const pids = [];
   const storage = [];
+  const transfers = [];
   const identity = { ...provenance, channel, browserVersion: null };
   async function snapshot(phase) {
     const db = new Database(path.join(dataDir, "catalog.sqlite"), {
@@ -155,8 +210,10 @@ for (const channel of ["chrome", "msedge"]) {
         JSON.stringify(
           {
             provenance: identity,
+            artwork,
+            transfers,
             scope:
-              "Short genuine generated-WAV playback; not yearly observation. No permitted originals supplied. Sizes are samples, not WAL peaks; no forced SQLite checkpoint.",
+              "Short genuine WAV playback; originals use RIFF ID3/APIC when explicitly supplied. Not yearly observation. Sizes are samples, not WAL peaks; no forced SQLite checkpoint. Native/GPU memory and decode are separate measurements.",
             storage,
           },
           null,
@@ -294,7 +351,7 @@ for (const channel of ["chrome", "msedge"]) {
       .filter({ hasText: channel })
       .locator(".list-tile-main")
       .click();
-    await expect(page.getByTestId("track-row")).toHaveCount(2);
+    await expect(page.getByTestId("track-row")).toHaveCount(trackCount);
     const other = await browser.newPage();
     await other.goto(origin);
     await expect(other.locator(".workspace")).toBeVisible();
@@ -303,8 +360,27 @@ for (const channel of ["chrome", "msedge"]) {
       .filter({ hasText: channel })
       .locator(".list-tile-main")
       .click();
-    await expect(other.getByTestId("track-row")).toHaveCount(2);
+    await expect(other.getByTestId("track-row")).toHaveCount(trackCount);
     const windows = [page, other];
+    while (windows.length < trackCount) {
+      const window = await browser.newPage();
+      await window.goto(origin);
+      await expect(window.locator(".workspace")).toBeVisible();
+      await expect(window.locator(".workspace")).toHaveAttribute(
+        "aria-busy",
+        "false",
+      );
+      // New windows may restore the selected library from shared preferences.
+      // Do not require its chooser panel when the requested tracks are loaded.
+      if ((await window.getByTestId("track-row").count()) !== trackCount)
+        await window
+          .locator(".libraries-panel .list-tile")
+          .filter({ hasText: channel })
+          .locator(".list-tile-main")
+          .click();
+      await expect(window.getByTestId("track-row")).toHaveCount(trackCount);
+      windows.push(window);
+    }
     for (let i = 0; i < windows.length; i++) {
       await windows[i].getByTestId("track-row").nth(i).dblclick();
       await until(() =>
@@ -329,7 +405,28 @@ for (const channel of ["chrome", "msedge"]) {
         globalThis.dispatchEvent(new Event("harbor-pulse-settings-changed")),
       );
     await wait(1200);
+    const missing = originals.at(-1);
+    if (missing) {
+      for (const original of originals)
+        assert.equal(
+          await hashFile(path.join(dataDir, "covers", original.id)),
+          original.id.split(".")[0],
+        );
+      await rename(
+        path.join(dataDir, "covers", missing.id),
+        path.join(dir, "withheld-original"),
+      );
+    }
     await snapshot("enabled-before-playback");
+    if (originals.length) {
+      loadObserver = observeStorageLoad(
+        browser,
+        origin,
+        dataDir,
+        artwork.totalInputBytes,
+      );
+      loadObserver.phase("first-copy-and-missing-checkpoints");
+    }
     for (const window of windows)
       await window.locator("audio").evaluate((audio) => audio.play());
     for (const window of windows)
@@ -344,7 +441,8 @@ for (const channel of ["chrome", "msedge"]) {
         });
         try {
           return (
-            db.prepare("SELECT count(*) n FROM pulse_intervals").get().n === 2
+            db.prepare("SELECT count(*) n FROM pulse_intervals").get().n ===
+            trackCount
           );
         } finally {
           db.close();
@@ -415,7 +513,7 @@ for (const channel of ["chrome", "msedge"]) {
     } finally {
       onlineDb.close();
     }
-    assert.equal(online.length, 2);
+    assert.equal(online.length, trackCount);
     const positions = await Promise.all(
       windows.map((window) =>
         window.locator("audio").evaluate((audio) => ({
@@ -435,7 +533,62 @@ for (const channel of ["chrome", "msedge"]) {
       JSON.stringify(outageEvidence, null, 2),
     );
     await snapshot("acknowledged-playback-checkpoints");
+    loadObserver?.phase("existing-and-missing-recovery");
+    if (missing) {
+      const missingSnapshot = storage
+        .at(-1)
+        .albums.map((row) => JSON.parse(row.snapshot))
+        .find((snapshot) => snapshot.coverId === missing.id);
+      assert.equal(
+        missingSnapshot?.title,
+        `Original ${String(trackCount).padStart(4, "0")}`,
+      );
+      for (const original of originals.slice(0, -1))
+        assert.equal(
+          await hashFile(
+            path.join(
+              dataDir,
+              "pulse-covers",
+              `${original.id}.archive`,
+              "image",
+            ),
+          ),
+          original.id.split(".")[0],
+        );
+      await assert.rejects(
+        readFile(
+          path.join(dataDir, "pulse-covers", `${missing.id}.archive`, "image"),
+        ),
+        { code: "ENOENT" },
+      );
+      for (const original of originals) {
+        const start = performance.now();
+        const response = await browser.request.get(
+          `${origin}/api/covers/${original.id}`,
+        );
+        const bytes = await response.body();
+        assert.equal(response.status(), original === missing ? 404 : 200);
+        if (original !== missing)
+          assert.equal(
+            createHash("sha256").update(bytes).digest("hex"),
+            original.id.split(".")[0],
+          );
+        transfers.push({
+          phase: "checkpoint-first-copy-or-missing",
+          id: original.id,
+          status: response.status(),
+          bytes: bytes.length,
+          elapsedMs: performance.now() - start,
+        });
+      }
+    }
     await stop();
+    // Only restore while the API is down: recovery must be a real later delivery.
+    if (missing)
+      await rename(
+        path.join(dir, "withheld-original"),
+        path.join(dataDir, "covers", missing.id),
+      );
     const outageStarted = performance.now();
     const outagePositions = await Promise.all(
       windows.map((window) =>
@@ -475,7 +628,7 @@ for (const channel of ["chrome", "msedge"]) {
         playedMs: Math.max(accepted.playedMs, queued?.playedMs ?? 0),
       };
     });
-    assert.equal(cutoff.length, 2);
+    assert.equal(cutoff.length, trackCount);
     await assert.rejects(
       fetch(`${origin}/api/session`),
       "Whole API must be absent",
@@ -539,7 +692,8 @@ for (const channel of ["chrome", "msedge"]) {
       await window.locator("audio").evaluate((audio) => audio.pause());
     await until(
       async () =>
-        (await pending(page)).filter((event) => event.final).length === 2,
+        (await pending(page)).filter((event) => event.final).length ===
+        trackCount,
     );
     const durable = await pending(page);
     await writeFile(
@@ -547,9 +701,18 @@ for (const channel of ["chrome", "msedge"]) {
       JSON.stringify({ checkpoint, durable }, null, 2),
     );
     await snapshot("offline-final-outbox-not-ingested");
-    assert.equal(new Set(durable.map((event) => event.track.id)).size, 2);
-    assert.equal(new Set(durable.map((event) => event.sessionId)).size, 2);
-    assert.equal(new Set(durable.map((event) => event.visitId)).size, 2);
+    assert.equal(
+      new Set(durable.map((event) => event.track.id)).size,
+      trackCount,
+    );
+    assert.equal(
+      new Set(durable.map((event) => event.sessionId)).size,
+      trackCount,
+    );
+    assert.equal(
+      new Set(durable.map((event) => event.visitId)).size,
+      trackCount,
+    );
     const final = durable.find((event) => event.eventId === checkpoint.eventId);
     assert(
       final.final &&
@@ -560,12 +723,28 @@ for (const channel of ["chrome", "msedge"]) {
     // Same on-disk browser profile and IndexedDB, same port and SQLite.
     await browser.close();
     browser = null;
+    if (loadObserver) {
+      await writeFile(
+        path.join(dir, "http-storage-before-restart.json"),
+        JSON.stringify(await loadObserver.stop(), null, 2),
+      );
+      loadObserver = null;
+    }
     await start();
     browser = await chromium.launchPersistentContext(
       path.join(dir, "profile"),
       { channel, headless: true },
     );
     const reopened = await browser.newPage();
+    if (originals.length) {
+      loadObserver = observeStorageLoad(
+        browser,
+        origin,
+        dataDir,
+        artwork.totalInputBytes,
+      );
+      loadObserver.phase("restart-finals-and-retries");
+    }
     const batches = [];
     reopened.on("request", (request) => {
       if (request.url() === `${origin}/api/listening-events`)
@@ -656,13 +835,14 @@ for (const channel of ["chrome", "msedge"]) {
         await browser.request.get(`${origin}/api/session`)
       ).json();
       const retry = async (batch) => {
-        const response = await browser.request.post(
-          `${origin}/api/listening-events`,
-          {
+        const send = () =>
+          browser.request.post(`${origin}/api/listening-events`, {
             headers: { "X-CSRF-Token": session.csrf },
             data: batch,
-          },
-        );
+          });
+        const response = await (loadObserver
+          ? loadObserver.ingest(send)
+          : send());
         assert(response.ok(), await response.text());
       };
       for (let i = 0; i < 2; i++)
@@ -684,6 +864,45 @@ for (const channel of ["chrome", "msedge"]) {
       });
       await verify();
       await snapshot("duplicate-finals-and-stale-checkpoint-retried");
+      assert.equal(
+        storage.at(-1).covers.stagingEntries,
+        0,
+        "Quiescent staging must drain",
+      );
+      if (originals.length) {
+        const snapshots = db
+          .prepare("SELECT snapshot FROM pulse_albums")
+          .all()
+          .map((row) => JSON.parse(row.snapshot));
+        for (let i = 0; i < originals.length; i++) {
+          const snapshot = snapshots.find(
+            (item) => item.coverId === originals[i].id,
+          );
+          assert.equal(
+            snapshot?.title,
+            `Original ${String(i + 1).padStart(4, "0")}`,
+          );
+        }
+      }
+      for (const original of originals)
+        assert.equal(
+          await hashFile(
+            path.join(
+              dataDir,
+              "pulse-covers",
+              `${original.id}.archive`,
+              "image",
+            ),
+          ),
+          original.id.split(".")[0],
+        );
+      if (loadObserver) {
+        await writeFile(
+          path.join(dir, "http-storage-after-restart.json"),
+          JSON.stringify(await loadObserver.stop(), null, 2),
+        );
+        loadObserver = null;
+      }
       const result = {
         provenance: identity,
         channel,
@@ -691,16 +910,17 @@ for (const channel of ["chrome", "msedge"]) {
         pids,
         expectedMs: expected,
         intervals: rows.length,
-        tracks: 2,
-        sessions: 2,
-        visits: 2,
+        tracks: trackCount,
+        sessions: trackCount,
+        visits: trackCount,
+        artwork,
         checkpointRevision: checkpoint.revision,
         finalRevision: final.revision,
         retryBatches: batches.length,
         outageMs,
         dataDir,
         limitation:
-          "Two genuine playback windows with prebuffered WAV, no route mocks. Sequential offline track switching unsupported. Not OS sleep or Electron crash.",
+          "Genuine playback windows with prebuffered WAV, no route mocks. Sequential offline track switching unsupported. Not OS sleep or Electron crash; native/GPU memory and browser decode require separate evidence.",
       };
       await writeFile(
         path.join(dir, "result.json"),
@@ -722,13 +942,36 @@ for (const channel of ["chrome", "msedge"]) {
     } finally {
       db.close();
     }
+  } catch (error) {
+    await writeFile(
+      path.join(dir, "failure.txt"),
+      error.stack || String(error),
+    );
+    if (browser)
+      for (const [index, window] of browser.pages().entries())
+        await writeFile(
+          path.join(dir, `failure-window-${index}.html`),
+          await window.content().catch(() => "Window unavailable"),
+        );
+    console.error(`Process failure artifacts: ${dir}`);
+    throw error;
   } finally {
     observer?.stop();
     try {
-      await browser?.close();
+      if (loadObserver) {
+        await writeFile(
+          path.join(dir, "http-storage-on-exit.json"),
+          JSON.stringify(await loadObserver.stop(), null, 2),
+        );
+        loadObserver = null;
+      }
     } finally {
-      await stop();
-      await writeFile(path.join(dir, "server.log"), serverLog);
+      try {
+        await browser?.close();
+      } finally {
+        await stop();
+        await writeFile(path.join(dir, "server.log"), serverLog);
+      }
     }
   }
 }

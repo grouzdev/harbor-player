@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { artworkStorage, verifySums } from "./pulse-ingest-evidence.mjs";
 
@@ -52,6 +53,12 @@ export async function playbackStorage(db, dataDir, phase) {
       ledger,
       expectedMs,
       aggregates,
+      albums: db.prepare("SELECT * FROM pulse_albums ORDER BY albumId").all(),
+      databaseObjects: db
+        .prepare(
+          "SELECT name, sum(pgsize) bytes, count(*) pages FROM dbstat GROUP BY name ORDER BY name",
+        )
+        .all(),
       visits: db.prepare("SELECT * FROM pulse_day_visits ORDER BY rowid").all(),
     };
   })();
@@ -65,10 +72,20 @@ export async function playbackStorage(db, dataDir, phase) {
       files[name] = null; // Absent is not a zero-length file.
     }
   }
+  const archiveHashes = [];
+  const coverDirectory = path.join(dataDir, "pulse-covers");
+  for (const name of await readdir(coverDirectory).catch(() => [])) {
+    if (!/^[a-f0-9]{64}\.(jpg|png)\.archive$/.test(name)) continue;
+    const bytes = await readFile(path.join(coverDirectory, name, "image"));
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    assert.equal(sha256, name.split(".")[0], `${phase}: archive hash`);
+    archiveHashes.push({ id: name.slice(0, -8), bytes: bytes.length, sha256 });
+  }
   return {
     phase,
     ...logical,
     files,
+    archiveHashes,
     covers: await artworkStorage(path.join(dataDir, "pulse-covers")),
   };
 }

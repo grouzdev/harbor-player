@@ -135,6 +135,19 @@ describe("explicit permitted artwork fixture", () => {
     expect(manifest.covers.artwork.mode).toBe("generated-only");
   });
 
+  it("supports the isolated process originals root, not arbitrary test directories", async () => {
+    await mkdir(".test-data", { recursive: true });
+    const root = await mkdtemp(path.resolve(".test-data/pulse-process-unit-"));
+    roots.push(root);
+    const originals = path.join(root, "originals");
+    expect(await assertArtworkRoot(originals)).toBe(
+      path.join(originals, "pulse-covers"),
+    );
+    await expect(
+      assertArtworkRoot(path.resolve(".test-data/arbitrary-originals")),
+    ).rejects.toThrow("isolated UI or process fixture root");
+  });
+
   it("rejects an ancestor junction before creating descendants through it", async () => {
     const { root } = await fixture();
     const { root: other } = await fixture();
