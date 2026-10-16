@@ -269,6 +269,21 @@ P1 и общий релизный gate не закрыты. Релиз/публ�
 
 ## Ручная приёмка установленного приложения
 
+Подготовка сеанса на Feather: существующие библиотека и профиль тестовые,
+пользователь разрешил clear/error-сценарии без отдельного профиля.
+Рабочие данные на VLVY не трогать. FAT/exFAT — NOT RUN, согласованный пропуск.
+Доставка следующей беты через updater разрешена после проверок и CI.
+Установленная версия, её hashes и ручные результаты ниже пока NOT RUN.
+
+Локальный gate кандидата `0.3.0-beta.5` на `cdebb0c` + dirty
+version/docs/tag-verification changes (Node 24.20.0, npm 11.19.0, Windows):
+`npm run fixtures`, `npm run verify:tags`, `npm test` (63 файла / 478 тестов),
+`npm run build`, `npm run lint`, `npm run format:check`,
+`npm run test:e2e` (144 Chrome + 144 Edge, без filters/skip),
+`npm run desktop:pack`, `npm run test:desktop:smoke`, `git diff --check` —
+все exit 0. Предупреждение Vite о chunk > 500 kB сохраняется.
+Это локальная packaged automation, не результат установленной приёмки.
+
 Заполнять на целевом Windows-ПК после последнего изменения. Packaged automation
 сама по себе не закрывает этот раздел. Не менять рабочую БД для ошибок/clear:
 эти действия проверять в отдельном тестовом data dir и profile.
