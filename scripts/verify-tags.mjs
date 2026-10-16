@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { writeTags } from "../dist/server/tag-writer.js";
+import { installedTagWriterVersion } from "../dist/server/tag-writer-version.js";
 
 const root = path.resolve(".fixtures");
 const output = path.join(root, "verification");
@@ -75,19 +76,14 @@ for (const format of ["mp3", "flac", "m4a", "aac", "ogg", "opus", "wav"]) {
     console.log(`${format}: BLOCKED — ${error.message}`);
   }
 }
-const pkg = JSON.parse(
-  readFileSync(
-    "node_modules/@digimezzo/node-taglib-sharp/package.json",
-    "utf8",
-  ),
-);
+const writerVersion = await installedTagWriterVersion();
 mkdirSync("verification", { recursive: true });
 writeFileSync(
   "verification/tag-support.json",
   JSON.stringify(
     {
       date: new Date().toISOString(),
-      writerVersion: pkg.version,
+      writerVersion,
       platform: process.platform,
       node: process.version,
       checks: [

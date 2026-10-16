@@ -11,6 +11,8 @@ import {
   readFile,
   readdir,
   stat,
+  lstat,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
@@ -21,7 +23,7 @@ await mkdir(path.join(project, ".test-data"), { recursive: true });
 const root = await mkdtemp(
   path.join(project, ".test-data", "pulse-publication-crash-"),
 );
-const coverId = `${"a".repeat(64)}.png`;
+let coverId = `${"a".repeat(64)}.png`;
 const fixture = Buffer.alloc(1024 * 1024, 0x5a);
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 await mkdir(path.join(root, "covers"));
@@ -38,6 +40,15 @@ await writeFile(
   path.join(directory, "published.png.archive", "image"),
   "preserve:archive",
 );
+const ambiguous = `.pulse-${"b".repeat(64)}.png-00000000-0000-4000-8000-000000000001.tmp`;
+await mkdir(path.join(directory, ambiguous));
+await writeFile(path.join(directory, ambiguous, "image"), "preserve:known");
+await writeFile(path.join(directory, ambiguous, "unknown"), "preserve:unknown");
+const linked = `.pulse-${"c".repeat(64)}.jpg-00000000-0000-4000-8000-000000000002.tmp`;
+const outside = path.join(root, "outside");
+await mkdir(outside);
+await writeFile(path.join(outside, "image"), "preserve:link-target");
+await symlink(outside, path.join(directory, linked), "junction");
 
 const children = new Set();
 const evidence = {
@@ -63,9 +74,11 @@ const evidence = {
         "src/server/pulse.ts",
         "src/server/service.ts",
         "src/server/instance-lock.ts",
+        "src/server/pulse-staging-recovery.ts",
         "dist/server/pulse.js",
         "dist/server/service.js",
         "dist/server/instance-lock.js",
+        "dist/server/pulse-staging-recovery.js",
       ].map(async (file) => [
         file,
         hash(await readFile(path.join(project, file))),
@@ -78,12 +91,13 @@ const evidence = {
   ),
   fixtureKind: "synthetic bytes; no image decoding assertion",
   copyAdapter: "real chunked copy paused after fsync of first 65536 bytes",
-  recovery: "NOT ENABLED: exclusive stale-lock takeover needs separate review",
+  recovery: "startup under lifetime ownership, before ingest",
+  cycles: [],
 };
-function start(mode) {
+function start(mode, cycle) {
   const child = fork(
     new URL("./pulse-publication-crash-worker.mjs", import.meta.url),
-    [root, mode, coverId],
+    [root, mode, coverId, String(cycle)],
     { cwd: project, stdio: ["ignore", "inherit", "inherit", "ipc"] },
   );
   children.add(child);
@@ -107,64 +121,92 @@ async function waitFor(worker, type) {
 }
 const timeout = setTimeout(() => {
   for (const child of children) child.kill("SIGKILL");
-}, 45000);
+}, 90000);
 try {
-  const interrupted = start("copy");
-  const partial = await waitFor(interrupted, "partial");
-  const staging = path.basename(path.dirname(partial.destination));
-  assert.match(
-    staging,
-    /^\.pulse-[a-f0-9]{64}\.(jpg|png)-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\.tmp$/,
-  );
-  assert.equal(
-    partial.destination,
-    path.join(directory, staging, "image"),
-    "Only inspect the generated owned staging path",
-  );
-  assert.equal((await stat(partial.destination)).size, 65536);
-  assert.ok(partial.bytes < fixture.length);
-  assert.ok(!(await readdir(directory)).includes(`${coverId}.archive`));
-  assert.ok(!interrupted.messages.some((message) => message.type === "ack"));
-  assert.ok(interrupted.child.kill("SIGKILL"));
-  evidence.killed = await interrupted.exit;
-  assert.ok(evidence.killed.signal || evidence.killed.code !== 0);
-  assert.equal((await stat(partial.destination)).size, partial.bytes);
-
-  const restarted = start("restart");
-  const acknowledged = await waitFor(restarted, "ack");
-  assert.ok(
-    restarted.messages.some((message) => message.type === "before-retry"),
-  );
-  assert.deepEqual(await restarted.exit, { code: 0, signal: null });
-  assert.equal(acknowledged.playedMs, 15000);
-  assert.deepEqual(acknowledged.accepted, acknowledged.duplicate);
-  assert.equal(hash(await readFile(acknowledged.archive)), hash(fixture));
-  // An orphan is evidence, not permission for a broad staging GC.
-  assert.equal((await stat(partial.destination)).size, partial.bytes);
-  for (const name of canaries)
-    assert.equal(
-      await readFile(path.join(directory, name), "utf8"),
-      `preserve:${name}`,
+  for (let cycle = 0; cycle < 3; cycle++) {
+    coverId = `${String(cycle + 1).repeat(64)}.png`;
+    await writeFile(path.join(root, "covers", coverId), fixture);
+    const interrupted = start("copy", cycle);
+    const partial = await waitFor(interrupted, "partial");
+    const staging = path.basename(path.dirname(partial.destination));
+    assert.match(
+      staging,
+      /^\.pulse-[a-f0-9]{64}\.(jpg|png)-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\.tmp$/,
     );
-  assert.equal(
-    await readFile(
-      path.join(directory, "published.png.archive", "image"),
-      "utf8",
-    ),
-    "preserve:archive",
-  );
-  Object.assign(evidence, {
-    status: "PASS",
-    partialBytes: partial.bytes,
-    sourceBytes: fixture.length,
-    sourceSha256: hash(fixture),
-    archiveSha256: hash(await readFile(acknowledged.archive)),
-    orphanStagingRetained: staging,
-    noAckBeforeKill: true,
-    noListeningCommitBeforeRetry: true,
-    duplicatePlayedMs: acknowledged.playedMs,
-    canariesPreserved: true,
-  });
+    assert.equal(
+      partial.destination,
+      path.join(directory, staging, "image"),
+      "Only inspect the generated owned staging path",
+    );
+    assert.equal((await stat(partial.destination)).size, 65536);
+    assert.ok(partial.bytes < fixture.length);
+    assert.ok(!(await readdir(directory)).includes(`${coverId}.archive`));
+    assert.ok(!interrupted.messages.some((message) => message.type === "ack"));
+    assert.ok(interrupted.child.kill("SIGKILL"));
+    evidence.killed = await interrupted.exit;
+    assert.deepEqual(evidence.killed, { code: null, signal: "SIGKILL" });
+    assert.equal((await stat(partial.destination)).size, partial.bytes);
+
+    const restarted = start("restart", cycle);
+    const acknowledged = await waitFor(restarted, "ack");
+    assert.ok(
+      restarted.messages.some((message) => message.type === "before-retry"),
+    );
+    assert.deepEqual(await restarted.exit, { code: 0, signal: null });
+    assert.equal(acknowledged.playedMs, 15000);
+    assert.equal(acknowledged.dayPlayedMs, (cycle + 1) * 15000);
+    assert.deepEqual(acknowledged.accepted, acknowledged.duplicate);
+    assert.equal(hash(await readFile(acknowledged.archive)), hash(fixture));
+    await assert.rejects(stat(path.join(directory, staging)), {
+      code: "ENOENT",
+    });
+    assert.deepEqual(
+      (await readdir(directory))
+        .filter((name) => /^\.pulse-[a-f0-9]{64}\.(jpg|png)-/.test(name))
+        .sort(),
+      [ambiguous, linked].sort(),
+      "No generated owned orphan may accumulate across restart cycles",
+    );
+    for (const name of canaries)
+      assert.equal(
+        await readFile(path.join(directory, name), "utf8"),
+        `preserve:${name}`,
+      );
+    assert.equal(
+      await readFile(
+        path.join(directory, "published.png.archive", "image"),
+        "utf8",
+      ),
+      "preserve:archive",
+    );
+    assert.equal(
+      await readFile(path.join(directory, ambiguous, "image"), "utf8"),
+      "preserve:known",
+    );
+    assert.equal(
+      await readFile(path.join(directory, ambiguous, "unknown"), "utf8"),
+      "preserve:unknown",
+    );
+    assert.ok((await lstat(path.join(directory, linked))).isSymbolicLink());
+    assert.equal(
+      await readFile(path.join(outside, "image"), "utf8"),
+      "preserve:link-target",
+    );
+    evidence.cycles.push({
+      cycle,
+      killed: evidence.killed,
+      partialBytes: partial.bytes,
+      sourceBytes: fixture.length,
+      sourceSha256: hash(fixture),
+      archiveSha256: hash(await readFile(acknowledged.archive)),
+      orphanStagingRemoved: staging,
+      noAckBeforeKill: true,
+      noListeningCommitBeforeRetry: true,
+      duplicatePlayedMs: acknowledged.playedMs,
+      canariesPreserved: true,
+    });
+  }
+  evidence.status = "PASS";
 } catch (error) {
   evidence.status = "FAIL";
   evidence.error = String(error.stack ?? error);

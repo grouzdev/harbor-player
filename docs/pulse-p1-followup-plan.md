@@ -11,6 +11,10 @@
 [startup A/B, actual storage и завершённые раздельные memory cohorts](../verification/pulse-p1-stage3.md).
 Автономное продолжение на базе `675ec67`:
 [e2e fix, generated artwork integrity и crash publication](../verification/pulse-p1-stage4.md).
+После четвёртого этапа актуальный порядок —
+[план закрытия релиза](pulse-release-completion-plan.md);
+ownership/recovery и текущая приёмка записаны в
+[пятом этапе](../verification/pulse-p1-stage5.md).
 Код находится в `wip/pulse-p1-followup`; с новым `main` пока не объединялся.
 Длительная navigation и чистый native-memory cohort завершены:
 по 1800 секунд на оба dataset, bounded DOM и post-warmup memory проверены.

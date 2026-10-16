@@ -21,6 +21,8 @@ import path from "node:path";
 import { Catalog } from "./database.js";
 import { Workers } from "./workers.js";
 import { acquireInstanceLock } from "./instance-lock.js";
+import { recoverPulseStaging } from "./pulse-staging-recovery.js";
+import { installedTagWriterVersion } from "./tag-writer-version.js";
 import { forkedTagWriter, type TagWriter } from "./isolated-tag-writer.js";
 import { writeId3InPlace } from "./in-place-id3.js";
 import { errorMessage, inside } from "./config.js";
@@ -104,6 +106,7 @@ export class MusicService extends EventEmitter {
   private active = new Set<string>();
   private stopping = false;
   private closePromise?: Promise<void>;
+  private initialization?: Promise<void>;
   private recoverySettings: RecoverySettings = { backupRetention: "none" };
   private recoveryTimer?: NodeJS.Timeout;
   private playlistSyncTimers = new Map<string, NodeJS.Timeout>();
@@ -148,7 +151,16 @@ export class MusicService extends EventEmitter {
         this.catalog.saveOperation(operation);
       }
   }
-  async initialize() {
+  initialize(): Promise<void> {
+    if (this.stopping)
+      return Promise.reject(unavailable("Сервис останавливается"));
+    return (this.initialization ??= this.initializeOnce());
+  }
+  private async initializeOnce() {
+    if (this.stopping) throw unavailable("Сервис останавливается");
+    // One shot per owner: repeated initialization must never sweep live copies.
+    await recoverPulseStaging(this.dataDir);
+    if (this.stopping) throw unavailable("Сервис останавливается");
     this.recoverySettings = await readRecoverySettings(this.dataDir);
     await this.maintainRecovery();
     this.recoveryTimer = setInterval(
@@ -162,16 +174,7 @@ export class MusicService extends EventEmitter {
           "utf8",
         ),
       );
-      const pkg = JSON.parse(
-        await readFile(
-          new URL(
-            "../../node_modules/@digimezzo/node-taglib-sharp/package.json",
-            import.meta.url,
-          ),
-          "utf8",
-        ),
-      );
-      if (report.writerVersion === pkg.version)
+      if (report.writerVersion === (await installedTagWriterVersion()))
         this.capabilities = {
           writableFormats: report.formats
             .filter((f: { passed: boolean }) => f.passed)
@@ -1774,6 +1777,10 @@ export class MusicService extends EventEmitter {
     if (!this.closePromise)
       this.closePromise = (async () => {
         try {
+          // Keep ownership until startup (including its sweep) has settled.
+          // initialize() reports failure; shutdown must still release resources.
+          await this.initialization?.catch(() => {});
+          if (this.recoveryTimer) clearInterval(this.recoveryTimer);
           await this.pending;
           await this.workers.close();
           this.catalog.close();

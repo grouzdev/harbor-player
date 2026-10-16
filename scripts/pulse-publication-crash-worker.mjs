@@ -5,7 +5,7 @@ import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 
-const [root, mode, coverId] = process.argv.slice(2);
+const [root, mode, coverId, cycle = "0"] = process.argv.slice(2);
 if (!process.send || !root || !["copy", "restart"].includes(mode))
   throw new Error("Run via pulse-publication-crash-check.mjs");
 
@@ -27,32 +27,35 @@ if (mode === "copy") {
 const { MusicService } = await import("../dist/server/service.js");
 const service = new MusicService(root);
 try {
+  await service.initialize();
   const pulse = service.catalog.pulse;
   pulse.updateSettings({ timeZone: "UTC" });
   const event = {
-    eventId: "crash-copy",
+    eventId: `crash-copy-${cycle}`,
     revision: 1,
     trackId: null,
-    albumKey: "crash-copy",
+    albumKey: `crash-copy-${cycle}`,
     snapshot: {
       title: "Crash copy",
       artists: ["Generated fixture"],
       year: null,
       coverId,
     },
-    sessionId: "crash-copy",
-    visitId: "crash-copy",
+    sessionId: `crash-copy-${cycle}`,
+    visitId: `crash-copy-${cycle}`,
     startedAtUtc: Date.parse("2026-03-07T12:00:00Z"),
     endedAtUtc: Date.parse("2026-03-07T12:00:15Z"),
     playedMs: 15000,
     final: true,
   };
   if (mode === "restart") {
-    if (pulse.layout("2026-03-07", "2026-03-07").days.length !== 0)
+    const days = pulse.layout("2026-03-07", "2026-03-07").days;
+    const total = days.reduce((sum, day) => sum + day.playedMs, 0);
+    if (total !== Number(cycle) * 15000)
       throw new Error(
         "Unacknowledged interrupted ingest committed listening time",
       );
-    process.send({ type: "before-retry", days: 0 });
+    process.send({ type: "before-retry", playedMs: total });
   }
   const batch = {
     historyGeneration: pulse.settings().historyGeneration,
@@ -66,6 +69,9 @@ try {
     accepted,
     duplicate,
     playedMs: stats.playedMs,
+    dayPlayedMs: pulse
+      .layout("2026-03-07", "2026-03-07")
+      .days.reduce((sum, day) => sum + day.playedMs, 0),
     archive: path.join(root, "pulse-covers", `${coverId}.archive`, "image"),
   });
 } finally {

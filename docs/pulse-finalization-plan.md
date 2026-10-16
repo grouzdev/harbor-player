@@ -60,6 +60,17 @@ stale-lock takeover. Ручной checklist подготовлен, но не в
 Автоматические проверки и их пределы записаны в
 [журнале P0](../verification/pulse-p0.md). Выборочный прогон не заменяет полный.
 
+Актуальный порядок оставшихся работ после четвёртого этапа:
+[план закрытия релиза](pulse-release-completion-plan.md).
+Он разделяет автономные доработки, операторскую приёмку и финальный CI;
+наличие плана не меняет статусы проверок ниже.
+Реализация ownership/recovery, новые UI-регрессии и текущие границы приёмки:
+[пятый этап](../verification/pulse-p1-stage5.md).
+После четвёртого этапа recovery включён под проверенным SQLite ownership,
+startup failure cleanup исправлен; полный e2e после dependency-resolution
+фикса — 144/144 Chrome и 144/144 Edge. Installed/manual, originals и финальный
+CI остаются открытыми; старые PID locks требуют отдельной offline migration.
+
 ## P0 — закрыть до релиза
 
 Порядок выполнения, точки изменений и доказательства приёмки:
@@ -236,9 +247,11 @@ backup и не очищать единственную рабочую БД ра�
     ([третий этап](../verification/pulse-p1-stage3.md#actual-playback--storage)).
   - [ ] Actual artwork/storage с разрешёнными originals; generated WAV без
     обложек не закрывают весь пункт.
-  - [ ] Owned-staging recovery после crash: real kill/restart подтвердил orphan;
-    автоматическая очистка заблокирована непроверенным эксклюзивным takeover
-    ([четвёртый этап](../verification/pulse-p1-stage4.md#реальный-kill-during-copy-и-граница-recovery)).
+  - [x] Owned-staging recovery после crash: эксклюзивное SQLite ownership,
+    консервативная startup-очистка и три настоящих SIGKILL/restart/retry цикла
+    с сохранением foreign/ambiguous/published canaries
+    ([пятый этап](../verification/pulse-p1-stage5.md#r2-owned-staging-recovery-и-startupshutdown)).
+    Старые PID locks требуют offline migration; рабочая блокировка не менялась.
 
 **Ориентиры, не гарантии:** тёплое открытие/возврат < 100 мс,
 холодное открытие < 300 мс на локальном API, read p95 < 50 мс,
@@ -266,9 +279,11 @@ backup и не очищать единственную рабочую БД ра�
 - [x] `npm run build`.
 - [x] `npm run lint`.
 - [x] `npm run format:check` — итоговый повтор после P1 успешен.
-- [x] `npm run test:e2e` — последний общий повтор Chrome 141/141, Edge 141/141,
-  без исключений. Library submenu render-регрессия исправлена и покрыта;
-  прежние FAIL сохранены в журнале третьего этапа.
+- [x] `npm run test:e2e` — полный непрерванный прогон после исправления
+  dependency resolution: Chrome 144/144, Edge 144/144, без фильтров/skip
+  и изменения timeout. Предварительные fixtures и verify:tags завершились успешно.
+  Предыдущие прерывания и FAIL сохранены в
+  [пятом этапе](../verification/pulse-p1-stage5.md).
 - [x] `git diff --check`.
 - [x] Обновить документацию: ограничения, default локального сбора,
   дата начала истории, отсутствие восстановления старого прослушивания.

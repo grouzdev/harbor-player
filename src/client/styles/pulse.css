@@ -59,6 +59,13 @@
 .pulse-copy p {
   margin: 4px 0;
 }
+.pulse-copy > p:not(.pulse-date) {
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .pulse-date,
 .pulse-copy p,
 .pulse-copy small,

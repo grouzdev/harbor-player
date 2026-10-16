@@ -16,6 +16,7 @@ async function prepareHistory(
   busyAlbums = 0,
   firstDay = "2023-01-01",
   busyDate = "2025-05-16",
+  metadata = { title: "Pulse album", artist: "Pulse artist" },
 ) {
   const session = await (await page.request.get("/api/session")).json();
   const headers = { "X-CSRF-Token": session.csrf };
@@ -43,8 +44,8 @@ async function prepareHistory(
       trackId: null,
       albumKey: `pulse-browser-${album}`,
       snapshot: {
-        title: `Pulse album ${album}`,
-        artists: ["Pulse artist"],
+        title: `${metadata.title} ${album}`,
+        artists: [metadata.artist],
         year: 2025,
         coverId: null,
       },
@@ -878,4 +879,169 @@ test("Pulse returns focus to a visible catalog fallback if the saved target disa
   await page.keyboard.press("Escape");
   await expect(page.locator(".workspace")).toBeVisible();
   await expect(page.locator(".workspace")).toBeFocused();
+});
+
+test("Pulse wheel clamps at both boundaries and does not hijack Ctrl+wheel", async ({
+  page,
+}) => {
+  await prepareHistory(page);
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Открыть Пульс", exact: true })
+    .click();
+  const rail = page.locator(".pulse-rail");
+  await expect(rail).toBeVisible();
+  const slider = page.getByRole("slider", { name: "Дата на таймлайне" });
+  await slider.fill("0");
+  await expect.poll(() => rail.evaluate((el) => el.scrollLeft)).toBe(0);
+  await rail.hover();
+  await page.mouse.wheel(0, -1000);
+  expect(await rail.evaluate((el) => el.scrollLeft)).toBe(0);
+  await page.mouse.wheel(0, 500);
+  await expect
+    .poll(() => rail.evaluate((el) => el.scrollLeft))
+    .toBeGreaterThan(0);
+  // Synthetic cancelable input checks application ownership, not browser zoom
+  // or physical trackpad behavior (those remain manual acceptance).
+  const ctrl = await rail.evaluate((el) => {
+    const before = el.scrollLeft;
+    const event = new WheelEvent("wheel", {
+      deltaY: 500,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    el.dispatchEvent(event);
+    return { before, after: el.scrollLeft, prevented: event.defaultPrevented };
+  });
+  expect(ctrl.after).toBe(ctrl.before);
+  expect(ctrl.prevented).toBe(false);
+  await page.mouse.wheel(0, 1_000_000);
+  await expect
+    .poll(() =>
+      rail.evaluate((el) => el.scrollWidth - el.clientWidth - el.scrollLeft),
+    )
+    .toBe(0);
+  const end = await rail.evaluate((el) => el.scrollLeft);
+  await page.mouse.wheel(0, 1000);
+  expect(await rail.evaluate((el) => el.scrollLeft)).toBe(end);
+  await page.mouse.wheel(0, -500);
+  await expect
+    .poll(() => rail.evaluate((el) => el.scrollLeft))
+    .toBeLessThan(end);
+});
+
+test("Pulse delayed prior navigation pages cannot restore the old date", async ({
+  page,
+}) => {
+  const { busyDate } = await prepareHistory(page, 40);
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let requested = 0;
+  let settled = 0;
+  await page.route(`**/api/pulse/days/${busyDate}/albums?**`, async (route) => {
+    if (new URL(route.request().url()).searchParams.get("limit") === "1") {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch();
+    requested++;
+    await held;
+    await route.fulfill({ response }).catch(() => {});
+    settled++;
+  });
+  try {
+    await page.goto("/");
+    await page
+      .getByRole("button", { name: "Открыть Пульс", exact: true })
+      .click();
+    const slider = page.getByRole("slider", { name: "Дата на таймлайне" });
+    await slider.fill(
+      String((Date.parse(busyDate) - Date.parse("2023-01-01")) / 86_400_000),
+    );
+    await expect.poll(() => requested).toBeGreaterThan(0);
+    await slider.fill("0");
+    const rail = page.locator(".pulse-rail");
+    await expect.poll(() => rail.evaluate((el) => el.scrollLeft)).toBe(0);
+    await expect(slider).toHaveAttribute("aria-valuetext", "2023-01-01");
+    const oldRequests = requested;
+    release();
+    await expect.poll(() => settled).toBe(oldRequests);
+    // Give response handlers and virtualizer frames a chance to commit.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await expect(slider).toHaveAttribute("aria-valuetext", "2023-01-01");
+    expect(await rail.evaluate((el) => el.scrollLeft)).toBe(0);
+    await expect(page.locator(".pulse-album").first()).toBeVisible();
+  } finally {
+    release();
+  }
+});
+
+test("Pulse long metadata fits light and dark themes with custom accents", async ({
+  page,
+}) => {
+  const title =
+    "Очень длинное название альбома — " + "UnbrokenTitle".repeat(25);
+  const artist = "Исполнитель " + "UnbrokenArtist".repeat(25);
+  await prepareHistory(page, 0, "2023-01-01", "2025-05-16", { title, artist });
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Открыть Пульс", exact: true })
+    .click();
+  await expect(page.locator(".pulse-copy h2")).toHaveText(`${title} 0`);
+  await expect(page.locator(".pulse-copy > p").nth(1)).toHaveText(artist);
+  await expect(page.locator(".pulse-stat-numbers")).toBeVisible();
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((theme) => {
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.style.setProperty(
+        "--accent",
+        theme === "light" ? "#123abc" : "#79b9d4",
+      );
+    }, theme);
+    for (const width of [390, 640, 800, 1366, 1600]) {
+      await page.setViewportSize({ width, height: 480 });
+      await expect
+        .poll(
+          () =>
+            page.evaluate(() => {
+              const pulse = document
+                .querySelector(".pulse-mode")!
+                .getBoundingClientRect();
+              return (
+                [
+                  ".pulse-copy h2",
+                  ".pulse-copy > p:nth-of-type(2)",
+                  ".pulse-stat-numbers",
+                  ".pulse-rail",
+                  ".pulse-history-range",
+                ].every((selector) => {
+                  const rect = document
+                    .querySelector(selector)!
+                    .getBoundingClientRect();
+                  return (
+                    rect.width > 0 &&
+                    rect.height > 0 &&
+                    rect.left >= pulse.left &&
+                    rect.right <= pulse.right + 1 &&
+                    rect.top >= pulse.top &&
+                    rect.bottom <= pulse.bottom + 1
+                  );
+                }) &&
+                document.documentElement.scrollWidth <= innerWidth &&
+                document.documentElement.scrollHeight <= innerHeight
+              );
+            }),
+          { message: `${theme} long metadata at ${width}x480` },
+        )
+        .toBe(true);
+    }
+  }
 });

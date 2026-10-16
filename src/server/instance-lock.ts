@@ -1,59 +1,45 @@
-import {
-  mkdirSync,
-  openSync,
-  closeSync,
-  writeFileSync,
-  readFileSync,
-  unlinkSync,
-} from "node:fs";
-import { randomUUID } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import Database from "better-sqlite3";
+
+// Permanent guard against older binaries, which require a positive integer PID.
+// Neither this marker nor the SQLite file may be removed on release.
+const marker = '{"protocol":"harbor-sqlite-ownership-v1"}\n';
 
 export function acquireInstanceLock(dataDir: string): () => void {
   mkdirSync(dataDir, { recursive: true });
   const file = path.join(dataDir, "server.lock");
-  const token = randomUUID();
-  for (let attempt = 0; attempt < 2; attempt++) {
+  const db = new Database(path.join(dataDir, "server-ownership.sqlite"), {
+    timeout: 0,
+  });
+  try {
+    // Rollback-journal EXCLUSIVE holds the OS-managed lock until close, including
+    // in an otherwise empty database. WAL would not provide this exclusion.
+    if (db.pragma("journal_mode", { simple: true }) !== "delete")
+      throw new Error("Неожиданный journal_mode блокировки каталога");
+    db.exec("BEGIN EXCLUSIVE");
     try {
-      const fd = openSync(file, "wx");
-      try {
-        writeFileSync(fd, JSON.stringify({ pid: process.pid, token }));
-      } finally {
-        closeSync(fd);
-      }
-      return () => {
-        try {
-          if (JSON.parse(readFileSync(file, "utf8")).token === token)
-            unlinkSync(file);
-        } catch {
-          /* Already removed on shutdown. */
-        }
-      };
+      writeFileSync(file, marker, { flag: "wx" });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      let pid: number;
-      try {
-        pid = JSON.parse(readFileSync(file, "utf8")).pid;
-      } catch {
+      if (readFileSync(file, "utf8") !== marker)
         throw new Error(
-          `Не удалось проверить блокировку ${file}. Закройте другие экземпляры сервиса и проверьте этот файл.`,
+          `Неподдерживаемая или неполная блокировка ${file}. Автоматический takeover запрещён. Остановите все старые экземпляры Harbor Player перед ручной миграцией блокировки.`,
         );
-      }
-      if (!Number.isSafeInteger(pid) || pid < 1)
-        throw new Error(`Некорректная блокировка ${file}`);
-      try {
-        process.kill(pid, 0);
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code === "ESRCH") {
-          unlinkSync(file);
-          continue;
-        }
-        throw e;
-      }
+    }
+  } catch (error) {
+    db.close();
+    if ((error as { code?: string }).code === "SQLITE_BUSY")
       throw new Error(
         "Harbor Player уже запущен с этим каталогом данных. Откройте существующее окно браузера.",
+        { cause: error },
       );
-    }
+    throw error;
   }
-  throw new Error("Не удалось получить блокировку каталога");
+  let released = false;
+  return () => {
+    if (released) return;
+    db.close();
+    released = true;
+  };
 }

@@ -737,12 +737,47 @@ async function navigation(session, dataset) {
     heaps: [],
     traces: [],
     points: [],
+    interactions: [],
     httpStart: http.length,
     completed: false,
   };
   record.heaps.push(await heapEvidence(session, "before-navigation"));
   const taskStart = await page.evaluate(() => performance.now());
   evidence.navigation.push(record);
+  // Renderer-clock windows label real input in the trace. Their elapsed time
+  // includes automation/readiness overhead; it is not input-to-paint latency.
+  const interactionPoint = (label) =>
+    page.evaluate((label) => {
+      performance.mark(label);
+      // Tracing records the event; do not retain thousands of User Timing
+      // entries during the long navigation cohort itself.
+      performance.clearMarks(label);
+      const rail = document.querySelector(".pulse-rail");
+      return {
+        time: performance.now(),
+        scroll: rail?.scrollLeft ?? null,
+        date: document
+          .querySelector(".pulse-history-range input")
+          ?.getAttribute("aria-valuetext"),
+      };
+    }, label);
+  const interaction = async (kind, action, target = null) => {
+    const id = `pulse-${kind}-${record.interactions.length}`;
+    const entry = {
+      kind,
+      target,
+      clock: "renderer performance.now",
+      before: await interactionPoint(`${id}-start`),
+      completed: false,
+    };
+    record.interactions.push(entry);
+    try {
+      await action();
+      entry.completed = true;
+    } finally {
+      entry.after = await interactionPoint(`${id}-end`);
+    }
+  };
   console.error(
     `Navigation ${dataset}: ${record.durationMs / 1000}s; artifacts ${runRoot}`,
   );
@@ -778,6 +813,9 @@ async function navigation(session, dataset) {
         targets.push(offset);
       targets.push(count - 1);
       for (const offset of targets) {
+        const interactionStart = await interactionPoint(
+          `pulse-year-${record.interactions.length}-start`,
+        );
         if (offset === 0) await page.keyboard.press("Home");
         else if (offset === count - 1) await page.keyboard.press("End");
         else {
@@ -824,6 +862,16 @@ async function navigation(session, dataset) {
           ((Date.parse(logicalDate) - Date.parse(m.from)) / 86400000) % 3 ===
             0 || logicalDate === m.to;
         assert.equal(titles.length > 0, active, "Settled target card presence");
+        record.interactions.push({
+          kind: "year-jump",
+          target: logicalDate,
+          clock: "renderer performance.now",
+          before: interactionStart,
+          after: await interactionPoint(
+            `pulse-year-${record.interactions.length}-end`,
+          ),
+          completed: true,
+        });
         record.points.push({
           logicalDate,
           offset,
@@ -837,14 +885,24 @@ async function navigation(session, dataset) {
       const box = await rail.boundingBox();
       assert(box);
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-      await page.mouse.wheel(-720, 0);
-      await page.mouse.down();
-      await page.mouse.move(
-        box.x + box.width / 2 - 200,
-        box.y + box.height / 2,
-        { steps: 6 },
-      );
-      await page.mouse.up();
+      await interaction("wheel", async () => {
+        await page.mouse.wheel(-720, 0);
+        await page.evaluate(
+          () =>
+            new Promise((resolve) =>
+              requestAnimationFrame(() => requestAnimationFrame(resolve)),
+            ),
+        );
+      });
+      await interaction("drag", async () => {
+        await page.mouse.down();
+        await page.mouse.move(
+          box.x + box.width / 2 - 200,
+          box.y + box.height / 2,
+          { steps: 6 },
+        );
+        await page.mouse.up();
+      });
       await delay(100);
       const point = await page.evaluate(() => ({
         time: performance.now(),
@@ -915,6 +973,12 @@ async function navigation(session, dataset) {
       0,
       ...record.longtasks.entries.map((t) => t.duration),
     );
+    for (const entry of record.interactions) {
+      entry.longtasks = tasksOverlappingSample(record.longtasks.entries, {
+        start: entry.before.time,
+        coversReady: entry.after.time - entry.before.time,
+      });
+    }
     record.http = http.slice(record.httpStart);
     record.network = networkSummary(record.http);
     record.pendingRequests = inflight.size;

@@ -207,6 +207,93 @@ for (const channel of ["chrome", "msedge"]) {
       },
     );
     identity.browserVersion = browser.browser().version();
+    const requests = [];
+    const responseReads = [];
+    const relevant = (url) =>
+      ["/api/pulse/settings", "/api/listening-events"].includes(
+        new URL(url).pathname,
+      );
+    const requestEvidence = (request) => ({
+      at: Date.now(),
+      page: browser.pages().indexOf(request.frame().page()),
+      url: request.url(),
+      method: request.method(),
+    });
+    browser.on("request", (request) => {
+      if (relevant(request.url()))
+        requests.push({ ...requestEvidence(request), kind: "request" });
+    });
+    browser.on("requestfailed", (request) => {
+      if (relevant(request.url()))
+        requests.push({
+          ...requestEvidence(request),
+          kind: "requestfailed",
+          failure: request.failure(),
+        });
+    });
+    browser.on("response", (response) => {
+      if (!relevant(response.url())) return;
+      const evidence = {
+        ...requestEvidence(response.request()),
+        kind: "response",
+        status: response.status(),
+      };
+      requests.push(evidence);
+      responseReads.push(
+        response
+          .json()
+          .then((body) => {
+            evidence.body = body;
+          })
+          .catch((error) => {
+            evidence.bodyError = String(error);
+          }),
+      );
+    });
+    // Preserve the browser side of a checkpoint timeout before closing the
+    // profile. An empty ledger alone cannot distinguish stopped media from
+    // recorder/outbox/delivery failures.
+    await browser.addInitScript(() => {
+      globalThis.pulseProcessTrace = [];
+      const record = (kind, detail) => {
+        globalThis.pulseProcessTrace.push({
+          at: performance.now(),
+          kind,
+          detail,
+        });
+      };
+      for (const name of [
+        "playing",
+        "pause",
+        "waiting",
+        "seeking",
+        "seeked",
+        "ended",
+        "error",
+      ])
+        document.addEventListener(
+          name,
+          (event) => {
+            if (event.target instanceof HTMLAudioElement)
+              record(name, {
+                currentTime: event.target.currentTime,
+                paused: event.target.paused,
+                readyState: event.target.readyState,
+                error: event.target.error?.message ?? null,
+              });
+          },
+          true,
+        );
+      window.addEventListener("harbor-pulse-status", (event) =>
+        record("pulse-status", event.detail),
+      );
+      window.addEventListener("error", (event) =>
+        record("window-error", event.message),
+      );
+      window.addEventListener("unhandledrejection", (event) =>
+        record("unhandledrejection", String(event.reason)),
+      );
+    });
     const page = await browser.newPage();
     const api = browser.request;
     async function get(url) {
@@ -286,18 +373,68 @@ for (const channel of ["chrome", "msedge"]) {
         window.locator("audio").evaluate((audio) => audio.currentTime > 0.8),
       );
     // Observe actual recorder checkpoints in SQLite before the API outage.
-    await until(async () => {
+    try {
+      await until(async () => {
+        const db = new Database(path.join(dataDir, "catalog.sqlite"), {
+          readonly: true,
+        });
+        try {
+          return (
+            db.prepare("SELECT count(*) n FROM pulse_intervals").get().n === 2
+          );
+        } finally {
+          db.close();
+        }
+      });
+    } catch (error) {
+      await Promise.all(responseReads);
       const db = new Database(path.join(dataDir, "catalog.sqlite"), {
         readonly: true,
       });
       try {
-        return (
-          db.prepare("SELECT count(*) n FROM pulse_intervals").get().n === 2
+        await writeFile(
+          path.join(dir, "checkpoint-failure.json"),
+          JSON.stringify(
+            {
+              provenance: identity,
+              requests,
+              settings: db.prepare("SELECT * FROM pulse_settings").all(),
+              intervals: db.prepare("SELECT * FROM pulse_intervals").all(),
+              windows: await Promise.all(
+                windows.map(async (window) => ({
+                  media: await window.locator("audio").evaluate((audio) => ({
+                    currentTime: audio.currentTime,
+                    src: audio.currentSrc,
+                    paused: audio.paused,
+                    ended: audio.ended,
+                    readyState: audio.readyState,
+                    networkState: audio.networkState,
+                    playbackRate: audio.playbackRate,
+                    error: audio.error?.message ?? null,
+                    buffered: Array.from(
+                      { length: audio.buffered.length },
+                      (_, i) => [
+                        audio.buffered.start(i),
+                        audio.buffered.end(i),
+                      ],
+                    ),
+                    trace: globalThis.pulseProcessTrace,
+                  })),
+                  pending: await pending(window),
+                })),
+              ),
+            },
+            null,
+            2,
+          ),
         );
       } finally {
         db.close();
       }
-    });
+      throw new Error(`Recorder checkpoint failed; evidence: ${dir}`, {
+        cause: error,
+      });
+    }
     // SQLite acceptance alone is not an ACK: wait for client outbox removal.
     await until(async () => (await pending(page)).length === 0);
     const onlineDb = new Database(path.join(dataDir, "catalog.sqlite"), {
