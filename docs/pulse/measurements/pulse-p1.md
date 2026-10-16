@@ -407,6 +407,32 @@ fixtures/tags, 478 unit tests, build/lint/format, полный
 `git diff --check` — все exit 0. CI и публикация beta.2 ещё не подтверждены.
 Установленная приёмка Feather всё ещё NOT RUN.
 
+### Опубликована 0.4.0-beta.2
+
+Source/tag: `4058653ebacf8311b4449e452532833d11eaf50d`,
+`v0.4.0-beta.2`. [PR CI 38961672607](https://github.com/grouzdev/harbor-player/actions/runs/38961672607)
+и [release workflow 38962345930](https://github.com/grouzdev/harbor-player/actions/runs/38962345930)
+— SUCCESS. Release workflow выполнил fixtures/tags, unit tests,
+полный Chrome + Edge e2e, desktop pack/smoke, NSIS + portable dist,
+portable smoke и проверку updater artifacts до публикации.
+
+[GitHub prerelease](https://github.com/grouzdev/harbor-player/releases/tag/v0.4.0-beta.2)
+не draft; опубликованы Setup.exe, blockmap, portable.exe и beta.yml.
+`gh release download v0.4.0-beta.2 --pattern '*Setup.exe'` скачал
+публичный установщик во временный локальный каталог. Python hashlib:
+размер **130082461 байт**, SHA-256
+`1bf998106d8a1eb2d94471c2202d682c30a69726df2252b08d50966bc1a8d45c`.
+SHA-256 совпал с GitHub asset digest; SHA-512 и размер — с опубликованным
+`beta.yml`, который указывает `version: 0.4.0-beta.2` и существующий Setup.
+Это identity установщика, не установленного EXE/app.asar.
+
+`main` не изменён (остаётся `690afd0`); релиз опубликован из
+`release/pulse-beta-5`. Последующие docs-only commits не входят в тег.
+Следующий шаг оператора: на Feather записать старую версию, выполнить
+проверку обновлений, скачать и подтвердить установку beta.2, проверить
+новую версию и сохранность тестовой библиотеки. Actual updater/installation,
+hashes установленного EXE/app.asar и ручной checklist — **NOT RUN**.
+
 Заполнять на целевом Windows-ПК после последнего изменения. Packaged automation
 сама по себе не закрывает этот раздел. Не менять рабочую БД для ошибок/clear:
 эти действия проверять в отдельном тестовом data dir и profile.
