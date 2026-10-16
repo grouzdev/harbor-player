@@ -351,6 +351,42 @@ add-library dialog сразу после пары Control-click; bookmark click 
 Публикация ещё требует CI на финальном commit и успешного release workflow;
 установленная ручная приёмка Feather пока NOT RUN.
 
+### Кандидат 0.4.0-beta.1
+
+По решению пользователя новая важная фича Pulse повышает minor:
+следующий выпуск — `0.4.0-beta.1`, не stable. Неопубликованный кандидат
+`0.3.0-beta.6` заменён до создания тега.
+
+CI [38950664427](https://github.com/grouzdev/harbor-player/actions/runs/38950664427)
+на `ccd6e97` — PASS, но release
+[38951382487](https://github.com/grouzdev/harbor-player/actions/runs/38951382487)
+на теге `v0.3.0-beta.5` — FAIL до создания GitHub release:
+Chrome 155/156, пункт viewed остаётся disabled после завершения rating POST.
+Тег не перемещать; beta.5 не опубликована.
+
+Причина: открытое меню сохраняло snapshot `pendingUserStateKeys`.
+Rating/viewed используют live disabled guards на существующем pending ref;
+ContextMenu вычисляет их на каждом render, включая submenu. Управляемый
+regression удерживает настоящий `/catalog-user-state` запрос, проверяет
+оба disabled пункта до ACK и enabled после ACK без переоткрытия меню.
+На старом dist — RED, после сборки исправления — PASS Chrome + Edge.
+
+Во время следующего полного прогона найден неоднозначный locator в
+playlist automatic-next test: `Song 1` совпадал с `Song 10` и с повтором
+в другой playlist entry. Теперь выбирается точное название первой
+(folder) occurrence. Адресный тест — PASS Chrome + Edge.
+Полные попытки с этим прежним locator дали Chrome 155/156; Edge не
+запускался из-за `&&`. Ещё один полный прогон был прерван пользователем
+при смене версии до завершения Chrome; это не PASS.
+Итоговый локальный gate `0.4.0-beta.1` на `ccd6e97` + dirty
+menu/version/regression/docs/tag-verification changes:
+`npm run fixtures`, `npm run verify:tags`, `npm test` (63 файла / 478),
+`npm run build`, `npm run lint`, `npm run format:check`,
+`npm run test:e2e` (156 Chrome + 156 Edge, без filters/skip),
+`npm run desktop:pack`, `npm run test:desktop:smoke`, `git diff --check`,
+`node scripts/verify-release.mjs v0.4.0-beta.1 --channel=beta` —
+все exit 0. CI и публикация нового тега пока не подтверждены.
+
 Заполнять на целевом Windows-ПК после последнего изменения. Packaged automation
 сама по себе не закрывает этот раздел. Не менять рабочую БД для ошибок/clear:
 эти действия проверять в отдельном тестовом data dir и profile.

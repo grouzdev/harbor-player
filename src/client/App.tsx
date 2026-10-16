@@ -1634,9 +1634,10 @@ export function App() {
                 {
                   label: `Изменить оценку…${suffix}`,
                   icon: <Star size={16} />,
-                  disabled: ids.some((item) =>
-                    pendingUserStateKeys.has(`${kind}:${item}`),
-                  ),
+                  disabled: () =>
+                    ids.some((item) =>
+                      pendingUserStateKeysRef.current.has(`${kind}:${item}`),
+                    ),
                   onSelect: () =>
                     setRatingDialog({
                       kind: kind as "album" | "track",
@@ -1663,9 +1664,10 @@ export function App() {
                   ) : (
                     <EyeOff size={16} />
                   ),
-                  disabled: ids.some((item) =>
-                    pendingUserStateKeys.has(`album:${item}`),
-                  ),
+                  disabled: () =>
+                    ids.some((item) =>
+                      pendingUserStateKeysRef.current.has(`album:${item}`),
+                    ),
                   onSelect: () => {
                     const viewed = !ids.every((item) =>
                       cachedAlbumViewed(queryClient, item),

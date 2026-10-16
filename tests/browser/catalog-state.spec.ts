@@ -157,7 +157,42 @@ test("catalog state uses RMB and only visible indicators consume title space", a
   await expect(track.locator(".is-rated")).toHaveCount(0);
   await checkGeometry();
   await rate(track, 4);
+  // Open the menu during an optimistic rating update, not after a fast ACK.
+  // Its live guard must enable both actions without closing/reopening it.
+  let releaseRating!: () => void;
+  const ratingGate = new Promise<void>((resolve) => {
+    releaseRating = resolve;
+  });
+  let ratingStarted!: () => void;
+  const ratingRequest = new Promise<void>((resolve) => {
+    ratingStarted = resolve;
+  });
+  await page.route("**/api/catalog-user-state", async (route) => {
+    ratingStarted();
+    await ratingGate;
+    await route.continue();
+  });
   await rate(album, 4);
+  await ratingRequest;
+  await album.dispatchEvent("contextmenu", { clientX: 300, clientY: 300 });
+  const rateAction = page.getByRole("menuitem", {
+    name: "Изменить оценку…",
+    exact: true,
+  });
+  const viewedAction = page.getByRole("menuitem", {
+    name: "Отметить просмотренными",
+    exact: true,
+  });
+  try {
+    await expect(rateAction).toBeDisabled();
+    await expect(viewedAction).toBeDisabled();
+  } finally {
+    releaseRating();
+  }
+  await expect(rateAction).toBeEnabled();
+  await expect(viewedAction).toBeEnabled();
+  await page.keyboard.press("Escape");
+  await page.unroute("**/api/catalog-user-state");
   await choose(album, "Добавить в закладки");
   await choose(album, "Отметить просмотренными");
   for (const target of [album, header]) {

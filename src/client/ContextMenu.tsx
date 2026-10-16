@@ -9,7 +9,8 @@ import {
 export interface ContextMenuItem {
   label: string;
   icon?: ReactNode;
-  disabled?: boolean;
+  /** Live guards are re-evaluated on render while the menu stays open. */
+  disabled?: boolean | (() => boolean);
   onSelect?: () => void | Promise<void>;
   submenu?: ContextMenuItem[];
 }
@@ -101,7 +102,11 @@ export function ContextMenu({
               type="button"
               role="menuitem"
               className="context-menu-item"
-              disabled={item.disabled}
+              disabled={
+                typeof item.disabled === "function"
+                  ? item.disabled()
+                  : item.disabled
+              }
               aria-haspopup={item.submenu ? "menu" : undefined}
               aria-expanded={item.submenu ? expanded : undefined}
               onFocus={() => item.submenu && setOpenSubmenu(item.label)}
@@ -141,7 +146,11 @@ export function ContextMenu({
                     type="button"
                     role="menuitem"
                     className="context-menu-item"
-                    disabled={subitem.disabled}
+                    disabled={
+                      typeof subitem.disabled === "function"
+                        ? subitem.disabled()
+                        : subitem.disabled
+                    }
                     onClick={() => {
                       onClose();
                       void subitem.onSelect?.();
