@@ -79,8 +79,8 @@ Retained-copy preflight учитывает 60 copies и передаёт budget 
 до полного cohort. Проверки budget, повторных events/generations/fixture,
 oversized pages и stable-old-stat readiness покрыты девятью тестами.
 
-**Полный packaged mutation cohort ещё не выполнялся.**
-Smoke и unit tests не закрывают p95 acceptance. После последнего изменения
+**Полный packaged mutation cohort завершён на `9e3b011`**;
+результаты и пределы приёмки ниже. После последнего изменения
 cleanup SQLite worker также не повторялись process/desktop commands;
 их предыдущие успешные результаты ниже относятся к указанному snapshot.
 
@@ -109,14 +109,119 @@ cleanup SQLite worker также не повторялись process/desktop com
   sampled WAL peak **4 396 072 bytes**. Generated workload, не originals.
 - Лог reliability: `.test-data/pulse-p1-stage6-final/reliability.log`.
 
-**Полный `npm run test:e2e` на шестом этапе ещё NOT RUN.**
-Принятый 144+144 из пятого этапа не переносится автоматически на новый lifecycle.
+**Полный `npm run test:e2e` на шестом этапе теперь PASS: 144+144**,
+подробности завершающего прогона ниже. Прежний результат пятого этапа
+не использовался вместо новой проверки lifecycle.
 Длительные memory и physical sleep не повторялись: соответствующие
 cache/layout/recorder/sleep правила не менялись.
 
 ## Следующий автономный блок
 
 См. [план завершения измерений и gate](../docs/pulse-autonomous-validation-plan.md).
-До его выполнения шестой этап частично завершён, release gate открыт.
+Измерения и локальный correctness gate выполнены, release gate остаётся открыт
+для originals, installed/manual, финального CI и согласованной интеграции.
 Оригинальные process/Edge outliers остаются необъяснёнными;
 успешные повторные прогоны не означают исправление причины.
+
+## Продолжение на `9e3b011`: полный packaged mutation cohort
+
+Свежий `npm run desktop:pack`, затем точный
+`npm run test:pulse:ui -- --smoke --mutations-only --electron` — PASS,
+`.test-data/pulse-p1-ui-9X8IK0/summary.json`.
+
+Первая полная попытка — `.test-data/pulse-p1-ui-6gzjhr/summary.json`,
+exit 1 на ordinary launch 20/30: нарушен native foreground invariant
+во время recovery. Серия не принята; неполные quantiles не выданы за PASS.
+Отклонённый sample не был сохранён с native snapshots — ограничение harness;
+точную причину потери focus из этого artifact установить нельзя.
+Проверки/пороги не ослаблялись.
+
+После явного согласования пользователем foreground-сеанса повторена точная
+команда `npm run test:pulse:ui -- --mutations-only --electron`:
+**exit 0, completed=true, 60 launches**.
+Evidence: `.test-data/pulse-p1-ui-GGXYvg/summary.json`,
+лог `.test-data/pulse-p1-stage6-completion/mutations-authorized.log`.
+По 30 независимых fixtures каждого dataset и 30 samples каждой mutation-группы;
+все generation/event/seed/state/page-limit проверки прошли.
+
+| Seed / измеряемое состояние | dataReady median / p95 / max, мс | coversReady median / p95 / max, мс |
+| --------------------------- | -------------------------------- | ---------------------------------- |
+| ordinary / listening        | 32,0 / 38,4 / 38,5               | 45,9 / 52,6 / 53,0                 |
+| ordinary / clear            | 25,0 / 26,2 / 30,1               | 38,9 / 40,0 / 44,1                 |
+| ordinary / recovery         | 32,0 / 38,2 / 39,5               | 45,9 / 51,9 / 53,3                 |
+| ten-year / listening        | 46,2 / 58,9 / 59,7               | 60,3 / 73,8 / 73,8                 |
+| ten-year / clear            | 25,2 / 25,8 / 26,0               | 39,1 / 39,9 / 41,0                 |
+| ten-year / recovery         | 32,0 / 32,7 / 32,8               | 46,1 / 46,7 / 46,9                 |
+
+Все dataReady p95 ниже warm guide 100 мс. После clear измеряется пустая история,
+после recovery — один album: названия dataset описывают исходный seed.
+Generated images, CDP rendering opportunity; не hardware paint, actual audio,
+originals, GPU memory или installed/manual acceptance.
+
+Отдельная исполняемая проверка сравнила identity tuple всех 60 runs и smoke:
+resolved executable path, executable/app.asar SHA-256, version, commit,
+Electron version совпали; каждому manifest соответствует один run root.
+Результат `.test-data/pulse-p1-stage6-completion/accepted-mutation-evidence.json`.
+Executable SHA-256:
+`8da9e9efb4479229744ec229fe6f6ab1d40bbd5ec628aaf44c0614f7ac2d5499`;
+app.asar:
+`ec17bad654c6fbfff5f6210dec610d28020c3bf8c4fd9b3b9bbce8b26901780b`.
+Version 0.3.0-beta.4, commit 9e3b011, Electron 44.4.1.
+Это не recursive identity всех sidecars/app.asar.unpacked.
+
+В foreground-сеанс parent не запускал параллельные проверки.
+Независимый correctness reviewer был поставлен на паузу; подтверждение
+пришло после команды и сообщает, что build завершён и дальнейшие команды
+не запускались. Точный момент окончания чужого build относительно начала
+cohort не измерен; абсолютную гарантию отсутствия внешней нагрузки не заявляем.
+
+Статическое ревью подтвердило budgets и структуру mutation proofs.
+Замечание о silent SQLite-worker exit исправлено settle-once обработчиком:
+unexpected exit отклоняет probe, result/abort listeners снимаются,
+late error после cancellation поглощается без удержания parent.
+После правки Node diagnostics tests **6/6 PASS**, включая actual injected Chrome.
+Полный correctness gate на этой маленькой последующей правке выполняется
+отдельно; ранее принятый packaged cohort не объявляется новым product build.
+
+## Завершающий correctness gate
+
+Независимый reviewer на `9e3b011` с последней diagnostics-only правкой:
+fixtures PASS; verify:tags **7/7**; `npm test` **59 файлов / 472 теста**;
+build/lint/format PASS; точный полный `npm run test:e2e`
+**Chrome 144/144 (4,9 мин), Edge 144/144 (4,8 мин)**, без filters/skip
+или изменения test timeout. Publication PASS:
+`.test-data/pulse-publication-crash-DlkqGm`; browser process PASS:
+`.test-data/pulse-process-G0GNcJ`, по два intervals/tracks/sessions/visits.
+
+Diagnostics helper SHA-256 до/после совпал:
+`3dd3a1817f9dc5e22520f4399534ae1978bb57b9be76f9e8afb7a869f25aea43`.
+В report verify:tags изменена только дата на `2026-10-16T15:03:54.689Z`,
+SHA-256 `35e4f9710c771f239540c2890a7f4302c95b3fe5f6bb0314dbd681377420d031`.
+Логи reviewer и manifests:
+`.test-data/correctness-gate-9e3b011-lYNqxr/`.
+
+Desktop в isolated reviewer завершился exit 1 до harness: отсутствует
+worktree-local `node_modules/electron/dist`, заданный в electron-builder.yml.
+Ошибка окружения сохранена; настройки и assertions не менялись.
+Parent выполнил точный `npm run test:pulse:desktop` в основном worktree,
+где Electron distribution присутствует: **exit 0, свежий pack и harness PASS**.
+Это отдельный подтверждающий прогон, а не успех первоначальной команды reviewer.
+Лог `.test-data/pulse-p1-stage6-completion/desktop-final.log`,
+evidence `.test-data/pulse-desktop-mgqHEH/evidence.json`.
+Checkpoint **15 034 мс** восстановлен точно, observed tail **4334,141 мс**;
+pending **30 074 мс**, restored **45 108 мс**, replay once;
+два действительно playing sessions, точная сумма **83 523 мс**.
+Parent `git diff --check` также PASS.
+
+Полный package cohort относится к artifact до последующей правки
+диагностического скрипта; production UI/lifecycle после него не менялись.
+Недоступность local electronDist в isolated checkout остаётся ограничением
+переносимости packaging-команды, не скрыта подменой конфигурации.
+Прежний silent-exit сценарий исправлен по review, но отдельная управляемая
+инъекция silent worker exit ещё не добавлена; реальные error/cancel paths
+проверены шестью Node tests.
+
+Остаются внешние gates: permitted originals/actual artwork storage,
+installed/manual/physical input, CI на финальном SHA и разрешённая интеграция.
+Исторические process timeout и Edge startup хвост остаются INCONCLUSIVE.
+Ни установка, ни push, ни миграция рабочего lock, ни релиз не выполнялись.

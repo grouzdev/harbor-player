@@ -76,8 +76,14 @@ CI остаются открытыми; старые PID locks требуют о
 Это план, не новые выполненные проверки.
 Реализация и реальные ограничения приёмки:
 [журнал шестого этапа](../verification/pulse-p1-stage6.md).
-Полный packaged mutation cohort и новый full e2e ещё не выполнены;
-[следующий автономный блок](pulse-autonomous-validation-plan.md) закрывает их.
+Полный packaged mutation cohort завершён: по 30 независимых samples каждой
+группы на ordinary/ten-year, dataReady p95 25,8–58,9 мс; hashes всех 60 runs
+и smoke совпали. Это не installed/manual и не originals.
+Новый full e2e завершён: 144/144 Chrome и 144/144 Edge.
+Локальные unit/build/lint/format/publication/process и свежий packaged desktop
+прошли; packaging в isolated reviewer отдельно встретил отсутствие local
+Electron distribution, parent-прогон выполнен без изменения настроек.
+Подробности — в [журнале шестого этапа](../verification/pulse-p1-stage6.md).
 
 ## P0 — закрыть до релиза
 
@@ -287,8 +293,9 @@ backup и не очищать единственную рабочую БД ра�
 - [x] `npm run build`.
 - [x] `npm run lint`.
 - [x] `npm run format:check` — итоговый повтор после P1 успешен.
-- [ ] `npm run test:e2e` на текущем lifecycle шестого этапа ещё NOT RUN.
-  Последний принятый результат пятого этапа — полный непрерванный прогон после исправления
+- [x] `npm run test:e2e` на lifecycle шестого этапа:
+  Chrome 144/144 и Edge 144/144, точный полный непрерванный прогон.
+  Результат пятого этапа — полный непрерванный прогон после исправления
   dependency resolution: Chrome 144/144, Edge 144/144, без фильтров/skip
   и изменения timeout. Предварительные fixtures и verify:tags завершились успешно.
   Предыдущие прерывания и FAIL сохранены в

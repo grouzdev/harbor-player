@@ -25,25 +25,40 @@ export function sqliteProbe(file, sql, signal) {
     const worker = new Worker(new URL(import.meta.url), {
       workerData: { file, sql },
     });
+    let settled = false;
+    const lateError = () => {};
+    const cleanup = () => {
+      signal.removeEventListener("abort", abort);
+      worker.off("message", onMessage);
+      worker.off("error", onError);
+      worker.off("exit", onExit);
+    };
+    const settle = (error, value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) reject(error);
+      else resolve(value);
+    };
     const abort = () => {
       // Native I/O may delay termination. Diagnostics must not keep the parent
       // alive after its deadline, and termination rejection must be handled.
+      worker.on("error", lateError);
       worker.unref();
       void worker.terminate().catch(() => {});
-      reject(new Error("SQLite diagnostic cancelled"));
+      settle(new Error("SQLite diagnostic cancelled"));
     };
+    const onMessage = (message) =>
+      settle(message.error ? new Error(message.error) : null, message.value);
+    const onError = (error) => settle(error);
+    const onExit = (code) =>
+      settle(
+        new Error(`SQLite diagnostic worker exited before result: ${code}`),
+      );
     signal.addEventListener("abort", abort, { once: true });
-    const cleanup = () => signal.removeEventListener("abort", abort);
-    worker.once("message", (message) => {
-      cleanup();
-      if (message.error) reject(new Error(message.error));
-      else resolve(message.value);
-    });
-    worker.once("error", (error) => {
-      cleanup();
-      reject(error);
-    });
-    worker.once("exit", cleanup);
+    worker.once("message", onMessage);
+    worker.once("error", onError);
+    worker.once("exit", onExit);
     if (signal.aborted) abort();
   });
 }
