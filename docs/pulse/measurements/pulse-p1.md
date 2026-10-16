@@ -319,6 +319,38 @@ merge не выполнены: цепочка остановилась на e2e.
 до merge не переносится на этот кандидат. Нужна адресная диагностика
 Edge menu/input после сброса selection; timeout/skip не изменялись.
 
+### Продолжение: Edge input и повторный release gate
+
+Блокер выше снят на `a41812c` + dirty CSS/regression/tag-verification changes.
+Диагностическая кнопка вне каталога показала: после двух настоящих
+Control-click по изображению обложки Edge перестаёт доставлять pointer/click
+события всей странице, а не только пункту bookmarks. До этой пары кликов
+обычный ввод работает; pointer capture не остаётся активным. Замена
+жизненного цикла Modal на layout effect не помогла и отменена.
+Это согласуется с нативным
+[Edge Magnify](https://www.microsoft.com/en-us/edge/features/magnify):
+двойной Ctrl над изображением включает браузерный просмотр.
+
+Исправлено правило hit testing: декоративные `.album-cover > img` и
+`.tiny-cover > img` имеют `pointer-events: none`; действия, selection и
+cover drop принадлежат родительским controls. Браузерные настройки/feature
+flags не отключались. С этим изменением адресный Edge-сценарий прошёл.
+В длинный regression добавлены настоящие click открытия и закрытия
+add-library dialog сразу после пары Control-click; bookmark click также
+остался настоящим. Диагностические probes удалены.
+
+Итоговые команды на Windows, Node 24.20.0 / npm 11.19.0, version beta.5:
+`npm run fixtures`, `npm run verify:tags`, `npm test` (63 / 478),
+`npm run build`, `npm run lint`, `npm run format:check`,
+**`npm run test:e2e` (156 Chrome + 156 Edge, полный, без filters/skip)**,
+`npm run desktop:pack` (Electron 44.4.1), `npm run test:desktop:smoke`,
+`git diff --check` — все exit 0. Предупреждение chunk > 500 kB сохраняется.
+Ошибочная параллельная диагностическая попытка сборки также дала
+`Build marker ... was not found` из-за общего dist; итоговый gate выше
+выполнен последовательно. Результаты прежних FAIL не удалены.
+Публикация ещё требует CI на финальном commit и успешного release workflow;
+установленная ручная приёмка Feather пока NOT RUN.
+
 Заполнять на целевом Windows-ПК после последнего изменения. Packaged automation
 сама по себе не закрывает этот раздел. Не менять рабочую БД для ошибок/clear:
 эти действия проверять в отдельном тестовом data dir и profile.

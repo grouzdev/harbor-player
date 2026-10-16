@@ -1870,6 +1870,15 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await expect(firstAlbum).toHaveClass(/selected/);
   await firstAlbumButton.click({ modifiers: ["Control"] });
   await expect(firstAlbum).not.toHaveClass(/selected/);
+  // Repeated Control presses over a decorative cover must not let Edge's
+  // native image Magnify swallow subsequent pointer input outside the DOM.
+  await page.locator(".add-library").click();
+  const afterCoverSelectionDialog = page.getByRole("dialog");
+  await expect(afterCoverSelectionDialog).toBeVisible();
+  await afterCoverSelectionDialog
+    .getByRole("button", { name: "Закрыть", exact: true })
+    .click();
+  await expect(afterCoverSelectionDialog).not.toBeVisible();
   const albumArtistLink = firstAlbum.getByRole("button", {
     name: "Выбрать исполнителя «Исполнитель альбома»",
   });
