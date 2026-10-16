@@ -26,7 +26,10 @@ export function sqliteProbe(file, sql, signal) {
       workerData: { file, sql },
     });
     const abort = () => {
-      void worker.terminate();
+      // Native I/O may delay termination. Diagnostics must not keep the parent
+      // alive after its deadline, and termination rejection must be handled.
+      worker.unref();
+      void worker.terminate().catch(() => {});
       reject(new Error("SQLite diagnostic cancelled"));
     };
     signal.addEventListener("abort", abort, { once: true });

@@ -71,6 +71,14 @@ startup failure cleanup исправлен; полный e2e после dependen
 фикса — 144/144 Chrome и 144/144 Edge. Installed/manual, originals и финальный
 CI остаются открытыми; старые PID locks требуют отдельной offline migration.
 
+Следующая работа, доступная без участия оператора:
+[автономный шестой этап](pulse-autonomous-stage6-plan.md).
+Это план, не новые выполненные проверки.
+Реализация и реальные ограничения приёмки:
+[журнал шестого этапа](../verification/pulse-p1-stage6.md).
+Полный packaged mutation cohort и новый full e2e ещё не выполнены;
+[следующий автономный блок](pulse-autonomous-validation-plan.md) закрывает их.
+
 ## P0 — закрыть до релиза
 
 Порядок выполнения, точки изменений и доказательства приёмки:
@@ -279,7 +287,8 @@ backup и не очищать единственную рабочую БД ра�
 - [x] `npm run build`.
 - [x] `npm run lint`.
 - [x] `npm run format:check` — итоговый повтор после P1 успешен.
-- [x] `npm run test:e2e` — полный непрерванный прогон после исправления
+- [ ] `npm run test:e2e` на текущем lifecycle шестого этапа ещё NOT RUN.
+  Последний принятый результат пятого этапа — полный непрерванный прогон после исправления
   dependency resolution: Chrome 144/144, Edge 144/144, без фильтров/skip
   и изменения timeout. Предварительные fixtures и verify:tags завершились успешно.
   Предыдущие прерывания и FAIL сохранены в

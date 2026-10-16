@@ -17,6 +17,10 @@ export class Workers {
   private id = 0;
   private closed = false;
   constructor(count = 2) {
+    this.start(count);
+  }
+  start(count: number) {
+    if (this.closed) throw new Error("Сервис остановлен");
     for (let i = 0; i < count; i++) this.spawn();
   }
   private spawn() {

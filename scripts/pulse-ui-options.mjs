@@ -7,6 +7,7 @@ export function uiBenchmarkOptions(args) {
       (a) =>
         a === "--smoke" ||
         a === "--latency-only" ||
+        a === "--mutations-only" ||
         a === "--diagnostic" ||
         a === "--electron" ||
         /^--diagnostic-runs=[1-5]$/.test(a) ||
@@ -17,6 +18,14 @@ export function uiBenchmarkOptions(args) {
   );
   const smoke = args.includes("--smoke");
   const diagnostic = args.includes("--diagnostic");
+  const mutationsOnly = args.includes("--mutations-only");
+  assert(
+    !mutationsOnly ||
+      (!diagnostic &&
+        !args.includes("--latency-only") &&
+        !args.some((arg) => arg.startsWith("--cold="))),
+    "--mutations-only is a separate ready-panels cohort, not cold/diagnostic/latency-only",
+  );
   assert(
     !diagnostic || smoke,
     "--diagnostic requires --smoke; not budget samples",
@@ -30,16 +39,19 @@ export function uiBenchmarkOptions(args) {
         args.find((a) => a.startsWith("--diagnostic-runs="))?.split("=")[1] ??
           1,
       )
-    : 10;
+    : mutationsOnly
+      ? 30
+      : 10;
   return {
     smoke,
     diagnostic,
+    mutationsOnly,
     launches,
     retainedCopies: 2 * launches,
     latencyOnly: args.includes("--latency-only"),
     electron: args.includes("--electron"),
     coldScenario:
       args.find((a) => a.startsWith("--cold="))?.split("=")[1] ??
-      "startup-overlap",
+      (mutationsOnly ? "ready-panels" : "startup-overlap"),
   };
 }

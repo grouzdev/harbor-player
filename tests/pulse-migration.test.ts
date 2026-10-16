@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { mkdirSync, mkdtempSync, writeFileSync, rmSync, cpSync } from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
@@ -90,7 +91,13 @@ beforeAll(() => {
   execFileSync(
     process.execPath,
     [
-      path.resolve("node_modules/typescript/bin/tsc"),
+      path.join(
+        path.dirname(
+          createRequire(import.meta.url).resolve("typescript/package.json"),
+        ),
+        "bin",
+        "tsc",
+      ),
       "-p",
       path.join(source, "tsconfig.json"),
     ],

@@ -1,6 +1,7 @@
 // npm run build && node scripts/pulse-ui-benchmark.mjs
 // --smoke reduces counts/navigation, never constitutes acceptance.
 // --latency-only retains full activation samples, skips navigation profiling.
+// --mutations-only uses fresh fixtures for independent mutation samples.
 // --electron uses HARBOR_PLAYER_DESKTOP_EXECUTABLE (Windows packaged artifact).
 // --channel=chrome|msedge or HARBOR_PLAYER_CHROMIUM_EXECUTABLE for browser.
 import assert from "node:assert/strict";
@@ -23,6 +24,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { seedUiDataset } from "./pulse-ui-dataset.mjs";
 import { inspectPermittedArtwork } from "./pulse-artwork-fixture.mjs";
 import { uiBenchmarkOptions } from "./pulse-ui-options.mjs";
+import { verifyMutationCohort } from "./pulse-ui-mutations.mjs";
 import {
   installUiProbe,
   summarize,
@@ -34,6 +36,7 @@ const args = process.argv.slice(2);
 const {
   smoke,
   latencyOnly,
+  mutationsOnly,
   diagnostic,
   launches,
   retainedCopies,
@@ -80,12 +83,17 @@ const sourceHashes = Object.fromEntries(
       "scripts/pulse-ui-benchmark.mjs",
       "scripts/pulse-ui-evidence.mjs",
       "scripts/pulse-ui-options.mjs",
+      "scripts/pulse-ui-mutations.mjs",
       "scripts/pulse-ui-dataset.mjs",
       "scripts/pulse-artwork-fixture.mjs",
       "src/client/App.tsx",
       "src/client/PulseMode.tsx",
       "src/desktop/main.ts",
       "src/server/pulse.ts",
+      "src/server/service.ts",
+      "src/server/workers.ts",
+      "src/server/database.ts",
+      "src/server/instance-lock.ts",
     ].map(async (file) => [
       file,
       createHash("sha256")
@@ -103,6 +111,7 @@ const evidence = {
   target: electron ? "windows-packaged-electron" : "browser",
   smoke,
   latencyOnly,
+  mutationsOnly,
   diagnostic,
   launchesPerDataset: launches,
   coldScenario,
@@ -130,9 +139,11 @@ const evidence = {
     profiling: "separate navigation trace, not latency samples",
     memory:
       "Network/Playwright inspector overhead is included; not an uncontaminated native-memory acceptance",
-    mutations: latencyOnly
-      ? "real HTTP ingest/clear latency cohort before heavy profiling"
-      : "NOT RUN: use --latency-only for mutation samples",
+    mutations: mutationsOnly
+      ? "independent fresh fixtures per dataset; real ingest/clear/recovery, setup excluded"
+      : latencyOnly
+        ? "real HTTP ingest/clear latency cohort before heavy profiling"
+        : "NOT RUN: use --latency-only or --mutations-only",
   },
   limitations: [
     "Installed Windows manual acceptance NOT RUN",
@@ -140,8 +151,13 @@ const evidence = {
     "Adapter LRU/TTL internal bounds not observable without runtime instrumentation; separate unit coverage required",
     "Warm mutation samples use real HTTP ingest/clear over an aggregate-seeded fixture, not actual audio/recorder integration",
     "read p95 budget belongs to server benchmark, not UI readiness",
-    ...(latencyOnly
-      ? ["Navigation/trace/memory protocol NOT RUN (--latency-only)"]
+    ...(latencyOnly || mutationsOnly
+      ? ["Navigation/trace/memory protocol NOT RUN in this latency cohort"]
+      : []),
+    ...(mutationsOnly
+      ? [
+          "Dataset names describe the seed before each chain. After clear the measured state is empty; recovery has one real album, not ten years.",
+        ]
       : []),
   ],
   manifests: [],
@@ -278,7 +294,7 @@ async function verifyFixture(origin, manifest) {
 async function launch(dataset, index) {
   const runRoot = await mkdtemp(path.join(root, `${dataset}-${index}-`));
   const data = path.join(runRoot, "data");
-  const manifest = await seedUiDataset(data, dataset);
+  const manifest = await seedUiDataset(data, dataset, { retainedCopies });
   evidence.manifests.push({ runRoot, ...manifest });
   const port = await freePort();
   const cdpPort = electron ? await freePort() : undefined;
@@ -298,6 +314,15 @@ async function launch(dataset, index) {
   const executableSha256 = createHash("sha256")
     .update(await readFile(executable))
     .digest("hex");
+  const appAsarSha256 = electron
+    ? createHash("sha256")
+        .update(
+          await readFile(
+            path.join(path.dirname(executable), "resources", "app.asar"),
+          ),
+        )
+        .digest("hex")
+    : null;
   const launchedAt = performance.now();
   owned = spawn(executable, launchArgs, {
     env: {
@@ -314,6 +339,7 @@ async function launch(dataset, index) {
     pid: owned.pid,
     executable,
     executableSha256,
+    appAsarSha256,
     port,
     cdpPort,
     runRoot,
@@ -470,7 +496,7 @@ async function finishTrace(cdp, filename) {
 async function activation(session, dataset, kind, options = {}) {
   const { page, http, inflight } = session;
   const nativeBefore =
-    electron && kind === "cold"
+    electron && (kind === "cold" || mutationsOnly)
       ? await page.evaluate(() => window.harborPlayerDesktop.getAppInfo())
       : null;
   const tracing = diagnostic && kind === "cold";
@@ -482,10 +508,13 @@ async function activation(session, dataset, kind, options = {}) {
   const first = http.length;
   if (!(await page.locator(".pulse-mode").count()))
     await page.locator(".workspace").focus();
-  await page.evaluate((empty) => {
-    window.__pulseUiProbe.sample = null;
-    window.__pulseUiProbe.expected = { empty };
-  }, options.empty === true);
+  await page.evaluate(
+    ({ empty, selection }) => {
+      window.__pulseUiProbe.sample = null;
+      window.__pulseUiProbe.expected = { empty, selection };
+    },
+    { empty: options.empty === true, selection: options.selection },
+  );
   try {
     await page.locator(".pulse-mode-toggle").click();
     await page.waitForFunction(
@@ -535,16 +564,27 @@ async function activation(session, dataset, kind, options = {}) {
   } else if (!sample.returning) {
     assert.equal(await page.locator(".pulse-copy h2").count(), 0);
     assert.equal(await page.locator(".pulse-stat-numbers").count(), 0);
+    assert.equal(await page.locator(".pulse-album").count(), 0);
     sample.fixture = { empty: true };
   }
   sample.dataset = dataset;
   sample.kind = kind;
   sample.coldScenario = coldScenario;
+  if (options.mutation) sample.mutation = options.mutation;
   if (nativeBefore) {
     sample.nativeWindowBeforeCommand = nativeBefore.nativeWindow;
     sample.nativeWindowAfterReadiness = (
       await page.evaluate(() => window.harborPlayerDesktop.getAppInfo())
     ).nativeWindow;
+    if (mutationsOnly)
+      for (const window of [
+        sample.nativeWindowBeforeCommand,
+        sample.nativeWindowAfterReadiness,
+      ])
+        assert(
+          window.visible && window.focused && !window.minimized,
+          "Mutation sample must stay in the native foreground",
+        );
   }
   sample.http = http.slice(first);
   sample.network = networkSummary(sample.http);
@@ -599,6 +639,38 @@ async function mutationSamples(session, dataset) {
     year: before.year ?? null,
     coverId: before.coverId ?? null,
   };
+  const generationBefore = settings.historyGeneration;
+  const proof = (historyState, extra = {}) => ({
+    chainId: session.runRoot,
+    sentinel: manifest.sentinel,
+    baselineVerified: session.run.fixtureVerified === true,
+    seed: {
+      from: manifest.from,
+      to: manifest.to,
+      busyCount: manifest.busyCount,
+      historyDays: manifest.historyDays,
+    },
+    historyState,
+    generationBefore,
+    generationAfter: settings.historyGeneration,
+    ...extra,
+  });
+  const selection = (albumId, title, stats) => {
+    assert(
+      stats.playedMs < 3600000,
+      "Mutation fixture uses minute-only values",
+    );
+    return {
+      albumId,
+      title,
+      day: manifest.busyDay,
+      stats: [
+        `${Math.round(stats.playedMs / 60000)} мин`,
+        String(stats.dayCount),
+        String(stats.sameDayReturns),
+      ],
+    };
+  };
   const ingest = async (title) => {
     const start = Date.parse(`${manifest.busyDay}T12:00:00Z`);
     return api("/api/listening-events", {
@@ -620,19 +692,32 @@ async function mutationSamples(session, dataset) {
       ],
     });
   };
-  await ingest(snapshot.title);
+  const listening = await ingest(snapshot.title);
+  assert.equal(listening.acknowledgements[0].albumId, last.albumId);
   const updated = await api(statsEndpoint);
   assert.equal(updated.playedMs, before.playedMs + 90_000);
   assert.equal(updated.dayTotalMs, before.dayTotalMs + 90_000);
-  await activation(session, dataset, "warm-after-listening");
+  await activation(session, dataset, "warm-after-listening", {
+    selection: selection(last.albumId, snapshot.title, updated),
+    mutation: proof("seeded-plus-event", {
+      eventId: listening.acknowledgements[0].eventId,
+      before,
+      after: updated,
+    }),
+  });
   await activation(session, dataset, "return-after-listening");
   settings = await api("/api/pulse/clear", {
     confirm: true,
     historyGeneration: settings.historyGeneration,
   });
+  assert.equal(settings.historyGeneration, generationBefore + 1);
   const range = await api("/api/pulse/history-range");
   assert.equal(range.firstDay, null);
-  await activation(session, dataset, "warm-after-clear", { empty: true });
+  assert.equal(range.lastDay, null);
+  await activation(session, dataset, "warm-after-clear", {
+    empty: true,
+    mutation: proof("empty-after-clear", { range }),
+  });
   await activation(session, dataset, "return-after-clear");
   const title = `${snapshot.title} recovered`;
   const recovered = await ingest(title);
@@ -642,8 +727,18 @@ async function mutationSamples(session, dataset) {
     `/api/pulse/albums/${albumId}/stats?day=${manifest.busyDay}`,
   );
   assert.equal(stats.playedMs, 90_000);
+  assert.equal(stats.dayPlayedMs, 90_000);
+  assert.equal(stats.dayTotalMs, 90_000);
+  assert.equal(stats.dayCount, 1);
+  assert.equal(stats.sameDayReturns, 0);
   await activation(session, dataset, "warm-after-clear-recovery", {
     expected: { albumId, title },
+    selection: selection(albumId, title, stats),
+    mutation: proof("single-recovered-album", {
+      eventId: recovered.acknowledgements[0].eventId,
+      previousAlbumId: last.albumId,
+      after: stats,
+    }),
   });
   await activation(session, dataset, "return-after-clear-recovery");
   session.run.mutations = {
@@ -1079,6 +1174,17 @@ try {
       }
       session.run.lifecycle.coldCommandStartMs =
         performance.now() - session.launchedAt;
+      if (mutationsOnly) {
+        // Deliberate warm setup, never a reported cold or mutation sample.
+        await activation(session, dataset, "mutation-setup");
+        session.run.fixtureVerified = await verifyFixture(
+          session.origin,
+          session.manifest,
+        );
+        await mutationSamples(session, dataset);
+        await stop();
+        continue;
+      }
       await activation(session, dataset, "cold");
       session.run.lifecycle.coldCommandEndMs =
         performance.now() - session.launchedAt;
@@ -1112,6 +1218,12 @@ try {
       await stop();
     }
   }
+  if (mutationsOnly)
+    evidence.mutationCohort = verifyMutationCohort(
+      evidence.samples,
+      evidence.manifests,
+      launches,
+    );
   evidence.completed = true;
 } catch (error) {
   evidence.completed = false;
@@ -1122,7 +1234,9 @@ try {
     await stop();
   } finally {
     evidence.summary = summarize(
-      evidence.samples.filter((s) => s.kind !== "navigation-setup"),
+      evidence.samples.filter(
+        (s) => !["navigation-setup", "mutation-setup"].includes(s.kind),
+      ),
       electron ? "electron" : "browser",
     );
     await writeFile(

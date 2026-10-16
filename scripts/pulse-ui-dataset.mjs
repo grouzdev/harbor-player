@@ -10,7 +10,7 @@ import {
   seedPermittedArtwork,
 } from "./pulse-artwork-fixture.mjs";
 
-export async function seedUiDataset(root, dataset) {
+export async function seedUiDataset(root, dataset, artworkOptions = {}) {
   assert(["ordinary", "ten-year"].includes(dataset));
   await assertArtworkRoot(root);
   const relative = path.relative(
@@ -69,7 +69,7 @@ export async function seedUiDataset(root, dataset) {
         status: size ? "valid-synthetic" : "corrupt",
       });
     }
-    const artwork = await seedPermittedArtwork(root);
+    const artwork = await seedPermittedArtwork(root, undefined, artworkOptions);
     covers.push(...artwork.files);
     const coverCycle = [...covers.slice(0, 4), null, ...artwork.files];
     const coverCounts = { missing: 0, valid: 0, corrupt: 0 };

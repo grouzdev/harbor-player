@@ -155,6 +155,24 @@ export function installUiProbe({ diagnostic = false } = {}) {
       const start = performance.now();
       const returning = !!document.querySelector(".pulse-mode");
       const expectedEmpty = probe.expected?.empty === true;
+      const expectedSelection = probe.expected?.selection;
+      const selectionReady = () =>
+        !expectedSelection ||
+        (document.querySelector(".pulse-copy h2")?.textContent ===
+          expectedSelection.title &&
+          JSON.stringify(
+            [...document.querySelectorAll(".pulse-stat-numbers strong")].map(
+              (element) => element.textContent,
+            ),
+          ) === JSON.stringify(expectedSelection.stats) &&
+          [...document.querySelectorAll(".pulse-album")].some(
+            (element) =>
+              element.getAttribute("data-album-id") ===
+                expectedSelection.albumId &&
+              element.getAttribute("aria-pressed") === "true" &&
+              element.closest("[data-day]")?.getAttribute("data-day") ===
+                expectedSelection.day,
+          ));
       const emptyReady = () =>
         document
           .querySelector(".pulse-empty[role='status']")
@@ -339,7 +357,8 @@ export function installUiProbe({ diagnostic = false } = {}) {
               !!document.querySelector(".pulse-rail") &&
               cards.length > 0 &&
               !loading &&
-              !!document.querySelector(".pulse-stat-numbers");
+              !!document.querySelector(".pulse-stat-numbers") &&
+              selectionReady();
         }
         const sameCards =
           cards.length === readyCards.length &&
@@ -405,7 +424,8 @@ export function installUiProbe({ diagnostic = false } = {}) {
                     ? !!document.querySelector(".pulse-mode")
                     : expectedEmpty
                       ? !emptyReady()
-                      : !document.querySelector(".pulse-stat-numbers"))
+                      : !document.querySelector(".pulse-stat-numbers") ||
+                        !selectionReady())
                 ) {
                   decoding = false;
                   return;

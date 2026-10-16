@@ -132,48 +132,57 @@ export class Catalog {
   constructor(readonly dataDir: string) {
     mkdirSync(dataDir, { recursive: true });
     this.db = new Database(path.join(dataDir, "catalog.sqlite"));
-    this.db.function(
-      "artist_sort_key",
-      { deterministic: true },
-      (artist: string) => artistSortKey(artist),
-    );
-    this.db.function("search_key", { deterministic: true }, searchKey);
-    this.db.function(
-      "folder_parent",
-      { deterministic: true },
-      (relativePath: string) => {
-        const parent = path.dirname(relativePath);
-        return parent === "." || parent === path.sep ? null : parent;
-      },
-    );
-    this.db.function(
-      "album_identity_key",
-      { deterministic: true },
-      (
-        libraryId: string,
-        relativePath: string,
-        albumTitle: string,
-        albumArtists: string,
-        year: number | null,
-      ) =>
-        albumIdentityKey({
-          libraryId,
-          relativePath,
-          albumTitle,
-          albumArtists: JSON.parse(albumArtists) as string[],
-          year,
-        }),
-    );
-    this.db.pragma("journal_mode = WAL");
-    this.db.pragma("foreign_keys = ON");
-    this.db.pragma("busy_timeout = 5000");
-    runCatalogMigrations(this.db);
-    this.pulse = new PulseStore(this.db, dataDir);
-    this.hasLegacyPlaylistOrderColumn = (
-      this.db.pragma("table_info(playlists)") as { name: string }[]
-    ).some((column) => column.name === "orderMode");
-    this.materializeLegacyCatalogPlaylists();
-    this.clearExpiredHttpCache();
+    try {
+      this.db.function(
+        "artist_sort_key",
+        { deterministic: true },
+        (artist: string) => artistSortKey(artist),
+      );
+      this.db.function("search_key", { deterministic: true }, searchKey);
+      this.db.function(
+        "folder_parent",
+        { deterministic: true },
+        (relativePath: string) => {
+          const parent = path.dirname(relativePath);
+          return parent === "." || parent === path.sep ? null : parent;
+        },
+      );
+      this.db.function(
+        "album_identity_key",
+        { deterministic: true },
+        (
+          libraryId: string,
+          relativePath: string,
+          albumTitle: string,
+          albumArtists: string,
+          year: number | null,
+        ) =>
+          albumIdentityKey({
+            libraryId,
+            relativePath,
+            albumTitle,
+            albumArtists: JSON.parse(albumArtists) as string[],
+            year,
+          }),
+      );
+      this.db.pragma("journal_mode = WAL");
+      this.db.pragma("foreign_keys = ON");
+      this.db.pragma("busy_timeout = 5000");
+      runCatalogMigrations(this.db);
+      this.pulse = new PulseStore(this.db, dataDir);
+      this.hasLegacyPlaylistOrderColumn = (
+        this.db.pragma("table_info(playlists)") as { name: string }[]
+      ).some((column) => column.name === "orderMode");
+      this.materializeLegacyCatalogPlaylists();
+      this.clearExpiredHttpCache();
+    } catch (error) {
+      try {
+        this.db.close();
+      } catch (cleanupError) {
+        console.error("Catalog construction cleanup failed", cleanupError);
+      }
+      throw error;
+    }
   }
   libraries(filter: CatalogFilter = emptyFilter): Library[] {
     const { sql, args } = this.where(filter);

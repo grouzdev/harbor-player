@@ -94,6 +94,15 @@ test("missing SQLite is explicit and cannot suppress another probe", async () =>
   assert.equal(artifact.probes.other.status, "ok");
 });
 
+test("an already expired SQLite probe cancels without retaining the process", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(
+    sqliteProbe("unused.sqlite", "SELECT 1", controller.signal),
+    /SQLite diagnostic cancelled/,
+  );
+});
+
 test("late probe completion cannot overwrite persisted timeout evidence", async () => {
   let finish;
   const late = new Promise((resolve) => {
