@@ -74,7 +74,7 @@ git push origin main --tags
 
 ## Публикация signed stable
 
-Stable-тег имеет вид `vX.Y.Z` и запускает отдельный защищённый GitHub environment `stable`. Он доступен только после одобрения проекта SignPath Foundation и настройки переменных/секретов. Актуальные следующие шаги собраны в [backlog](docs/next-steps.md). В stable assets нет суффикса `unsigned`; Windows показывает издателя `SignPath Foundation`.
+Stable-тег имеет вид `vX.Y.Z` и запускает отдельный защищённый GitHub environment `stable`. Он доступен только после одобрения проекта SignPath Foundation и настройки переменных/секретов. Незакрытые проверки выпуска собраны в [бэклоге](docs/backlog.md#репозиторий-и-выпуск-stable). В stable assets нет суффикса `unsigned`; Windows показывает издателя `SignPath Foundation`.
 
 Stable workflow сначала подписывает EXE/DLL в Electron bundle, затем NSIS installer и portable EXE. `latest.yml` создаётся после финальной подписи, поэтому updater получает хэш уже подписанного установщика. Если signing environment не настроен, workflow останавливается до публикации; используйте unsigned beta.
 
@@ -170,8 +170,9 @@ SQLite backup учитывает WAL, мигрируется только вре
 дождитесь `READY_SLEEP_PLAYBACK`, вручную сделайте sleep/wake на 1–2 минуты,
 затем повторите при `READY_SLEEP_PAUSED`. `--smoke` — только короткая проверка
 harness, не доказательство сна; отсутствие power events не считается PASS.
-Текущий статус и оставшиеся работы: [roadmap Pulse](docs/pulse-roadmap.md)
-и [порядок завершения](docs/pulse-next-steps.md).
+Первый этап Пульса принят на `0.4.0-beta.2` с согласованными ограничениями:
+[итог приёмки](docs/pulse-next-steps.md), [roadmap](docs/pulse-roadmap.md).
+Незакрытые риски и отложенные работы — в [едином бэклоге](docs/backlog.md).
 Результаты и ограничения записаны в [журнале P0](docs/pulse/measurements/pulse-p0.md).
 
 `verify:tags` создаёт `verification/tag-support.json`. Редактор разрешён только для форматов, прошедших проверку с установленной версией библиотеки записи. Проверяются MP3 (ID3v2.3/2.4), FLAC, M4A, AAC, Ogg Vorbis, Opus и WAV: кириллица, множественные значения, большие обложки, сохранность неизвестных тегов, SHA-256 аудиоданных и независимое декодирование через FFmpeg.
@@ -185,7 +186,7 @@ harness, не доказательство сна; отсутствие power ev
 - `src/client` — React, TanStack Query/Virtual, браузерный плеер.
 - `src/server` — Fastify, SQLite, очередь операций, два рабочих потока для тегов и хэширования, ограниченный клиент MusicBrainz/Cover Art Archive.
 - `src/shared/contracts.ts` — типы и схемы API.
-- `docs/next-steps.md` — актуальный backlog и условия первого signed stable.
+- `docs/backlog.md` — единый бэклог рисков, непроверенных сценариев и будущих работ.
 - `THIRD_PARTY_NOTICES.md` — сведения о стороннем коде.
 
 Поддержка macOS/Linux архитектурно предусмотрена; текущие проверки выполнены на Windows. AcoustID/Chromaprint, сетевой доступ к самой библиотеке и gapless в эту версию не входят. Windows desktop shell выпускается как NSIS installer и portable EXE. Работают beta updater и GitHub Actions release pipeline; stable workflow проверяет наличие signing secrets до сборки. Проверка на чистой VM и первый фактически подписанный stable-дистрибутив ещё не подтверждены.

@@ -1,152 +1,58 @@
-# Пульс: как закончить работу
+# Пульс: завершение первого этапа
 
-[Общий статус и границы](pulse-roadmap.md). Выполнять этапы ниже, не возвращаясь
-к старым планам. Этап 1 выполнен в ограниченном локальном cohort;
-для этапов 2–3 нужен ввод пользователя. Автономный автоматический блок завершён.
+**Первый этап принят пользователем на 0.4.0-beta.2 с согласованными
+ограничениями и остаточными рисками.** Общую бета-приёмку больше не держать
+открытой ради непроверенных устройств или необъяснённых исторических samples.
+Это не утверждение, что каждый пункт checklist получил PASS, и не stable gate.
 
-## 1. Разрешённые обложки и actual storage
+## Что принято
 
-**Выполнено:** [отчёт originals](pulse/measurements/pulse-originals.md):
-7 разрешённых JPEG/PNG, actual playback в Chrome/Edge, first-copy/existing/
-missing/restart/retry, точные суммы и hashes, отдельные HTTP/decode/native/GPU
-измерения, missing/corrupt в настоящем UI и сравнение с 30/365 models.
-Staging drained; WAL — samples, короткая память — diagnostic, не leak verdict.
-Sparse catalog overlap не выдаётся за устойчивую tail-оценку.
+- [Permitted originals](pulse/measurements/pulse-originals.md): bounded cohort
+  из 7 JPEG/PNG, actual playback/storage, exact hashes/sums, bounded staging,
+  HTTP/decode/native/GPU samples. Не год наблюдений и не новый leak verdict.
+- [Feather](pulse/measurements/pulse-p1.md#feather-начало-установленной-приёмки):
+  штатное обновление `0.3.0-beta.4` → `0.4.0-beta.2`, playback/запись,
+  enable/disable, полный выход/restart, переходы и диалоги, доступные размеры
+  окна/fullscreen при Windows 125%, физический тачпад и player controls.
+- [Installed identity](pulse/measurements/pulse-p1.md#feather-идентичность-установленного-артефакта):
+  EXE/app.asar hashes и build `4058653` сняты с установленного приложения.
+- [Installed error/fallback](pulse/measurements/pulse-p1.md#feather-installed-errorfallback--pass):
+  отдельный disposable profile, synthetic history, API 503/retry,
+  missing/corrupt cover и восстановление исправного изображения.
+  Не физическое повреждение файлов и не actual recorder cohort.
+- [Beta release](https://github.com/grouzdev/harbor-player/releases/tag/v0.4.0-beta.2):
+  локальный gate, PR CI и release workflow PASS на `4058653`, установщик
+  скачан и проверен по SHA-256/SHA-512/размеру.
 
-**При повторе нужно от пользователя:** разрешённые локальные JPEG/PNG разных размеров,
-пропорций и веса; согласие на их использование в локальных тестах.
-Сначала согласовать расположение и существующий permitted manifest
-`scripts/pulse-artwork-fixture.mjs`, не заводить второй формат.
-Private изображения, абсолютные пути и traces не коммитить и не публиковать.
+## Что перенесено
 
-**Протокол повторного прогона:**
+Единственный список остаточных работ — [бэклог](backlog.md):
+process timeout, Edge startup/cold хвост, инъекция silent worker exit,
+keyboard/focus, темы/accent, недоступные устройства, оставшиеся ручные
+сценарии и будущие расширения. Эти риски приняты для первого этапа;
+технические NOT RUN/INCONCLUSIVE в старых отчётах не переписаны в PASS.
 
-1. Проверяет существующие опции harness; связывает originals с actual
-   audio → recorder → HTTP → SQLite, не заменяя это synthetic event seeds.
-2. Измеряет first-copy/existing/missing, checkpoint/final/retry/restart:
-   hash архива, точные ledger/day/album суммы, размеры БД/индексов,
-   sampled WAL/SHM, число/вес обложек, staging до/после.
-3. Отдельно измеряет HTTP transfer, decode и image/GPU/native memory.
-   JS heap не подменяет native/GPU память. Проверяет missing/corrupt cover
-   без потери названия и статистики.
-4. Сопоставляет с уже существующими 30/365-дневными моделями. Короткий прогон
-   не выдаётся за год наблюдений, sampled WAL — за peak; UI-порог не применяется
-   к ingest ACK. Ориентир overlapping catalog read p95 < 50 мс.
+## Интеграция
 
-**Готово, когда:** есть воспроизводимый отчёт с provenance, числами,
-точными суммами и bounded staging. Без originals — NOT RUN.
-Thumbnail/переработка image pipeline нужна только при измеренном bottleneck;
-полный memory cohort повторяется только при релевантном изменении.
-Методика и границы baseline — [здесь](pulse/playback-storage.md).
+Пользователь разрешил merge текущей ветки в `main`. Изменения после
+release source — документация и standalone installed-error harness;
+продуктовый код установленной beta.2 не менялся.
+Перед merge проверить diff/format/lint и CI ветки, после merge —
+результат CI окончательного SHA в `main`. Старый release CI не заменяет
+этот integration gate. Новая публикация или stable-релиз не требуются.
 
-## 2. Установленная сборка и физические проверки
+## Правила дальнейшей работы
 
-**Согласованный сеанс:** целевой ПК — Feather, установленная бета и библиотека
-на нём тестовые; пользователь разрешил clear/error-сценарии на существующем
-профиле без отдельного test data dir. Рабочий профиль на VLVY не трогать.
-Репозиторий на Feather не нужен: следующая бета доставляется штатным updater.
-Публикация следующей беты разрешена после успешных проверок и CI; это не
-закрывает ручную приёмку или остаточные риски этапа 3.
-По решению пользователя Pulse получает новую минорную версию:
-опубликована **0.4.0-beta.2**, не stable 0.4.0:
-[release и artifact identity](pulse/measurements/pulse-p1.md#опубликована-040-beta2).
-CI/release workflow прошли на `4058653`. На Feather подтверждены штатное
-обновление с beta.4, playback/запись/disable/restart, переходы/диалоги,
-доступные размеры/fullscreen при 125%, физический тачпад и player controls.
-Сняты hashes установленного EXE/app.asar и build ID. Installed automation
-проверила API error/retry и missing/corrupt cover fallback на отдельном
-профиле; [результаты и ограничения](pulse/measurements/pulse-p1.md#feather-installed-errorfallback--pass).
-FAT/exFAT — **NOT RUN, согласованный пропуск**; доступность физических
-устройств: только тачпад, touch и физический Ctrl+wheel NOT RUN.
-Keyboard/focus согласованно отложены; темы отключены ранее и NOT RUN.
-Полный checklist не объявляется PASS: остаются не проверенные вручную
-длинные имена, общий диалог операций/истории и отдельный Chromium zoom.
-Новые общие прогоны без конкретного дефекта не нужны; остаточные риски
-этапа 3 требуют решения пользователя.
-
-**Нужно от пользователя:** целевой Windows-ПК, разрешение на установку,
-время для ручной проверки; доступные мышь/trackpad/touch и тестовый FAT/exFAT
-носитель, если такая совместимость входит в приёмку.
-
-1. Согласовать сборку и отдельный test data dir/profile. Записать SHA,
-   version/build ID, hashes именно установленного executable/app.asar,
-   Windows/Electron, DPI/zoom, viewport и устройства.
-2. Пройти [единый ручной checklist](pulse/measurements/pulse-p1.md#ручная-приёмка-установленного-приложения):
-   переходы панели/Пульс/обложка, focus/scroll/Escape, playback/queue,
-   низкое/portrait/fullscreen окно, темы/accent, длинные имена, API/cover errors,
-   player controls, физические trackpad/touch/Ctrl+wheel.
-3. На разрешённом FAT/exFAT носителе проверить ownership/recovery/publication.
-   NTFS или эмуляция не дают physical FAT/exFAT PASS.
-4. Записать реальные шаги и наблюдения в checklist. Нет устройства — NOT RUN
-   с причиной и решением о допустимости пропуска.
-
-**Готово, когда:** оператор заполнил checklist, дефекты исправлены и затронутые
-сценарии повторены на новой сборке. Установка сама по себе не закрывает этап.
-Физический sleep уже принят в P0: повторять только при изменении
-recorder/delivery/sleep/playback, с оператором; harness сам ПК не усыпляет.
-
-**Безопасность:** рабочую БД, обычный профиль, часы и power settings не менять.
-Если запуск блокирует legacy `server.lock`, не удалять его автоматически:
-нужна отдельная согласованная offline migration при остановленных старых
-экземплярах. Это не повод менять рабочие данные ради теста.
-
-## 3. Решение по остаточным рискам
-
-**Нужно решение пользователя, а не ещё один бесконечный прогон.**
-
-- Исторический process timeout не воспроизведён естественно; fault injection
-  проверила диагностику, но не доказала устранение исходной причины.
-- Старый Edge startup/cold хвост не объяснён. Новые быстрые samples
-  не являются доказательством исправления.
-- Для silent SQLite-worker exit обработчик исправлен по review, но отдельная
-  управляемая инъекция такого выхода ещё не добавлена; error/cancel paths
-  проверены шестью Node tests.
-
-Рекомендуемый порядок: сначала собрать факты этапов 1–2, затем зафиксировать
-для каждого оставшегося риска **принят / нужна отдельная ограниченная
-диагностика**. Если нужна диагностика — заранее определить один сценарий,
-ожидаемое evidence и условие остановки. До решения статус INCONCLUSIVE.
-Не объявлять исторический сбой исправленным и не повышать пороги.
-
-## 4. Финальные проверки, интеграция и передача
-
-**Агент** фиксирует итоговые исходники и artifact identity, проверяет регрессии
-после последнего изменения:
-
-```sh
-npm run fixtures
-npm run verify:tags
-npm test
-npm run build
-npm run lint
-npm run format:check
-npm run test:e2e
-git diff --check
-```
-
-Это gate финального кода, не просьба повторить его сейчас ради документации.
-Полный `test:e2e` — Chrome + Edge без filters/skip и увеличения timeout.
-Process/publication/desktop, ingest, UI, memory и physical sleep повторяются
-по затронутым областям, а не все подряд. После merge оценить изменения
-artifact и выполнить релевантные проверки результата интеграции.
-При новом foreground cohort заранее согласовать сеанс и исключить
-параллельные build/e2e/benchmark.
-
-**Пользователь** согласует целевую ветку и интеграцию/push. После разрешённого
-push нужен CI на окончательном SHA; старый success не закрывает этот пункт.
-Установка, миграция пользовательского lock и публикация/релиз требуют
-отдельного согласования, этот документ их не разрешает.
-
-**Готово, когда:** этапы 1–2 приняты либо явно согласованы исключения,
-риски этапа 3 решены, финальные локальные проверки и CI подтверждены для
-согласованной версии. Решение о релизе — отдельно.
-
-## Как записывать результат без новой стопки файлов
-
-Новый отчёт добавлять только при новых измерениях в `docs/pulse/measurements/`,
-включать в [индекс](pulse/measurements/README.md). Для небольшого дополнения
-использовать существующий релевантный отчёт, не создавать очередной план.
-Записывать команду, exit/status, SHA/dirty, artifact hashes, окружение,
-локальный raw evidence, числа и ограничения. FAIL и неполные попытки сохранять;
-не превращать NOT RUN/INCONCLUSIVE в PASS по косвенной проверке.
-Изменение статуса отражать здесь и в roadmap.
+- Не начинать новый полный круг memory/sleep/ingest/UI cohorts без
+  релевантной правки или воспроизводимого дефекта.
+- Для повтора originals использовать существующий permitted manifest
+  `scripts/pulse-artwork-fixture.mjs` и
+  [методику playback/storage](pulse/playback-storage.md). Private originals,
+  абсолютные пути и raw traces не коммитить и не публиковать.
+- Рабочий профиль VLVY не трогать. Искусственные ошибки/clear — только
+  на разрешённых тестовых данных. Не менять часы или power settings.
+- Legacy `server.lock` не удалять автоматически: только отдельно
+  согласованная offline migration при остановленных старых экземплярах.
+- Журналы фактов сохранять в `docs/pulse/measurements/`, включать новые
+  измерения в [индекс](pulse/measurements/README.md). Не создавать второй
+  план завершения; открытые задачи складывать в бэклог.
