@@ -387,6 +387,26 @@ menu/version/regression/docs/tag-verification changes:
 `node scripts/verify-release.mjs v0.4.0-beta.1 --channel=beta` —
 все exit 0. CI и публикация нового тега пока не подтверждены.
 
+### Кандидат 0.4.0-beta.2: live bookmark menu
+
+PR CI [38956709158](https://github.com/grouzdev/harbor-player/actions/runs/38956709158)
+на `092cf3d` — PASS. Release
+[38957346874](https://github.com/grouzdev/harbor-player/actions/runs/38957346874)
+для beta.1 — FAIL до публикации: Chrome 156/156, Edge 155/156,
+после optimistic bookmark отсутствует пункт «Удалить из закладок».
+Открытое меню сохраняло pending label; disabled-only fix не покрывал label.
+Тег beta.1 не перемещался; следующий кандидат — beta.2.
+
+Bookmark item теперь resolve-ится на render целиком (label/icon/disabled/action)
+по актуальному query cache и pending ref. Управляемый тест держит bookmark
+POST, открывает меню в pending-состоянии, затем проверяет переход к enabled
+«Удалить из закладок» без переоткрытия. Адресный Chrome + Edge — PASS.
+Локальный gate на `092cf3d` + dirty menu/version/regression/docs changes:
+fixtures/tags, 478 unit tests, build/lint/format, полный
+`npm run test:e2e` (156 Chrome + 156 Edge), desktop:pack и desktop smoke,
+`git diff --check` — все exit 0. CI и публикация beta.2 ещё не подтверждены.
+Установленная приёмка Feather всё ещё NOT RUN.
+
 Заполнять на целевом Windows-ПК после последнего изменения. Packaged automation
 сама по себе не закрывает этот раздел. Не менять рабочую БД для ошибок/clear:
 эти действия проверять в отдельном тестовом data dir и profile.

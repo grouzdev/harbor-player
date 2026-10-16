@@ -8,6 +8,8 @@ import {
 
 export interface ContextMenuItem {
   label: string;
+  /** Resolve async-backed state without replacing an open menu. */
+  resolve?: () => ContextMenuItem;
   icon?: ReactNode;
   /** Live guards are re-evaluated on render while the menu stays open. */
   disabled?: boolean | (() => boolean);
@@ -88,7 +90,8 @@ export function ContextMenu({
       aria-label="Контекстное меню"
       style={{ left: menu.x, top: menu.y }}
     >
-      {menu.items.map((item, index) => {
+      {menu.items.map((source, index) => {
+        const item = source.resolve?.() ?? source;
         const expanded = openSubmenu === item.label;
         return (
           <div
@@ -139,38 +142,44 @@ export function ContextMenu({
                 className={`context-menu context-menu-submenu context-menu-submenu-${submenuSide}`}
                 role="menu"
               >
-                {item.submenu.map((subitem, subitemIndex) => (
-                  <button
-                    ref={subitemIndex === 0 ? submenuFirstItemRef : undefined}
-                    key={subitem.label}
-                    type="button"
-                    role="menuitem"
-                    className="context-menu-item"
-                    disabled={
-                      typeof subitem.disabled === "function"
-                        ? subitem.disabled()
-                        : subitem.disabled
-                    }
-                    onClick={() => {
-                      onClose();
-                      void subitem.onSelect?.();
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape" || event.key === "ArrowLeft") {
-                        event.preventDefault();
-                        setOpenSubmenu(null);
-                        ref.current
-                          ?.querySelector<HTMLButtonElement>(
-                            `[aria-expanded="true"]`,
-                          )
-                          ?.focus();
+                {item.submenu.map((source, subitemIndex) => {
+                  const subitem = source.resolve?.() ?? source;
+                  return (
+                    <button
+                      ref={subitemIndex === 0 ? submenuFirstItemRef : undefined}
+                      key={subitem.label}
+                      type="button"
+                      role="menuitem"
+                      className="context-menu-item"
+                      disabled={
+                        typeof subitem.disabled === "function"
+                          ? subitem.disabled()
+                          : subitem.disabled
                       }
-                    }}
-                  >
-                    {subitem.icon}
-                    <span>{subitem.label}</span>
-                  </button>
-                ))}
+                      onClick={() => {
+                        onClose();
+                        void subitem.onSelect?.();
+                      }}
+                      onKeyDown={(event) => {
+                        if (
+                          event.key === "Escape" ||
+                          event.key === "ArrowLeft"
+                        ) {
+                          event.preventDefault();
+                          setOpenSubmenu(null);
+                          ref.current
+                            ?.querySelector<HTMLButtonElement>(
+                              `[aria-expanded="true"]`,
+                            )
+                            ?.focus();
+                        }
+                      }}
+                    >
+                      {subitem.icon}
+                      <span>{subitem.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

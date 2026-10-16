@@ -193,7 +193,28 @@ test("catalog state uses RMB and only visible indicators consume title space", a
   await expect(viewedAction).toBeEnabled();
   await page.keyboard.press("Escape");
   await page.unroute("**/api/catalog-user-state");
+  let releaseBookmark!: () => void;
+  const bookmarkGate = new Promise<void>((resolve) => {
+    releaseBookmark = resolve;
+  });
+  await page.route("**/api/bookmarks", async (route) => {
+    if (route.request().method() === "POST") await bookmarkGate;
+    await route.continue();
+  });
   await choose(album, "Добавить в закладки");
+  await album.dispatchEvent("contextmenu", { clientX: 300, clientY: 300 });
+  try {
+    await expect(
+      page.getByRole("menuitem", { name: "Сохраняем закладку…", exact: true }),
+    ).toBeDisabled();
+  } finally {
+    releaseBookmark();
+  }
+  await expect(
+    page.getByRole("menuitem", { name: "Удалить из закладок", exact: true }),
+  ).toBeEnabled();
+  await page.keyboard.press("Escape");
+  await page.unroute("**/api/bookmarks");
   await choose(album, "Отметить просмотренными");
   for (const target of [album, header]) {
     await expect(target.locator(".catalog-state-mark")).toHaveCount(3);

@@ -1552,12 +1552,6 @@ export function App() {
     ) => {
       event.preventDefault();
       const ids = [...new Set(selectedIds)];
-      const allBookmarked = ids.every((item) =>
-        bookmarkKeys.has(`${kind}:${item}`),
-      );
-      const bookmarkPending = ids.some((item) =>
-        pendingBookmarkKeys.has(`${kind}:${item}`),
-      );
       const suffix = ids.length > 1 ? ` (${ids.length})` : "";
       const ratings =
         kind === "artist"
@@ -1608,26 +1602,41 @@ export function App() {
             suffix,
           ),
           {
-            label: bookmarkPending
-              ? "Сохраняем закладку…"
-              : bookmarks.isPending
-                ? "Закладки загружаются…"
-                : bookmarks.isError
-                  ? "Закладки недоступны"
-                  : allBookmarked
-                    ? `Удалить из закладок${suffix}`
-                    : `Добавить в закладки${suffix}`,
-            icon:
-              bookmarkPending || bookmarks.isPending ? (
-                <RefreshCw size={16} className="spinning" />
-              ) : (
-                <BookmarkIcon
-                  size={16}
-                  fill={allBookmarked ? "currentColor" : "none"}
-                />
-              ),
-            disabled: bookmarksUnavailable || bookmarkPending,
-            onSelect: () => changeBookmarks(kind, ids, !allBookmarked),
+            label: "Закладки",
+            resolve: () => {
+              const state = queryClient.getQueryState<CatalogBookmark[]>([
+                "bookmarks",
+              ]);
+              const keys = new Set(
+                (state?.data ?? []).map((item) => `${item.kind}:${item.id}`),
+              );
+              const all = ids.every((item) => keys.has(`${kind}:${item}`));
+              const pending = ids.some((item) =>
+                pendingBookmarkKeysRef.current.has(`${kind}:${item}`),
+              );
+              const unavailable = !state?.data || state.status !== "success";
+              return {
+                label: pending
+                  ? "Сохраняем закладку…"
+                  : state?.status === "pending"
+                    ? "Закладки загружаются…"
+                    : unavailable
+                      ? "Закладки недоступны"
+                      : all
+                        ? `Удалить из закладок${suffix}`
+                        : `Добавить в закладки${suffix}`,
+                icon: pending ? (
+                  <RefreshCw size={16} className="spinning" />
+                ) : (
+                  <BookmarkIcon
+                    size={16}
+                    fill={all ? "currentColor" : "none"}
+                  />
+                ),
+                disabled: unavailable || pending,
+                onSelect: () => changeBookmarks(kind, ids, !all),
+              };
+            },
           },
           ...(kind !== "artist"
             ? [
