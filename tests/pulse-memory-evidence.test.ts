@@ -3,6 +3,7 @@ import { test } from "vitest";
 import {
   checkPoint,
   durationSeconds,
+  memoryDatasets,
   memoryFailureStatus,
   navigationTargets,
 } from "../scripts/pulse-memory-evidence.mjs";
@@ -44,6 +45,13 @@ test("memory navigation has endpoints and intermediate year offsets", () => {
     navigationTargets({ from: "2020-01-01", to: "2022-01-01" }),
     [0, 365, 730, 731],
   );
+});
+
+test("memory dataset selection preserves the default cohort and permits an isolated repeat", () => {
+  assert.deepEqual(memoryDatasets(), ["ordinary", "ten-year"]);
+  assert.deepEqual(memoryDatasets("ordinary"), ["ordinary"]);
+  assert.deepEqual(memoryDatasets("ten-year"), ["ten-year"]);
+  assert.throws(() => memoryDatasets("unknown"));
 });
 
 test("memory reached-date and bounded DOM checks cannot pass stale or foreign UI", () => {

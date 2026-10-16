@@ -45,6 +45,14 @@ foreground cold guide в packaged Electron подтверждён отдельн
 чистый native-memory cohort завершён, но Edge outliers и installed/manual остаются
 открытыми. Результаты первого этапа — в [журнале P1](../verification/pulse-p1.md),
 последующие измерения — в [журнале доработок](../verification/pulse-p1-followup.md).
+Актуальный результат на базе `f0078fc`:
+[третий этап](../verification/pulse-p1-stage3.md). Длительные DOM/native-memory
+проверки подтверждены для текущего packaged artifact на обоих dataset;
+eager/lazy A/B завершён в пользу eager, actual playback/storage проверен без
+реальных обложек. Это не закрывает весь P1: installed/manual, permitted originals,
+причина исторического Edge startup хвоста и финальный CI остаются открытыми.
+Последний общий e2e — FAIL двух общих library-сценариев в Edge; прежний PASS
+не заменяет проверку финального кандидата.
 Автоматические проверки и их пределы записаны в
 [журнале P0](../verification/pulse-p0.md). Выборочный прогон не заменяет полный.
 
@@ -191,12 +199,25 @@ backup и не очищать единственную рабочую БД ра�
 ### 6. Измерить end-to-end производительность
 
 - [x] Повторить `npm run build:server && node scripts/pulse-benchmark.mjs`.
-- [ ] Измерить холодное открытие Пульса, тёплый возврат и возврат к панелям
+- [x] Измерить холодное открытие Пульса, тёплый возврат и возврат к панелям
   на целевом устройстве; SQLite-бенчмарк этих операций не измеряет.
+  Foreground packaged Electron ordinary/ten-year: cold p95 106,7/126,3 мс,
+  warm 64,7/96,3 мс, return 63,3/63,3 мс
+  ([второй этап](../verification/pulse-p1-stage2.md#финальные-foreground-cohorts-после-последнего-изменения-исходников)).
+  Это измерение ready-panels, не installed/manual acceptance и не объяснение
+  исторического Edge startup-overlap хвоста.
+- [x] Проверить eager/lazy module loading вместе со startup панелей.
+  A–B–B–A: lazy cold p95 427–468 мс без устойчивого startup выигрыша;
+  эксперимент удалён, оставлен eager
+  ([третий этап](../verification/pulse-p1-stage3.md#диагностика-edge-и-abba)).
 - [x] Проверить UI на десяти годах и 1000 альбомах в дне:
   bounded DOM, число запросов, ограничение LRU и память после долгой навигации.
   Generated fixtures; полный memory cohort без renderer Network inspector
   завершён и разобран в журнале доработок. Это не проверка реальных обложек/GPU.
+  Повтор на текущем artifact: ordinary 1800,756 с и ten-year 1803,789 с,
+  bounded DOM и post-warmup memory подтверждены; оба executable/app.asar hashes
+  совпадают. Повторять эти же cohorts без релевантных изменений не требуется
+  ([третий этап](../verification/pulse-p1-stage3.md#чистый-native-memory-оба-набора-завершены-раздельно)).
 - [ ] Записать профили drag/wheel и прыжков по годам.
   Устаревшие запросы не возвращают к предыдущей дате; нет длительных задач.
 - [ ] Отдельно измерить загрузку/декодирование настоящих обложек:
@@ -205,6 +226,12 @@ backup и не очищать единственную рабочую БД ра�
   каталога. Синхронный `better-sqlite3` не должен надолго блокировать сервер.
 - [ ] Зафиксировать рост raw-данных, индексов, WAL и исторических обложек
   на реалистичной частоте прослушивания, а не только синтетической базе.
+  - [x] Короткий actual audio/recorder → checkpoint/final/retry: точные ledger,
+    day/album allocations и sampled SQLite/WAL/SHM, без роста числа intervals
+    от cumulative revisions; сопоставление с synthetic 30/365 моделями записано
+    ([третий этап](../verification/pulse-p1-stage3.md#actual-playback--storage)).
+  - [ ] Actual artwork/storage с разрешёнными originals; generated WAV без
+    обложек не закрывают весь пункт.
 
 **Ориентиры, не гарантии:** тёплое открытие/возврат < 100 мс,
 холодное открытие < 300 мс на локальном API, read p95 < 50 мс,
@@ -232,7 +259,11 @@ backup и не очищать единственную рабочую БД ра�
 - [x] `npm run build`.
 - [x] `npm run lint`.
 - [x] `npm run format:check` — итоговый повтор после P1 успешен.
-- [x] `npm run test:e2e` — полный Chrome + Edge, без исключений.
+- [ ] `npm run test:e2e` — последний повтор Chrome 140/140, Edge 138/140.
+  Открыты `library root can be added to any playlist` и
+  `local library: readable UI, playback, tags, move and permanent delete`.
+  Нужен новый полный PASS без исключений; прежние успешные прогоны сохранены
+  в журналах как исторические результаты.
 - [x] `git diff --check`.
 - [x] Обновить документацию: ограничения, default локального сбора,
   дата начала истории, отсутствие восстановления старого прослушивания.

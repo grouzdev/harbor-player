@@ -1,6 +1,15 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
+import { pulseDayKey, pulseFixtureInstant } from "./pulse-test-dates";
+
+async function historyToday(page: Page) {
+  expect((await page.request.get("/api/session")).ok()).toBe(true);
+  const response = await page.request.get("/api/pulse/settings");
+  expect(response.ok(), await response.text()).toBe(true);
+  const settings = await response.json();
+  return pulseDayKey(Date.now(), settings.timeZone ?? "UTC");
+}
 
 async function prepareHistory(
   page: Page,
@@ -27,7 +36,7 @@ async function prepareHistory(
   expect(cleared.ok()).toBe(true);
   const generation = (await cleared.json()).historyGeneration;
   const makeEvent = (album: number, day: string, visit = randomUUID()) => {
-    const start = Date.parse(`${day}T12:00:00Z`);
+    const start = pulseFixtureInstant(day, settings.timeZone ?? "UTC");
     return {
       eventId: randomUUID(),
       revision: 1,
@@ -343,6 +352,7 @@ test("Pulse records real audio and mode switches preserve playback", async ({
   await expect
     .poll(() => page.getByTestId("track-row").count(), { timeout: 20_000 })
     .toBeGreaterThan(0);
+  const playbackDay = await historyToday(page);
   await page.getByTestId("track-row").first().dblclick();
   await expect
     .poll(() =>
@@ -362,12 +372,14 @@ test("Pulse records real audio and mode switches preserve playback", async ({
       .locator("audio")
       .evaluate((audio: HTMLAudioElement) => audio.paused),
   ).toBe(false);
-  const today = new Date().toISOString().slice(0, 10);
   await expect
     .poll(
       async () => {
+        const today = await historyToday(page);
         const result = await (
-          await page.request.get(`/api/pulse/layout?from=${today}&to=${today}`)
+          await page.request.get(
+            `/api/pulse/layout?from=${playbackDay}&to=${today}`,
+          )
         ).json();
         return result.days.reduce(
           (total: number, day: { playedMs: number }) => total + day.playedMs,
@@ -396,7 +408,7 @@ test("all 1000 busy-day ranks are keyboard reachable with bounded DOM", async ({
   page,
 }) => {
   test.setTimeout(180_000);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = await historyToday(page);
   const firstDay = `${Number(today.slice(0, 4)) - 10}${today.slice(4)}`;
   const { busyDate } = await prepareHistory(page, 999, firstDay, today);
   const session = await (await page.request.get("/api/session")).json();

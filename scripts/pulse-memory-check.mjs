@@ -12,6 +12,7 @@ import {
   checkPoint,
   connectMainInspector,
   durationSeconds,
+  memoryDatasets,
   memoryFailureStatus,
   navigationTargets,
 } from "./pulse-memory-evidence.mjs";
@@ -20,10 +21,12 @@ const { values } = parseArgs({
   options: {
     smoke: { type: "boolean", default: false },
     "duration-seconds": { type: "string" },
+    dataset: { type: "string", default: "all" },
   },
 });
 assert.equal(process.platform, "win32", "Native Windows packaged cohort only");
 const duration = durationSeconds(values);
+const datasets = memoryDatasets(values.dataset);
 await mkdir(".test-data", { recursive: true });
 const root = await mkdtemp(path.resolve(".test-data/pulse-p1-ui-memory-"));
 const executable = path.resolve(
@@ -35,6 +38,8 @@ const evidence = {
   executable,
   durationSeconds: duration,
   smoke: values.smoke,
+  datasets,
+  scope: "Completion flags apply only to the explicitly selected datasets",
   longAcceptance: false,
   status: "RUNNING",
   protocol:
@@ -130,7 +135,7 @@ try {
     new URL("./pulse-ui-dataset.mjs", import.meta.url).href;
   evidence.fixtureModule = fixtureModule;
   const { seedUiDataset } = await import(fixtureModule);
-  for (const dataset of ["ordinary", "ten-year"]) {
+  for (const dataset of datasets) {
     const data = path.join(root, dataset, "data");
     const manifest = await seedUiDataset(data, dataset);
     const port = await freePort(),

@@ -11,6 +11,15 @@ export function distribution(samples) {
   };
 }
 
+/** All timestamps belong to the renderer clock; include tasks crossing click. */
+export function tasksOverlappingSample(tasks, sample) {
+  const end = sample.start + sample.coversReady;
+  return tasks.filter(
+    (task) =>
+      task.startTime < end && task.startTime + task.duration > sample.start,
+  );
+}
+
 export function networkSummary(rows) {
   const byEndpoint = {};
   for (const row of rows) {
@@ -182,6 +191,7 @@ export function installUiProbe({ diagnostic = false } = {}) {
       probe.cancel?.();
       probe.sample = sample;
       let observer;
+      let stopDiagnostics = () => {};
       if (diagnostic) {
         sample.phases = {
           visibilityAtClick: document.visibilityState,
@@ -190,6 +200,12 @@ export function installUiProbe({ diagnostic = false } = {}) {
           shellDomObserved: null,
           cardAndStatsDomObserved: null,
           frames: [],
+          raf: [],
+          rafDropped: 0,
+          decodeRaf: [],
+          decodeRafDropped: 0,
+          contextChanges: [],
+          contextChangesDropped: 0,
           paintsAtClick: performance.getEntriesByType("paint").map((entry) => ({
             name: entry.name,
             relativeMs: entry.startTime - start,
@@ -216,8 +232,72 @@ export function installUiProbe({ diagnostic = false } = {}) {
           subtree: true,
           attributes: true,
         });
-        probe.cancel = () => observer.disconnect();
+        const contextChanged = (event) => {
+          if (sample.phases.contextChanges.length >= 64) {
+            sample.phases.contextChangesDropped++;
+            return;
+          }
+          sample.phases.contextChanges.push({
+            event: event.type,
+            relativeMs: performance.now() - start,
+            visibility: document.visibilityState,
+            focused: document.hasFocus(),
+          });
+        };
+        document.addEventListener("visibilitychange", contextChanged);
+        window.addEventListener("focus", contextChanged);
+        window.addEventListener("blur", contextChanged);
+        stopDiagnostics = () => {
+          observer.disconnect();
+          document.removeEventListener("visibilitychange", contextChanged);
+          window.removeEventListener("focus", contextChanged);
+          window.removeEventListener("blur", contextChanged);
+        };
+        probe.cancel = () => {
+          if (sample.coversReady === null)
+            sample.phases.cancelledAtMs = performance.now() - start;
+          stopDiagnostics();
+        };
       }
+      // Record the initial two RAFs too: recording only `frame` hides the wait
+      // before the very first callback. Diagnostic logging never changes readiness.
+      const requestFrame = (purpose, callback) => {
+        if (!diagnostic) return requestAnimationFrame(callback);
+        const requestedMs = performance.now() - start;
+        // Repeated readiness frames must not consume the final decode evidence.
+        // Retain the latest bounded decode attempts, including their two RAFs.
+        const decodingFrame = purpose.startsWith("decode-");
+        const entries = decodingFrame
+          ? sample.phases.decodeRaf
+          : sample.phases.raf;
+        if (decodingFrame && entries.length === 16) {
+          entries.shift();
+          sample.phases.decodeRafDropped++;
+        }
+        const entry =
+          entries.length < (decodingFrame ? 16 : 180)
+            ? {
+                purpose,
+                requestedMs,
+                visibilityAtRequest: document.visibilityState,
+                focusedAtRequest: document.hasFocus(),
+                firedMs: null,
+              }
+            : null;
+        if (entry) entries.push(entry);
+        else sample.phases.rafDropped++;
+        return requestAnimationFrame((timestamp) => {
+          if (probe.sample !== sample || sample.coversReady !== null) return;
+          if (entry) {
+            entry.firedMs = performance.now() - start;
+            entry.callbackTimestampMs = timestamp - start;
+            entry.waitMs = entry.firedMs - requestedMs;
+            entry.visibilityAtFire = document.visibilityState;
+            entry.focusedAtFire = document.hasFocus();
+          }
+          callback(timestamp);
+        });
+      };
       let decoding = false;
       let readyFrames = 0;
       let readyCards = [];
@@ -299,8 +379,8 @@ export function installUiProbe({ diagnostic = false } = {}) {
               }
             }),
           ).then((covers) =>
-            requestAnimationFrame(() =>
-              requestAnimationFrame(() => {
+            requestFrame("decode-opportunity-1", () =>
+              requestFrame("decode-opportunity-2", () => {
                 if (probe.sample !== sample) return;
                 const currentCards = [
                   ...document.querySelectorAll(".pulse-album"),
@@ -339,7 +419,7 @@ export function installUiProbe({ diagnostic = false } = {}) {
                   focused: document.hasFocus?.() ?? null,
                 };
                 if (diagnostic) {
-                  observer.disconnect();
+                  stopDiagnostics();
                   sample.phases.resources = performance
                     .getEntriesByType("resource")
                     .filter((entry) => entry.responseEnd >= start)
@@ -368,11 +448,13 @@ export function installUiProbe({ diagnostic = false } = {}) {
             ),
           );
         }
-        if (sample.coversReady === null) requestAnimationFrame(frame);
+        if (sample.coversReady === null) requestFrame("readiness", frame);
       };
       // Double RAF: readiness is observed after at least one rendering opportunity,
       // not a visibility assertion or a hardware presentation timestamp.
-      requestAnimationFrame(() => requestAnimationFrame(frame));
+      requestFrame("initial-opportunity-1", () =>
+        requestFrame("initial-opportunity-2", frame),
+      );
     },
     true,
   );

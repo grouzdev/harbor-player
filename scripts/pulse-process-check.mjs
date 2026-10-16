@@ -1,16 +1,70 @@
 // Run after: npm run build:server && npx vite build
 // No mocked routes: two windows preload their own real WAV before the outage.
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { once } from "node:events";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import Database from "better-sqlite3";
+import { playbackStorage } from "./pulse-playback-storage.mjs";
 
 await mkdir(path.resolve(".test-data"), { recursive: true });
 const root = await mkdtemp(path.resolve(".test-data/pulse-process-"));
+async function hashFile(file) {
+  return createHash("sha256")
+    .update(await readFile(file))
+    .digest("hex");
+}
+async function artifactHashes(directory) {
+  let entries;
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === "ENOENT") return {};
+    throw error;
+  }
+  const hashes = {};
+  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    const file = path.join(directory, entry.name);
+    if (entry.isDirectory()) Object.assign(hashes, await artifactHashes(file));
+    else if (entry.isFile()) hashes[file] = await hashFile(file);
+  }
+  return hashes;
+}
+const provenance = {
+  gitCommit: execFileSync("git", ["rev-parse", "HEAD"], {
+    encoding: "utf8",
+  }).trim(),
+  dirty: Boolean(
+    execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim(),
+  ),
+  nodeVersion: process.version,
+  nodeExecutableSha256: await hashFile(process.execPath),
+  sourceHashes: {
+    ...(await artifactHashes("src/client")),
+    ...(await artifactHashes("src/server")),
+    ...(await artifactHashes("src/shared")),
+    ...Object.fromEntries(
+      await Promise.all(
+        [
+          "scripts/pulse-process-check.mjs",
+          "scripts/pulse-playback-storage.mjs",
+          "scripts/pulse-ingest-evidence.mjs",
+          "package-lock.json",
+        ].map(async (file) => [file, await hashFile(file)]),
+      ),
+    ),
+  },
+  // Includes generated build info and client/server assets when present.
+  distHashes: await artifactHashes("dist"),
+};
+await writeFile(
+  path.join(root, "provenance.json"),
+  JSON.stringify(provenance, null, 2),
+);
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function until(check, timeout = 30000) {
   const deadline = Date.now() + timeout;
@@ -75,13 +129,38 @@ for (const channel of ["chrome", "msedge"]) {
   for (let i = 0; i < 2; i++)
     await writeFile(
       path.join(library, `Track-${i + 1}.wav`),
-      wav(40, 220 + i * 110),
+      wav(60, 220 + i * 110),
     );
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
   let child, exited, browser;
   let serverLog = "";
   const pids = [];
+  const storage = [];
+  const identity = { ...provenance, channel, browserVersion: null };
+  async function snapshot(phase) {
+    const db = new Database(path.join(dataDir, "catalog.sqlite"), {
+      readonly: true,
+    });
+    try {
+      storage.push(await playbackStorage(db, dataDir, phase));
+      await writeFile(
+        path.join(dir, "storage.json"),
+        JSON.stringify(
+          {
+            provenance: identity,
+            scope:
+              "Short genuine generated-WAV playback; not yearly observation. No permitted originals supplied. Sizes are samples, not WAL peaks; no forced SQLite checkpoint.",
+            storage,
+          },
+          null,
+          2,
+        ),
+      );
+    } finally {
+      db.close();
+    }
+  }
   async function start() {
     child = spawn(process.execPath, ["dist/server/index.js", "--no-open"], {
       cwd: process.cwd(),
@@ -127,6 +206,7 @@ for (const channel of ["chrome", "msedge"]) {
         viewport: { width: 1600, height: 1000 },
       },
     );
+    identity.browserVersion = browser.browser().version();
     const page = await browser.newPage();
     const api = browser.request;
     async function get(url) {
@@ -183,7 +263,7 @@ for (const channel of ["chrome", "msedge"]) {
             (audio) =>
               audio.currentTime > 0.3 &&
               audio.buffered.length > 0 &&
-              audio.buffered.end(audio.buffered.length - 1) >= 39,
+              audio.buffered.end(audio.buffered.length - 1) >= 59,
           ),
       );
       await windows[i].locator("audio").evaluate((audio) => audio.pause());
@@ -198,32 +278,164 @@ for (const channel of ["chrome", "msedge"]) {
         globalThis.dispatchEvent(new Event("harbor-pulse-settings-changed")),
       );
     await wait(1200);
+    await snapshot("enabled-before-playback");
     for (const window of windows)
       await window.locator("audio").evaluate((audio) => audio.play());
     for (const window of windows)
       await until(() =>
         window.locator("audio").evaluate((audio) => audio.currentTime > 0.8),
       );
+    // Observe actual recorder checkpoints in SQLite before the API outage.
+    await until(async () => {
+      const db = new Database(path.join(dataDir, "catalog.sqlite"), {
+        readonly: true,
+      });
+      try {
+        return (
+          db.prepare("SELECT count(*) n FROM pulse_intervals").get().n === 2
+        );
+      } finally {
+        db.close();
+      }
+    });
+    // SQLite acceptance alone is not an ACK: wait for client outbox removal.
+    await until(async () => (await pending(page)).length === 0);
+    const onlineDb = new Database(path.join(dataDir, "catalog.sqlite"), {
+      readonly: true,
+    });
+    let online;
+    try {
+      online = onlineDb
+        .prepare("SELECT * FROM pulse_intervals ORDER BY eventId")
+        .all()
+        .map((row) => ({
+          eventId: row.eventId,
+          revision: row.revision,
+          playedMs: JSON.parse(row.payload).playedMs,
+        }));
+    } finally {
+      onlineDb.close();
+    }
+    assert.equal(online.length, 2);
+    const positions = await Promise.all(
+      windows.map((window) =>
+        window.locator("audio").evaluate((audio) => ({
+          src: audio.currentSrc,
+          currentTime: audio.currentTime,
+        })),
+      ),
+    );
+    const outageEvidence = {
+      online,
+      positions,
+      onlineOutbox: await pending(page),
+    };
+    assert.equal(outageEvidence.onlineOutbox.length, 0);
+    await writeFile(
+      path.join(dir, "outage.json"),
+      JSON.stringify(outageEvidence, null, 2),
+    );
+    await snapshot("acknowledged-playback-checkpoints");
     await stop();
     const outageStarted = performance.now();
+    const outagePositions = await Promise.all(
+      windows.map((window) =>
+        window.locator("audio").evaluate((audio) => ({
+          src: audio.currentSrc,
+          currentTime: audio.currentTime,
+        })),
+      ),
+    );
+    // The server is now stopped: no later commit can invalidate this cutoff.
+    const cutoffDb = new Database(path.join(dataDir, "catalog.sqlite"), {
+      readonly: true,
+    });
+    let acceptedAtCutoff;
+    try {
+      acceptedAtCutoff = cutoffDb
+        .prepare(
+          "SELECT eventId,revision,payload FROM pulse_intervals ORDER BY eventId",
+        )
+        .all()
+        .map((row) => ({
+          eventId: row.eventId,
+          revision: row.revision,
+          playedMs: JSON.parse(row.payload).playedMs,
+        }));
+    } finally {
+      cutoffDb.close();
+    }
+    const pendingAtCutoff = await pending(page);
+    const cutoff = acceptedAtCutoff.map((accepted) => {
+      const queued = pendingAtCutoff.find(
+        (event) => event.eventId === accepted.eventId,
+      );
+      return {
+        eventId: accepted.eventId,
+        revision: Math.max(accepted.revision, queued?.revision ?? 0),
+        playedMs: Math.max(accepted.playedMs, queued?.playedMs ?? 0),
+      };
+    });
+    assert.equal(cutoff.length, 2);
     await assert.rejects(
       fetch(`${origin}/api/session`),
       "Whole API must be absent",
     );
-    await until(
-      async () =>
-        (await pending(page)).filter(
-          (event) => !event.final && event.playedMs >= 14000,
-        ).length === 2,
-    );
-    const checkpoint = (await pending(page)).find((event) => !event.final);
-    assert(checkpoint);
-    for (const window of windows)
-      await until(() =>
-        window.locator("audio").evaluate((audio) => audio.currentTime > 17),
+    await until(async () => {
+      const events = await pending(page);
+      return cutoff.every((baseline) =>
+        events.find(
+          (event) =>
+            event.eventId === baseline.eventId &&
+            !event.final &&
+            event.revision > baseline.revision &&
+            event.playedMs - baseline.playedMs > 15000,
+        ),
       );
-    const outageMs = Math.floor(performance.now() - outageStarted);
+    }, 45000);
+    const offlineCheckpoints = await pending(page);
+    const checkpoint = offlineCheckpoints.find((event) => !event.final);
+    assert(checkpoint);
+    await snapshot("offline-checkpoint-outbox-not-ingested");
+    for (const [index, window] of windows.entries())
+      await until(() =>
+        window
+          .locator("audio")
+          .evaluate(
+            (audio, baseline) =>
+              audio.currentSrc === baseline.src &&
+              audio.currentTime - baseline.currentTime > 15,
+            outagePositions[index],
+          ),
+      );
+    await until(() => performance.now() - outageStarted > 15000);
+    const outageMs = performance.now() - outageStarted;
     assert(outageMs > 15000, "Actual API outage must exceed 15 seconds");
+    const offlinePositions = await Promise.all(
+      windows.map((window) =>
+        window.locator("audio").evaluate((audio) => ({
+          src: audio.currentSrc,
+          currentTime: audio.currentTime,
+        })),
+      ),
+    );
+    await writeFile(
+      path.join(dir, "outage.json"),
+      JSON.stringify(
+        {
+          ...outageEvidence,
+          acceptedAtCutoff,
+          pendingAtCutoff,
+          cutoff,
+          outagePositions,
+          offlinePositions,
+          offlineCheckpoints,
+          outageMs,
+        },
+        null,
+        2,
+      ),
+    );
     for (const window of windows)
       await window.locator("audio").evaluate((audio) => audio.pause());
     await until(
@@ -231,6 +443,11 @@ for (const channel of ["chrome", "msedge"]) {
         (await pending(page)).filter((event) => event.final).length === 2,
     );
     const durable = await pending(page);
+    await writeFile(
+      path.join(dir, "outbox.json"),
+      JSON.stringify({ checkpoint, durable }, null, 2),
+    );
+    await snapshot("offline-final-outbox-not-ingested");
     assert.equal(new Set(durable.map((event) => event.track.id)).size, 2);
     assert.equal(new Set(durable.map((event) => event.sessionId)).size, 2);
     assert.equal(new Set(durable.map((event) => event.visitId)).size, 2);
@@ -332,6 +549,7 @@ for (const channel of ["chrome", "msedge"]) {
         }
       }
       await verify();
+      await snapshot("acknowledged-finals");
       // Retry actual browser-delivered HTTP batches twice, then an older real
       // checkpoint. Cumulative revisions must not be added as separate listens.
       assert(batches.length > 0);
@@ -366,7 +584,9 @@ for (const channel of ["chrome", "msedge"]) {
         ],
       });
       await verify();
+      await snapshot("duplicate-finals-and-stale-checkpoint-retried");
       const result = {
+        provenance: identity,
         channel,
         origin,
         pids,
@@ -387,7 +607,19 @@ for (const channel of ["chrome", "msedge"]) {
         path.join(dir, "result.json"),
         JSON.stringify(result, null, 2),
       );
-      console.log(JSON.stringify(result));
+      console.log(
+        JSON.stringify({
+          ...result,
+          provenance: {
+            gitCommit: identity.gitCommit,
+            dirty: identity.dirty,
+            nodeVersion: identity.nodeVersion,
+            nodeExecutableSha256: identity.nodeExecutableSha256,
+            browserVersion: identity.browserVersion,
+            fullIdentity: path.join(dir, "result.json"),
+          },
+        }),
+      );
     } finally {
       db.close();
     }

@@ -25,6 +25,14 @@ export function durationSeconds(values) {
   return seconds;
 }
 
+export function memoryDatasets(dataset = "all") {
+  assert(
+    ["all", "ordinary", "ten-year"].includes(dataset),
+    "dataset must be all, ordinary or ten-year",
+  );
+  return dataset === "all" ? ["ordinary", "ten-year"] : [dataset];
+}
+
 export function navigationTargets(manifest) {
   const last = Math.round(
     (Date.parse(manifest.to) - Date.parse(manifest.from)) / 86400000,

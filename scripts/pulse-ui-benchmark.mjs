@@ -22,35 +22,24 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { seedUiDataset } from "./pulse-ui-dataset.mjs";
 import { inspectPermittedArtwork } from "./pulse-artwork-fixture.mjs";
+import { uiBenchmarkOptions } from "./pulse-ui-options.mjs";
 import {
   installUiProbe,
   summarize,
   networkSummary,
+  tasksOverlappingSample,
 } from "./pulse-ui-evidence.mjs";
 
 const args = process.argv.slice(2);
-assert(
-  args.every(
-    (a) =>
-      a === "--smoke" ||
-      a === "--latency-only" ||
-      a === "--diagnostic" ||
-      a === "--electron" ||
-      /^--cold=(startup-overlap|ready-panels)$/.test(a) ||
-      /^--channel=(chrome|msedge)$/.test(a),
-  ),
-  "Unknown argument",
-);
-const smoke = args.includes("--smoke");
-const latencyOnly = args.includes("--latency-only");
-const diagnostic = args.includes("--diagnostic");
-assert(
-  !diagnostic || smoke,
-  "--diagnostic requires --smoke; not budget samples",
-);
-const coldScenario =
-  args.find((a) => a.startsWith("--cold="))?.split("=")[1] ?? "startup-overlap";
-const electron = args.includes("--electron");
+const {
+  smoke,
+  latencyOnly,
+  diagnostic,
+  launches,
+  retainedCopies,
+  coldScenario,
+  electron,
+} = uiBenchmarkOptions(args);
 assert(
   !electron || process.platform === "win32",
   "--electron requires Windows",
@@ -62,7 +51,7 @@ const productionHtml = await readFile("dist/client/index.html"); // Fail before 
 await mkdir(".test-data", { recursive: true });
 const root = await mkdtemp(path.resolve(".test-data/pulse-p1-ui-"));
 const artworkBudget = await inspectPermittedArtwork(undefined, {
-  retainedCopies: smoke ? 2 : 20,
+  retainedCopies,
 });
 const disk = await statfs(root);
 const freeBytes = disk.bavail * disk.bsize;
@@ -90,6 +79,7 @@ const sourceHashes = Object.fromEntries(
     [
       "scripts/pulse-ui-benchmark.mjs",
       "scripts/pulse-ui-evidence.mjs",
+      "scripts/pulse-ui-options.mjs",
       "scripts/pulse-ui-dataset.mjs",
       "scripts/pulse-artwork-fixture.mjs",
       "src/client/App.tsx",
@@ -114,6 +104,7 @@ const evidence = {
   smoke,
   latencyOnly,
   diagnostic,
+  launchesPerDataset: launches,
   coldScenario,
   provenance: { gitCommit, dirty, sourceHashes },
   diskPreflight: { freeBytes, evidenceReserveBytes, artworkBudget },
@@ -564,9 +555,9 @@ async function activation(session, dataset, kind, options = {}) {
   sample.pendingEventStreams = [...inflight.values()].filter(
     (r) => r.endpoint === "/api/events",
   ).length;
-  sample.longtasks = await page.evaluate(
-    (start) => window.__pulseUiProbe.tasks.filter((t) => t.startTime >= start),
-    sample.start,
+  sample.longtasks = tasksOverlappingSample(
+    await page.evaluate(() => window.__pulseUiProbe.tasks),
+    sample,
   );
   evidence.samples.push(sample);
   await writeFile(
@@ -951,9 +942,9 @@ async function navigation(session, dataset) {
 }
 try {
   for (const dataset of ["ordinary", "ten-year"]) {
-    for (let index = 0; index < (smoke ? 1 : 10); index++) {
+    for (let index = 0; index < launches; index++) {
       console.error(
-        `Pulse UI ${dataset}: launch ${index + 1}/${smoke ? 1 : 10}, ${coldScenario}`,
+        `Pulse UI ${dataset}: launch ${index + 1}/${launches}, ${coldScenario}`,
       );
       const session = await launch(dataset, index);
       if (coldScenario === "ready-panels") {
@@ -989,10 +980,34 @@ try {
             })),
           "ready panels without Pulse prewarm",
         );
-        await session.page.evaluate(
+        session.run.panelsReadiness = await session.page.evaluate(
           () =>
             new Promise((resolve) =>
-              requestAnimationFrame(() => requestAnimationFrame(resolve)),
+              requestAnimationFrame(() =>
+                requestAnimationFrame(() =>
+                  resolve({
+                    clock:
+                      "renderer performance.now since navigation time origin",
+                    observedAtMs: performance.now(),
+                    paints: performance
+                      .getEntriesByType("paint")
+                      .map((entry) => ({
+                        name: entry.name,
+                        startTime: entry.startTime,
+                      })),
+                    navigation: performance
+                      .getEntriesByType("navigation")
+                      .map((entry) => ({
+                        domContentLoadedEventEnd:
+                          entry.domContentLoadedEventEnd,
+                        loadEventEnd: entry.loadEventEnd,
+                      })),
+                    visibility: document.visibilityState,
+                    focused: document.hasFocus(),
+                    fonts: document.fonts.status,
+                  }),
+                ),
+              ),
             ),
         );
         session.run.lifecycle.panelsReadyMs =
