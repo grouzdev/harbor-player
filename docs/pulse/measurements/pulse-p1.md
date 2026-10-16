@@ -284,6 +284,41 @@ version/docs/tag-verification changes (Node 24.20.0, npm 11.19.0, Windows):
 все exit 0. Предупреждение Vite о chunk > 500 kB сохраняется.
 Это локальная packaged automation, не результат установленной приёмки.
 
+### Интеграция актуального main в beta-кандидат
+
+По разрешению пользователя `origin/main` (`690afd0`) объединён только в
+релизную ветку, merge commit `6086c60`; удалённый main не менялся.
+Исходный PR CI [38939739148](https://github.com/grouzdev/harbor-player/actions/runs/38939739148)
+на `b532389` — FAIL: старый unit test ожидал удалённые album actions.
+Тест адаптирован к indicators на обложке без возврата старого интерфейса.
+
+После merge fixtures/tags, 478 unit tests, build/lint/format — exit 0.
+Первый полный `npm run test:e2e`: Chrome 153/156, Edge не запущен
+из-за `&&`. Исправлены устаревшие ожидания кнопок плейлиста и неравных
+ширин панелей, отдельный fixture `catalog-state` устраняет повторное
+подключение папки из search test. Следующий Chrome 155/156 выявил
+неоднозначный locator при анимации закрытия: проверки теперь адресуют
+живые `data-panel-id`, а не декоративные clones, и ждут удаления snapshot.
+
+Последний полный `npm run test:e2e` на `6086c60` + dirty test/fixture changes:
+**Chrome 156/156 PASS, Edge 155/156 FAIL**. В длинном `local library`
+сценарии после сброса album selection нажатие пункта «Добавить в закладки»
+не приводит к появлению индикатора. Menu остаётся открыт; POST bookmarks
+в trace для этого действия отсутствует. Причина не установлена.
+Адресные проверки с настоящим right-click, ожиданием idle и явным
+`MouseEvent` не устранили отказ; диагностические изменения helper отменены,
+не заменять настоящий click синтетическим ради PASS.
+Часть ошибочно параллельно запущенных диагностических попыток завершилась
+ошибками подготовки общего fixture (ENOENT/ENOTEMPTY); это не новые
+продуктовые дефекты и не результаты приёмки.
+Локальный последний trace сохранён в
+`.test-data/pulse-beta-5-integration/edge-menu-trace.zip`.
+
+**Публикация beta.5 заблокирована полным e2e.** Desktop pack/smoke после
+merge не выполнены: цепочка остановилась на e2e. Предыдущий packaged PASS
+до merge не переносится на этот кандидат. Нужна адресная диагностика
+Edge menu/input после сброса selection; timeout/skip не изменялись.
+
 Заполнять на целевом Windows-ПК после последнего изменения. Packaged automation
 сама по себе не закрывает этот раздел. Не менять рабочую БД для ошибок/clear:
 эти действия проверять в отдельном тестовом data dir и profile.

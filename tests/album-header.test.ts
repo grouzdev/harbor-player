@@ -5,14 +5,14 @@ import { AlbumHeader } from "../src/client/AlbumHeader";
 import { DiscHeader } from "../src/client/DiscHeader";
 
 describe("shared album presentation", () => {
-  it("keeps the selectable content button separate from management and collapse buttons", () => {
+  it("keeps the selectable content button separate from indicators and collapse control", () => {
     const html = renderToStaticMarkup(
       createElement(AlbumHeader, {
         title: "Album",
         role: "group",
         contentButton: { "aria-pressed": true },
         collapseControl: createElement("button", null, "Collapse"),
-        actions: createElement("button", null, "Remove"),
+        indicators: createElement("span", null, "Bookmarked"),
       }),
     );
     expect(html).toContain('role="group"');
@@ -22,6 +22,8 @@ describe("shared album presentation", () => {
       /<button[^>]*><small>[^]*<\/strong><\/button><div class="track-album-state"/,
     );
     expect(html).not.toContain('role="button"');
+    expect(html).toContain("<span>Bookmarked</span></div><button");
+    expect(html).toContain("<button>Collapse</button>");
   });
 
   it("preserves catalog content, classes and forwarded selection attributes", () => {
@@ -36,7 +38,7 @@ describe("shared album presentation", () => {
         selected: true,
         role: "button",
         "aria-pressed": true,
-        actions: createElement("button", null, "Rate"),
+        indicators: createElement("span", null, "Rated"),
       }),
     );
     expect(html).toContain('class="track-album-header selected"');
@@ -45,7 +47,11 @@ describe("shared album presentation", () => {
     expect(html).toContain("<small>One, Two</small>");
     expect(html).toContain("<strong>Album</strong>");
     expect(html).toContain("<small>2024 · Rock</small>");
-    expect(html).toContain('class="track-album-actions"><button>Rate</button>');
+    expect(html).toContain(
+      '<img src="/api/covers/cover-id" alt=""/><span>Rated</span></div>',
+    );
+    expect(html).not.toContain('class="track-album-actions"');
+    expect(html).not.toContain("indicators=");
     expect(html).toContain('class="track-album-duration">42:00</span>');
   });
 

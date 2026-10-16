@@ -1447,10 +1447,11 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     await page
       .locator(".albums-panel")
       .evaluate((e) => e.getBoundingClientRect().width),
-  ).toBeGreaterThan(
+  ).toBeCloseTo(
     await page
       .locator(".artists-panel")
       .evaluate((e) => e.getBoundingClientRect().width),
+    0,
   );
   const initialPanelWidths = await page
     .locator(".panel")
@@ -2574,35 +2575,37 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   ).toEqual(["now-artists", "now-track-link"]);
   await artistButton.click({ modifiers: ["Control"] });
   await expect(artistRow).not.toHaveClass(/selected/);
+  const liveAlbumsPanel = page.locator('[data-panel-id="albums"]');
+  const liveArtistsPanel = page.locator('[data-panel-id="artists"]');
   await page
-    .locator(".albums-panel")
+    .locator('[data-panel-id="albums"]')
     .getByRole("button", { name: "Закрыть панель «Альбомы»" })
     .dispatchEvent("click");
-  await expect(page.locator(".albums-panel")).toBeHidden();
+  await expect(liveAlbumsPanel).toBeHidden();
   await nowPlaying
     .getByRole("button", { name: /Открыть альбом/ })
     .dispatchEvent("click");
-  await expect(page.locator(".albums-panel")).toBeHidden();
-  await expect(page.locator(".albums-panel .album-card.selected")).toHaveCount(
-    0,
-  );
+  await expect(liveAlbumsPanel).toBeHidden();
+  await expect(liveAlbumsPanel.locator(".album-card.selected")).toHaveCount(0);
   await expect(
     page
       .locator(".artists-panel .list-tile.selected")
       .filter({ hasText: "Исполнитель альбома" }),
   ).toHaveCount(1);
   await expect(rows).toHaveCount(6);
+  await expect(page.locator(".panel-transition-snapshot")).toHaveCount(0);
   await page
-    .locator(".artists-panel")
+    .locator('[data-panel-id="artists"]')
     .getByRole("button", { name: "Закрыть панель «Исполнители»" })
     .dispatchEvent("click");
-  await expect(page.locator(".artists-panel")).toBeHidden();
+  await expect(liveArtistsPanel).toBeHidden();
   await nowPlaying
     .getByRole("button", { name: "Открыть исполнителя «Исполнитель альбома»" })
     .dispatchEvent("click");
-  await expect(page.locator(".artists-panel")).toBeHidden();
-  await expect(page.locator(".albums-panel")).toBeHidden();
+  await expect(liveArtistsPanel).toBeHidden();
+  await expect(liveAlbumsPanel).toBeHidden();
   await expect(rows).toHaveCount(6);
+  await expect(page.locator(".panel-transition-snapshot")).toHaveCount(0);
   await downloadsTile.locator(".list-tile-main").dispatchEvent("click");
   await page.locator("audio").evaluate((a: HTMLAudioElement) => {
     a.loop = true;

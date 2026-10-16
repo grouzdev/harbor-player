@@ -40,7 +40,7 @@ test("catalog state uses RMB and only visible indicators consume title space", a
       path.resolve(
         ".test-data/browser",
         info.project.name,
-        "search",
+        "catalog-state",
         "Downloads",
       ),
     );

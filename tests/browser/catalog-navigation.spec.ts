@@ -927,9 +927,8 @@ test("playlists live in the libraries panel and open a permanent composition pan
   const panel = page.locator(".playlist-panel");
   await expect(panel).toBeVisible();
   await expect(panel.getByRole("heading", { name: "В дорогу" })).toBeVisible();
-  await expect(
-    panel.locator(".playlist-heading-actions .icon-button"),
-  ).toHaveCount(5);
+  await expect(panel.locator(".panel-heading .icon-button")).toHaveCount(1);
+  await expect(panel.locator(".playlist-heading-actions")).toHaveCount(0);
   await expect(
     panel.getByText("Queen album 000", { exact: true }),
   ).toBeVisible();
