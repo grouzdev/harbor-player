@@ -1,7 +1,258 @@
 import assert from "node:assert/strict";
-import { readdir, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { lstat, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
+
+/** Half-open parent HTTP intervals; worker timestamps are deliberately unused. */
+export function batchReadEvidence(batch, requests) {
+  const reads = requests.filter(
+    (read) =>
+      Math.max(read.startMs, batch.startMs) < Math.min(read.endMs, batch.endMs),
+  );
+  const overlaps = reads.map(
+    (read) =>
+      Math.min(read.endMs, batch.endMs) - Math.max(read.startMs, batch.startMs),
+  );
+  return {
+    clock: "parent performance.now / HTTP request through parsed response",
+    count: reads.length,
+    requestIndices: requests.flatMap((read, index) =>
+      reads.includes(read) ? [index] : [],
+    ),
+    latency: reads.length ? summary(reads.map((r) => r.latencyMs)) : null,
+    overlapDuration: overlaps.length ? summary(overlaps) : null,
+    endpoints: Object.fromEntries(
+      [...new Set(reads.map((r) => r.endpoint))].map((endpoint) => [
+        endpoint,
+        summary(
+          reads.filter((r) => r.endpoint === endpoint).map((r) => r.latencyMs),
+        ),
+      ]),
+    ),
+  };
+}
+
+/** Disjoint generated identities and artwork, reserved outside the overlap pool. */
+export function isolatedFirstCopyEvents(repetition, coverIds) {
+  assert.equal(coverIds.length, 100);
+  assert.equal(new Set(coverIds).size, 100);
+  return coverIds.map((coverId, i) => ({
+    ...modelTracks(0, coverIds)[0],
+    eventId: `isolated-${repetition}-${i}`,
+    albumKey: `isolated-${repetition}-${i}`,
+    visitId: `isolated-${repetition}-${i}`,
+    snapshot: {
+      title: `Generated ${i}`,
+      artists: ["Benchmark"],
+      year: 2025,
+      coverId,
+    },
+    playedMs: 15000,
+    endedAtUtc: modelTracks(0, coverIds)[0].startedAtUtc + 15000,
+    final: false,
+  }));
+}
+
+/** Verify publication against generated image bytes, not directory sizes. */
+export function verifyArtworkStorage(actual, manifest) {
+  assert.equal(
+    new Set(manifest.map((image) => image.id)).size,
+    manifest.length,
+  );
+  assert.deepEqual(actual, {
+    count: manifest.length,
+    bytes: manifest.reduce((sum, image) => sum + image.bytes, 0),
+    stagingEntries: 0,
+  });
+}
+
+/** Check every publication's identity/content, not just matching aggregate sizes. */
+export async function verifyArtworkManifest(directory, manifest) {
+  const actual = await artworkStorage(directory);
+  verifyArtworkStorage(actual, manifest);
+  const entries = await readdir(directory, { withFileTypes: true });
+  const published = new Map();
+  for (const entry of entries) {
+    const flat = /^[a-f0-9]{64}\.(jpg|png)$/.test(entry.name);
+    const archive = /^[a-f0-9]{64}\.(jpg|png)\.archive$/.test(entry.name);
+    if (!flat && !archive) continue;
+    assert(
+      flat ? entry.isFile() : entry.isDirectory(),
+      `Publication-shaped entry must be a regular file/directory: ${entry.name}`,
+    );
+    let id, file;
+    if (flat) {
+      id = entry.name;
+      file = path.join(directory, id);
+    } else {
+      id = entry.name.replace(/\.archive$/, "");
+      file = path.join(directory, entry.name, "image");
+    }
+    assert(!published.has(id), `Duplicate flat/archive publication: ${id}`);
+    published.set(id, file);
+  }
+  assert.deepEqual(
+    [...published.keys()].sort(),
+    manifest.map((image) => image.id).sort(),
+    "Published artwork IDs match manifest",
+  );
+  for (const image of manifest) {
+    assert.match(image.id, /^[a-f0-9]{64}\.(jpg|png)$/);
+    const file = published.get(image.id);
+    const info = await lstat(file);
+    assert(
+      info.isFile(),
+      `Published image must be a regular file: ${image.id}`,
+    );
+    assert.equal(info.size, image.bytes, `Published bytes: ${image.id}`);
+    const bytes = await readFile(file);
+    assert.equal(
+      createHash("sha256").update(bytes).digest("hex"),
+      image.id.slice(0, 64),
+      `Published content hash: ${image.id}`,
+    );
+  }
+  return { ...actual, contentSha256Verified: manifest.length };
+}
+
+export function verifyCohortCoverage(batches, repetitions) {
+  const isolated = batches.filter((batch) => batch.cohort === "isolated");
+  assert.equal(isolated.length, repetitions, "Isolated sample count");
+  assert(isolated.every((batch) => batch.readOverlap.count === 0));
+  const loaded = batches.filter(
+    (batch) =>
+      batch.cohort === "read-load-period" &&
+      batch.label === "100/first-copy/new",
+  );
+  assert.equal(
+    loaded.length,
+    repetitions,
+    "Load-period first-copy sample count",
+  );
+  assert(
+    loaded.every((batch) => batch.readOverlap.count > 0),
+    "Every load-period first-copy 100 sample must have observed read overlap",
+  );
+}
+
+/** Keep legacy scenario keys load-period-only; isolated samples never dilute them. */
+export function scenarioEvidence(batches, cohort) {
+  const selected = batches.filter((batch) => batch.cohort === cohort);
+  return Object.fromEntries(
+    [...new Set(selected.map((batch) => batch.label))].map((label) => {
+      const samples = selected.filter((batch) => batch.label === label);
+      return [
+        label,
+        {
+          http: summary(samples.map((s) => s.httpMs)),
+          ingest: summary(samples.map((s) => s.fullIngestMs)),
+          transaction: summary(samples.map((s) => s.transactionCommitMs)),
+        },
+      ];
+    }),
+  );
+}
+
+/** Interval union is elapsed coverage, unlike summed overlapping I/O durations. */
+export function phaseEvidence(spans) {
+  const tail = spans
+    .filter((s) => s.phase === "copySlot")
+    .reduce(
+      (last, span) => (!last || span.endMs > last.endMs ? span : last),
+      null,
+    );
+  const coverage = (items) => {
+    const points = items
+      .filter(({ startMs, endMs }) => endMs > startMs)
+      .flatMap(({ startMs, endMs }) => [
+        [startMs, 1],
+        [endMs, -1],
+      ])
+      .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    let active = 0,
+      peakConcurrency = 0,
+      coveredMs = 0,
+      previous = 0;
+    for (const [time, delta] of points) {
+      if (active) coveredMs += time - previous;
+      active += delta;
+      peakConcurrency = Math.max(peakConcurrency, active);
+      previous = time;
+    }
+    return { coveredMs, peakConcurrency };
+  };
+  const publications = spans.filter((s) => s.phase === "publication");
+  const errors = spans.filter((s) => s.outcome && s.outcome !== "ok");
+  const outcomes = (items) =>
+    Object.fromEntries(
+      [...new Set(items.map((s) => s.outcome ?? "unknown"))].map((outcome) => [
+        outcome,
+        items.filter((s) => (s.outcome ?? "unknown") === outcome).length,
+      ]),
+    );
+  return {
+    spans,
+    publication: {
+      attempts: publications.length,
+      succeeded: publications.filter((s) => s.outcome === "ok").length,
+      failed: publications.filter((s) => s.outcome && s.outcome !== "ok")
+        .length,
+      outcomes: outcomes(publications),
+    },
+    errors: { count: errors.length, outcomes: outcomes(errors) },
+    observedLastCopySlot: tail
+      ? {
+          interpretation:
+            "Observed final copy-slot tail, not a causal trace or sum of concurrent durations",
+          completionMs: tail.endMs,
+          slotElapsedMs: tail.endMs - tail.startMs,
+          phases: Object.fromEntries(
+            [...new Set(spans.map((s) => s.phase))].map((phase) => [
+              phase,
+              coverage(
+                spans.filter(
+                  (s) => s.phase === phase && s.path?.includes(tail.path),
+                ),
+              ).coveredMs,
+            ]),
+          ),
+        }
+      : null,
+    // Legacy field: the last observed copy slot, not necessarily the artwork
+    // barrier. Metadata-only work can finish later; lastCompletion is independent.
+    barrierTail: tail
+      ? {
+          coverId: tail.path,
+          completionMs: tail.endMs,
+          spans: spans
+            .filter((s) => s.path?.includes(tail.path))
+            .sort((a, b) => a.startMs - b.startMs),
+        }
+      : null,
+    ...coverage(spans),
+    phases: Object.fromEntries(
+      [...new Set(spans.map((s) => s.phase))].map((phase) => {
+        const items = spans.filter((s) => s.phase === phase);
+        return [
+          phase,
+          {
+            calls: items.length,
+            summedDurationMs: items.reduce(
+              (sum, s) => sum + s.endMs - s.startMs,
+              0,
+            ),
+            ...coverage(items),
+          },
+        ];
+      }),
+    ),
+    lastCompletion: spans.reduce(
+      (last, span) => (!last || span.endMs > last.endMs ? span : last),
+      null,
+    ),
+  };
+}
 
 /** Count actual image bytes for both legacy flat files and published archives. */
 export async function artworkStorage(directory) {

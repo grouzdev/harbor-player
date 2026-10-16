@@ -21,6 +21,8 @@ import path from "node:path";
 import { Catalog } from "./database.js";
 import { Workers } from "./workers.js";
 import { acquireInstanceLock } from "./instance-lock.js";
+import { recoverPulseStaging } from "./pulse-staging-recovery.js";
+import { installedTagWriterVersion } from "./tag-writer-version.js";
 import { forkedTagWriter, type TagWriter } from "./isolated-tag-writer.js";
 import { writeId3InPlace } from "./in-place-id3.js";
 import { errorMessage, inside } from "./config.js";
@@ -74,6 +76,9 @@ interface JournalItem extends OperationItem {
 // Keep the verified recovery workflow available for a future opt-in, but make
 // ordinary deletion irreversible until that mode is explicitly re-enabled.
 const softDeleteEnabled = false;
+// Failed construction/shutdown can leave no reachable caller-owned service.
+// Keep ownership handles alive if cleanup rejects; remove on successful cleanup.
+const retainedOwners = new Set<() => void>();
 const exists = async (file: string) => {
   try {
     await lstat(file);
@@ -104,6 +109,7 @@ export class MusicService extends EventEmitter {
   private active = new Set<string>();
   private stopping = false;
   private closePromise?: Promise<void>;
+  private initialization?: Promise<void>;
   private recoverySettings: RecoverySettings = { backupRetention: "none" };
   private recoveryTimer?: NodeJS.Timeout;
   private playlistSyncTimers = new Map<string, NodeJS.Timeout>();
@@ -116,10 +122,24 @@ export class MusicService extends EventEmitter {
   ) {
     super();
     this.unlock = acquireInstanceLock(dataDir);
+    let catalog: Catalog | undefined;
+    let workers: Workers | undefined;
     try {
-      this.catalog = new Catalog(dataDir);
-      this.workers = new Workers(2);
-      this.scanner = new LibraryScanner(this.catalog, this.workers, dataDir);
+      this.catalog = catalog = new Catalog(dataDir);
+      // Recover synchronously for direct callers too, before any worker can run.
+      const jobs = this.catalog.jobs();
+      const history = this.catalog.history();
+      for (const job of jobs)
+        if (job.status === "queued" || job.status === "running") {
+          job.status = "error";
+          job.errors.push("Работа прервана остановкой сервиса");
+          this.catalog.saveJob(job);
+        }
+      for (const operation of history)
+        if (operation.status === "running") {
+          operation.status = "interrupted";
+          this.catalog.saveOperation(operation);
+        }
       this.musicBrainz = new MusicBrainzService(
         this.catalog,
         dataDir,
@@ -132,23 +152,53 @@ export class MusicService extends EventEmitter {
         execute: (id) => this.executeInternal(id),
         operation: (id) => this.catalog.operation(id),
       } satisfies OperationBackend);
+      // Keep the pool reachable even if starting a later worker throws.
+      this.workers = workers = new Workers(0);
+      this.scanner = new LibraryScanner(this.catalog, this.workers, dataDir);
+      this.workers.start(2);
     } catch (e) {
-      this.unlock();
+      const release = () => {
+        catalog?.close();
+        this.unlock();
+        retainedOwners.delete(release);
+      };
+      retainedOwners.add(release);
+      if (workers) {
+        // Construction cannot await termination. Retain ownership until every
+        // worker is gone; if cleanup fails, fail closed rather than unlock.
+        void workers
+          .close()
+          .then(release)
+          .catch((cleanupError: unknown) => {
+            console.error(
+              "Startup rollback failed; ownership retained",
+              cleanupError,
+            );
+          });
+      } else {
+        try {
+          release();
+        } catch (cleanupError) {
+          // Preserve the startup error and ownership if catalog close failed.
+          console.error(
+            "Startup rollback failed; ownership retained",
+            cleanupError,
+          );
+        }
+      }
       throw e;
     }
-    for (const job of this.catalog.jobs())
-      if (job.status === "queued" || job.status === "running") {
-        job.status = "error";
-        job.errors.push("Работа прервана остановкой сервиса");
-        this.catalog.saveJob(job);
-      }
-    for (const operation of this.catalog.history())
-      if (operation.status === "running") {
-        operation.status = "interrupted";
-        this.catalog.saveOperation(operation);
-      }
   }
-  async initialize() {
+  initialize(): Promise<void> {
+    if (this.stopping)
+      return Promise.reject(unavailable("Сервис останавливается"));
+    return (this.initialization ??= this.initializeOnce());
+  }
+  private async initializeOnce() {
+    if (this.stopping) throw unavailable("Сервис останавливается");
+    // One shot per owner: repeated initialization must never sweep live copies.
+    await recoverPulseStaging(this.dataDir);
+    if (this.stopping) throw unavailable("Сервис останавливается");
     this.recoverySettings = await readRecoverySettings(this.dataDir);
     await this.maintainRecovery();
     this.recoveryTimer = setInterval(
@@ -162,16 +212,7 @@ export class MusicService extends EventEmitter {
           "utf8",
         ),
       );
-      const pkg = JSON.parse(
-        await readFile(
-          new URL(
-            "../../node_modules/@digimezzo/node-taglib-sharp/package.json",
-            import.meta.url,
-          ),
-          "utf8",
-        ),
-      );
-      if (report.writerVersion === pkg.version)
+      if (report.writerVersion === (await installedTagWriterVersion()))
         this.capabilities = {
           writableFormats: report.formats
             .filter((f: { passed: boolean }) => f.passed)
@@ -1770,17 +1811,26 @@ export class MusicService extends EventEmitter {
     if (this.recoveryTimer) clearInterval(this.recoveryTimer);
     for (const timer of this.playlistSyncTimers.values()) clearTimeout(timer);
     this.playlistSyncTimers.clear();
-    this.beginShutdown();
-    if (!this.closePromise)
+    if (!this.closePromise) {
+      const release = () => {
+        this.catalog.close();
+        this.unlock();
+        retainedOwners.delete(release);
+      };
+      retainedOwners.add(release);
       this.closePromise = (async () => {
-        try {
-          await this.pending;
-          await this.workers.close();
-          this.catalog.close();
-        } finally {
-          this.unlock();
-        }
+        this.beginShutdown();
+        // Keep ownership until startup (including its sweep) has settled.
+        // initialize() reports failure; shutdown must still release resources.
+        await this.initialization?.catch(() => {});
+        if (this.recoveryTimer) clearInterval(this.recoveryTimer);
+        await this.pending;
+        await this.workers.close();
+        // A rejected termination is not proof that workers stopped. Fail closed,
+        // preserving ownership and the catalog until process shutdown.
+        release();
       })();
+    }
     await this.closePromise;
   }
 }

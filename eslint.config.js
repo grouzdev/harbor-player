@@ -7,6 +7,12 @@ export default [
   { ignores: ["dist/**", "release/**", ".test-data/**", "test-results/**"] },
   js.configs.recommended,
   {
+    files: ["tests/**/*.mjs"],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+    },
+  },
+  {
     files: ["src/**/*.{ts,tsx}", "tests/**/*.ts"],
     languageOptions: {
       parser: babelParser,

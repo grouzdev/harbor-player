@@ -8,6 +8,8 @@ import {
   readdir,
 } from "node:fs/promises";
 import path from "node:path";
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import type Database from "better-sqlite3";
 import { Catalog } from "../dist/server/database.js";
 import { splitPulseInterval } from "../dist/server/pulse.js";
@@ -46,6 +48,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   vi.restoreAllMocks();
+  syncBuiltinESMExports();
   catalog.close();
   await rm(root, { recursive: true, force: true });
 });
@@ -287,6 +290,207 @@ describe("Pulse storage", () => {
     ).toEqual({ albumId });
   });
 
+  it("retries missing artwork after source appears without caching absence or doubling time", async () => {
+    const coverId = `${"d".repeat(64)}.jpg`;
+    const input = event({ snapshot: { ...event().snapshot, coverId } });
+    const makeDirectory = vi.spyOn(fs.promises, "mkdir");
+    syncBuiltinESMExports();
+    await send(input);
+    await send(input);
+    expect(makeDirectory).not.toHaveBeenCalled();
+    await mkdir(path.join(root, "covers"));
+    await writeFile(path.join(root, "covers", coverId), "appeared");
+    await send(input);
+    expect(
+      await readFile(
+        path.join(root, "pulse-covers", `${coverId}.archive`, "image"),
+        "utf8",
+      ),
+    ).toBe("appeared");
+    expect(
+      db().prepare("SELECT sum(playedMs) total FROM pulse_days").get(),
+    ).toEqual({ total: 15000 });
+  });
+
+  it("cleans staging when source disappears after access and retries publication", async () => {
+    const coverId = `${"f".repeat(64)}.jpg`;
+    const source = path.join(root, "covers", coverId);
+    await mkdir(path.dirname(source));
+    await writeFile(source, "original");
+    const input = event({ snapshot: { ...event().snapshot, coverId } });
+    const originalCopy = fs.promises.copyFile;
+    const copy = vi
+      .spyOn(fs.promises, "copyFile")
+      .mockImplementationOnce(async (...args) => {
+        await rm(source);
+        return originalCopy(...args);
+      });
+    syncBuiltinESMExports();
+    await send(input);
+    expect(copy).toHaveBeenCalledTimes(1);
+    expect(await readdir(path.join(root, "pulse-covers"))).toEqual([]);
+    await writeFile(source, "returned");
+    await send(input);
+    expect(
+      await readFile(
+        path.join(root, "pulse-covers", `${coverId}.archive`, "image"),
+        "utf8",
+      ),
+    ).toBe("returned");
+    expect(
+      db().prepare("SELECT sum(playedMs) total FROM pulse_days").get(),
+    ).toEqual({ total: 15000 });
+  });
+
+  it.each(["EPERM", "EBUSY", "EACCES"])(
+    "retries transient %s publication before ACK without recopying",
+    async (code) => {
+      const coverId = `${"a".repeat(64)}.jpg`;
+      await mkdir(path.join(root, "covers"));
+      await writeFile(path.join(root, "covers", coverId), "complete original");
+      const originalRename = fs.promises.rename;
+      const rename = vi
+        .spyOn(fs.promises, "rename")
+        .mockRejectedValueOnce(Object.assign(new Error("sharing"), { code }))
+        .mockRejectedValueOnce(Object.assign(new Error("sharing"), { code }))
+        .mockImplementation(originalRename);
+      const copy = vi.spyOn(fs.promises, "copyFile");
+      syncBuiltinESMExports();
+      const input = event({ snapshot: { ...event().snapshot, coverId } });
+      await send(input);
+      expect(rename).toHaveBeenCalledTimes(3);
+      expect(copy).toHaveBeenCalledTimes(1);
+      expect(new Set(rename.mock.calls.map(([source]) => source)).size).toBe(1);
+      const archive = path.join(root, "pulse-covers", `${coverId}.archive`);
+      expect(await readFile(path.join(archive, "image"), "utf8")).toBe(
+        "complete original",
+      );
+      expect(await readdir(path.dirname(archive))).toEqual([
+        `${coverId}.archive`,
+      ]);
+      await writeFile(path.join(root, "covers", coverId), "changed source");
+      await send(input);
+      expect(rename).toHaveBeenCalledTimes(3);
+      expect(await readFile(path.join(archive, "image"), "utf8")).toBe(
+        "complete original",
+      );
+      expect(
+        db().prepare("SELECT sum(playedMs) total FROM pulse_days").get(),
+      ).toEqual({ total: 15000 });
+    },
+  );
+
+  it.each([
+    { code: "EPERM", attempts: 4 },
+    { code: "EBUSY", attempts: 4 },
+    { code: "EACCES", attempts: 4 },
+    { code: "EIO", attempts: 1 },
+  ])(
+    "bounds failed $code publication, cleans staging and allows later retry",
+    async ({ code, attempts }) => {
+      const coverId = `${"e".repeat(64)}.jpg`;
+      await mkdir(path.join(root, "covers"));
+      await writeFile(path.join(root, "covers", coverId), "original");
+      const originalRename = fs.promises.rename;
+      const rename = vi
+        .spyOn(fs.promises, "rename")
+        .mockRejectedValue(Object.assign(new Error("publication"), { code }));
+      syncBuiltinESMExports();
+      const input = event({ snapshot: { ...event().snapshot, coverId } });
+      await send(input);
+      expect(rename).toHaveBeenCalledTimes(attempts);
+      expect(await readdir(path.join(root, "pulse-covers"))).toEqual([]);
+      rename.mockImplementation(originalRename);
+      await send(input);
+      expect(
+        await readFile(
+          path.join(root, "pulse-covers", `${coverId}.archive`, "image"),
+          "utf8",
+        ),
+      ).toBe("original");
+      expect(
+        db().prepare("SELECT sum(playedMs) total FROM pulse_days").get(),
+      ).toEqual({ total: 15000 });
+    },
+  );
+
+  it("never publishes a partial failed copy or touches unrelated staging", async () => {
+    const coverId = `${"c".repeat(64)}.png`;
+    const directory = path.join(root, "pulse-covers");
+    await mkdir(path.join(root, "covers"));
+    await mkdir(directory);
+    await writeFile(path.join(root, "covers", coverId), "complete original");
+    const foreign = ".pulse-foreign.tmp";
+    await mkdir(path.join(directory, foreign));
+    await writeFile(path.join(directory, foreign, "image"), "live foreign");
+    await writeFile(path.join(directory, "flat.png"), "published flat");
+    await mkdir(path.join(directory, "prior.png.archive"));
+    await writeFile(
+      path.join(directory, "prior.png.archive", "image"),
+      "published archive",
+    );
+    let release!: () => void;
+    let written!: () => void;
+    const paused = new Promise<void>((resolve) => (release = resolve));
+    const partialWritten = new Promise<void>((resolve) => (written = resolve));
+    const originalCopy = fs.promises.copyFile;
+    vi.spyOn(fs.promises, "copyFile").mockImplementationOnce(
+      async (_source, destination) => {
+        await writeFile(destination, "partial");
+        written();
+        await paused;
+        throw Object.assign(new Error("interrupted copy"), { code: "EIO" });
+      },
+    );
+    const rename = vi.spyOn(fs.promises, "rename");
+    syncBuiltinESMExports();
+    const input = event({ snapshot: { ...event().snapshot, coverId } });
+    let acknowledged = false;
+    const pending = send(input).then((result) => {
+      acknowledged = true;
+      return result;
+    });
+    try {
+      await partialWritten;
+      expect(acknowledged).toBe(false);
+      expect(rename).not.toHaveBeenCalled();
+      expect(await readdir(directory)).not.toContain(`${coverId}.archive`);
+    } finally {
+      release();
+      await pending;
+    }
+    expect(rename).not.toHaveBeenCalled();
+    expect((await readdir(directory)).sort()).toEqual(
+      [foreign, "flat.png", "prior.png.archive"].sort(),
+    );
+    expect(await readFile(path.join(directory, foreign, "image"), "utf8")).toBe(
+      "live foreign",
+    );
+    expect(await readFile(path.join(directory, "flat.png"), "utf8")).toBe(
+      "published flat",
+    );
+    expect(
+      await readFile(
+        path.join(directory, "prior.png.archive", "image"),
+        "utf8",
+      ),
+    ).toBe("published archive");
+    // Best-effort decoration ACKs time after failure; exact retry can still
+    // prepare the complete image, without counting that time a second time.
+    fs.promises.copyFile = originalCopy;
+    syncBuiltinESMExports();
+    await send(input);
+    expect(
+      await readFile(
+        path.join(directory, `${coverId}.archive`, "image"),
+        "utf8",
+      ),
+    ).toBe("complete original");
+    expect(
+      db().prepare("SELECT sum(playedMs) total FROM pulse_days").get(),
+    ).toEqual({ total: 15000 });
+  });
+
   it.each(["missing", "copy-error"])(
     "records time and snapshot when cover is %s",
     async (fault) => {
@@ -303,7 +507,13 @@ describe("Pulse storage", () => {
         playedMs: 15000,
         coverId,
       });
-      expect(await readdir(path.join(root, "pulse-covers"))).toEqual([]);
+      if (fault === "missing")
+        await expect(
+          readdir(path.join(root, "pulse-covers")),
+        ).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+      else expect(await readdir(path.join(root, "pulse-covers"))).toEqual([]);
       if (fault === "copy-error")
         await rm(path.join(root, "covers"), { recursive: true });
       const context = await createApp({ dataDir: root });

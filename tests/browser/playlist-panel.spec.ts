@@ -555,7 +555,9 @@ test("automatic next opens collapsed ancestors and scrolls to the exact occurren
     .evaluate((audio) => audio.dispatchEvent(new Event("ended")));
   const current = panel
     .getByTestId("playlist-track-row")
-    .filter({ hasText: "Song 1" });
+    .filter({ has: page.getByText("Song 1", { exact: true }) })
+    // The folder occurrence precedes the intentional duplicate in the genre entry.
+    .first();
   await expect(current).toHaveClass(/current/);
   await expect(current).toBeInViewport();
   await expect(folder.locator(".playlist-entity-main")).toHaveAttribute(

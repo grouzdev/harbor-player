@@ -2,6 +2,7 @@ import type Database from "better-sqlite3";
 import { createHash, randomUUID } from "node:crypto";
 import { access, copyFile, mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   pulseBatchSchema,
   pulseSettingsPatchSchema,
@@ -223,17 +224,33 @@ export class PulseStore {
     let staging: string | undefined;
     try {
       if (await this.hasCover(id)) return;
+      // Avoid staging for absent sources, without caching absence across retries.
+      // Copy still handles disappearance after access as best-effort artwork.
+      const source = path.join(this.dataDir, "covers", id);
+      await access(source);
       await mkdir(directory, { recursive: true });
       staging = path.join(directory, `.pulse-${id}-${randomUUID()}.tmp`);
       await mkdir(staging);
-      await copyFile(
-        path.join(this.dataDir, "covers", id),
-        path.join(staging, "image"),
-      );
+      await copyFile(source, path.join(staging, "image"));
       // Publish a complete, nonempty directory on all filesystems. Directory
       // rename cannot replace another nonempty winner, unlike flat-file rename.
       // This also works on FAT/exFAT where hard links are unavailable.
-      await rename(staging, `${target}.archive`);
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await rename(staging, `${target}.archive`);
+          break;
+        } catch (error) {
+          // Windows scanners can briefly hold the completed staging directory.
+          // Retry publication only, before ACK, with a bounded 140ms backoff.
+          const code = (error as NodeJS.ErrnoException).code;
+          if (
+            attempt === 3 ||
+            !["EPERM", "EBUSY", "EACCES"].includes(code ?? "")
+          )
+            throw error;
+          await delay(20 * 2 ** attempt);
+        }
+      }
     } catch {
       // Artwork is best-effort; preserve the snapshot and listening time.
     } finally {

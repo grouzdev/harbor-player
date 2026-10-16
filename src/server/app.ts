@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import staticFiles from "@fastify/static";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -81,7 +81,7 @@ export function rangeFor(
     throw new Error("range");
   return { start, end };
 }
-export async function createApp(options: {
+type AppOptions = {
   dataDir: string;
   port?: number;
   dev?: boolean;
@@ -89,7 +89,8 @@ export async function createApp(options: {
   openExplorer?: ExplorerLauncher;
   musicBrainz?: MusicBrainzOptions;
   tagWriter?: TagWriter;
-}) {
+};
+export async function createApp(options: AppOptions) {
   const app = Fastify({
     logger: options.logger || false,
     bodyLimit: 16 * 1024 * 1024,
@@ -100,6 +101,24 @@ export async function createApp(options: {
     options.musicBrainz,
     options.tagWriter,
   );
+  try {
+    return await configureApp(app, service, options);
+  } catch (error) {
+    // Hooks may not exist yet, or plugin boot may have failed. Always release
+    // the owner explicitly even when closing the partially built app rejects.
+    try {
+      await app.close();
+    } finally {
+      await service.close();
+    }
+    throw error;
+  }
+}
+async function configureApp(
+  app: FastifyInstance,
+  service: MusicService,
+  options: AppOptions,
+) {
   const scanScheduler = new AutoScanScheduler(service);
   const openExplorer = options.openExplorer || openInExplorer;
   await service.initialize();

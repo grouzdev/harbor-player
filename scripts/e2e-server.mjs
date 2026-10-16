@@ -79,10 +79,12 @@ for (const browser of ["chrome", "edge"]) {
   for (const scenario of [
     "player",
     "file-operations",
+    "root-menu",
     "cover-mode",
     "folders",
     "selection",
     "search",
+    "catalog-state",
   ]) {
     const source = path.join(root, browser, scenario, "Downloads");
     const target = path.join(root, browser, scenario, "Collection");

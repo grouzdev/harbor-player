@@ -8,8 +8,11 @@ import {
 
 export interface ContextMenuItem {
   label: string;
+  /** Resolve async-backed state without replacing an open menu. */
+  resolve?: () => ContextMenuItem;
   icon?: ReactNode;
-  disabled?: boolean;
+  /** Live guards are re-evaluated on render while the menu stays open. */
+  disabled?: boolean | (() => boolean);
   onSelect?: () => void | Promise<void>;
   submenu?: ContextMenuItem[];
 }
@@ -38,7 +41,14 @@ export function ContextMenu({
     if (!menu) return;
     setOpenSubmenu(null);
     setSubmenuSide("right");
-    requestAnimationFrame(() => firstItemRef.current?.focus());
+    const frame = requestAnimationFrame(() => firstItemRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [menu]);
+
+  // Callback identity can change on any parent render (playback/scan updates).
+  // Refresh dismissal listeners without resetting an already targeted submenu.
+  useEffect(() => {
+    if (!menu) return;
     const closeForOutsidePress = (event: PointerEvent) => {
       if (!ref.current?.contains(event.target as Node)) onClose();
     };
@@ -80,7 +90,8 @@ export function ContextMenu({
       aria-label="Контекстное меню"
       style={{ left: menu.x, top: menu.y }}
     >
-      {menu.items.map((item, index) => {
+      {menu.items.map((source, index) => {
+        const item = source.resolve?.() ?? source;
         const expanded = openSubmenu === item.label;
         return (
           <div
@@ -94,7 +105,11 @@ export function ContextMenu({
               type="button"
               role="menuitem"
               className="context-menu-item"
-              disabled={item.disabled}
+              disabled={
+                typeof item.disabled === "function"
+                  ? item.disabled()
+                  : item.disabled
+              }
               aria-haspopup={item.submenu ? "menu" : undefined}
               aria-expanded={item.submenu ? expanded : undefined}
               onFocus={() => item.submenu && setOpenSubmenu(item.label)}
@@ -127,34 +142,44 @@ export function ContextMenu({
                 className={`context-menu context-menu-submenu context-menu-submenu-${submenuSide}`}
                 role="menu"
               >
-                {item.submenu.map((subitem, subitemIndex) => (
-                  <button
-                    ref={subitemIndex === 0 ? submenuFirstItemRef : undefined}
-                    key={subitem.label}
-                    type="button"
-                    role="menuitem"
-                    className="context-menu-item"
-                    disabled={subitem.disabled}
-                    onClick={() => {
-                      onClose();
-                      void subitem.onSelect?.();
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape" || event.key === "ArrowLeft") {
-                        event.preventDefault();
-                        setOpenSubmenu(null);
-                        ref.current
-                          ?.querySelector<HTMLButtonElement>(
-                            `[aria-expanded="true"]`,
-                          )
-                          ?.focus();
+                {item.submenu.map((source, subitemIndex) => {
+                  const subitem = source.resolve?.() ?? source;
+                  return (
+                    <button
+                      ref={subitemIndex === 0 ? submenuFirstItemRef : undefined}
+                      key={subitem.label}
+                      type="button"
+                      role="menuitem"
+                      className="context-menu-item"
+                      disabled={
+                        typeof subitem.disabled === "function"
+                          ? subitem.disabled()
+                          : subitem.disabled
                       }
-                    }}
-                  >
-                    {subitem.icon}
-                    <span>{subitem.label}</span>
-                  </button>
-                ))}
+                      onClick={() => {
+                        onClose();
+                        void subitem.onSelect?.();
+                      }}
+                      onKeyDown={(event) => {
+                        if (
+                          event.key === "Escape" ||
+                          event.key === "ArrowLeft"
+                        ) {
+                          event.preventDefault();
+                          setOpenSubmenu(null);
+                          ref.current
+                            ?.querySelector<HTMLButtonElement>(
+                              `[aria-expanded="true"]`,
+                            )
+                            ?.focus();
+                        }
+                      }}
+                    >
+                      {subitem.icon}
+                      <span>{subitem.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

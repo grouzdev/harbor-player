@@ -1,5 +1,5 @@
 {
-  "date": "2026-09-10T23:02:25.769Z",
+  "date": "2026-10-16T20:08:52.791Z",
   "writerVersion": "1.0.4",
   "platform": "win32",
   "node": "v24.20.0",
@@ -17,7 +17,7 @@
     {
       "format": "mp3",
       "passed": true,
-      "bytes": 3809266
+      "bytes": 28529
     },
     {
       "format": "flac",

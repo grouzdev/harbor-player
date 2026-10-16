@@ -1208,7 +1208,7 @@ test("library root can be added to any playlist", async ({ page }, info) => {
   const source = path.resolve(
     ".test-data/browser",
     browser,
-    "file-operations",
+    "root-menu",
     "Downloads",
   );
   await page.goto("/");
@@ -1258,8 +1258,37 @@ test("library root can be added to any playlist", async ({ page }, info) => {
   await expect(
     page.getByRole("menuitem", { name: "Создать новый", exact: true }),
   ).toBeVisible();
+  // A parent render must not reinitialize the open submenu just because the
+  // caller supplies a new onClose callback. Change real player state while the
+  // pointer stays over the menu, without dispatching a click outside it.
+  const volume = page.getByRole("slider", { name: "Громкость", exact: true });
+  const previousVolume = await volume.inputValue();
+  const nextVolume = previousVolume === "0.3" ? "0.4" : "0.3";
+  const openItem = await page
+    .getByRole("menuitem", { name: playlistName })
+    .elementHandle();
+  expect(openItem).not.toBeNull();
+  await volume.fill(nextVolume);
+  await expect(volume).toHaveValue(nextVolume);
+  await expect
+    .poll(() =>
+      page.evaluate(() => localStorage.getItem("harbor-player-volume")),
+    )
+    .toBe(nextVolume);
+  expect(
+    await openItem!.evaluate(async (item) => {
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
+      return item.isConnected;
+    }),
+  ).toBe(true);
+  await expect(
+    page.getByRole("menuitem", { name: playlistName }),
+  ).toBeVisible();
   await page.getByRole("menuitem", { name: playlistName }).click();
   await expect(page.getByText("Добавлено в плейлист")).toBeVisible();
+  await volume.fill(previousVolume);
 
   const libraryTile = page
     .locator(".libraries-panel .library-container")
@@ -1418,10 +1447,11 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     await page
       .locator(".albums-panel")
       .evaluate((e) => e.getBoundingClientRect().width),
-  ).toBeGreaterThan(
+  ).toBeCloseTo(
     await page
       .locator(".artists-panel")
       .evaluate((e) => e.getBoundingClientRect().width),
+    0,
   );
   const initialPanelWidths = await page
     .locator(".panel")
@@ -1840,6 +1870,15 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await expect(firstAlbum).toHaveClass(/selected/);
   await firstAlbumButton.click({ modifiers: ["Control"] });
   await expect(firstAlbum).not.toHaveClass(/selected/);
+  // Repeated Control presses over a decorative cover must not let Edge's
+  // native image Magnify swallow subsequent pointer input outside the DOM.
+  await page.locator(".add-library").click();
+  const afterCoverSelectionDialog = page.getByRole("dialog");
+  await expect(afterCoverSelectionDialog).toBeVisible();
+  await afterCoverSelectionDialog
+    .getByRole("button", { name: "Закрыть", exact: true })
+    .click();
+  await expect(afterCoverSelectionDialog).not.toBeVisible();
   const albumArtistLink = firstAlbum.getByRole("button", {
     name: "Выбрать исполнителя «Исполнитель альбома»",
   });
@@ -2545,35 +2584,37 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   ).toEqual(["now-artists", "now-track-link"]);
   await artistButton.click({ modifiers: ["Control"] });
   await expect(artistRow).not.toHaveClass(/selected/);
+  const liveAlbumsPanel = page.locator('[data-panel-id="albums"]');
+  const liveArtistsPanel = page.locator('[data-panel-id="artists"]');
   await page
-    .locator(".albums-panel")
+    .locator('[data-panel-id="albums"]')
     .getByRole("button", { name: "Закрыть панель «Альбомы»" })
     .dispatchEvent("click");
-  await expect(page.locator(".albums-panel")).toBeHidden();
+  await expect(liveAlbumsPanel).toBeHidden();
   await nowPlaying
     .getByRole("button", { name: /Открыть альбом/ })
     .dispatchEvent("click");
-  await expect(page.locator(".albums-panel")).toBeHidden();
-  await expect(page.locator(".albums-panel .album-card.selected")).toHaveCount(
-    0,
-  );
+  await expect(liveAlbumsPanel).toBeHidden();
+  await expect(liveAlbumsPanel.locator(".album-card.selected")).toHaveCount(0);
   await expect(
     page
       .locator(".artists-panel .list-tile.selected")
       .filter({ hasText: "Исполнитель альбома" }),
   ).toHaveCount(1);
   await expect(rows).toHaveCount(6);
+  await expect(page.locator(".panel-transition-snapshot")).toHaveCount(0);
   await page
-    .locator(".artists-panel")
+    .locator('[data-panel-id="artists"]')
     .getByRole("button", { name: "Закрыть панель «Исполнители»" })
     .dispatchEvent("click");
-  await expect(page.locator(".artists-panel")).toBeHidden();
+  await expect(liveArtistsPanel).toBeHidden();
   await nowPlaying
     .getByRole("button", { name: "Открыть исполнителя «Исполнитель альбома»" })
     .dispatchEvent("click");
-  await expect(page.locator(".artists-panel")).toBeHidden();
-  await expect(page.locator(".albums-panel")).toBeHidden();
+  await expect(liveArtistsPanel).toBeHidden();
+  await expect(liveAlbumsPanel).toBeHidden();
   await expect(rows).toHaveCount(6);
+  await expect(page.locator(".panel-transition-snapshot")).toHaveCount(0);
   await downloadsTile.locator(".list-tile-main").dispatchEvent("click");
   await page.locator("audio").evaluate((a: HTMLAudioElement) => {
     a.loop = true;

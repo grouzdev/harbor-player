@@ -669,6 +669,13 @@ body.selection-dragging * {
   padding: 0 2px 5px;
 }
 
+/* Covers decorate their parent controls; do not target native image actions
+   (including Edge's double-Control Magnify) during catalog selection. */
+.album-cover > img,
+.tiny-cover > img {
+  pointer-events: none;
+}
+
 .album-cover {
   aspect-ratio: 1;
   background: #28352f;
