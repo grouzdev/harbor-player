@@ -20,7 +20,6 @@ import { useArtistGenreReveal } from "./useArtistGenreReveal";
 import { SettingsWorkspace } from "./SettingsWorkspace";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
-  Activity,
   AudioLines,
   Bookmark as BookmarkIcon,
   CircleUserRound,
@@ -42,6 +41,7 @@ import {
   Play,
   Plus,
   RefreshCw,
+  Settings,
   Eye,
   EyeOff,
   Star,
@@ -140,8 +140,10 @@ import {
   type CatalogContextMenuHandler,
 } from "./CatalogVirtualViews";
 import { useAppShellLayout } from "./useAppShellLayout";
+import { CatalogSidebar } from "./CatalogSidebar";
+import { usePanelTransitions } from "./usePanelTransitions";
 import { useCatalogScrollTargets } from "./useCatalogScrollTargets";
-import { PlaylistPanel } from "./PlaylistPanel";
+import { PlaylistPanel, PlaylistSettingsDialog } from "./PlaylistPanel";
 import { IconToggle } from "./IconToggle";
 import "./styles/pulse-shell.css";
 import type {
@@ -204,6 +206,7 @@ type PanelVisibility = Record<PanelId, boolean>;
 const panelVisibilityStorageKey = "harbor-player-panel-visibility-v1";
 const legacyPanelVisibilityStorageKey = "mml-panel-visibility-v1";
 const virtualPanelTopInset = 14;
+const defaultPanelWeights = [1, 1, 1, 1, 1, 1];
 
 function updateUserStateCache(
   value: unknown,
@@ -625,6 +628,8 @@ export function App() {
   const [toast, setToast] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
+  const [playlistForSettings, setPlaylistForSettings] =
+    useState<Playlist | null>(null);
   const [pendingBookmarkKeys, setPendingBookmarkKeys] = useState<Set<string>>(
     new Set(),
   );
@@ -1048,20 +1053,34 @@ export function App() {
     window.addEventListener("resize", constrainToRoom);
     return () => window.removeEventListener("resize", constrainToRoom);
   }, [fullscreenWindowMode, getFullscreenRoom, isWebFullscreen]);
-  const setPanelVisible = useCallback((id: PanelId, visible: boolean) => {
-    setPanelVisibility((current) => {
-      if (current[id] === visible) return current;
-      const next = { ...current, [id]: visible };
-      try {
-        localStorage.setItem(panelVisibilityStorageKey, JSON.stringify(next));
-      } catch {
-        // Visibility remains usable for the current session.
-      }
-      return next;
-    });
-  }, []);
+  const workspaceRef = useRef<HTMLElement>(null);
+  const { busy: panelsTransitioning, prepare: preparePanelTransition } =
+    usePanelTransitions(
+      workspaceRef,
+      appShellRef,
+      panelVisibility,
+      `${workspaceMode}:${modal === "settings" || modal === "history"}`,
+    );
+  const setPanelVisible = useCallback(
+    (id: PanelId, visible: boolean) => {
+      if (panelVisibility[id] === visible) return;
+      if (!preparePanelTransition(id, visible)) return;
+      setPanelVisibility((current) => {
+        if (current[id] === visible) return current;
+        const next = { ...current, [id]: visible };
+        try {
+          localStorage.setItem(panelVisibilityStorageKey, JSON.stringify(next));
+        } catch {
+          // Visibility remains usable for the current session.
+        }
+        return next;
+      });
+    },
+    [panelVisibility, preparePanelTransition],
+  );
   const togglePanelVisibility = useCallback(
     (id: PanelId) => {
+      if (panelsTransitioning) return;
       const visible = !panelVisibility[id];
       setPanelVisible(id, visible);
       if (visible) return;
@@ -1086,6 +1105,7 @@ export function App() {
     },
     [
       panelVisibility,
+      panelsTransitioning,
       setPanelVisible,
       setFilter,
       setSelectedArtists,
@@ -1094,14 +1114,13 @@ export function App() {
       setSelectedAlbumId,
     ],
   );
-  const workspaceRef = useRef<HTMLElement>(null);
   const [panelWeights, setPanelWeights] = useState<number[]>(() => {
     try {
       const weights = JSON.parse(
         readMigratedStorageValue(
           "harbor-player-panel-weights-v1",
           "mml-panel-weights-v1",
-        ) || "[1.05,0.9,1,1.45,1.6,1.8]",
+        ) || JSON.stringify(defaultPanelWeights),
       );
       return Array.isArray(weights) &&
         weights.length === 6 &&
@@ -1111,9 +1130,9 @@ export function App() {
         ? weights
         : Array.isArray(weights) && weights.length === 5
           ? [...weights, 1.8]
-          : [1.05, 0.9, 1, 1.45, 1.6, 1.8];
+          : [...defaultPanelWeights];
     } catch {
-      return [1.05, 0.9, 1, 1.45, 1.6, 1.8];
+      return [...defaultPanelWeights];
     }
   });
   const [rowWeights, setRowWeights] = useState<number[]>(() => {
@@ -2746,13 +2765,43 @@ export function App() {
           undefined,
           "DELETE",
         );
-        setActivePlaylistId(null);
+        setActivePlaylistId((current) =>
+          current === playlist.id ? null : current,
+        );
         await refreshPlaylists();
       } catch (error) {
         notify((error as Error).message);
       }
     },
     [notify, refreshPlaylists],
+  );
+  const showPlaylistMenu = useCallback(
+    (event: React.MouseEvent, playlist: Playlist) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        items: [
+          {
+            label: "Переименовать",
+            icon: <Pencil size={16} />,
+            onSelect: () => renamePlaylist(playlist),
+          },
+          {
+            label: "Настройки",
+            icon: <Settings size={16} />,
+            onSelect: () => setPlaylistForSettings(playlist),
+          },
+          {
+            label: "Удалить",
+            icon: <Trash2 size={16} />,
+            onSelect: () => deletePlaylist(playlist),
+          },
+        ],
+      });
+    },
+    [renamePlaylist, deletePlaylist],
   );
   const addCurrentSelectionToPlaylist = useCallback(
     async (beforeEntryId?: string) => {
@@ -2810,6 +2859,7 @@ export function App() {
     rightId: PanelId,
     e: React.PointerEvent<HTMLDivElement>,
   ) => {
+    if (panelsTransitioning) return;
     const start = e.clientX;
     const initial = panelWeights;
     const leftPanel = getPanelDefinition(leftId);
@@ -2861,6 +2911,7 @@ export function App() {
     window.addEventListener("pointerup", stop);
   };
   const resizeRows = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (panelsTransitioning) return;
     const start = e.clientY;
     const initial = rowWeights;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -2895,6 +2946,14 @@ export function App() {
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
+  };
+  const resetPanelWidths = () => {
+    const weights = [...defaultPanelWeights];
+    setPanelWeights(weights);
+    localStorage.setItem(
+      "harbor-player-panel-weights-v1",
+      JSON.stringify(weights),
+    );
   };
   const libraryListRef = useRef<HTMLDivElement>(null);
   const genreListRef = useRef<HTMLDivElement>(null);
@@ -3089,10 +3148,16 @@ export function App() {
         role="separator"
         aria-label={`Ширина: ${leftPanel.label} — ${rightPanel.label}`}
         onPointerDown={(event) => resize(leftId, rightId, event)}
+        onDoubleClick={resetPanelWidths}
       />
     );
   };
   const settingsOpen = modal === "settings" || modal === "history";
+  const toggleSettings = () => {
+    setContextMenu(null);
+    if (settingsOpen && !pulseMode) setCoverMode(false);
+    setModal(settingsOpen ? null : "settings");
+  };
   return (
     <div
       ref={appShellRef}
@@ -3170,11 +3235,7 @@ export function App() {
                 : "Вернуться в каталог"
               : "Настройки"
           }
-          onClick={() => {
-            setContextMenu(null);
-            if (settingsOpen && !pulseMode) setCoverMode(false);
-            setModal(settingsOpen ? null : "settings");
-          }}
+          onClick={toggleSettings}
         />
         {!settingsOpen && workspaceMode === "panels" && (
           <CatalogUserFilters
@@ -3188,31 +3249,6 @@ export function App() {
             onRetryBookmarks={() => {
               void bookmarks.refetch();
             }}
-            trailingControls={
-              panelDefinitions.some(({ id }) => !panelVisibility[id]) && (
-                <div
-                  className="panel-visibility-controls"
-                  role="group"
-                  aria-label="Видимость панелей каталога"
-                >
-                  {panelDefinitions
-                    .filter(({ id }) => !panelVisibility[id])
-                    .map(({ id, label, Icon }) => (
-                      <button
-                        key={id}
-                        type="button"
-                        className="icon-button panel-visibility-button is-hidden"
-                        aria-label={`Показать панель «${label}»`}
-                        aria-pressed={false}
-                        title={`Показать панель «${label}»`}
-                        onClick={() => togglePanelVisibility(id)}
-                      >
-                        <Icon size={19} />
-                      </button>
-                    ))}
-                </div>
-              )
-            }
           />
         )}
         {!settingsOpen && coverMode && (
@@ -3234,20 +3270,6 @@ export function App() {
         )}
         {!settingsOpen && (
           <>
-            <button
-              type="button"
-              className="icon-button pulse-mode-toggle"
-              aria-label={pulseMode ? "Вернуться к панелям" : "Открыть Пульс"}
-              title={pulseMode ? "Вернуться к панелям" : "Пульс"}
-              aria-pressed={pulseMode}
-              onClick={() => {
-                setContextMenu(null);
-                setCoverSearch("");
-                setWorkspaceMode(pulseMode ? "panels" : "pulse");
-              }}
-            >
-              <Activity size={21} />
-            </button>
             <IconToggle
               className="cover-mode-toggle"
               checked={coverMode}
@@ -3278,6 +3300,21 @@ export function App() {
           </>
         )}
       </header>
+      <CatalogSidebar
+        panels={panelDefinitions.filter(({ id }) => !panelVisibility[id])}
+        showPanels={!settingsOpen && workspaceMode === "panels"}
+        settingsOpen={settingsOpen}
+        pulseMode={pulseMode && !settingsOpen}
+        busy={panelsTransitioning}
+        onShowPanel={(id) => togglePanelVisibility(id as PanelId)}
+        onToggleSettings={toggleSettings}
+        onTogglePulse={() => {
+          setContextMenu(null);
+          setCoverSearch("");
+          setModal(null);
+          setWorkspaceMode(pulseMode && !settingsOpen ? "panels" : "pulse");
+        }}
+      />
       {settingsOpen && (
         <SettingsWorkspace>
           {(renderSeparator) => (
@@ -3370,8 +3407,6 @@ export function App() {
                     }
                   : undefined
               }
-              onRename={(playlist) => void renamePlaylist(playlist)}
-              onDelete={(playlist) => void deletePlaylist(playlist)}
               notify={notify}
               onClose={() => togglePanelVisibility("playlists")}
             />
@@ -3421,6 +3456,7 @@ export function App() {
               playlists={playlists.data || []}
               activePlaylistId={activePlaylistId}
               onSelectPlaylist={selectPlaylist}
+              onPlaylistContextMenu={showPlaylistMenu}
               onPlayPlaylist={(playlistId) =>
                 void player.startPlaylist(playlistId)
               }
@@ -3570,8 +3606,6 @@ export function App() {
                     }
                   : undefined
               }
-              onRename={(playlist) => void renamePlaylist(playlist)}
-              onDelete={(playlist) => void deletePlaylist(playlist)}
               notify={notify}
               onClose={() => togglePanelVisibility("playlists")}
             />
@@ -3640,14 +3674,9 @@ export function App() {
               onSelectArtist={selectAlbumArtist}
               onCoverDrop={prepareDroppedCover}
               bookmarkKeys={bookmarkKeys}
-              bookmarksUnavailable={bookmarksUnavailable}
-              pendingBookmarkKeys={pendingBookmarkKeys}
-              onBookmarkChange={changeBookmark}
-              pendingUserStateKeys={pendingUserStateKeys}
               playlistDragEnabled={Boolean(
                 activePlaylistId && panelVisibility.playlists,
               )}
-              onUserStateChange={changeUserState}
               scrollTarget={
                 albumScrollTarget?.filterKey === filterKey
                   ? albumScrollTarget
@@ -3766,11 +3795,6 @@ export function App() {
                 }}
                 onContextMenu={showCatalogMenu}
                 bookmarkKeys={bookmarkKeys}
-                bookmarksUnavailable={bookmarksUnavailable}
-                pendingBookmarkKeys={pendingBookmarkKeys}
-                onBookmarkChange={changeBookmark}
-                pendingUserStateKeys={pendingUserStateKeys}
-                onUserStateChange={changeUserState}
                 bookmarksOnly={filter.bookmarksOnly}
                 bookmarkCount={bookmarks.data?.length || 0}
                 hasOtherFilters={
@@ -3856,6 +3880,14 @@ export function App() {
         pendingUserStateKeys={pendingUserStateKeys}
       />
       <ContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
+      {playlistForSettings && (
+        <PlaylistSettingsDialog
+          key={playlistForSettings.id}
+          playlist={playlistForSettings}
+          onClose={() => setPlaylistForSettings(null)}
+          notify={notify}
+        />
+      )}
       <UpdatePanel />
       {toast && (
         <div className="toast" role="status">

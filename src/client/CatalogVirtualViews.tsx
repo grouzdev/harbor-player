@@ -29,11 +29,6 @@ import {
 } from "../shared/artist-grouping";
 import { count, duration } from "./api";
 import { BookmarkToggle, type BookmarkChange } from "./BookmarkToggle";
-import {
-  RatingControl,
-  ViewedToggle,
-  type UserStateChange,
-} from "./RatingControl";
 import { ListTile } from "./ListTile";
 import { showPlayingTrackIndicators } from "./feature-flags";
 import {
@@ -45,6 +40,7 @@ import { buildTrackListRows } from "./track-grouping";
 import { usePanelScrollResolver } from "./panel-scroll";
 import { AlbumHeader } from "./AlbumHeader";
 import { DiscHeader } from "./DiscHeader";
+import { CatalogStateIndicators } from "./CatalogStateIndicators";
 
 const virtualPanelTopInset = 14;
 
@@ -387,11 +383,6 @@ export function AlbumGrid({
   onSelectArtist,
   onCoverDrop,
   bookmarkKeys,
-  bookmarksUnavailable,
-  pendingBookmarkKeys,
-  onBookmarkChange,
-  onUserStateChange,
-  pendingUserStateKeys,
   scrollTarget,
   playlistDragEnabled = false,
 }: {
@@ -410,11 +401,6 @@ export function AlbumGrid({
   onSelectArtist: (artist: string) => void;
   onCoverDrop: (album: Album, files: File[]) => void;
   bookmarkKeys: Set<string>;
-  bookmarksUnavailable: boolean;
-  pendingBookmarkKeys: Set<string>;
-  onBookmarkChange: BookmarkChange;
-  onUserStateChange: UserStateChange;
-  pendingUserStateKeys: Set<string>;
   playlistDragEnabled?: boolean;
   scrollTarget: {
     album: string;
@@ -604,15 +590,6 @@ export function AlbumGrid({
                 {entry?.type === "albums" &&
                   entry.albums.map((album) => {
                     const bookmarked = bookmarkKeys.has(`album:${album.id}`);
-                    const rated = album.rating !== null;
-                    let compactActionIndex = 0;
-                    const bookmarkActionIndex = bookmarked
-                      ? compactActionIndex++
-                      : -1;
-                    const viewedActionIndex = album.viewed
-                      ? compactActionIndex++
-                      : -1;
-                    const ratingActionIndex = rated ? compactActionIndex++ : -1;
 
                     return (
                       <div
@@ -656,61 +633,6 @@ export function AlbumGrid({
                             onSelectArtist={onSelectArtist}
                           />
                         )}
-                        <div
-                          className={`album-card-actions active-actions-${compactActionIndex}`}
-                        >
-                          <div
-                            className={`album-card-action album-card-action--bookmark ${bookmarked ? `is-active compact-action-${bookmarkActionIndex}` : ""}`}
-                          >
-                            <BookmarkToggle
-                              kind="album"
-                              id={album.id}
-                              label={album.title || "Без альбома"}
-                              bookmarked={bookmarked}
-                              unavailable={bookmarksUnavailable}
-                              pending={pendingBookmarkKeys.has(
-                                `album:${album.id}`,
-                              )}
-                              onChange={onBookmarkChange}
-                              className="album-bookmark-toggle"
-                              filledWhenBookmarked={false}
-                            />
-                          </div>
-                          <div
-                            className={`album-card-action album-card-action--viewed ${album.viewed ? `is-active compact-action-${viewedActionIndex}` : ""}`}
-                          >
-                            <ViewedToggle
-                              id={album.id}
-                              viewed={album.viewed}
-                              pending={pendingUserStateKeys.has(
-                                `album:${album.id}`,
-                              )}
-                              onChange={onUserStateChange}
-                              className="album-viewed-toggle"
-                            />
-                          </div>
-                          <div
-                            className={`album-card-action album-card-action--rating ${rated ? `is-active compact-action-${ratingActionIndex}` : ""}`}
-                          >
-                            <RatingControl
-                              kind="album"
-                              id={album.id}
-                              rating={album.rating}
-                              pending={pendingUserStateKeys.has(
-                                `album:${album.id}`,
-                              )}
-                              onChange={onUserStateChange}
-                              className="album-rating-control"
-                              outlineStar
-                              showValue
-                            />
-                          </div>
-                          <div className="album-card-action album-card-action--count">
-                            <span className="album-track-count">
-                              {trackCountLabel(album.trackCount)}
-                            </span>
-                          </div>
-                        </div>
                         <button
                           className="album-main"
                           aria-pressed={selected.includes(album.id)}
@@ -768,6 +690,15 @@ export function AlbumGrid({
                             ) : (
                               <div className="cover-placeholder" />
                             )}
+                            <CatalogStateIndicators
+                              bookmarked={bookmarked}
+                              viewed={album.viewed}
+                              rating={album.rating}
+                              onCover
+                            />
+                            <span className="album-track-count album-track-count-overlay">
+                              {trackCountLabel(album.trackCount)}
+                            </span>
                             {dropTarget === album.id && (
                               <span className="album-cover-drop-hint">
                                 Отпустите обложку
@@ -823,11 +754,6 @@ export function TrackList({
   onMore,
   onContextMenu,
   bookmarkKeys,
-  bookmarksUnavailable,
-  pendingBookmarkKeys,
-  onBookmarkChange,
-  onUserStateChange,
-  pendingUserStateKeys,
   bookmarksOnly,
   bookmarkCount,
   hasOtherFilters,
@@ -850,11 +776,6 @@ export function TrackList({
   onMore: () => void;
   onContextMenu: CatalogContextMenuHandler;
   bookmarkKeys: Set<string>;
-  bookmarksUnavailable: boolean;
-  pendingBookmarkKeys: Set<string>;
-  onBookmarkChange: BookmarkChange;
-  onUserStateChange: UserStateChange;
-  pendingUserStateKeys: Set<string>;
   bookmarksOnly: boolean;
   bookmarkCount: number;
   hasOtherFilters: boolean;
@@ -1029,10 +950,10 @@ export function TrackList({
               );
             const track = entry.track;
             const bookmarked = bookmarkKeys.has(`album:${track.albumKey}`);
-            const rated = track.albumRating !== null;
             return entry.type === "album" ? (
               <AlbumHeader
                 key={`album-${track.albumKey}`}
+                data-album-id={track.albumKey}
                 selected={selectedAlbumId === track.albumKey}
                 title={track.albumTitle}
                 artists={entry.artists}
@@ -1067,55 +988,13 @@ export function TrackList({
                   height: row.size,
                   transform: `translateY(${row.start}px)`,
                 }}
-                actions={
-                  <>
-                    <div
-                      className={`track-album-action track-album-action--rating ${rated ? "is-active" : ""}`}
-                    >
-                      <RatingControl
-                        kind="album"
-                        id={track.albumKey}
-                        rating={track.albumRating}
-                        pending={pendingUserStateKeys.has(
-                          `album:${track.albumKey}`,
-                        )}
-                        onChange={onUserStateChange}
-                        className="album-rating-control"
-                        outlineStar
-                        showValue
-                      />
-                    </div>
-                    <div
-                      className={`track-album-action track-album-action--viewed ${track.albumViewed ? "is-active" : ""}`}
-                    >
-                      <ViewedToggle
-                        id={track.albumKey}
-                        viewed={track.albumViewed}
-                        pending={pendingUserStateKeys.has(
-                          `album:${track.albumKey}`,
-                        )}
-                        onChange={onUserStateChange}
-                        className="album-viewed-toggle"
-                      />
-                    </div>
-                    <div
-                      className={`track-album-action track-album-action--bookmark ${bookmarked ? "is-active" : ""}`}
-                    >
-                      <BookmarkToggle
-                        kind="album"
-                        id={track.albumKey}
-                        label={track.albumTitle || "Без альбома"}
-                        bookmarked={bookmarked}
-                        unavailable={bookmarksUnavailable}
-                        pending={pendingBookmarkKeys.has(
-                          `album:${track.albumKey}`,
-                        )}
-                        onChange={onBookmarkChange}
-                        className="album-bookmark-toggle track-album-bookmark-toggle"
-                        filledWhenBookmarked={false}
-                      />
-                    </div>
-                  </>
+                indicators={
+                  <CatalogStateIndicators
+                    bookmarked={bookmarked}
+                    viewed={track.albumViewed}
+                    rating={track.albumRating}
+                    onCover
+                  />
                 }
               />
             ) : (
@@ -1123,7 +1002,7 @@ export function TrackList({
                 key={track.id}
                 testId="track-row"
                 dataFormat={track.format}
-                className="track-row"
+                className="track-row catalog-track-row"
                 selected={
                   highlighted.has(track.id) &&
                   (selection.previewKeys !== null ||
@@ -1139,7 +1018,17 @@ export function TrackList({
                 }
                 prefix={track.trackNumber ?? undefined}
                 value={track.title}
-                suffix={duration(track.duration)}
+                suffix={
+                  <>
+                    <CatalogStateIndicators
+                      bookmarked={bookmarkKeys.has(`track:${track.id}`)}
+                      rating={track.rating}
+                    />
+                    <span className="track-duration">
+                      {duration(track.duration)}
+                    </span>
+                  </>
+                }
                 draggable={playlistDragEnabled}
                 onDragStart={(event) => {
                   if (!selected.has(track.id)) onSelectionChange([track.id]);
@@ -1180,27 +1069,6 @@ export function TrackList({
                     copyTexts,
                   );
                 }}
-                endAction={
-                  <div className="track-row-actions" data-selection-ignore>
-                    <RatingControl
-                      kind="track"
-                      id={track.id}
-                      rating={track.rating}
-                      pending={pendingUserStateKeys.has(`track:${track.id}`)}
-                      onChange={onUserStateChange}
-                    />
-                    <BookmarkToggle
-                      kind="track"
-                      id={track.id}
-                      label={track.title}
-                      bookmarked={bookmarkKeys.has(`track:${track.id}`)}
-                      unavailable={bookmarksUnavailable}
-                      pending={pendingBookmarkKeys.has(`track:${track.id}`)}
-                      onChange={onBookmarkChange}
-                      className="track-bookmark-toggle"
-                    />
-                  </div>
-                }
               />
             );
           })}

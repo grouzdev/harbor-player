@@ -1,15 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Download,
-  ListMusic,
-  Pencil,
-  Play,
-  Plus,
-  RefreshCw,
-  Settings,
-  Trash2,
-} from "lucide-react";
+import { Download, ListMusic, Plus, RefreshCw, Trash2 } from "lucide-react";
 import type {
   PathTemplate,
   PathTemplateField,
@@ -56,7 +47,7 @@ const fieldPart = (
 
 const emptyCollapsed = new Set<string>();
 
-function SyncDialog({
+export function PlaylistSettingsDialog({
   playlist,
   onClose,
   notify,
@@ -412,8 +403,6 @@ export function PlaylistPanel({
   onAddSelection,
   onPlay,
   current,
-  onRename,
-  onDelete,
   notify,
   onClose,
 }: {
@@ -421,13 +410,10 @@ export function PlaylistPanel({
   onAddSelection: (beforeEntryId?: string) => Promise<void>;
   onPlay: (id: string, startId?: string, startEntryId?: string) => void;
   current?: PlaylistCurrentTrack;
-  onRename: (playlist: PlaylistDetail["playlist"]) => void;
-  onDelete: (playlist: PlaylistDetail["playlist"]) => void;
   notify: (message: string) => void;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [syncOpen, setSyncOpen] = useState(false);
   const mutationBusy = useRef(false);
   const [mutating, setMutating] = useState(false);
   const [collapsedByPlaylist, setCollapsedByPlaylist] = useState<
@@ -531,51 +517,6 @@ export function PlaylistPanel({
           <ListMusic size={19} />
         </button>
         <h2>{playlist?.name || "Плейлист"}</h2>
-        <div className="playlist-heading-actions">
-          <button
-            className="icon-button"
-            aria-label="Добавить выбранное"
-            title="Добавить выбранное"
-            onClick={() => void onAddSelection()}
-          >
-            <Plus size={17} />
-          </button>
-          <button
-            className="icon-button"
-            aria-label="Воспроизвести плейлист"
-            title="Воспроизвести"
-            disabled={!playlist?.trackCount}
-            onClick={() => onPlay(playlistId)}
-          >
-            <Play size={17} fill="currentColor" />
-          </button>
-          <button
-            className="icon-button"
-            aria-label="Переименовать плейлист"
-            title="Переименовать"
-            disabled={!playlist}
-            onClick={() => playlist && onRename(playlist)}
-          >
-            <Pencil size={16} />
-          </button>
-          <button
-            className="icon-button"
-            aria-label="Настройки сборки"
-            title="Сборка и экспорт"
-            onClick={() => setSyncOpen(true)}
-          >
-            <Settings size={17} />
-          </button>
-          <button
-            className="icon-button"
-            aria-label="Удалить плейлист"
-            title="Удалить"
-            disabled={!playlist}
-            onClick={() => playlist && onDelete(playlist)}
-          >
-            <Trash2 size={16} />
-          </button>
-        </div>
       </div>
       {detail.isError || tracks.isError ? (
         <div className="empty-small track-empty playlist-empty">
@@ -637,13 +578,6 @@ export function PlaylistPanel({
           </span>
         ) : null}
       </div>
-      {syncOpen && playlist && (
-        <SyncDialog
-          playlist={playlist}
-          onClose={() => setSyncOpen(false)}
-          notify={notify}
-        />
-      )}
     </section>
   );
 }

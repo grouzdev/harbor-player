@@ -51,6 +51,7 @@ type LibraryPanelProps = {
   activePlaylistId: string | null;
   onSelectPlaylist: (id: string) => void;
   onPlayPlaylist: (id: string) => void;
+  onPlaylistContextMenu: (event: React.MouseEvent, playlist: Playlist) => void;
   onCreatePlaylist: () => void;
   onImportPlaylist: () => void;
   onClose: () => void;
@@ -79,6 +80,7 @@ export function LibraryPanel({
   activePlaylistId,
   onSelectPlaylist,
   onPlayPlaylist,
+  onPlaylistContextMenu,
   onCreatePlaylist,
   onImportPlaylist,
   onClose,
@@ -182,6 +184,7 @@ export function LibraryPanel({
             suffix={count(playlist.trackCount)}
             selected={activePlaylistId === playlist.id}
             className="playlist-library-tile"
+            onContextMenu={(event) => onPlaylistContextMenu(event, playlist)}
             onSelect={() => onSelectPlaylist(playlist.id)}
             onDoubleClick={() => {
               if (playlist.trackCount) onPlayPlaylist(playlist.id);

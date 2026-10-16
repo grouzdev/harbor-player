@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 export function useAppShellLayout() {
   const appShellRef = useRef<HTMLDivElement>(null);
   const [isPortraitLayout, setIsPortraitLayout] = useState(false);
   const [appShellWidth, setAppShellWidth] = useState(0);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const shell = appShellRef.current;
     if (!shell) return;
+    // Resolve the first layout before a panel transition can capture its geometry.
+    setAppShellWidth(shell.clientWidth);
+    setIsPortraitLayout(shell.clientHeight > shell.clientWidth);
     const observer = new ResizeObserver(([entry]) => {
       setAppShellWidth(entry.contentRect.width);
       setIsPortraitLayout(entry.contentRect.height > entry.contentRect.width);

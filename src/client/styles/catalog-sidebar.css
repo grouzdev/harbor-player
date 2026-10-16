@@ -1,0 +1,129 @@
+.app-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  grid-template-rows: 65px minmax(0, 1fr) auto;
+}
+
+.app-shell > .topbar {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.app-shell
+  > :is(.workspace, .settings-workspace-scroll, .cover-mode, .pulse-mode) {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+}
+
+.app-shell > .player {
+  grid-column: 1 / -1;
+  grid-row: 3;
+}
+
+.catalog-sidebar {
+  position: relative;
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  min-height: 0;
+  padding: 8px 0;
+  z-index: 2;
+}
+
+.catalog-sidebar::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--panel-divider-shading), #101111;
+  pointer-events: none;
+}
+
+html[data-theme="light"] .catalog-sidebar::before {
+  background-color: #e5ebe5;
+}
+
+.catalog-sidebar-panels {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.catalog-sidebar .panel-visibility-controls {
+  flex-direction: column;
+  gap: 7px;
+}
+
+.catalog-sidebar .icon-button {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.catalog-sidebar .icon-button:hover:not(:disabled) {
+  background: transparent;
+  box-shadow: none;
+  color: var(--accent);
+  filter: drop-shadow(
+    0 0 4px color-mix(in srgb, var(--accent) 60%, transparent)
+  );
+}
+
+.sidebar-settings[aria-pressed="true"] {
+  color: var(--accent);
+  filter: drop-shadow(
+    0 0 4px color-mix(in srgb, var(--accent) 60%, transparent)
+  );
+}
+
+.catalog-sidebar .panel-visibility-button.is-hidden,
+.catalog-sidebar .panel-visibility-button:disabled {
+  color: #929da5;
+  opacity: 1;
+}
+
+.workspace[data-panel-transition] > .workspace-row > .panel {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  max-width: none;
+  align-self: start;
+}
+
+.workspace[data-panel-transition] .resizer,
+.workspace[data-panel-transition] .row-resizer,
+.workspace[data-panel-transition] .panel-heading .panel-visibility-button {
+  pointer-events: none;
+}
+
+.workspace[data-panel-transition] .resizer,
+.workspace[data-panel-transition] .row-resizer {
+  visibility: hidden;
+}
+
+.workspace[data-panel-transition] .workspace-row {
+  overflow: visible;
+}
+
+.panel-transition-snapshot {
+  position: fixed;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+  contain: layout paint;
+}
+
+.panel-transition-snapshot > .panel {
+  min-width: 0;
+  max-width: none;
+}
