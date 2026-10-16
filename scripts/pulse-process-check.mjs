@@ -10,6 +10,11 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import Database from "better-sqlite3";
 import { playbackStorage } from "./pulse-playback-storage.mjs";
+import {
+  captureCheckpointFailure,
+  observeRequests,
+  sqliteProbe,
+} from "./pulse-process-diagnostics.mjs";
 
 await mkdir(path.resolve(".test-data"), { recursive: true });
 const root = await mkdtemp(path.resolve(".test-data/pulse-process-"));
@@ -51,6 +56,7 @@ const provenance = {
       await Promise.all(
         [
           "scripts/pulse-process-check.mjs",
+          "scripts/pulse-process-diagnostics.mjs",
           "scripts/pulse-playback-storage.mjs",
           "scripts/pulse-ingest-evidence.mjs",
           "package-lock.json",
@@ -133,7 +139,7 @@ for (const channel of ["chrome", "msedge"]) {
     );
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
-  let child, exited, browser;
+  let child, exited, browser, observer;
   let serverLog = "";
   const pids = [];
   const storage = [];
@@ -207,49 +213,7 @@ for (const channel of ["chrome", "msedge"]) {
       },
     );
     identity.browserVersion = browser.browser().version();
-    const requests = [];
-    const responseReads = [];
-    const relevant = (url) =>
-      ["/api/pulse/settings", "/api/listening-events"].includes(
-        new URL(url).pathname,
-      );
-    const requestEvidence = (request) => ({
-      at: Date.now(),
-      page: browser.pages().indexOf(request.frame().page()),
-      url: request.url(),
-      method: request.method(),
-    });
-    browser.on("request", (request) => {
-      if (relevant(request.url()))
-        requests.push({ ...requestEvidence(request), kind: "request" });
-    });
-    browser.on("requestfailed", (request) => {
-      if (relevant(request.url()))
-        requests.push({
-          ...requestEvidence(request),
-          kind: "requestfailed",
-          failure: request.failure(),
-        });
-    });
-    browser.on("response", (response) => {
-      if (!relevant(response.url())) return;
-      const evidence = {
-        ...requestEvidence(response.request()),
-        kind: "response",
-        status: response.status(),
-      };
-      requests.push(evidence);
-      responseReads.push(
-        response
-          .json()
-          .then((body) => {
-            evidence.body = body;
-          })
-          .catch((error) => {
-            evidence.bodyError = String(error);
-          }),
-      );
-    });
+    observer = observeRequests(browser);
     // Preserve the browser side of a checkpoint timeout before closing the
     // profile. An empty ledger alone cannot distinguish stopped media from
     // recorder/outbox/delivery failures.
@@ -387,49 +351,47 @@ for (const channel of ["chrome", "msedge"]) {
         }
       });
     } catch (error) {
-      await Promise.all(responseReads);
-      const db = new Database(path.join(dataDir, "catalog.sqlite"), {
-        readonly: true,
-      });
       try {
-        await writeFile(
-          path.join(dir, "checkpoint-failure.json"),
-          JSON.stringify(
-            {
-              provenance: identity,
-              requests,
-              settings: db.prepare("SELECT * FROM pulse_settings").all(),
-              intervals: db.prepare("SELECT * FROM pulse_intervals").all(),
-              windows: await Promise.all(
-                windows.map(async (window) => ({
-                  media: await window.locator("audio").evaluate((audio) => ({
-                    currentTime: audio.currentTime,
-                    src: audio.currentSrc,
-                    paused: audio.paused,
-                    ended: audio.ended,
-                    readyState: audio.readyState,
-                    networkState: audio.networkState,
-                    playbackRate: audio.playbackRate,
-                    error: audio.error?.message ?? null,
-                    buffered: Array.from(
-                      { length: audio.buffered.length },
-                      (_, i) => [
-                        audio.buffered.start(i),
-                        audio.buffered.end(i),
-                      ],
-                    ),
-                    trace: globalThis.pulseProcessTrace,
-                  })),
-                  pending: await pending(window),
-                })),
+        const probes = {
+          responses: () => Promise.all(observer.reads),
+        };
+        for (const table of ["pulse_settings", "pulse_intervals"])
+          probes[table] = (signal) =>
+            sqliteProbe(
+              path.join(dataDir, "catalog.sqlite"),
+              `SELECT * FROM ${table}`,
+              signal,
+            );
+        for (const window of windows) {
+          const id = observer.windowId(window);
+          probes[`${id}.media`] = () =>
+            window.locator("audio").evaluate((audio) => ({
+              currentTime: audio.currentTime,
+              src: audio.currentSrc,
+              paused: audio.paused,
+              ended: audio.ended,
+              readyState: audio.readyState,
+              networkState: audio.networkState,
+              playbackRate: audio.playbackRate,
+              error: audio.error?.message ?? null,
+              buffered: Array.from(
+                { length: audio.buffered.length },
+                (_, i) => [audio.buffered.start(i), audio.buffered.end(i)],
               ),
-            },
-            null,
-            2,
-          ),
-        );
-      } finally {
-        db.close();
+              trace: globalThis.pulseProcessTrace,
+            }));
+          probes[`${id}.pending`] = () => pending(window);
+        }
+        await captureCheckpointFailure({
+          file: path.join(dir, "checkpoint-failure.json"),
+          error,
+          provenance: identity,
+          observer,
+          probes,
+        });
+      } catch (diagnosticError) {
+        // Artifact write failures must not replace the acceptance failure.
+        console.error("Checkpoint diagnostic failure:", diagnosticError);
       }
       throw new Error(`Recorder checkpoint failed; evidence: ${dir}`, {
         cause: error,
@@ -761,6 +723,7 @@ for (const channel of ["chrome", "msedge"]) {
       db.close();
     }
   } finally {
+    observer?.stop();
     try {
       await browser?.close();
     } finally {
