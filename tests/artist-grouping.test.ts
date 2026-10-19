@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  albumArtistGroupStats,
   artistGroupKey,
   artistGroupStats,
   compareArtistNames,
@@ -55,13 +54,7 @@ describe("artist grouping", () => {
     expect(shouldGroupArtists(11, 3)).toBe(true);
   });
 
-  it("groups albums solely by their average album-artist group size", () => {
-    expect(albumArtistGroupStats([["Alpha"], ["Alpha"], ["Beta"]])).toEqual({
-      groupCount: 2,
-      albumCount: 3,
-      averageSize: 1.5,
-    });
-    expect(shouldGroupAlbums(2.99)).toBe(false);
-    expect(shouldGroupAlbums(3)).toBe(true);
+  it("always groups albums by their album artists", () => {
+    expect(shouldGroupAlbums()).toBe(true);
   });
 });

@@ -63,10 +63,7 @@ export interface Album {
   rating: number | null;
   viewed: boolean;
 }
-export interface AlbumPage extends Page<Album> {
-  /** Average number of albums in each visible album-artist group. */
-  averageGroupSize?: number;
-}
+export type AlbumPage = Page<Album>;
 export interface AlbumMergeSource {
   albumId: string;
   title: string;

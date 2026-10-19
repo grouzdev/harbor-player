@@ -26,7 +26,6 @@ import type {
 } from "../shared/contracts.js";
 import { emptyFilter } from "../shared/contracts.js";
 import {
-  albumArtistGroupStats,
   artistGroupStats,
   artistSortKey,
   compareArtistNames,
@@ -1119,36 +1118,6 @@ export class Catalog {
       .filter((album) => !album.artists.length)
       .map((album) => album.id);
     const fallbackArtists = this.fallbackAlbumArtists(ids);
-    const groupRows = this.db
-      .prepare(
-        `WITH ranked AS (
-           SELECT t.albumKey id, t.albumArtists artists,
-                  row_number() OVER (
-                    PARTITION BY t.albumKey
-                    ORDER BY t.year IS NOT NULL, t.year DESC,
-                             t.albumTitle COLLATE NOCASE, t.albumKey,
-                             coalesce(t.discNumber,0), coalesce(t.trackNumber,0),
-                             t.relativePath
-                  ) albumRank
-           FROM tracks t JOIN libraries l ON l.id=t.libraryId
-           WHERE ${sql}
-         )
-         SELECT id, artists FROM ranked WHERE albumRank=1`,
-      )
-      .all(...args) as { id: string; artists: string }[];
-    const groupFallbackArtists = this.fallbackAlbumArtists(
-      groupRows
-        .filter((album) => !(JSON.parse(album.artists) as string[]).length)
-        .map((album) => album.id),
-    );
-    const { averageSize: averageGroupSize } = albumArtistGroupStats(
-      groupRows.map((album) => {
-        const artists = JSON.parse(album.artists) as string[];
-        return artists.length
-          ? artists
-          : groupFallbackArtists.get(album.id) || [];
-      }),
-    );
     return {
       items: items.map(
         (album) =>
@@ -1163,7 +1132,6 @@ export class Catalog {
       ),
       total,
       offset,
-      averageGroupSize,
     };
   }
   albumMergeContext(albumIds: string[]): AlbumMergeContext {

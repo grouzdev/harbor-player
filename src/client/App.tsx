@@ -3657,7 +3657,6 @@ export function App() {
             <AlbumGrid
               albums={albumItems}
               total={albumTotal}
-              averageGroupSize={albums.data?.pages[0]?.averageGroupSize}
               selected={selectedAlbums}
               currentAlbumId={currentPlayerTrack?.albumKey ?? null}
               onSelectionChange={(ids, options) =>

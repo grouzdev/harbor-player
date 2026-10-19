@@ -370,7 +370,6 @@ export function ArtistList({
 export function AlbumGrid({
   albums,
   total,
-  averageGroupSize,
   selected,
   currentAlbumId,
   onSelectionChange,
@@ -388,7 +387,6 @@ export function AlbumGrid({
 }: {
   albums: Album[];
   total: number;
-  averageGroupSize?: number;
   selected: string[];
   currentAlbumId: string | null;
   onSelectionChange: (ids: string[], options?: SelectionChangeOptions) => void;
@@ -417,7 +415,7 @@ export function AlbumGrid({
       onSelectionFocus?.(id, ids, albumById.get(id)?.artists[0] || null),
   });
   const highlighted = selection.previewKeys || new Set(selected);
-  const groupByArtists = shouldGroupAlbums(averageGroupSize || 0);
+  const groupByArtists = shouldGroupAlbums();
   const albumById = useMemo(
     () => new Map(albums.map((album) => [album.id, album])),
     [albums],

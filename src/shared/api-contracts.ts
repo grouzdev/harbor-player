@@ -130,7 +130,6 @@ const albumPageSchema: z.ZodType<AlbumPage> = z.object({
   items: z.array(albumSchema),
   total: z.number(),
   offset: z.number(),
-  averageGroupSize: z.number().nonnegative().optional(),
 });
 const albumMergeContextSchema = z.object({
   compatible: z.boolean(),
