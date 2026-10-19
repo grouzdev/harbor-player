@@ -1,21 +1,5 @@
-import {
-  type ReactNode,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
-import { createPortal } from "react-dom";
-import {
-  Bookmark,
-  Check,
-  Clock3,
-  Eye,
-  Plus,
-  RefreshCw,
-  Star,
-  X,
-} from "lucide-react";
+import { type ReactNode, useEffect, useState } from "react";
+import { Bookmark, Check, Clock3, Eye, RefreshCw, Star, X } from "lucide-react";
 import { emptyFilter, type CatalogFilter } from "../shared/contracts";
 import { RangeSlider } from "./RangeSlider";
 import { ExpandingSearch } from "./ExpandingSearch";
@@ -98,9 +82,9 @@ export function withSharedRatingRange(
 
 const filterDefinitions = [
   { kind: "bookmarks", label: "Закладки", Icon: Bookmark },
+  { kind: "recent", label: "Недавние", Icon: Clock3 },
   { kind: "unviewed", label: "Не просмотрено", Icon: Eye },
   { kind: "rating", label: "Рейтинг", Icon: Star },
-  { kind: "recent", label: "Недавние", Icon: Clock3 },
 ] as const;
 type FilterKind = (typeof filterDefinitions)[number]["kind"];
 
@@ -125,15 +109,9 @@ export function CatalogUserFilters({
   onRetryBookmarks: () => void;
   trailingControls?: ReactNode;
 }) {
-  const [collapsed, setCollapsed] = useState(!search.trim());
-  const [menuOpen, setMenuOpen] = useState(false);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState({ left: 8, top: 8 });
   const [ratingEditing, setRatingEditing] = useState(false);
   const [recentEditing, setRecentEditing] = useState(false);
   const [neutralRating, setNeutralRating] = useState(false);
-  const [order, setOrder] = useState<FilterKind[]>([]);
   const [previousFilter, setPreviousFilter] = useState(filter);
   const [minimum, maximum] = ratingRangeFromFilter(filter);
   const ratingActive = minimum !== 0 || maximum !== 5;
@@ -144,13 +122,6 @@ export function CatalogUserFilters({
     rating: ratingActive || (neutralRating && !reset),
     recent: filter.recentlyAddedDays !== null,
   };
-  // Reconcile externally changed filters without losing insertion order.
-  const visible = order.filter((kind) => active[kind]);
-  for (const { kind } of filterDefinitions) {
-    if (active[kind] && !visible.includes(kind)) visible.push(kind);
-  }
-  const visibleKey = visible.join();
-  if (visibleKey !== order.join()) setOrder(visible);
   if (previousFilter !== filter) {
     setPreviousFilter(filter);
     if (reset) setNeutralRating(false);
@@ -160,11 +131,8 @@ export function CatalogUserFilters({
     if (recentEditing && (reset || filter.recentlyAddedDays === null))
       setRecentEditing(false);
   }
-  const addable = filterDefinitions.filter(({ kind }) => !active[kind]);
-
   useEffect(() => {
     if (disabled) {
-      setMenuOpen(false);
       setRatingEditing(false);
       setRecentEditing(false);
     }
@@ -182,49 +150,6 @@ export function CatalogUserFilters({
     return () => document.removeEventListener("keydown", cancel);
   }, [ratingEditing, recentEditing]);
 
-  useLayoutEffect(() => {
-    if (!menuOpen) return;
-    const update = () => {
-      const target = trigger.current?.getBoundingClientRect();
-      const box = menu.current?.getBoundingClientRect();
-      if (!target || !box) return;
-      setPosition({
-        left: Math.max(
-          8,
-          Math.min(target.left, window.innerWidth - box.width - 8),
-        ),
-        top: Math.max(
-          8,
-          Math.min(target.bottom + 4, window.innerHeight - box.height - 8),
-        ),
-      });
-    };
-    update();
-    const close = (event: PointerEvent) => {
-      if (
-        !menu.current?.contains(event.target as Node) &&
-        !trigger.current?.contains(event.target as Node)
-      )
-        setMenuOpen(false);
-    };
-    const key = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setMenuOpen(false);
-        trigger.current?.focus();
-      }
-    };
-    document.addEventListener("pointerdown", close, true);
-    document.addEventListener("keydown", key);
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      document.removeEventListener("pointerdown", close, true);
-      document.removeEventListener("keydown", key);
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  }, [menuOpen, collapsed, bookmarksError, visibleKey]);
-
   const changeBoolean = (kind: FilterKind, value: boolean) => {
     onChange((current) => ({
       ...current,
@@ -239,24 +164,19 @@ export function CatalogUserFilters({
       onRetryBookmarks();
       return;
     }
-    setMenuOpen(false);
     if (kind === "rating") {
-      setOrder([...visible, "rating"]);
       setNeutralRating(true);
       onChange((current) => withSharedRatingRange(current, 0, 5));
       setRatingEditing(true);
     } else if (kind === "recent") {
-      setOrder([...visible, "recent"]);
       const days = readRecentPeriod();
       onChange((current) => ({ ...current, recentlyAddedDays: days }));
       setRecentEditing(false);
     } else {
-      setOrder([...visible, kind]);
       changeBoolean(kind, true);
     }
   };
   const remove = (kind: FilterKind) => {
-    setOrder(visible.filter((item) => item !== kind));
     if (kind === "rating") {
       setNeutralRating(false);
       setRatingEditing(false);
@@ -388,13 +308,9 @@ export function CatalogUserFilters({
       aria-label="Поиск и фильтры каталога"
       data-window-control
     >
-      <ExpandingSearch
-        value={search}
-        onChange={onSearchChange}
-        onCollapsedChange={setCollapsed}
-      />
+      <ExpandingSearch value={search} onChange={onSearchChange} />
       <div className={`catalog-filter-items${disabled ? " is-disabled" : ""}`}>
-        {visible.map((kind) => {
+        {filterDefinitions.map(({ kind, label, Icon }) => {
           if (kind === "rating" && ratingEditing)
             return (
               <div className="catalog-filter-editor-slot" key={kind}>
@@ -407,11 +323,36 @@ export function CatalogUserFilters({
                 {renderRecentEditor()}
               </div>
             );
-          const { label, Icon } = filterDefinitions.find(
-            (item) => item.kind === kind,
-          )!;
           const busy = kind === "bookmarks" && bookmarksBusy;
           const error = kind === "bookmarks" && bookmarksError;
+          if (!active[kind])
+            return (
+              <button
+                type="button"
+                key={kind}
+                className={`icon-button catalog-filter-add${error ? " is-error" : ""}`}
+                aria-label={
+                  error
+                    ? "Повторить загрузку закладок"
+                    : `Добавить фильтр «${label}»`
+                }
+                title={
+                  error
+                    ? "Не удалось загрузить закладки. Нажмите, чтобы повторить"
+                    : `Добавить фильтр «${label}»`
+                }
+                disabled={
+                  disabled || busy || Boolean(ratingEditing || recentEditing)
+                }
+                onClick={() => add(kind)}
+              >
+                {busy ? (
+                  <RefreshCw size={16} className="spinning" />
+                ) : (
+                  <Icon size={18} />
+                )}
+              </button>
+            );
           const title = error
             ? "Не удалось загрузить закладки. Нажмите, чтобы повторить"
             : kind === "recent"
@@ -479,66 +420,8 @@ export function CatalogUserFilters({
             </div>
           );
         })}
-        {!visible.includes("rating") && renderRatingEditor()}
-        {!visible.includes("recent") && renderRecentEditor()}
-        <button
-          ref={trigger}
-          type="button"
-          className="icon-button catalog-filter-add"
-          aria-label="Добавить фильтр"
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          disabled={
-            disabled ||
-            Boolean(ratingEditing || recentEditing) ||
-            !addable.length
-          }
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          <Plus size={18} />
-        </button>
       </div>
       {trailingControls}
-      {menuOpen &&
-        createPortal(
-          <div
-            ref={menu}
-            className="catalog-filter-menu"
-            role="menu"
-            aria-label="Добавить фильтр"
-            style={position}
-          >
-            {addable.map(({ kind, label, Icon }) => (
-              <button
-                type="button"
-                role="menuitem"
-                key={kind}
-                disabled={disabled || (kind === "bookmarks" && bookmarksBusy)}
-                className={
-                  kind === "bookmarks" && bookmarksError
-                    ? "is-error"
-                    : undefined
-                }
-                title={
-                  kind === "recent"
-                    ? "Выбрать период недавнего добавления"
-                    : undefined
-                }
-                onClick={() => add(kind)}
-              >
-                {kind === "bookmarks" && bookmarksBusy ? (
-                  <RefreshCw size={16} className="spinning" />
-                ) : (
-                  <Icon size={16} />
-                )}
-                {kind === "bookmarks" && bookmarksError
-                  ? "Закладки: повторить загрузку"
-                  : label}
-              </button>
-            ))}
-          </div>,
-          document.body,
-        )}
     </div>
   );
 }

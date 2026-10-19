@@ -4195,7 +4195,7 @@ html[data-theme="light"] .appearance-theme-card {
   background: #ffffffa8;
 }
 
-/* Collapsible catalog search and addable filters. */
+/* Collapsible catalog search and filters. */
 .topbar:has(.catalog-user-filters) {
   height: auto;
   min-height: 65px;
@@ -4283,8 +4283,7 @@ html[data-theme="light"] .appearance-theme-card {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.catalog-filter-chip svg,
-.catalog-filter-menu svg {
+.catalog-filter-chip svg {
   flex-shrink: 0;
 }
 .catalog-filter-small-button {
@@ -4339,40 +4338,13 @@ button.catalog-filter-chip-label:hover:not(:disabled) {
   width: 220px;
   max-width: 100%;
 }
-.catalog-filter-menu {
-  position: fixed;
-  z-index: 100;
-  min-width: 190px;
-  max-width: calc(100vw - 16px);
-  max-height: calc(100dvh - 16px);
-  overflow-y: auto;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--panel);
-  padding: 4px;
-  box-shadow: 0 8px 24px #0006;
-}
-.catalog-filter-menu button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 32px;
-  padding: 6px 8px;
-  border-radius: 3px;
-  text-align: left;
-  font-size: var(--type-caption);
-}
-.catalog-filter-menu button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
 .catalog-filter-chip.is-error,
-.catalog-filter-menu .is-error {
+.catalog-filter-add.is-error {
   color: #c77364;
 }
 html[data-theme="light"] .catalog-filter-chip,
 html[data-theme="light"] .catalog-filter-editor,
-html[data-theme="light"] .catalog-filter-menu {
+html[data-theme="light"] .catalog-filter-add {
   background: #f7f9f6;
   color: #202820;
   border-color: #26312930;
