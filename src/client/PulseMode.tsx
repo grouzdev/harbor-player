@@ -22,7 +22,12 @@ export interface PulseAlbumCard {
   albumId: string;
   title: string;
   artist: string;
+  artists: string[];
   coverUrl?: string | null;
+  playedMs: number;
+}
+export interface PulseArtistGroup {
+  albums: PulseAlbumCard[];
   playedMs: number;
 }
 export interface PulseAlbumStats {
@@ -41,7 +46,6 @@ export interface PulseHistory {
   enabled: boolean;
   generation: string | number;
 }
-/** readAlbums must return the requested rank window, never an unbounded day. */
 export interface PulseAdapter {
   invalidate?(): void;
   history(signal: AbortSignal): Promise<PulseHistory>;
@@ -56,6 +60,12 @@ export interface PulseAdapter {
     limit: number,
     signal: AbortSignal,
   ): Promise<PulseAlbumCard[]>;
+  groups(
+    day: string,
+    start: number,
+    limit: number,
+    signal: AbortSignal,
+  ): Promise<PulseArtistGroup[]>;
   stats(
     albumId: string,
     day: string,
@@ -131,6 +141,7 @@ function mapAlbum(album: WireAlbum): PulseAlbumCard {
     albumId: album.albumId,
     title: album.title,
     artist: album.artists.join(", "),
+    artists: album.artists,
     coverUrl: album.coverId
       ? `/api/covers/${encodeURIComponent(album.coverId)}`
       : null,
@@ -162,6 +173,7 @@ function boundedCache<T>(maximum: number) {
 }
 export function createPulseApiAdapter(): PulseAdapter {
   const pages = boundedCache<PulseAlbumCard[]>(24);
+  const groups = boundedCache<PulseArtistGroup[]>(24);
   const statistics = boundedCache<PulseAlbumStats>(16);
   let generation: string | number | undefined;
   let timeZone = "UTC";
@@ -169,6 +181,7 @@ export function createPulseApiAdapter(): PulseAdapter {
   const invalidate = () => {
     epoch++;
     pages.clear();
+    groups.clear();
     statistics.clear();
   };
   const localDate = (timestamp: number) => {
@@ -196,6 +209,7 @@ export function createPulseApiAdapter(): PulseAdapter {
       }>("/api/pulse/history-range", signal);
       if (generation !== range.historyGeneration) {
         pages.clear();
+        groups.clear();
         statistics.clear();
       }
       generation = range.historyGeneration;
@@ -214,6 +228,7 @@ export function createPulseApiAdapter(): PulseAdapter {
           playedMs: number;
           albumCount: number;
           maxAlbumMs: number;
+          maxArtistGroupMs: number;
         }[];
       }>(`/api/pulse/layout?from=${from}&to=${to}`, signal);
       return result.days.map((day) => ({ ...day, date: day.dayKey }));
@@ -230,6 +245,24 @@ export function createPulseApiAdapter(): PulseAdapter {
       const cards = result.items.map(mapAlbum);
       if (!signal.aborted && requestEpoch === epoch) pages.set(key, cards);
       return cards;
+    },
+    async groups(day, start, limit, signal) {
+      const key = `${generation}:${day}:${start}:${limit}`;
+      const cached = groups.get(key);
+      if (cached) return cached;
+      const requestEpoch = epoch;
+      const result = await pulseGet<{
+        items: { albums: WireAlbum[]; playedMs: number }[];
+      }>(
+        `/api/pulse/days/${day}/artist-groups?offset=${start}&limit=${limit}`,
+        signal,
+      );
+      const value = result.items.map((group) => ({
+        albums: group.albums.map(mapAlbum),
+        playedMs: group.playedMs,
+      }));
+      if (!signal.aborted && requestEpoch === epoch) groups.set(key, value);
+      return value;
     },
     async stats(albumId, day, signal) {
       const key = `${generation}:${albumId}:${day}`;
@@ -330,13 +363,19 @@ function AlbumDay({
 }) {
   const day = layout.date(index);
   const start = layout.start(index);
-  const count = layout.day(index)?.albumCount ?? 0;
-  const focusedCard = useRef<{ index: number; album: PulseAlbumCard } | null>(
+  const count =
+    layout.day(index)?.artistGroupCount ?? layout.day(index)?.albumCount ?? 0;
+  const [groups, setGroups] = useState<{
+    start: number;
+    groups: PulseArtistGroup[];
+  }>({ start: 0, groups: [] });
+  const [lastFocusedRank, setLastFocusedRank] = useState<number | null>(null);
+  const focusedGroup = useRef<{ rank: number; group: PulseArtistGroup } | null>(
     null,
   );
-  const [lastFocusedRank, setLastFocusedRank] = useState<number | null>(null);
   const [pendingRank, setPendingRank] = useState<number | null>(null);
   const dayElement = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState(false);
   const first = Math.max(
     0,
     Math.floor((left - start - DAY_PADDING) / ALBUM_WIDTH) - 3,
@@ -345,41 +384,41 @@ function AlbumDay({
     count - 1,
     Math.ceil((left + viewport - start - DAY_PADDING) / ALBUM_WIDTH) + 3,
   );
-  // One shared viewport drives both rendered ranks and page requests. A second
-  // scroll observer can start at zero when a day mounts at a nonzero rail offset.
   const ranks = [
     ...new Set([
       ...Array.from(
         { length: Math.max(0, last - first + 1) },
-        (_, i) => first + i,
+        (_, offset) => first + offset,
       ),
-      ...(focusedCard.current ? [focusedCard.current.index] : []),
-      ...(pendingRank === null ? [] : [pendingRank]),
+      ...(focusedGroup.current ? [focusedGroup.current.rank] : []),
     ]),
   ].sort((a, b) => a - b);
-  const [cards, setCards] = useState<{
-    start: number;
-    cards: PulseAlbumCard[];
-  }>({ start: 0, cards: [] });
-  const [error, setError] = useState(false);
-  // Fixed-sized pages bound cache and make panning within a page request-free.
   const page = Math.floor(first / 20) * 20;
   const end = Math.min(count, Math.ceil((last + 1) / 20) * 20);
+  const entryRank =
+    lastFocusedRank !== null &&
+    lastFocusedRank >= first &&
+    lastFocusedRank <= last
+      ? lastFocusedRank
+      : Math.min(
+          count - 1,
+          Math.max(0, Math.floor((left - start - DAY_PADDING) / ALBUM_WIDTH)),
+        );
   useEffect(() => {
     if (!count || end <= page) return;
     const controller = new AbortController();
     setError(false);
     void adapter
-      .albums(day, page, Math.min(100, end - page), controller.signal)
+      .groups(day, page, Math.min(100, end - page), controller.signal)
       .then((result) => {
         if (!controller.signal.aborted)
-          setCards({ start: page, cards: result });
+          setGroups({ start: page, groups: result });
       })
       .catch(() => {
         if (!controller.signal.aborted) setError(true);
       });
     return () => controller.abort();
-  }, [adapter, layout, day, count, page, end]);
+  }, [adapter, day, count, page, end]);
   useEffect(() => {
     if (pendingRank === null) return;
     const button = dayElement.current?.querySelector<HTMLButtonElement>(
@@ -389,17 +428,7 @@ function AlbumDay({
       button.focus({ preventScroll: true });
       setPendingRank(null);
     }
-  }, [cards, pendingRank]);
-  const entryRank =
-    focusedCard.current?.index ??
-    (lastFocusedRank !== null &&
-    lastFocusedRank >= first &&
-    lastFocusedRank <= last
-      ? lastFocusedRank
-      : Math.min(
-          count - 1,
-          Math.max(0, Math.floor((left - start - DAY_PADDING) / ALBUM_WIDTH)),
-        ));
+  }, [groups, pendingRank]);
   const date = new Date(`${day}T00:00:00Z`);
   const labelLeft = Math.max(
     8,
@@ -414,10 +443,39 @@ function AlbumDay({
     >
       <div className="pulse-albums" style={{ height: plotHeight + 28 }}>
         {ranks.map((rank) => {
-          const album =
-            focusedCard.current?.index === rank
-              ? focusedCard.current.album
-              : cards.cards[rank - cards.start];
+          const group =
+            focusedGroup.current?.rank === rank
+              ? focusedGroup.current.group
+              : groups.groups[rank - groups.start];
+          if (!group) {
+            return (
+              <div
+                key={rank}
+                className="pulse-card-slot"
+                style={{
+                  left: DAY_PADDING + rank * ALBUM_WIDTH,
+                  width: ALBUM_WIDTH,
+                }}
+              >
+                <span
+                  className="pulse-card-loading"
+                  aria-label={
+                    error ? "Ошибка загрузки альбомов" : "Загрузка альбома"
+                  }
+                />
+              </div>
+            );
+          }
+          const albums = [...group.albums].reverse();
+          const latest = albums[0];
+          const stripHeight = Math.max(
+            1,
+            (group.playedMs / Math.max(1, layout.maxArtistGroupMs)) *
+              Math.max(
+                1,
+                plotHeight - Math.min(80, Math.max(24, plotHeight * 0.45)) - 10,
+              ),
+          );
           return (
             <div
               key={rank}
@@ -427,71 +485,76 @@ function AlbumDay({
                 width: ALBUM_WIDTH,
               }}
             >
-              {album ? (
-                <button
-                  type="button"
-                  className="pulse-album"
-                  data-rank={rank}
-                  data-album-id={album.albumId}
-                  tabIndex={rank === entryRank ? 0 : -1}
-                  onKeyDown={(event) => {
-                    let nextRank = rank;
-                    if (event.key === "ArrowRight") nextRank++;
-                    else if (event.key === "ArrowLeft") nextRank--;
-                    else if (event.key === "Home") nextRank = 0;
-                    else if (event.key === "End") nextRank = count - 1;
-                    else if (event.key === "PageDown")
-                      nextRank += Math.max(
-                        1,
-                        Math.floor(viewport / ALBUM_WIDTH),
-                      );
-                    else if (event.key === "PageUp")
-                      nextRank -= Math.max(
-                        1,
-                        Math.floor(viewport / ALBUM_WIDTH),
-                      );
-                    else return;
-                    event.preventDefault();
-                    nextRank = Math.max(0, Math.min(count - 1, nextRank));
-                    if (rail.current)
-                      rail.current.scrollLeft =
-                        start +
-                        DAY_PADDING +
-                        nextRank * ALBUM_WIDTH -
-                        Math.max(0, (viewport - ALBUM_WIDTH) / 2);
-                    setPendingRank(nextRank);
-                  }}
-                  onFocus={() => {
-                    focusedCard.current = { index: rank, album };
-                    setLastFocusedRank(rank);
-                  }}
-                  onBlur={() => {
-                    focusedCard.current = null;
-                  }}
-                  aria-pressed={selected === album.albumId}
-                  aria-label={`${album.title}, ${album.artist}, ${duration(album.playedMs)}, ${dateFormat.format(date)}`}
-                  onClick={() => select(album, day)}
-                >
-                  <span className="pulse-plot" style={{ height: plotHeight }}>
-                    <Cover album={album} />
-                    <span
-                      className="pulse-stem"
-                      style={{
-                        height: Math.max(
-                          1,
-                          (album.playedMs / Math.max(1, layout.maxAlbumMs)) *
-                            Math.max(
-                              1,
-                              plotHeight -
-                                Math.min(80, Math.max(24, plotHeight * 0.45)) -
-                                10,
-                            ),
-                        ),
+              {latest ? (
+                <div className="pulse-artist-group">
+                  <div className="pulse-plot" style={{ height: plotHeight }}>
+                    <button
+                      type="button"
+                      className="pulse-album pulse-album-latest"
+                      data-rank={rank}
+                      data-album-id={latest.albumId}
+                      tabIndex={rank === entryRank ? 0 : -1}
+                      aria-pressed={selected === latest.albumId}
+                      aria-label={`${latest.title}, ${latest.artist}, ${duration(latest.playedMs)}, ${dateFormat.format(date)}`}
+                      title={`${latest.title} — ${latest.artist}`}
+                      onClick={() => select(latest, day)}
+                      onFocus={() => {
+                        focusedGroup.current = { rank, group };
+                        setLastFocusedRank(rank);
                       }}
-                    />
-                  </span>
-                  <span className="pulse-time">{duration(album.playedMs)}</span>
-                </button>
+                      onKeyDown={(event) => {
+                        let nextRank = rank;
+                        if (event.key === "ArrowRight") nextRank++;
+                        else if (event.key === "ArrowLeft") nextRank--;
+                        else if (event.key === "Home") nextRank = 0;
+                        else if (event.key === "End") nextRank = count - 1;
+                        else if (event.key === "PageDown")
+                          nextRank += Math.max(
+                            1,
+                            Math.floor(viewport / ALBUM_WIDTH),
+                          );
+                        else if (event.key === "PageUp")
+                          nextRank -= Math.max(
+                            1,
+                            Math.floor(viewport / ALBUM_WIDTH),
+                          );
+                        else return;
+                        event.preventDefault();
+                        nextRank = Math.max(0, Math.min(count - 1, nextRank));
+                        if (rail.current)
+                          rail.current.scrollLeft =
+                            start +
+                            DAY_PADDING +
+                            nextRank * ALBUM_WIDTH -
+                            Math.max(0, (viewport - ALBUM_WIDTH) / 2);
+                        setPendingRank(nextRank);
+                      }}
+                    >
+                      <Cover album={latest} />
+                    </button>
+                    <span
+                      className="pulse-group-strips"
+                      style={{ height: stripHeight }}
+                    >
+                      {albums.map((album) => (
+                        <button
+                          key={album.albumId}
+                          type="button"
+                          className="pulse-album pulse-album-strip"
+                          data-album-id={album.albumId}
+                          aria-pressed={selected === album.albumId}
+                          aria-label={`${album.title}, ${album.artist}, ${duration(album.playedMs)}, ${dateFormat.format(date)}`}
+                          title={`${album.title} — ${album.artist}`}
+                          onClick={() => select(album, day)}
+                          style={{
+                            flexGrow: Math.max(1, album.playedMs),
+                          }}
+                        />
+                      ))}
+                    </span>
+                  </div>
+                  <span className="pulse-time">{duration(group.playedMs)}</span>
+                </div>
               ) : (
                 <span
                   className="pulse-card-loading"
@@ -791,21 +854,23 @@ export function PulseMode({
     <section className="pulse-mode" aria-label="История прослушивания">
       <div className="pulse-selection">
         <div className="pulse-selected">
+          {album ? (
+            <Cover album={album} />
+          ) : (
+            <span className="pulse-cover pulse-missing" aria-hidden="true" />
+          )}
           {album && (
-            <>
-              <Cover album={album} />
-              <div className="pulse-copy">
-                <p className="pulse-date">
-                  {selection &&
-                    dateFormat.format(new Date(`${selection.day}T00:00:00Z`))}
-                </p>
-                <h2>{album.title}</h2>
-                <p>{album.artist}</p>
-                <small>
-                  {duration(stats?.dayPlayedMs ?? album.playedMs)} за этот день
-                </small>
-              </div>
-            </>
+            <div className="pulse-copy">
+              <p className="pulse-date">
+                {selection &&
+                  dateFormat.format(new Date(`${selection.day}T00:00:00Z`))}
+              </p>
+              <h2>{album.title}</h2>
+              <p>{album.artist}</p>
+              <small>
+                {duration(stats?.dayPlayedMs ?? album.playedMs)} за этот день
+              </small>
+            </div>
           )}
         </div>
         <aside
@@ -854,11 +919,38 @@ export function PulseMode({
             </>
           ) : (
             selection && (
-              <p role="status">
-                {statsError
-                  ? "Не удалось загрузить статистику альбома"
-                  : "Загрузка статистики…"}
-              </p>
+              <>
+                <div className="pulse-stat-placeholder" aria-hidden="true">
+                  <div className="pulse-stat-numbers">
+                    <div>
+                      <strong>0 мин</strong>
+                      <small>за всю историю</small>
+                    </div>
+                    <div>
+                      <strong>0</strong>
+                      <small>дней с альбомом</small>
+                    </div>
+                    <div>
+                      <strong>0</strong>
+                      <small>возвратов в тот же день</small>
+                    </div>
+                  </div>
+                  <p className="pulse-share">
+                    Доля музыки за день <strong>0%</strong>
+                  </p>
+                  <div className="pulse-share-bar" />
+                  <p className="pulse-facts">
+                    Первое прослушивание — 0000-00-00
+                    <br />
+                    Последнее — 0000-00-00
+                  </p>
+                </div>
+                <p role="status" className="pulse-stats-status">
+                  {statsError
+                    ? "Не удалось загрузить статистику альбома"
+                    : "Загрузка статистики…"}
+                </p>
+              </>
             )
           )}
         </aside>
@@ -927,7 +1019,7 @@ export function PulseMode({
               event.pointerType !== "mouse" ||
               event.button !== 0 ||
               (event.target as HTMLElement).closest(
-                ".pulse-cover, .pulse-stem, .pulse-time, button:not(.pulse-album)",
+                ".pulse-album, .pulse-time, button",
               )
             )
               return;

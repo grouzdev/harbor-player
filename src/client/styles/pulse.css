@@ -20,6 +20,21 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 460px);
   gap: 24px;
 }
+.pulse-statistics {
+  /* Statistics are replaced by a loading message on selection. */
+  position: relative;
+  min-height: 132px;
+}
+.pulse-stat-placeholder {
+  visibility: hidden;
+}
+.pulse-stats-status {
+  position: absolute;
+  top: 42px;
+  left: 0;
+  right: 0;
+  margin: 0;
+}
 .pulse-selected {
   display: flex;
   min-width: 0;
@@ -159,7 +174,8 @@
 }
 .pulse-card-slot {
   position: absolute;
-  top: 0;
+  /* Leave room for the selected cover's outline at the plot's top edge. */
+  top: 5px;
 }
 .pulse-album {
   display: block;
@@ -175,6 +191,44 @@
   flex-direction: column;
   justify-content: end;
   align-items: center;
+}
+.pulse-artist-group {
+  display: block;
+  width: 100%;
+  text-align: center;
+}
+.pulse-group-strips {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  width: var(--pulse-cover-size, 80px);
+  min-height: 0;
+  margin-top: 10px;
+  gap: 2px;
+  overflow: hidden;
+}
+.pulse-album-strip {
+  flex-basis: 0;
+  flex-shrink: 1;
+  width: 100%;
+  min-height: 8px;
+  padding: 0;
+  border: 0;
+  background: #8da99836;
+}
+.pulse-album-latest {
+  width: auto;
+  padding: 0;
+}
+.pulse-album-strip[aria-pressed="true"] {
+  background: #c3dbc16a;
+  box-shadow: inset 2px 0 var(--pulse-accent);
+}
+.pulse-album-strip:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--pulse-accent);
+  outline-offset: -2px;
 }
 .pulse-stem {
   display: block;
@@ -296,6 +350,9 @@
     grid-template-columns: minmax(0, 1fr);
     gap: 12px;
   }
+  .pulse-statistics {
+    min-height: 72px;
+  }
   .pulse-selected > .pulse-cover {
     width: 72px;
     height: 72px;
@@ -308,6 +365,9 @@
   }
 }
 @container (max-height: 450px) {
+  .pulse-statistics {
+    min-height: 56px;
+  }
   .pulse-selected > .pulse-cover {
     width: 56px;
     height: 56px;
@@ -336,6 +396,9 @@
   .pulse-selection {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
     gap: 10px;
+  }
+  .pulse-statistics {
+    min-height: 56px;
   }
   .pulse-selected {
     gap: 10px;

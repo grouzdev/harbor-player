@@ -6,7 +6,9 @@ export const DAY_PADDING = 14;
 export interface PulseDayLayout {
   date: string;
   albumCount: number;
+  artistGroupCount?: number;
   maxAlbumMs: number;
+  maxArtistGroupMs?: number;
   playedMs: number;
 }
 export function calendarDay(date: string): number {
@@ -36,6 +38,7 @@ export class PulseLayout {
   readonly first: number;
   readonly count: number;
   readonly maxAlbumMs: number;
+  readonly maxArtistGroupMs: number;
   private readonly indices: number[];
   private readonly extras: number[];
   private readonly days: Map<number, PulseDayLayout>;
@@ -52,6 +55,7 @@ export class PulseLayout {
     this.extras = [0];
     this.days = new Map();
     let maximum = 0;
+    let maximumGroup = 0;
     for (const entry of sorted) {
       const index = calendarDay(entry.date) - this.first;
       if (index < 0 || index >= this.count || entry.albumCount < 1) continue;
@@ -62,8 +66,13 @@ export class PulseLayout {
         this.extras.at(-1)! + dayWidth(entry.albumCount) - EMPTY_DAY_WIDTH,
       );
       maximum = Math.max(maximum, entry.maxAlbumMs);
+      maximumGroup = Math.max(
+        maximumGroup,
+        entry.maxArtistGroupMs ?? entry.maxAlbumMs,
+      );
     }
     this.maxAlbumMs = maximum;
+    this.maxArtistGroupMs = maximumGroup;
   }
   date(index: number): string {
     return calendarKey(
@@ -80,7 +89,8 @@ export class PulseLayout {
     return this.days.get(index);
   }
   width(index: number): number {
-    return dayWidth(this.days.get(index)?.albumCount ?? 0);
+    const day = this.days.get(index);
+    return dayWidth(day?.artistGroupCount ?? day?.albumCount ?? 0);
   }
   start(index: number): number {
     const clamped = Math.max(0, Math.min(this.count, index));

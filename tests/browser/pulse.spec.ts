@@ -16,7 +16,11 @@ async function prepareHistory(
   busyAlbums = 0,
   firstDay = "2023-01-01",
   busyDate = "2025-05-16",
-  metadata = { title: "Pulse album", artist: "Pulse artist" },
+  metadata: {
+    title: string;
+    artist: string;
+    artistForAlbum?: (album: number) => string;
+  } = { title: "Pulse album", artist: "Pulse artist" },
 ) {
   const session = await (await page.request.get("/api/session")).json();
   const headers = { "X-CSRF-Token": session.csrf };
@@ -45,7 +49,7 @@ async function prepareHistory(
       albumKey: `pulse-browser-${album}`,
       snapshot: {
         title: `${metadata.title} ${album}`,
-        artists: [metadata.artist],
+        artists: [metadata.artistForAlbum?.(album) ?? metadata.artist],
         year: 2025,
         coverId: null,
       },
@@ -115,6 +119,35 @@ test("Pulse has its own button and preserves the mounted catalog", async ({
   await expect(workspace).toBeVisible();
   await expect(addLibrary).toBeFocused();
   expect(await workspace.getAttribute("style")).toBe(originalStyle);
+});
+
+test("selects an earlier album from a grouped column without clipping its cover", async ({
+  page,
+}) => {
+  const today = await historyToday(page);
+  await prepareHistory(page, 1, today, today);
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Открыть Пульс", exact: true })
+    .click();
+  const strip = page.locator('.pulse-album-strip[aria-pressed="false"]');
+  await expect(strip).toBeVisible();
+  await expect(page.locator(".pulse-stat-numbers")).toBeVisible();
+  const railBefore = await page.locator(".pulse-rail").boundingBox();
+  const selectedTitle = await page.locator(".pulse-copy h2").textContent();
+  await strip.click();
+  await expect(page.locator(".pulse-copy h2")).not.toHaveText(selectedTitle!);
+  const railAfter = await page.locator(".pulse-rail").boundingBox();
+  expect(railAfter).not.toBeNull();
+  expect(railBefore).not.toBeNull();
+  expect(railAfter!.y).toBe(railBefore!.y);
+  const rail = await page.locator(".pulse-rail").boundingBox();
+  const cover = await page
+    .locator(".pulse-album-latest .pulse-cover")
+    .boundingBox();
+  expect(rail).not.toBeNull();
+  expect(cover).not.toBeNull();
+  expect(cover!.y - rail!.y).toBeGreaterThanOrEqual(4);
 });
 
 test("Pulse bounds busy-day DOM and supports wheel, drag and year navigation", async ({
@@ -534,7 +567,11 @@ test("all 1000 busy-day ranks are keyboard reachable with bounded DOM", async ({
   test.setTimeout(180_000);
   const today = await historyToday(page);
   const firstDay = `${Number(today.slice(0, 4)) - 10}${today.slice(4)}`;
-  const { busyDate } = await prepareHistory(page, 999, firstDay, today);
+  const { busyDate } = await prepareHistory(page, 999, firstDay, today, {
+    title: "Pulse album",
+    artist: "Pulse artist",
+    artistForAlbum: (album) => `Pulse artist ${album}`,
+  });
   const session = await (await page.request.get("/api/session")).json();
   // Prevent restored real playback from extending this deterministic history.
   expect(

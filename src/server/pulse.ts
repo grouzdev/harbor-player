@@ -12,7 +12,11 @@ import {
   type PulseDay,
   type PulseDayAlbumPage,
   type PulseAlbumStats,
+  type PulseArtistGroup,
+  type PulseDayAlbum,
+  type PulseDayArtistGroups,
 } from "../shared/pulse.js";
+import { albumArtistGroupKey } from "../shared/artist-grouping.js";
 import { badRequest, conflict, notFound } from "./http-error.js";
 
 type Interval = {
@@ -463,13 +467,59 @@ export class PulseStore {
     };
   }
   layout(from: string, to: string) {
+    const albums = this.db
+      .prepare(
+        `SELECT d.dayKey,d.playedMs,a.snapshot FROM pulse_day_albums d
+        JOIN pulse_albums a USING(albumId)
+        WHERE d.dayKey BETWEEN ? AND ?
+        ORDER BY d.dayKey, d.firstPlayedAtUtc, d.albumId`,
+      )
+      .all(from, to) as {
+      dayKey: string;
+      playedMs: number;
+      snapshot: string;
+    }[];
+    const groupCounts = new Map<string, number>();
+    const groupMaximums = new Map<string, number>();
+    let previousDay: string | undefined;
+    let previousGroup: string | undefined;
+    let groupPlayedMs = 0;
+    const saveGroup = () => {
+      if (previousDay)
+        groupMaximums.set(
+          previousDay,
+          Math.max(groupMaximums.get(previousDay) ?? 0, groupPlayedMs),
+        );
+    };
+    for (const album of albums) {
+      const group = albumArtistGroupKey(
+        (JSON.parse(album.snapshot) as PulseDayAlbum).artists,
+      );
+      if (album.dayKey !== previousDay || group !== previousGroup) {
+        saveGroup();
+        groupCounts.set(album.dayKey, (groupCounts.get(album.dayKey) ?? 0) + 1);
+        groupPlayedMs = 0;
+      }
+      groupPlayedMs += album.playedMs;
+      previousDay = album.dayKey;
+      previousGroup = group;
+    }
+    saveGroup();
+    const days = this.db
+      .prepare(
+        "SELECT * FROM pulse_days WHERE dayKey BETWEEN ? AND ? ORDER BY dayKey DESC",
+      )
+      .all(from, to) as Omit<
+      PulseDay,
+      "artistGroupCount" | "maxArtistGroupMs"
+    >[];
     return {
       historyGeneration: this.settings().historyGeneration,
-      days: this.db
-        .prepare(
-          "SELECT * FROM pulse_days WHERE dayKey BETWEEN ? AND ? ORDER BY dayKey DESC",
-        )
-        .all(from, to) as PulseDay[],
+      days: days.map((day) => ({
+        ...day,
+        artistGroupCount: groupCounts.get(day.dayKey) ?? 0,
+        maxArtistGroupMs: groupMaximums.get(day.dayKey) ?? 0,
+      })),
     };
   }
   window(from: string, to: string) {
@@ -531,6 +581,40 @@ export class PulseStore {
           ).toString("base64url")
         : null,
     };
+  }
+  dayArtistGroups(
+    dayKey: string,
+    limit = Number.MAX_SAFE_INTEGER,
+    offset = 0,
+  ): PulseDayArtistGroups {
+    const rows = this.db
+      .prepare(
+        `SELECT d.*,a.snapshot FROM pulse_day_albums d JOIN pulse_albums a USING(albumId)
+        WHERE dayKey=? ORDER BY firstPlayedAtUtc,albumId`,
+      )
+      .all(dayKey) as (Record<string, unknown> & {
+      albumId: string;
+      snapshot: string;
+    })[];
+    const groups: PulseArtistGroup[] = [];
+    let previousGroup: string | undefined;
+    for (const row of rows) {
+      const { snapshot, dayKey: _day, ...values } = row;
+      const album = {
+        ...values,
+        ...JSON.parse(snapshot),
+      } as PulseDayAlbum;
+      const groupKey = albumArtistGroupKey(album.artists);
+      let group = groups.at(-1);
+      if (!group || groupKey !== previousGroup) {
+        group = { albums: [], playedMs: 0 };
+        groups.push(group);
+      }
+      group.albums.push(album);
+      group.playedMs += album.playedMs;
+      previousGroup = groupKey;
+    }
+    return { dayKey, items: groups.slice(offset, offset + limit) };
   }
   albumStats(albumId: string, dayKey?: string): PulseAlbumStats {
     const stats = this.db

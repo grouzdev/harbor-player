@@ -64,7 +64,9 @@ export interface PulseDay {
   dayKey: string;
   playedMs: number;
   albumCount: number;
+  artistGroupCount: number;
   maxAlbumMs: number;
+  maxArtistGroupMs: number;
 }
 export interface PulseDayAlbum extends PulseSnapshot {
   albumId: string;
@@ -77,6 +79,14 @@ export interface PulseDayAlbumPage {
   dayKey: string;
   items: PulseDayAlbum[];
   nextCursor: string | null;
+}
+export interface PulseArtistGroup {
+  albums: PulseDayAlbum[];
+  playedMs: number;
+}
+export interface PulseDayArtistGroups {
+  dayKey: string;
+  items: PulseArtistGroup[];
 }
 export interface PulseHistoryRange extends PulseSettings {
   firstDay: string | null;
@@ -116,7 +126,9 @@ export const pulseDaySchema = z.object({
   dayKey,
   playedMs: durationMs,
   albumCount: z.number().int().nonnegative(),
+  artistGroupCount: z.number().int().nonnegative(),
   maxAlbumMs: durationMs,
+  maxArtistGroupMs: durationMs,
 });
 export const pulseLayoutSchema = z.object({
   historyGeneration: z.number().int().positive(),
@@ -133,6 +145,14 @@ export const pulseDayAlbumPageSchema = z.object({
   dayKey,
   items: z.array(pulseDayAlbumSchema).max(100),
   nextCursor: z.string().nullable(),
+});
+export const pulseArtistGroupSchema = z.object({
+  albums: z.array(pulseDayAlbumSchema).min(1),
+  playedMs: durationMs,
+});
+export const pulseDayArtistGroupsSchema = z.object({
+  dayKey,
+  items: z.array(pulseArtistGroupSchema),
 });
 export const pulseWindowSchema = pulseLayoutSchema.extend({
   albums: z.array(pulseDayAlbumPageSchema).max(31),

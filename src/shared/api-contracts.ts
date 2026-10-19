@@ -19,6 +19,7 @@ import {
   pulseLayoutSchema,
   pulseWindowSchema,
   pulseDayAlbumPageSchema,
+  pulseDayArtistGroupsSchema,
   pulseAlbumStatsSchema,
   pulseBatchResultSchema,
 } from "./pulse.js";
@@ -340,6 +341,8 @@ export function apiResponseContract(method: string, pathname: string) {
   if (pathname === "/api/pulse/window") return pulseWindowSchema;
   if (/^\/api\/pulse\/days\/[^/]+\/albums$/.test(pathname))
     return pulseDayAlbumPageSchema;
+  if (/^\/api\/pulse\/days\/[^/]+\/artist-groups$/.test(pathname))
+    return pulseDayArtistGroupsSchema;
   if (/^\/api\/pulse\/albums\/[^/]+\/stats$/.test(pathname))
     return pulseAlbumStatsSchema;
   if (pathname === "/api/listening-events") return pulseBatchResultSchema;

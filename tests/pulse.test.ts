@@ -640,7 +640,14 @@ describe("Pulse storage", () => {
         expect(reopened.pulse.settings().timeZone).toBe("America/New_York");
         expect(reopened.pulse.albumStats(albumId!).playedMs).toBe(20000);
         expect(reopened.pulse.layout(dayKey, dayKey).days).toEqual([
-          { dayKey, playedMs: 20000, albumCount: 1, maxAlbumMs: 20000 },
+          {
+            dayKey,
+            playedMs: 20000,
+            albumCount: 1,
+            artistGroupCount: 1,
+            maxAlbumMs: 20000,
+            maxArtistGroupMs: 20000,
+          },
         ]);
       } finally {
         reopened.close();
@@ -672,13 +679,17 @@ describe("Pulse storage", () => {
         dayKey: "2026-03-08",
         playedMs: 20000,
         albumCount: 1,
+        artistGroupCount: 1,
         maxAlbumMs: 20000,
+        maxArtistGroupMs: 20000,
       },
       {
         dayKey: "2026-03-07",
         playedMs: 10000,
         albumCount: 1,
+        artistGroupCount: 1,
         maxAlbumMs: 10000,
+        maxArtistGroupMs: 10000,
       },
     ]);
     expect(catalog.pulse.albumStats(albumId)).toMatchObject({
@@ -688,6 +699,40 @@ describe("Pulse storage", () => {
       firstPlayedAtUtc: start,
       lastPlayedAtUtc: start + 30000,
     });
+  });
+
+  it("groups only consecutive albums with the same catalog artist key", async () => {
+    const albums = [
+      ["first", ["Artist", "Guest"]],
+      ["second", ["guest", "artist"]],
+      ["third", ["Other"]],
+      ["fourth", ["Artist", "Guest"]],
+    ] as const;
+    await send(
+      ...albums.map(([albumKey, artists], index) =>
+        event({
+          eventId: `group-${albumKey}`,
+          trackId: `track-${albumKey}`,
+          albumKey,
+          visitId: `visit-${albumKey}`,
+          startedAtUtc: start + index * 20_000,
+          endedAtUtc: start + (index + 1) * 20_000,
+          snapshot: {
+            title: albumKey,
+            artists: [...artists],
+            year: 2026,
+            coverId: null,
+          },
+        }),
+      ),
+    );
+    const day = "2026-03-08";
+    expect(catalog.pulse.layout(day, day).days[0].artistGroupCount).toBe(3);
+    expect(
+      catalog.pulse
+        .dayArtistGroups(day)
+        .items.map((group) => group.albums.map((album) => album.title)),
+    ).toEqual([["first", "second"], ["third"], ["fourth"]]);
   });
 
   it("rolls the entire batch back on conflicting revisions or identities", async () => {

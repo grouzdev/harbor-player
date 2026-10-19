@@ -62,6 +62,17 @@ export function registerPulseRoutes(app: FastifyInstance, pulse: PulseStore) {
       throw badRequest("Выберите курсор или offset");
     return pulse.dayAlbums(dayKey, query.limit, query.cursor, query.offset);
   });
+  app.get("/api/pulse/days/:day/artist-groups", async (request) => {
+    const dayKey = z.object({ day }).parse(request.params).day;
+    const query = z
+      .object({
+        limit: z.coerce.number().int().min(1).max(100).default(20),
+        offset: z.coerce.number().int().min(0).max(1000000).default(0),
+      })
+      .strict()
+      .parse(request.query);
+    return pulse.dayArtistGroups(dayKey, query.limit, query.offset);
+  });
   app.get("/api/pulse/albums/:id/stats", async (request) => {
     const { id } = z
       .object({ id: z.string().min(1).max(500) })
