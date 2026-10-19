@@ -63,7 +63,9 @@ export class PulseLayout {
       this.days.set(index, entry);
       this.indices.push(index);
       this.extras.push(
-        this.extras.at(-1)! + dayWidth(entry.albumCount) - EMPTY_DAY_WIDTH,
+        this.extras.at(-1)! +
+          dayWidth(entry.artistGroupCount ?? entry.albumCount) -
+          EMPTY_DAY_WIDTH,
       );
       maximum = Math.max(maximum, entry.maxAlbumMs);
       maximumGroup = Math.max(

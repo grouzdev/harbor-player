@@ -58,6 +58,30 @@ describe("Pulse sparse calendar geometry", () => {
     });
     expect(layout.index("2026-01-01")).toBe(2);
   });
+  it("uses artist-group counts for day offsets as well as visible widths", () => {
+    const layout = new PulseLayout("2025-01-01", "2025-01-02", [
+      {
+        date: "2025-01-01",
+        albumCount: 4,
+        artistGroupCount: 1,
+        maxAlbumMs: 1000,
+        maxArtistGroupMs: 4000,
+        playedMs: 4000,
+      },
+      {
+        date: "2025-01-02",
+        albumCount: 1,
+        artistGroupCount: 1,
+        maxAlbumMs: 1000,
+        maxArtistGroupMs: 1000,
+        playedMs: 1000,
+      },
+    ]);
+
+    expect(layout.width(0)).toBe(dayWidth(1));
+    expect(layout.start(1)).toBe(dayWidth(1));
+    expect(layout.totalWidth).toBe(2 * dayWidth(1));
+  });
   it("rejects duplicate sparse rows and reversed ranges", () => {
     const row = {
       date: "2025-01-01",
