@@ -1408,7 +1408,7 @@ export class Catalog {
     return (
       this.db
         .prepare(
-          "SELECT payload FROM operations ORDER BY createdAt DESC LIMIT 100",
+          "SELECT payload FROM operations ORDER BY createdAt DESC, id DESC",
         )
         .all() as Row[]
     )
@@ -1416,46 +1416,70 @@ export class Catalog {
       .filter((result) => result.success)
       .map((result) => result.data);
   }
-  clearHistory(): { operations: number; jobs: number; cache: number } {
-    const removable = this.history().filter(
-      (operation) =>
-        operation.status === "done" &&
-        (["move", "restore"].includes(operation.kind) ||
-          (operation.kind === "trash" && operation.recoverable === false)) &&
-        !operation.items.some((item) => item.error),
-    );
-    if (!removable.length)
-      return { operations: 0, jobs: 0, cache: this.clearExpiredHttpCache() };
-    const ids = removable.map((operation) => operation.id);
-    const placeholders = ids.map(() => "?").join(",");
-    const jobs = this.db.prepare("SELECT payload FROM jobs").all() as Row[];
-    const removableJobs = jobs
-      .map((row) => jobSchema.safeParse(parseStoredJson(row.payload)))
-      .filter((result) => result.success)
-      .map((result) => result.data)
-      .filter(
-        (job) =>
-          job.operationId &&
-          ids.includes(job.operationId) &&
-          (job.status === "done" || job.status === "error"),
-      )
-      .map((job) => job.id);
-    this.db.transaction(() => {
-      this.db
-        .prepare(`DELETE FROM operations WHERE id IN (${placeholders})`)
-        .run(...ids);
-      if (removableJobs.length) {
-        const jobPlaceholders = removableJobs.map(() => "?").join(",");
+  // A journal entry is not the operation itself: recovery, retry and retention
+  // must keep seeing hidden operations through history()/operation().
+  visibleHistory() {
+    const hidden = new Set(
+      (
         this.db
-          .prepare(`DELETE FROM jobs WHERE id IN (${jobPlaceholders})`)
-          .run(...removableJobs);
-      }
-    })();
+          .prepare("SELECT operationId FROM operation_history_hidden")
+          .all() as { operationId: string }[]
+      ).map((row) => row.operationId),
+    );
+    const active = new Set<string>();
+    for (const row of this.db
+      .prepare("SELECT payload FROM jobs")
+      .all() as Row[]) {
+      const parsed = jobSchema.safeParse(parseStoredJson(row.payload));
+      if (
+        parsed.success &&
+        parsed.data.operationId &&
+        ["queued", "running"].includes(parsed.data.status)
+      )
+        active.add(parsed.data.operationId);
+    }
+    return this.history()
+      .filter(
+        (operation) =>
+          operation.status !== "preview" && !hidden.has(operation.id),
+      )
+      .map((operation) => ({
+        ...operation,
+        deletable: operation.status !== "running" && !active.has(operation.id),
+        successful:
+          operation.status === "done" &&
+          operation.items.every((item) => item.phase === "done" && !item.error),
+      }));
+  }
+  historyStats() {
+    const entries = this.visibleHistory();
     return {
-      operations: ids.length,
-      jobs: removableJobs.length,
-      cache: this.clearExpiredHttpCache(),
+      total: entries.length,
+      successful: entries.filter((entry) => entry.deletable && entry.successful)
+        .length,
+      removable: entries.filter((entry) => entry.deletable).length,
+      active: entries.filter((entry) => !entry.deletable).length,
     };
+  }
+  clearHistory(scope: "all" | "successful", id?: string) {
+    return this.db.transaction(() => {
+      const entries = this.visibleHistory().filter((entry) =>
+        id ? entry.id === id : scope === "all" || entry.successful,
+      );
+      if (id && entries.some((entry) => !entry.deletable))
+        throw conflict("Дождитесь завершения операции");
+      const insert = this.db.prepare(
+        "INSERT OR IGNORE INTO operation_history_hidden(operationId,hiddenAt) VALUES (?,?)",
+      );
+      const now = new Date().toISOString();
+      let removed = 0;
+      for (const entry of entries)
+        if (entry.deletable) removed += insert.run(entry.id, now).changes;
+      return {
+        removed,
+        skippedActive: entries.filter((entry) => !entry.deletable).length,
+      };
+    })();
   }
   clearExpiredHttpCache(now = Date.now()): number {
     return this.db.prepare("DELETE FROM http_cache WHERE expiresAt<=?").run(now)

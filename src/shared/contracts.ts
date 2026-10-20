@@ -310,6 +310,17 @@ export interface OperationSummary {
   errors: string[];
   recoverable?: boolean;
   intent?: "album-merge";
+  deletable?: boolean;
+}
+export interface OperationHistoryStats {
+  total: number;
+  successful: number;
+  removable: number;
+  active: number;
+}
+export interface OperationHistoryRemoval {
+  removed: number;
+  skippedActive: number;
 }
 export const emptyFilter: CatalogFilter = {
   libraryIds: [],

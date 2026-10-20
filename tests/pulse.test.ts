@@ -655,8 +655,8 @@ describe("Pulse storage", () => {
     },
   );
 
-  it("migrates to version 13 and retains exact milliseconds through retries and checkpoints", async () => {
-    expect(db().pragma("user_version", { simple: true })).toBe(13);
+  it("migrates to the current version and retains exact milliseconds through retries and checkpoints", async () => {
+    expect(db().pragma("user_version", { simple: true })).toBe(14);
     const albumId = (await send(event())).acknowledgements[0].albumId;
     await send(event());
     await send(

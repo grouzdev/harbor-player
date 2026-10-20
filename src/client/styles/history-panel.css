@@ -45,3 +45,12 @@
 .history-panel-body > .error-text {
   padding: 0 16px;
 }
+
+.history-remove {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.history-notice {
+  padding: 0 16px;
+}

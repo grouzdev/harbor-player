@@ -1300,6 +1300,15 @@ describe("catalog and safe filesystem operations", () => {
     expect((await parseFile(file)).common.title).toBe("Новое название");
     expect(await audioDigest(file)).toBe(audio);
     const restore = await service.previewRestore(op.id);
+    const recoveryBefore = await service.recoveryStatus();
+    expect(service.catalog.clearHistory("all", op.id)).toEqual({
+      removed: 1,
+      skippedActive: 0,
+    });
+    expect(await service.recoveryStatus()).toEqual(recoveryBefore);
+    expect(
+      service.catalog.visibleHistory().some((entry) => entry.id === op.id),
+    ).toBe(false);
     service.execute(restore.id);
     await service.idle();
     expect(

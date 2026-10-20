@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, describe, it, expect, vi } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import {
@@ -1456,10 +1456,10 @@ describe("Explorer endpoint", () => {
       truncated: true,
     });
   });
-  it("clears only completed history entries that have no recovery path", async () => {
+  it("hides successful history without deleting operation, recovery, job or cache data", async () => {
     const saved = (
       id: string,
-      kind: "move" | "trash",
+      kind: "move" | "trash" | "tags",
       status: "done" | "interrupted",
     ) => ({
       id,
@@ -1483,6 +1483,7 @@ describe("Explorer endpoint", () => {
     });
     context.service.catalog.saveOperation(saved("move-done", "move", "done"));
     context.service.catalog.saveOperation(saved("trash-done", "trash", "done"));
+    context.service.catalog.saveOperation(saved("tags-done", "tags", "done"));
     context.service.catalog.saveOperation({
       ...saved("hard-trash-done", "trash", "done"),
       recoverable: false,
@@ -1515,30 +1516,168 @@ describe("Explorer endpoint", () => {
     context.service.catalog.db
       .prepare("INSERT INTO http_cache VALUES (?,?,?,?)")
       .run("expired", 200, "{}", 0);
+    const recoveryFile = path.join(root, "recovery", "trash-done", "original");
+    await mkdir(path.dirname(recoveryFile), { recursive: true });
+    await writeFile(recoveryFile, "original bytes");
 
     const response = await context.app.inject({
       method: "DELETE",
-      url: "/api/operations/history",
+      url: "/api/operations/history?scope=successful",
       headers: await sessionHeaders(),
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ operations: 2, jobs: 1, cache: 1 });
+    expect(response.json()).toEqual({ removed: 4, skippedActive: 0 });
+    expect(
+      context.service.catalog.visibleHistory().map((operation) => operation.id),
+    ).toEqual(["move-interrupted"]);
     expect(
       context.service.catalog.history().map((operation) => operation.id),
-    ).toEqual(expect.arrayContaining(["trash-done", "move-interrupted"]));
-    expect(
-      context.service.catalog.history().map((operation) => operation.id),
-    ).not.toContain("move-done");
-    expect(
-      context.service.catalog.history().map((operation) => operation.id),
-    ).not.toContain("hard-trash-done");
+    ).toEqual(expect.arrayContaining(["move-done", "trash-done", "tags-done"]));
+    expect(await readFile(recoveryFile, "utf8")).toBe("original bytes");
     expect(context.service.catalog.jobs().map((job) => job.id)).toContain(
       "trash-job",
     );
-    expect(context.service.catalog.jobs().map((job) => job.id)).not.toContain(
+    expect(context.service.catalog.jobs().map((job) => job.id)).toContain(
       "move-job",
     );
+    expect(
+      context.service.catalog.db
+        .prepare("SELECT key FROM http_cache WHERE key='expired'")
+        .get(),
+    ).toBeTruthy();
+    const hiddenId = context.service.catalog.operation("tags-done");
+    context.service.catalog.saveOperation(hiddenId);
+    const list = await context.app.inject({
+      url: "/api/operations",
+      headers: await sessionHeaders(),
+    });
+    expect(
+      list.json().map((operation: { id: string }) => operation.id),
+    ).toEqual(["move-interrupted"]);
+    await context.app.close();
+    context = await createApp({ dataDir: root });
+    expect(
+      context.service.catalog.visibleHistory().map((operation) => operation.id),
+    ).toEqual(["move-interrupted"]);
+    expect(context.service.catalog.operation("tags-done").id).toBe("tags-done");
+    // Hidden entries still participate in the ordinary recovery retention policy.
+    context.service.catalog.saveOperation({
+      ...context.service.catalog.operation("trash-done"),
+      createdAt: "2000-01-01T00:00:00.000Z",
+      recoverable: true,
+    });
+    await context.service.updateRecoverySettings({ backupRetention: "1d" });
+    await expect(readFile(recoveryFile)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(context.service.catalog.operation("trash-done").recoverable).toBe(
+      false,
+    );
+    expect(
+      context.service.catalog.visibleHistory().map((operation) => operation.id),
+    ).toEqual(["move-interrupted"]);
+  });
+  it("removes individual and all history across the 100-entry page while protecting active jobs", async () => {
+    const headers = await sessionHeaders();
+    const operation = (
+      id: string,
+      status: "done" | "running" | "interrupted" = "done",
+    ) => ({
+      id,
+      kind: "tags" as const,
+      status,
+      createdAt: "2026-09-18T00:00:00.000Z",
+      items: [
+        {
+          id: `${id}-item`,
+          trackId: null,
+          source: "/source",
+          destination: "/target",
+          size: 1,
+          mtimeMs: 0,
+          hash: "",
+          title: id,
+          phase: "done" as const,
+        },
+      ],
+    });
+    for (let i = 0; i < 105; i++)
+      context.service.catalog.saveOperation(operation(`success-${i}`));
+    context.service.catalog.saveOperation(operation("running", "running"));
+    context.service.catalog.saveOperation(
+      operation("interrupted", "interrupted"),
+    );
+    const failed = operation("failed");
+    context.service.catalog.saveOperation({
+      ...failed,
+      items: [{ ...failed.items[0], phase: "error", error: "Ошибка" }],
+    });
+    context.service.catalog.saveOperation(operation("queued"));
+    context.service.catalog.saveJob({
+      id: "queued-job",
+      kind: "operation",
+      label: "Queued",
+      status: "queued",
+      completed: 0,
+      total: 1,
+      errors: [],
+      createdAt: failed.createdAt,
+      operationId: "queued",
+    });
+    const stats = await context.app.inject({
+      url: "/api/operations/history",
+      headers,
+    });
+    expect(stats.json()).toEqual({
+      total: 109,
+      successful: 105,
+      removable: 107,
+      active: 2,
+    });
+    const list = await context.app.inject({ url: "/api/operations", headers });
+    expect(list.json()).toHaveLength(100);
+    const remove = (url: string) =>
+      context.app.inject({ method: "DELETE", url, headers });
+    for (const id of ["running", "queued"]) {
+      expect((await remove(`/api/operations/${id}/history`)).statusCode).toBe(
+        409,
+      );
+      expect(
+        context.service.catalog
+          .visibleHistory()
+          .find((entry) => entry.id === id)?.deletable,
+      ).toBe(false);
+    }
+    expect((await remove("/api/operations/failed/history")).json()).toEqual({
+      removed: 1,
+      skippedActive: 0,
+    });
+    expect((await remove("/api/operations/failed/history")).json()).toEqual({
+      removed: 0,
+      skippedActive: 0,
+    });
+    expect(
+      (await remove("/api/operations/history?scope=invalid")).statusCode,
+    ).toBe(400);
+    expect(
+      (await remove("/api/operations/history?scope=successful")).json(),
+    ).toEqual({ removed: 105, skippedActive: 1 });
+    expect(
+      context.service.catalog
+        .visibleHistory()
+        .map((entry) => entry.id)
+        .sort(),
+    ).toEqual(["interrupted", "queued", "running"]);
+    expect((await remove("/api/operations/history?scope=all")).json()).toEqual({
+      removed: 1,
+      skippedActive: 2,
+    });
+    expect((await remove("/api/operations/history")).json()).toEqual({
+      removed: 0,
+      skippedActive: 2,
+    });
+    expect(context.service.catalog.history()).toHaveLength(109);
   });
   it("builds Windows Explorer arguments for folders and selected files", () => {
     expect(explorerArgs({ directory: "C:\\Music\\Album" })).toEqual([

@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { Catalog } from "../dist/server/database.js";
+import { catalogSchemaVersion } from "../dist/server/catalog-migrations.js";
 
 // Read the supplied database only. SQLite's backup API includes committed WAL
 // data. Migration runs exclusively on a disposable copy, never on the source.
@@ -21,7 +22,7 @@ await mkdir(copy);
 const tables = (db) =>
   db
     .prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'pulse_%' ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'pulse_%' AND name != 'operation_history_hidden' ORDER BY name",
     )
     .all()
     .map((row) => row.name);
@@ -31,7 +32,7 @@ const digest = (db) => {
     JSON.stringify(
       db
         .prepare(
-          "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE tbl_name NOT LIKE 'pulse_%' ORDER BY type,name",
+          "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE tbl_name NOT LIKE 'pulse_%' AND tbl_name != 'operation_history_hidden' ORDER BY type,name",
         )
         .all(),
     ),
@@ -93,7 +94,14 @@ try {
         readonly: true,
       });
       try {
-        assert.equal(db.pragma("user_version", { simple: true }), 13);
+        assert.equal(
+          db.pragma("user_version", { simple: true }),
+          catalogSchemaVersion,
+        );
+        assert.deepEqual(
+          db.prepare("SELECT * FROM operation_history_hidden").all(),
+          [],
+        );
         integrity(db);
         assert.equal(
           digest(db),
@@ -113,7 +121,7 @@ try {
   const report = {
     check: "real-v12-copy-migration",
     sourceVersion: 12,
-    migratedVersion: 13,
+    migratedVersion: catalogSchemaVersion,
     catalogRowsAndSchemaUnchanged: true,
     integrityAndForeignKeys: true,
     repeatedOpen: true,

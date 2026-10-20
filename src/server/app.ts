@@ -859,8 +859,8 @@ async function configureApp(
   });
   app.get("/api/operations", async () =>
     service.catalog
-      .history()
-      .filter((o) => o.status !== "preview")
+      .visibleHistory()
+      .slice(0, 100)
       .map((o) => ({
         id: o.id,
         kind: o.kind,
@@ -873,10 +873,23 @@ async function configureApp(
           .map((i) => `${i.title}: ${i.error}`),
         recoverable: o.recoverable,
         intent: o.intent,
+        deletable: o.deletable,
       })),
   );
-  app.delete("/api/operations/history", async () =>
-    service.catalog.clearHistory(),
+  app.get("/api/operations/history", async () =>
+    service.catalog.historyStats(),
+  );
+  app.delete("/api/operations/history", async (request) => {
+    const { scope } = z
+      .object({
+        scope: z.enum(["all", "successful"]).default("all"),
+      })
+      .strict()
+      .parse(request.query);
+    return service.catalog.clearHistory(scope);
+  });
+  app.delete("/api/operations/:id/history", async (request) =>
+    service.catalog.clearHistory("all", idParam.parse(request.params).id),
   );
   app.get("/api/operations/:id", async (request) =>
     service.catalog.operation(idParam.parse(request.params).id),

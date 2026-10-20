@@ -5,7 +5,10 @@ import { mkdirSync, mkdtempSync, writeFileSync, rmSync, cpSync } from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { Catalog } from "../dist/server/database.js";
-import { runCatalogMigrations } from "../dist/server/catalog-migrations.js";
+import {
+  catalogSchemaVersion,
+  runCatalogMigrations,
+} from "../dist/server/catalog-migrations.js";
 
 // Provenance: actual parent of b309473 (first Pulse/v13 commit).
 // Export its server/shared sources with git show, compile with the installed TS,
@@ -23,7 +26,7 @@ let baselineSchema: unknown;
 const snapshot = (db: Database.Database) => {
   const tables = db
     .prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'pulse_%' ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'pulse_%' AND name != 'operation_history_hidden' ORDER BY name",
     )
     .all() as { name: string }[];
   return Object.fromEntries(
@@ -41,7 +44,7 @@ const check = (db: Database.Database, version: number) => {
   expect(
     db
       .prepare(
-        "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE tbl_name NOT LIKE 'pulse_%' ORDER BY type,name",
+        "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE tbl_name NOT LIKE 'pulse_%' AND tbl_name != 'operation_history_hidden' ORDER BY type,name",
       )
       .all(),
   ).toEqual(baselineSchema);
@@ -139,7 +142,7 @@ afterAll(() => {
   if (root) rmSync(root, { recursive: true, force: true });
 });
 
-describe("real old-code v12 → v13 migration", () => {
+describe("real old-code v12 → current schema migration", () => {
   it("preserves every catalog row, playlist and queue over two opens", () => {
     const target = path.join(root, "upgrade");
     cpSync(fixture, target, { recursive: true });
@@ -148,7 +151,10 @@ describe("real old-code v12 → v13 migration", () => {
       const catalog = new Catalog(target);
       try {
         const db = (catalog as unknown as { db: Database.Database }).db;
-        check(db, 13);
+        check(db, catalogSchemaVersion);
+        expect(
+          db.prepare("SELECT * FROM operation_history_hidden").all(),
+        ).toEqual([]);
         const settings = db.prepare("SELECT * FROM pulse_settings").all();
         if (i === 0) pulseBaseline = settings;
         else expect(settings).toEqual(pulseBaseline);
@@ -185,7 +191,7 @@ describe("real old-code v12 → v13 migration", () => {
       { encoding: "utf8" },
     );
     expect(JSON.parse(output)).toMatchObject({
-      migratedVersion: 13,
+      migratedVersion: catalogSchemaVersion,
       originalOpenedReadOnly: true,
       catalogRowsAndSchemaUnchanged: true,
       audioPlaybackChecked: false,
@@ -226,7 +232,10 @@ describe("real old-code v12 → v13 migration", () => {
     }
     const catalog = new Catalog(target);
     try {
-      check((catalog as unknown as { db: Database.Database }).db, 13);
+      check(
+        (catalog as unknown as { db: Database.Database }).db,
+        catalogSchemaVersion,
+      );
     } finally {
       catalog.close();
     }

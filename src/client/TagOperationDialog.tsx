@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowRight,
@@ -10,6 +10,7 @@ import {
   Search,
   RotateCcw,
   TriangleAlert,
+  X,
 } from "lucide-react";
 import type {
   Capabilities,
@@ -20,6 +21,8 @@ import type {
   OperationPreview,
   OperationRetryResult,
   OperationSummary,
+  OperationHistoryStats,
+  OperationHistoryRemoval,
   MetadataProposal,
   MusicBrainzCandidate,
   PerTrackTagPatch,
@@ -921,53 +924,95 @@ export function HistoryDialog({
     queryFn: () => api<OperationSummary[]>("/operations"),
     refetchInterval: 2000,
   });
+  const queryClient = useQueryClient();
+  const stats = useQuery({
+    queryKey: ["history", "stats"],
+    queryFn: () => api<OperationHistoryStats>("/operations/history"),
+    refetchInterval: 2000,
+  });
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [removal, setRemoval] = useState<
+    { scope: "all" | "successful" } | { operation: OperationSummary } | null
+  >(null);
+  const [removalError, setRemovalError] = useState("");
   const [details, setDetails] = useState<{
     operationId: string;
     preview: OperationPreview;
   } | null>(null);
+  const askRemoval = (next: NonNullable<typeof removal>) => {
+    setRemovalError("");
+    setRemoval(next);
+  };
+  const removeHistory = async () => {
+    if (!removal || busy) return;
+    setBusy("clear-history");
+    setRemovalError("");
+    setNotice("");
+    try {
+      const url =
+        "operation" in removal
+          ? `/operations/${encodeURIComponent(removal.operation.id)}/history`
+          : `/operations/history?scope=${removal.scope}`;
+      const result = await api<OperationHistoryRemoval>(
+        url,
+        undefined,
+        "DELETE",
+      );
+      setDetails(null);
+      setError("");
+      await queryClient.invalidateQueries({ queryKey: ["history"] });
+      setNotice(
+        `Удалено записей: ${result.removed}.` +
+          (result.skippedActive
+            ? ` Активные действия сохранены: ${result.skippedActive}.`
+            : ""),
+      );
+      setRemoval(null);
+    } catch (cause) {
+      setRemovalError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy("");
+    }
+  };
   const content = (
     <>
-      {history.data?.some(
-        (operation) =>
-          operation.status === "done" &&
-          (["move", "restore"].includes(operation.kind) ||
-            (operation.kind === "trash" && operation.recoverable === false)) &&
-          operation.errors.length === 0,
-      ) && (
-        <div className="history-clear">
-          <span className="muted">
-            Восстановимые, прерванные и выполняющиеся операции сохранятся.
-          </span>
-          <button
-            className="button secondary small"
-            disabled={!!busy}
-            onClick={async () => {
-              if (
-                !window.confirm(
-                  "Очистить завершённые операции без возможности восстановления?",
-                )
-              )
-                return;
-              setBusy("clear-history");
-              try {
-                await api("/operations/history", undefined, "DELETE");
-                setDetails(null);
-                await history.refetch();
-              } catch (e) {
-                setError((e as Error).message);
-              } finally {
-                setBusy("");
-              }
-            }}
-          >
-            Очистить завершённые
-          </button>
-        </div>
+      <div className="history-clear">
+        <span className="muted">
+          Выполняющиеся действия останутся в истории.
+        </span>
+        <button
+          className="button secondary small"
+          disabled={!!busy || !stats.data?.successful || stats.isError}
+          onClick={() => askRemoval({ scope: "successful" })}
+        >
+          Удалить успешные
+        </button>
+        <button
+          className="button secondary small"
+          disabled={!!busy || !stats.data?.removable || stats.isError}
+          onClick={() => askRemoval({ scope: "all" })}
+        >
+          Очистить историю…
+        </button>
+      </div>
+      {notice && (
+        <p className="history-notice" role="status">
+          {notice}
+        </p>
       )}
+      {history.isPending && <p role="status">Загрузка истории…</p>}
+      {stats.data &&
+        stats.data.total > (history.data?.length ?? 0) &&
+        !history.isPending && (
+          <p className="muted history-notice">
+            Показаны последние {history.data?.length ?? 0} из {stats.data.total}
+            . Очистка применяется ко всей истории.
+          </p>
+        )}
       <div className="history-list">
-        {!history.data?.length && (
+        {history.isSuccess && !history.data.length && (
           <div className="empty-small">
             <History size={32} />
             <p>Здесь появятся переносы, удаления и изменения тегов.</p>
@@ -980,6 +1025,17 @@ export function HistoryDialog({
               <span className="muted">
                 {new Date(op.createdAt).toLocaleString("ru-RU")}
               </span>
+              {op.deletable === true && op.status !== "running" && (
+                <button
+                  className="icon-button history-remove"
+                  title="Удалить из истории"
+                  aria-label={`Удалить из истории: ${operationLabel(op)}`}
+                  disabled={!!busy}
+                  onClick={() => askRemoval({ operation: op })}
+                >
+                  <X size={16} aria-hidden="true" />
+                </button>
+              )}
             </div>
             <p>
               {op.status === "running"
@@ -1106,10 +1162,63 @@ export function HistoryDialog({
           </article>
         ))}
       </div>
-      {(error || history.error) && (
+      {(error || history.error || stats.error) && (
         <p className="error-text" role="alert">
-          {error || history.error?.message}
+          {error || history.error?.message || stats.error?.message}
         </p>
+      )}
+      {removal && (
+        <Modal
+          title={
+            "operation" in removal
+              ? "Удалить действие из истории?"
+              : removal.scope === "successful"
+                ? "Удалить успешные действия?"
+                : "Очистить историю действий?"
+          }
+          onClose={() => {
+            if (!busy) setRemoval(null);
+          }}
+        >
+          <p>
+            {"operation" in removal
+              ? `${operationLabel(removal.operation)} · ${new Date(removal.operation.createdAt).toLocaleString("ru-RU")}`
+              : removal.scope === "successful"
+                ? "Будут удалены записи об успешных действиях. Ошибки и прерванные действия останутся."
+                : "Будут удалены записи о завершённых и прерванных действиях. Выполняющиеся действия останутся."}
+          </p>
+          <p>
+            Изменения файлов не отменятся. Резервные копии не будут удалены.
+            Восстановление и повтор из удалённых записей станут недоступны.
+          </p>
+          {removalError && (
+            <p className="error-text" role="alert">
+              {removalError}
+            </p>
+          )}
+          <footer className="dialog-actions">
+            <button
+              className="button secondary"
+              disabled={!!busy}
+              onClick={() => setRemoval(null)}
+            >
+              Отмена
+            </button>
+            <button
+              className="button danger"
+              disabled={!!busy}
+              onClick={() => void removeHistory()}
+            >
+              {busy === "clear-history"
+                ? "Удаление…"
+                : "operation" in removal
+                  ? "Удалить из истории"
+                  : removal.scope === "successful"
+                    ? "Удалить успешные"
+                    : "Очистить историю"}
+            </button>
+          </footer>
+        </Modal>
       )}
     </>
   );
@@ -1122,7 +1231,9 @@ export function HistoryDialog({
         <header className="panel-heading settings-panel-heading">
           <History size={20} aria-hidden="true" />
           <h2>История действий</h2>
-          <span className="history-count">{history.data?.length ?? 0}</span>
+          <span className="history-count">
+            {stats.data?.total ?? history.data?.length ?? 0}
+          </span>
         </header>
         <div className="settings-panel-body history-panel-body">{content}</div>
       </section>

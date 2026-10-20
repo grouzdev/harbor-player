@@ -219,6 +219,7 @@ const operationSummarySchema = z.object({
   errors: stringArray,
   recoverable: z.boolean().optional(),
   intent: z.enum(["album-merge"]).optional(),
+  deletable: z.boolean().optional(),
 });
 export const okSchema = z.object({ ok: z.literal(true) });
 export const queueSchema = z.object({
@@ -418,7 +419,21 @@ export function apiResponseContract(method: string, pathname: string) {
       : apiResponseSchemas.pathTemplate;
   if (/^\/api\/path-templates\/[^/]+$/.test(pathname))
     return method === "DELETE" ? okSchema : apiResponseSchemas.pathTemplate;
-  if (pathname === "/api/operations/history") return maintenanceResultSchema;
+  if (pathname === "/api/operations/history" && method === "GET")
+    return z.object({
+      total: z.number().int().nonnegative(),
+      successful: z.number().int().nonnegative(),
+      removable: z.number().int().nonnegative(),
+      active: z.number().int().nonnegative(),
+    });
+  if (
+    pathname === "/api/operations/history" ||
+    /^\/api\/operations\/[^/]+\/history$/.test(pathname)
+  )
+    return z.object({
+      removed: z.number().int().nonnegative(),
+      skippedActive: z.number().int().nonnegative(),
+    });
   if (/^\/api\/operations\/[^/]+\/(execute|retry|restore)$/.test(pathname))
     return z.unknown();
   if (pathname === "/api/operations/preview") return operationPreviewSchema;

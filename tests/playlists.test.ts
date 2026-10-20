@@ -361,7 +361,7 @@ describe("playlists", () => {
         "user_version",
         { simple: true },
       ),
-    ).toBe(13);
+    ).toBe(14);
   });
 
   it("retains unavailable entries and reports them", () => {
