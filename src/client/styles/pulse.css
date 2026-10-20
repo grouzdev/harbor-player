@@ -167,7 +167,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  border-left: 1px solid #ffffff20;
+  border-left: 1px solid #ffffff0b;
 }
 .pulse-albums {
   position: relative;
@@ -254,7 +254,7 @@
 .pulse-axis {
   position: relative;
   height: 64px;
-  border-top: 1px solid #ffffff20;
+  border-top: 1px solid #ffffff0b;
   padding-top: 10px;
 }
 .pulse-day-label {
