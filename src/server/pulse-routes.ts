@@ -40,6 +40,17 @@ export function registerPulseRoutes(app: FastifyInstance, pulse: PulseStore) {
     return pulse.clear(body.historyGeneration);
   });
   app.get("/api/pulse/history-range", async () => pulse.range());
+  app.delete("/api/pulse/days/:day/albums", async (request) => {
+    const dayKey = z.object({ day }).parse(request.params).day;
+    const body = z
+      .object({
+        albumIds: z.array(z.string().min(1).max(500)).min(1),
+        historyGeneration: z.number().int().min(1),
+      })
+      .strict()
+      .parse(request.body);
+    return pulse.deleteDayAlbums(dayKey, body.albumIds, body.historyGeneration);
+  });
   app.get("/api/pulse/layout", async (request) => {
     const { from, to } = checkedRange(request.query, 366);
     return pulse.layout(from, to);

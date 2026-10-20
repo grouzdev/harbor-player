@@ -339,7 +339,7 @@ export function apiResponseContract(method: string, pathname: string) {
   if (pathname === "/api/pulse/layout") return pulseLayoutSchema;
   if (pathname === "/api/pulse/window") return pulseWindowSchema;
   if (/^\/api\/pulse\/days\/[^/]+\/albums$/.test(pathname))
-    return pulseDayAlbumPageSchema;
+    return method === "DELETE" ? okSchema : pulseDayAlbumPageSchema;
   if (/^\/api\/pulse\/days\/[^/]+\/artist-groups$/.test(pathname))
     return pulseDayArtistGroupsSchema;
   if (/^\/api\/pulse\/albums\/[^/]+\/stats$/.test(pathname))

@@ -148,6 +148,68 @@ export class PulseStore {
     })();
   }
 
+  deleteDayAlbums(dayKey: string, albumIds: string[], generation: number) {
+    return this.db.transaction(() => {
+      if (this.settings().historyGeneration !== generation)
+        throw conflict("Поколение истории изменилось");
+      for (const albumId of new Set(albumIds)) {
+        // Keep the ledger and a zero contribution as a tombstone: retries and
+        // later checkpoints must not restore a day the user explicitly removed.
+        const intervals = this.db
+          .prepare(
+            "SELECT eventId,dayContributions FROM pulse_intervals WHERE albumId=?",
+          )
+          .all(albumId) as { eventId: string; dayContributions: string }[];
+        for (const interval of intervals) {
+          const parts: Contribution[] = JSON.parse(interval.dayContributions);
+          if (!parts.some((part) => part.dayKey === dayKey)) continue;
+          this.db
+            .prepare(
+              "UPDATE pulse_intervals SET dayContributions=? WHERE eventId=?",
+            )
+            .run(
+              JSON.stringify(
+                parts.map((part) =>
+                  part.dayKey === dayKey ? { ...part, playedMs: 0 } : part,
+                ),
+              ),
+              interval.eventId,
+            );
+        }
+        this.db
+          .prepare("DELETE FROM pulse_day_visits WHERE dayKey=? AND albumId=?")
+          .run(dayKey, albumId);
+        this.db
+          .prepare("DELETE FROM pulse_day_albums WHERE dayKey=? AND albumId=?")
+          .run(dayKey, albumId);
+        this.db
+          .prepare("DELETE FROM pulse_album_stats WHERE albumId=?")
+          .run(albumId);
+        this.db
+          .prepare(
+            `
+          INSERT INTO pulse_album_stats
+          SELECT albumId,sum(playedMs),count(*),sum(visitCount-1),
+            min(firstPlayedAtUtc),max(lastPlayedAtUtc)
+          FROM pulse_day_albums WHERE albumId=? GROUP BY albumId
+        `,
+          )
+          .run(albumId);
+      }
+      this.db.prepare("DELETE FROM pulse_days WHERE dayKey=?").run(dayKey);
+      this.db
+        .prepare(
+          `
+        INSERT INTO pulse_days
+        SELECT dayKey,sum(playedMs),count(*),max(playedMs)
+        FROM pulse_day_albums WHERE dayKey=? GROUP BY dayKey
+      `,
+        )
+        .run(dayKey);
+      return { ok: true as const };
+    })();
+  }
+
   async ingest(input: unknown): Promise<PulseBatchResult> {
     const batch = pulseBatchSchema.parse(input);
     const settings = this.settings();
@@ -349,7 +411,10 @@ export class PulseStore {
       ? JSON.parse(prior.dayContributions)
       : [];
     const deltaMs = event.playedMs - (old?.playedMs ?? 0);
-    const current =
+    const deletedDays = new Set(
+      previous.filter((part) => part.playedMs === 0).map((part) => part.dayKey),
+    );
+    const current = (
       deltaMs > 0
         ? splitPulseInterval(
             {
@@ -359,7 +424,8 @@ export class PulseStore {
             },
             timeZone,
           )
-        : [];
+        : []
+    ).filter((part) => !deletedDays.has(part.dayKey));
     const contributions = new Map(previous.map((part) => [part.dayKey, part]));
     let newDays = 0,
       returns = 0;
@@ -408,21 +474,22 @@ export class PulseStore {
           (before?.playedMs ?? 0) + delta,
         );
     }
-    this.db
-      .prepare(
-        `INSERT INTO pulse_album_stats VALUES (?,?,?,?,?,?)
+    if (current.length)
+      this.db
+        .prepare(
+          `INSERT INTO pulse_album_stats VALUES (?,?,?,?,?,?)
       ON CONFLICT(albumId) DO UPDATE SET playedMs=playedMs+excluded.playedMs,
       dayCount=dayCount+excluded.dayCount,sameDayReturns=sameDayReturns+excluded.sameDayReturns,
       firstPlayedAtUtc=min(firstPlayedAtUtc,excluded.firstPlayedAtUtc),lastPlayedAtUtc=max(lastPlayedAtUtc,excluded.lastPlayedAtUtc)`,
-      )
-      .run(
-        albumId,
-        event.playedMs - (old?.playedMs ?? 0),
-        newDays,
-        returns,
-        event.startedAtUtc,
-        event.endedAtUtc,
-      );
+        )
+        .run(
+          albumId,
+          current.reduce((sum, part) => sum + part.playedMs, 0),
+          newDays,
+          returns,
+          Math.min(...current.map((part) => part.start)),
+          Math.max(...current.map((part) => part.end)),
+        );
     this.db
       .prepare(
         `INSERT INTO pulse_intervals VALUES (?,?,?,?,?,?)

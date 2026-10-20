@@ -3,10 +3,13 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type MouseEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import { api } from "./api";
+import { ContextMenu, type ContextMenuState } from "./ContextMenu";
 import {
   ALBUM_WIDTH,
   DAY_PADDING,
@@ -48,6 +51,11 @@ export interface PulseHistory {
 }
 export interface PulseAdapter {
   invalidate?(): void;
+  deleteDayAlbums?(
+    day: string,
+    albumIds: string[],
+    generation: string | number,
+  ): Promise<void>;
   history(signal: AbortSignal): Promise<PulseHistory>;
   layout(
     from: string,
@@ -197,6 +205,14 @@ export function createPulseApiAdapter(): PulseAdapter {
   };
   return {
     invalidate,
+    async deleteDayAlbums(day, albumIds, historyGeneration) {
+      await api(
+        `/pulse/days/${day}/albums`,
+        { albumIds, historyGeneration },
+        "DELETE",
+      );
+      invalidate();
+    },
     async history(signal) {
       // Listening may have changed while this screen was unmounted.
       invalidate();
@@ -350,6 +366,7 @@ function AlbumDay({
   adapter,
   selected,
   select,
+  showMenu,
 }: {
   layout: PulseLayout;
   index: number;
@@ -360,6 +377,7 @@ function AlbumDay({
   adapter: PulseAdapter;
   selected?: string;
   select: (album: PulseAlbumCard, day: string) => void;
+  showMenu: (event: MouseEvent, day: string, albums: PulseAlbumCard[]) => void;
 }) {
   const day = layout.date(index);
   const start = layout.start(index);
@@ -376,6 +394,7 @@ function AlbumDay({
   const [pendingRank, setPendingRank] = useState<number | null>(null);
   const dayElement = useRef<HTMLDivElement>(null);
   const [error, setError] = useState(false);
+  const [coverAlbums, setCoverAlbums] = useState<Record<number, string>>({});
   const first = Math.max(
     0,
     Math.floor((left - start - DAY_PADDING) / ALBUM_WIDTH) - 3,
@@ -467,7 +486,9 @@ function AlbumDay({
             );
           }
           const albums = [...group.albums].reverse();
-          const latest = albums[0];
+          const latest =
+            albums.find((album) => album.albumId === coverAlbums[rank]) ??
+            albums[0];
           const stripHeight = Math.max(
             1,
             (group.playedMs / Math.max(1, layout.maxArtistGroupMs)) *
@@ -480,6 +501,7 @@ function AlbumDay({
             <div
               key={rank}
               className="pulse-card-slot"
+              onContextMenu={(event) => showMenu(event, day, albums)}
               style={{
                 left: DAY_PADDING + rank * ALBUM_WIDTH,
                 width: ALBUM_WIDTH,
@@ -498,6 +520,7 @@ function AlbumDay({
                       aria-label={`${latest.title}, ${latest.artist}, ${duration(latest.playedMs)}, ${dateFormat.format(date)}`}
                       title={`${latest.title} — ${latest.artist}`}
                       onClick={() => select(latest, day)}
+                      onContextMenu={(event) => showMenu(event, day, [latest])}
                       onFocus={() => {
                         focusedGroup.current = { rank, group };
                         setLastFocusedRank(rank);
@@ -542,10 +565,22 @@ function AlbumDay({
                           type="button"
                           className="pulse-album pulse-album-strip"
                           data-album-id={album.albumId}
+                          // A single-album column already has a roving Tab
+                          // stop on its cover; do not add a duplicate stop.
+                          tabIndex={albums.length > 1 ? 0 : -1}
                           aria-pressed={selected === album.albumId}
                           aria-label={`${album.title}, ${album.artist}, ${duration(album.playedMs)}, ${dateFormat.format(date)}`}
                           title={`${album.title} — ${album.artist}`}
-                          onClick={() => select(album, day)}
+                          onClick={() => {
+                            setCoverAlbums((previous) => ({
+                              ...previous,
+                              [rank]: album.albumId,
+                            }));
+                            select(album, day);
+                          }}
+                          onContextMenu={(event) =>
+                            showMenu(event, day, [album])
+                          }
                           style={{
                             flexGrow: Math.max(1, album.playedMs),
                           }}
@@ -607,6 +642,8 @@ export function PulseMode({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
+  const [deletionRevision, setDeletionRevision] = useState(0);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [position, setPosition] = useState({ left: 0, width: 0, height: 0 });
   const [slider, setSlider] = useState(0);
   const [selection, setSelection] = useState<
@@ -706,6 +743,41 @@ export function PulseMode({
       });
     return () => controller.abort();
   }, [adapter, revision]);
+  function showMenu(event: MouseEvent, day: string, albums: PulseAlbumCard[]) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!adapter.deleteDayAlbums || !history) return;
+    const generation = history.generation;
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        {
+          label: "Удалить",
+          onSelect: async () => {
+            try {
+              await adapter.deleteDayAlbums!(
+                day,
+                albums.map((album) => album.albumId),
+                generation,
+              );
+              setSelection(undefined);
+              setStats(undefined);
+              setDeletionRevision((value) => value + 1);
+              adapter.invalidate?.();
+              setRevision((value) => value + 1);
+            } catch (reason) {
+              setError(
+                reason instanceof Error
+                  ? reason.message
+                  : "Не удалось удалить запись",
+              );
+            }
+          },
+        },
+      ],
+    });
+  }
   const days = useVirtualizer({
     count: layout?.count ?? 0,
     horizontal: true,
@@ -851,7 +923,17 @@ export function PulseMode({
     ? Math.round((stats.dayPlayedMs / stats.dayTotalMs) * 100)
     : 0;
   return (
-    <section className="pulse-mode" aria-label="История прослушивания">
+    <section
+      className="pulse-mode"
+      aria-label="История прослушивания"
+      onKeyDown={(event) => {
+        if (contextMenu && event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          setContextMenu(null);
+        }
+      }}
+    >
       <div className="pulse-selection">
         <div className="pulse-selected">
           {album ? (
@@ -1058,7 +1140,7 @@ export function PulseMode({
           >
             {days.getVirtualItems().map((item) => (
               <AlbumDay
-                key={layout.date(item.index)}
+                key={`${deletionRevision}:${layout.date(item.index)}`}
                 layout={layout}
                 index={item.index}
                 rail={rail}
@@ -1068,6 +1150,7 @@ export function PulseMode({
                 adapter={adapter}
                 selected={selection?.albumId}
                 select={select}
+                showMenu={showMenu}
               />
             ))}
           </div>
@@ -1119,6 +1202,14 @@ export function PulseMode({
           ))}
         </nav>
       )}
+      {contextMenu &&
+        createPortal(
+          <ContextMenu
+            menu={contextMenu}
+            onClose={() => setContextMenu(null)}
+          />,
+          document.body,
+        )}
     </section>
   );
 }

@@ -135,8 +135,13 @@ test("selects an earlier album from a grouped column without clipping its cover"
   await expect(page.locator(".pulse-stat-numbers")).toBeVisible();
   const railBefore = await page.locator(".pulse-rail").boundingBox();
   const selectedTitle = await page.locator(".pulse-copy h2").textContent();
+  const albumId = await strip.getAttribute("data-album-id");
   await strip.click();
   await expect(page.locator(".pulse-copy h2")).not.toHaveText(selectedTitle!);
+  await expect(page.locator(".pulse-album-latest")).toHaveAttribute(
+    "data-album-id",
+    albumId!,
+  );
   const railAfter = await page.locator(".pulse-rail").boundingBox();
   expect(railAfter).not.toBeNull();
   expect(railBefore).not.toBeNull();
@@ -150,10 +155,75 @@ test("selects an earlier album from a grouped column without clipping its cover"
   expect(cover!.y - rail!.y).toBeGreaterThanOrEqual(4);
 });
 
+test("deletes a section, the displayed cover and a whole column through RMB menus", async ({
+  page,
+}) => {
+  const today = await historyToday(page);
+  await prepareHistory(page, 3, today, today);
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Открыть Пульс", exact: true })
+    .click();
+  const strips = page.locator(".pulse-album-strip");
+  await expect(strips).toHaveCount(4);
+
+  // Dismissal must not mutate history.
+  await strips.first().click({ button: "right" });
+  await expect(page.getByRole("menuitem")).toHaveCount(1);
+  await expect(
+    page.getByRole("menuitem", { name: "Удалить", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(strips).toHaveCount(4);
+
+  await strips.last().click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Удалить", exact: true }).click();
+  await expect(strips).toHaveCount(3);
+
+  await strips.last().click();
+  const displayedId = await strips.last().getAttribute("data-album-id");
+  const cover = page.locator(".pulse-album-latest");
+  await expect(cover).toHaveAttribute("data-album-id", displayedId!);
+  await cover.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Удалить", exact: true }).click();
+  await expect(strips).toHaveCount(2);
+  await expect(
+    page.locator(`.pulse-album[data-album-id="${displayedId}"]`),
+  ).toHaveCount(0);
+
+  await page
+    .locator(".pulse-plot")
+    .click({ button: "right", position: { x: 2, y: 2 } });
+  await page.getByRole("menuitem", { name: "Удалить", exact: true }).click();
+  await expect(
+    page.getByText("История прослушивания пока пуста", { exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Открыть Пульс", exact: true })
+    .click();
+  await expect(
+    page.getByText("История прослушивания пока пуста", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".pulse-album-strip")).toHaveCount(0);
+});
+
 test("Pulse bounds busy-day DOM and supports wheel, drag and year navigation", async ({
   page,
 }) => {
-  const { busyDate } = await prepareHistory(page, 260);
+  // Horizontal virtualization works on artist groups, not the album sections
+  // inside one column. Seed independent columns so the day exceeds a viewport.
+  const { busyDate } = await prepareHistory(
+    page,
+    260,
+    "2023-01-01",
+    "2025-05-16",
+    {
+      title: "Pulse album",
+      artist: "Pulse artist",
+      artistForAlbum: (album) => `Pulse artist ${album}`,
+    },
+  );
   await page.goto("/");
   await page
     .getByRole("button", { name: "Открыть Пульс", exact: true })
@@ -337,14 +407,14 @@ test("Pulse recovers the selected artwork after a failed image", async ({
     .fill(String(dayIndex));
   const image = page.locator(".pulse-selected img");
   await page
-    .getByRole("button", { name: titles[0] })
-    .locator(".pulse-time")
+    .getByRole("button", { name: `${titles[0]},` })
+    .and(page.locator(".pulse-album-strip"))
     .click();
   await expect(page.locator(".pulse-copy h2")).toHaveText(titles[0]);
   await expect(image).toHaveCSS("visibility", "hidden");
   await page
-    .getByRole("button", { name: titles[1] })
-    .locator(".pulse-time")
+    .getByRole("button", { name: `${titles[1]},` })
+    .and(page.locator(".pulse-album-strip"))
     .click();
   await expect(image).toHaveAttribute("src", `/api/covers/${goodCover}`);
   await expect(image).toBeVisible();
@@ -442,8 +512,8 @@ test("Pulse decodes wide PNG and portrait JPEG and keeps metadata after truncate
     );
   for (const fixture of fixtures) {
     await page
-      .getByRole("button", { name: fixture.title })
-      .locator(".pulse-time")
+      .getByRole("button", { name: `${fixture.title},` })
+      .and(page.locator(".pulse-album-strip"))
       .click();
     await expect(page.locator(".pulse-copy h2")).toHaveText(fixture.title);
     const image = page.locator(".pulse-selected img");
@@ -470,7 +540,9 @@ test("Pulse decodes wide PNG and portrait JPEG and keeps metadata after truncate
       await expect(image).toHaveCSS("visibility", "hidden");
       await expect(page.locator(".pulse-stat-numbers")).toBeVisible();
       await expect(
-        page.getByRole("button", { name: fixture.title }),
+        page
+          .locator(".pulse-album-strip")
+          .and(page.getByRole("button", { name: `${fixture.title},` })),
       ).toHaveAttribute("aria-pressed", "true");
     }
   }
@@ -695,21 +767,29 @@ test("clear while Pulse is unmounted cannot restore shell selection", async ({
 });
 
 test("clear wins over delayed pages and statistics", async ({ page }) => {
-  const { busyDate } = await prepareHistory(page, 40);
+  const { busyDate } = await prepareHistory(
+    page,
+    40,
+    "2023-01-01",
+    "2025-05-16",
+    {
+      title: "Pulse album",
+      artist: "Pulse artist",
+      artistForAlbum: (album) => `Pulse artist ${album}`,
+    },
+  );
   let release!: () => void;
   const held = new Promise<void>((resolve) => {
     release = resolve;
   });
-  let requests = 0;
+  const delayed = { pages: 0, statistics: 0 };
   await page.route(
-    /\/api\/pulse\/(days\/.*\/albums|albums\/.*\/stats)/,
+    /\/api\/pulse\/(days\/.*\/artist-groups|albums\/.*\/stats)/,
     async (route) => {
-      if (new URL(route.request().url()).searchParams.get("limit") === "1") {
-        await route.continue();
-        return;
-      }
       const response = await route.fetch();
-      requests++;
+      if (new URL(route.request().url()).pathname.endsWith("/stats"))
+        delayed.statistics++;
+      else delayed.pages++;
       await held;
       await route.fulfill({ response }).catch(() => {});
     },
@@ -729,7 +809,8 @@ test("clear wins over delayed pages and statistics", async ({ page }) => {
       ),
     ),
   );
-  await expect.poll(() => requests).toBeGreaterThan(1);
+  await expect.poll(() => delayed.pages).toBeGreaterThan(0);
+  await expect.poll(() => delayed.statistics).toBeGreaterThan(0);
   await page
     .getByRole("button", { name: "Настройки истории прослушивания" })
     .click();
@@ -971,24 +1052,33 @@ test("Pulse wheel clamps at both boundaries and does not hijack Ctrl+wheel", asy
 test("Pulse delayed prior navigation pages cannot restore the old date", async ({
   page,
 }) => {
-  const { busyDate } = await prepareHistory(page, 40);
+  const { busyDate } = await prepareHistory(
+    page,
+    40,
+    "2023-01-01",
+    "2025-05-16",
+    {
+      title: "Pulse album",
+      artist: "Pulse artist",
+      artistForAlbum: (album) => `Pulse artist ${album}`,
+    },
+  );
   let release!: () => void;
   const held = new Promise<void>((resolve) => {
     release = resolve;
   });
   let requested = 0;
   let settled = 0;
-  await page.route(`**/api/pulse/days/${busyDate}/albums?**`, async (route) => {
-    if (new URL(route.request().url()).searchParams.get("limit") === "1") {
-      await route.continue();
-      return;
-    }
-    const response = await route.fetch();
-    requested++;
-    await held;
-    await route.fulfill({ response }).catch(() => {});
-    settled++;
-  });
+  await page.route(
+    `**/api/pulse/days/${busyDate}/artist-groups?**`,
+    async (route) => {
+      const response = await route.fetch();
+      requested++;
+      await held;
+      await route.fulfill({ response }).catch(() => {});
+      settled++;
+    },
+  );
   try {
     await page.goto("/");
     await page
