@@ -3084,7 +3084,7 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     page.getByRole("button", { name: "Открыть настройки" }),
   ).toHaveCount(1);
   await expect(page.locator(".cover-mode-toggle")).toBeVisible();
-  await expect(coverMode).toHaveCSS("background-image", /linear-gradient/);
+  await expect(coverMode).toHaveCSS("background-image", "none");
   await expect(coverMode.getByRole("heading", { level: 2 })).toContainText(
     "Первый трек",
   );
@@ -3098,7 +3098,7 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     "background-color",
     "rgba(0, 0, 0, 0)",
   );
-  await expect(coverMode).toHaveCSS("background-image", /linear-gradient/);
+  await expect(coverMode).toHaveCSS("background-image", "none");
   await page
     .getByRole("button", { name: "Свернуть окно из полноэкранного режима" })
     .click();

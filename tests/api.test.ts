@@ -42,6 +42,8 @@ describe("HTTP boundary", () => {
       theme: "dark",
       accent: "#b8bd82",
       backgroundRevision: 0,
+      surfaceTransparency: 20,
+      backgroundBlur: 14,
     };
     const save = (payload: object) =>
       context.app.inject({
@@ -50,6 +52,22 @@ describe("HTTP boundary", () => {
         headers,
         payload,
       });
+    for (const patch of [
+      { surfaceTransparency: -1 },
+      { surfaceTransparency: 101 },
+      { surfaceTransparency: 1.5 },
+      { surfaceTransparency: "20" },
+      { backgroundBlur: -1 },
+      { backgroundBlur: 41 },
+      { backgroundBlur: null },
+    ])
+      expect((await save({ ...settings, ...patch })).statusCode).toBe(400);
+    const legacy = {
+      theme: settings.theme,
+      accent: settings.accent,
+      backgroundRevision: 0,
+    };
+    expect((await save(legacy)).json()).toEqual(settings);
     for (const backgroundPreset of [1, 2, 3, 4, 5]) {
       const response = await save({ ...settings, backgroundPreset });
       expect(response.statusCode).toBe(200);

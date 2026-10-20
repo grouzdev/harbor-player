@@ -235,6 +235,8 @@ async function configureApp(
       accent: z.string().regex(/^#[0-9a-f]{6}$/i),
       backgroundRevision: z.number().int().min(0),
       backgroundPreset: z.number().int().min(1).max(5).optional(),
+      surfaceTransparency: z.number().int().min(0).max(100).default(20),
+      backgroundBlur: z.number().int().min(0).max(40).default(14),
     })
     .strict();
   app.get("/api/appearance", async () => readAppearance(service.dataDir));

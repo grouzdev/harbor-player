@@ -42,10 +42,10 @@ test("sidebar buttons have normal brightness and share the logo settings action"
   expect(pulseBox.y + pulseBox.height).toBeLessThan(settingsBox.y);
   await expect(sidebar).toHaveCSS("width", "48px");
   const libraryBackground = await page
-    .locator(".libraries-panel")
-    .evaluate((panel) => ({
-      image: getComputedStyle(panel).backgroundImage,
-      color: getComputedStyle(panel).backgroundColor,
+    .locator(".app-shell")
+    .evaluate((shell) => ({
+      image: getComputedStyle(shell, "::after").backgroundImage,
+      color: getComputedStyle(shell, "::after").backgroundColor,
     }));
   await expect(sidebar).toHaveCSS("background-image", libraryBackground.image);
   await expect(sidebar).toHaveCSS("background-color", libraryBackground.color);

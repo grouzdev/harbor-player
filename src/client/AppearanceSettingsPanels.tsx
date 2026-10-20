@@ -18,6 +18,7 @@ import "./desktop";
 import { MAX_BACKGROUND_IMAGE_BYTES } from "../shared/appearance-background";
 import { useQueryClient } from "@tanstack/react-query";
 import { backgroundPresets } from "./background-presets";
+import { RangeSlider } from "./RangeSlider";
 import { VersionSettingsPanel } from "./VersionSettingsPanel";
 
 const accents = [
@@ -82,6 +83,12 @@ export function AppearanceSettingsPanels({
   const fileRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
+  const savedAppearanceRef = useRef(settings);
+  const previewingAppearanceRef = useRef(false);
+  useEffect(() => {
+    if (!busy && !previewingAppearanceRef.current)
+      savedAppearanceRef.current = settings;
+  }, [busy, settings]);
   const [scanBusy, setScanBusy] = useState(false);
   const [recovery, setRecovery] = useState<RecoveryStatus | null>(null);
   const [recoveryBusy, setRecoveryBusy] = useState(false);
@@ -103,13 +110,16 @@ export function AppearanceSettingsPanels({
     setAccentDraft(settings.accent.toUpperCase());
   }, [settings.accent]);
   const save = async (next: AppearanceSettings) => {
+    previewingAppearanceRef.current = false;
     setBusy(true);
     setAppearanceError("");
     onChange(next);
     try {
-      onChange(await api<AppearanceSettings>("/appearance", next));
+      const saved = await api<AppearanceSettings>("/appearance", next);
+      savedAppearanceRef.current = saved;
+      onChange(saved);
     } catch (cause) {
-      onChange(settings);
+      onChange(savedAppearanceRef.current);
       setAppearanceError(
         cause instanceof Error ? cause.message : String(cause),
       );
@@ -121,13 +131,13 @@ export function AppearanceSettingsPanels({
     setBusy(true);
     setAppearanceError("");
     try {
-      onChange(
-        await api<AppearanceSettings>("/appearance/background", {
-          ...body,
-          theme: settings.theme,
-          accent: settings.accent,
-        }),
-      );
+      const saved = await api<AppearanceSettings>("/appearance/background", {
+        ...body,
+        theme: settings.theme,
+        accent: settings.accent,
+      });
+      savedAppearanceRef.current = saved;
+      onChange(saved);
     } catch (cause) {
       setAppearanceError(
         cause instanceof Error ? cause.message : String(cause),
@@ -278,6 +288,15 @@ export function AppearanceSettingsPanels({
                 </button>
               ))}
             </div>
+            <AppearanceSurfaceControls
+              settings={settings}
+              disabled={busy}
+              onPreview={(next) => {
+                previewingAppearanceRef.current = true;
+                onChange(next);
+              }}
+              onCommit={(next) => void save(next)}
+            />
             <div className="appearance-actions">
               <button
                 type="button"
@@ -451,5 +470,64 @@ export function AppearanceSettingsPanels({
       {renderSeparator(2)}
       {history}
     </>
+  );
+}
+
+function AppearanceSurfaceControls({
+  settings,
+  disabled,
+  onPreview,
+  onCommit,
+}: {
+  settings: AppearanceSettings;
+  disabled: boolean;
+  onPreview: (settings: AppearanceSettings) => void;
+  onCommit: (settings: AppearanceSettings) => void;
+}) {
+  const draftRef = useRef(settings);
+  const dirtyRef = useRef(false);
+  draftRef.current = settings;
+  const commit = () => {
+    if (!dirtyRef.current || disabled) return;
+    dirtyRef.current = false;
+    onCommit(draftRef.current);
+  };
+  return (
+    <div className="appearance-surface-controls">
+      {(
+        [
+          ["surfaceTransparency", "Прозрачность панелей", 100, "%"],
+          ["backgroundBlur", "Размытие фона", 40, "px"],
+        ] as const
+      ).map(([field, label, maximum, unit]) => (
+        <div
+          key={field}
+          className="appearance-surface-control"
+          onPointerUp={commit}
+          onPointerCancel={commit}
+          onKeyUp={commit}
+          onBlur={commit}
+        >
+          <span>{label}</span>
+          <output>
+            {settings[field]} {unit}
+          </output>
+          <RangeSlider
+            ariaLabel={label}
+            min={0}
+            max={maximum}
+            step={1}
+            value={settings[field]}
+            disabled={disabled}
+            onChange={(value) => {
+              const next = { ...draftRef.current, [field]: value };
+              draftRef.current = next;
+              dirtyRef.current = true;
+              onPreview(next);
+            }}
+          />
+        </div>
+      ))}
+    </div>
   );
 }

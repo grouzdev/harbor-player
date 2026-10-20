@@ -1,9 +1,14 @@
+import {
+  defaultSurfaceSettings,
+  normalizeSurfaceSettings,
+  type AppearanceSurfaceSettings,
+} from "../shared/appearance-surface";
 export type AppearanceTheme = "dark" | "light";
 
 import { readMigratedStorageValue } from "./storage";
 import { backgroundPresets } from "./background-presets";
 
-export type AppearanceSettings = {
+export type AppearanceSettings = AppearanceSurfaceSettings & {
   theme: AppearanceTheme;
   accent: string;
   backgroundRevision: number;
@@ -11,6 +16,7 @@ export type AppearanceSettings = {
 };
 
 export const defaultAppearance: AppearanceSettings = {
+  ...defaultSurfaceSettings,
   theme: "dark",
   accent: "#b8bd82",
   backgroundRevision: 0,
@@ -24,6 +30,7 @@ export function normalizeAppearance(value: unknown): AppearanceSettings {
   if (!value || typeof value !== "object") return defaultAppearance;
   const candidate = value as Partial<AppearanceSettings>;
   return {
+    ...normalizeSurfaceSettings(candidate),
     theme: "dark",
     accent:
       typeof candidate.accent === "string" &&
@@ -66,6 +73,14 @@ export function applyAppearance(settings: AppearanceSettings) {
   const normalized = normalizeAppearance(settings);
   document.documentElement.dataset.theme = normalized.theme;
   document.documentElement.style.setProperty("--accent", normalized.accent);
+  document.documentElement.style.setProperty(
+    "--surface-opacity",
+    String(1 - normalized.surfaceTransparency / 100),
+  );
+  document.documentElement.style.setProperty(
+    "--background-blur",
+    `${normalized.backgroundBlur}px`,
+  );
   if (normalized.backgroundRevision > 0) {
     document.documentElement.style.setProperty(
       "--appearance-background",

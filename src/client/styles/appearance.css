@@ -290,3 +290,24 @@
     border-bottom: 1px solid #ffffff14;
   }
 }
+
+.appearance-surface-controls {
+  display: grid;
+  gap: 16px;
+  margin: 8px 0;
+}
+.appearance-surface-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  color: var(--muted);
+  font-size: var(--type-caption);
+}
+.appearance-surface-control output {
+  font-variant-numeric: tabular-nums;
+}
+.appearance-surface-control > .range-slider {
+  grid-column: 1 / -1;
+  width: 100%;
+  accent-color: var(--accent);
+}

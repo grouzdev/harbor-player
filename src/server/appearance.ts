@@ -1,3 +1,8 @@
+import {
+  defaultSurfaceSettings,
+  normalizeSurfaceSettings,
+  type AppearanceSurfaceSettings,
+} from "../shared/appearance-surface.js";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -5,7 +10,7 @@ import sharp from "sharp";
 import { MAX_BACKGROUND_IMAGE_BYTES } from "../shared/appearance-background.js";
 import { badRequest } from "./http-error.js";
 
-export type AppearanceSettings = {
+export type AppearanceSettings = AppearanceSurfaceSettings & {
   theme: "dark" | "light";
   accent: string;
   backgroundRevision: number;
@@ -13,6 +18,7 @@ export type AppearanceSettings = {
 };
 
 export const defaultAppearance: AppearanceSettings = {
+  ...defaultSurfaceSettings,
   theme: "dark",
   accent: "#b8bd82",
   backgroundRevision: 0,
@@ -27,6 +33,7 @@ export async function readAppearance(
       await readFile(path.join(dataDir, "appearance.json"), "utf8"),
     ) as Partial<AppearanceSettings>;
     return {
+      ...normalizeSurfaceSettings(parsed),
       theme: "dark",
       accent:
         typeof parsed.accent === "string" && accent.test(parsed.accent)
@@ -54,6 +61,7 @@ export async function writeAppearance(
 ) {
   const normalized: AppearanceSettings = {
     ...settings,
+    ...normalizeSurfaceSettings(settings),
     theme: "dark",
     accent: settings.accent.toLowerCase(),
   };
