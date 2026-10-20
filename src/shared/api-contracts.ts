@@ -93,6 +93,7 @@ export const appearanceSchema = z.object({
   backgroundRevision: z.number().int().nonnegative(),
   surfaceTransparency: z.number().int().min(0).max(100),
   backgroundBlur: z.number().int().min(0).max(40),
+  surfaceDarkness: z.number().int().min(0).max(100),
   backgroundPreset: z.number().int().min(1).max(5).optional(),
 });
 export const bookmarkSchema: z.ZodType<CatalogBookmark> = z.object({

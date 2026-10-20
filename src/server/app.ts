@@ -237,6 +237,7 @@ async function configureApp(
       backgroundPreset: z.number().int().min(1).max(5).optional(),
       surfaceTransparency: z.number().int().min(0).max(100).default(20),
       backgroundBlur: z.number().int().min(0).max(40).default(14),
+      surfaceDarkness: z.number().int().min(0).max(100).default(0),
     })
     .strict();
   app.get("/api/appearance", async () => readAppearance(service.dataDir));

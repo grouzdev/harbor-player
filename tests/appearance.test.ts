@@ -41,7 +41,11 @@ describe("appearance storage", () => {
   it.each([-1, 101, 1.5, "20", null])(
     "normalizes invalid surface transparency %s",
     async (surfaceTransparency) => {
-      const invalid = { surfaceTransparency, backgroundBlur: 41 };
+      const invalid = {
+        surfaceTransparency,
+        backgroundBlur: 41,
+        surfaceDarkness: surfaceTransparency,
+      };
       await writeFile(
         path.join(root, "appearance.json"),
         JSON.stringify(invalid),
@@ -58,6 +62,7 @@ describe("appearance storage", () => {
       ...normalizeAppearance(null),
       surfaceTransparency: 100,
       backgroundBlur: 40,
+      surfaceDarkness: 65,
     };
     await writeAppearance(root, settings);
     expect(await readAppearance(root)).toEqual(settings);
@@ -69,14 +74,20 @@ describe("appearance storage", () => {
     expect(await importAppearanceBackground(root, source)).toMatchObject({
       surfaceTransparency: 100,
       backgroundBlur: 40,
+      surfaceDarkness: 65,
     });
     expect(await clearAppearanceBackground(root)).toMatchObject({
       surfaceTransparency: 100,
       backgroundBlur: 40,
+      surfaceDarkness: 65,
     });
     const style = { setProperty: vi.fn(), removeProperty: vi.fn() };
     vi.stubGlobal("document", { documentElement: { dataset: {}, style } });
     applyAppearance(settings);
+    expect(style.setProperty).toHaveBeenCalledWith(
+      "--surface-darkness",
+      "0.65",
+    );
     expect(style.setProperty).toHaveBeenCalledWith("--surface-opacity", "0");
     expect(style.setProperty).toHaveBeenCalledWith("--background-blur", "40px");
     applyAppearance({ ...settings, surfaceTransparency: 0, backgroundBlur: 0 });

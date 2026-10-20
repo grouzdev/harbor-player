@@ -2,6 +2,7 @@
 :root {
   --surface-opacity: 0.8;
   --background-blur: 14px;
+  --surface-darkness: 0;
 }
 html:not(:fullscreen) body {
   background:
@@ -36,7 +37,11 @@ html:fullscreen .app-shell.app-shell {
   z-index: -1;
   background:
     var(--fine-noise) 0 0 / 180px 180px repeat,
-    #181917;
+    rgb(
+      calc(24 * (1 - var(--surface-darkness)))
+        calc(25 * (1 - var(--surface-darkness)))
+        calc(23 * (1 - var(--surface-darkness)))
+    );
   background-blend-mode: soft-light, normal;
   opacity: var(--surface-opacity);
 }

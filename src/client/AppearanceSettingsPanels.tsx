@@ -498,6 +498,7 @@ function AppearanceSurfaceControls({
         [
           ["surfaceTransparency", "Прозрачность панелей", 100, "%"],
           ["backgroundBlur", "Размытие фона", 40, "px"],
+          ["surfaceDarkness", "Затемнение панелей", 100, "%"],
         ] as const
       ).map(([field, label, maximum, unit]) => (
         <div

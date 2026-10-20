@@ -81,6 +81,10 @@ export function applyAppearance(settings: AppearanceSettings) {
     "--background-blur",
     `${normalized.backgroundBlur}px`,
   );
+  document.documentElement.style.setProperty(
+    "--surface-darkness",
+    String(normalized.surfaceDarkness / 100),
+  );
   if (normalized.backgroundRevision > 0) {
     document.documentElement.style.setProperty(
       "--appearance-background",

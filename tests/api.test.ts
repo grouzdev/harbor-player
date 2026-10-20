@@ -44,6 +44,7 @@ describe("HTTP boundary", () => {
       backgroundRevision: 0,
       surfaceTransparency: 20,
       backgroundBlur: 14,
+      surfaceDarkness: 0,
     };
     const save = (payload: object) =>
       context.app.inject({
@@ -53,6 +54,10 @@ describe("HTTP boundary", () => {
         payload,
       });
     for (const patch of [
+      { surfaceDarkness: -1 },
+      { surfaceDarkness: 101 },
+      { surfaceDarkness: 1.5 },
+      { surfaceDarkness: "20" },
       { surfaceTransparency: -1 },
       { surfaceTransparency: 101 },
       { surfaceTransparency: 1.5 },

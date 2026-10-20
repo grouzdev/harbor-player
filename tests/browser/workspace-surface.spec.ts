@@ -39,6 +39,7 @@ test("shares the catalog texture, transparency and background blur across all mo
     .click();
   await setRange(page, "Прозрачность панелей", "Home");
   await setRange(page, "Размытие фона", "Home");
+  await setRange(page, "Затемнение панелей", "Home");
   const opaque = await surface(page);
   expect(opaque).toMatchObject({
     opacity: "1",
@@ -48,6 +49,8 @@ test("shares the catalog texture, transparency and background blur across all mo
   });
   expect(opaque.image).toContain("data:image/svg+xml");
   await page.screenshot({ path: info.outputPath("settings-opaque.png") });
+  await setRange(page, "Затемнение панелей", "End");
+  expect((await surface(page)).color).toBe("rgb(0, 0, 0)");
   await setRange(page, "Прозрачность панелей", "End");
   await setRange(page, "Размытие фона", "End");
   expect((await surface(page)).opacity).toBe("0");
@@ -61,7 +64,10 @@ test("shares the catalog texture, transparency and background blur across all mo
   await expect(
     page.getByRole("slider", { name: "Размытие фона", exact: true }),
   ).toHaveValue("40");
-  // Custom image import and removal must preserve both controls.
+  await expect(
+    page.getByRole("slider", { name: "Затемнение панелей", exact: true }),
+  ).toHaveValue("100");
+  // Custom image import and removal must preserve all surface controls.
   await page
     .locator('input[type="file"]')
     .setInputFiles(path.resolve("assets/bg_lounge.jpg"));
@@ -84,6 +90,22 @@ test("shares the catalog texture, transparency and background blur across all mo
   await page
     .getByRole("button", { name: "Выбрать фон 2", exact: true })
     .click();
+  await expect(
+    page.getByRole("slider", { name: "Затемнение панелей", exact: true }),
+  ).toHaveValue("100");
+  await setRange(page, "Затемнение панелей", "Home");
+  const darkness = page.getByRole("slider", {
+    name: "Затемнение панелей",
+    exact: true,
+  });
+  const darknessBox = (await darkness.boundingBox())!;
+  await page.mouse.click(
+    darknessBox.x + darknessBox.width / 2,
+    darknessBox.y + darknessBox.height / 2,
+  );
+  await expect(darkness).toBeEnabled();
+  expect((await surface(page)).color).not.toBe("rgb(24, 25, 23)");
+  expect((await surface(page)).color).not.toBe("rgb(0, 0, 0)");
   await setRange(page, "Прозрачность панелей", "Home");
   const slider = page.getByRole("slider", {
     name: "Прозрачность панелей",
@@ -187,35 +209,43 @@ test("shares the catalog texture, transparency and background blur across all mo
   await expect(page.locator("body")).toHaveCSS("background-image", /2-.*\.jpg/);
 });
 
-test("previews until interaction ends, saves once and rolls back failed saves", async ({
-  page,
-}) => {
-  await page.goto("/");
-  await page
-    .getByRole("button", { name: "Открыть настройки", exact: true })
-    .click();
-  await setRange(page, "Прозрачность панелей", "Home");
-  const requests: unknown[] = [];
-  await page.route("**/api/appearance", async (route) => {
-    if (route.request().method() !== "POST") return route.continue();
-    requests.push(route.request().postDataJSON());
-    await route.fulfill({
-      status: 500,
-      json: { message: "Surface save failed" },
+for (const control of ["Прозрачность панелей", "Затемнение панелей"]) {
+  test(`${control} previews until interaction ends, saves once and rolls back failed saves`, async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page
+      .getByRole("button", { name: "Открыть настройки", exact: true })
+      .click();
+    await setRange(page, control, "Home");
+    const original = await surface(page);
+    const requests: unknown[] = [];
+    await page.route("**/api/appearance", async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      requests.push(route.request().postDataJSON());
+      await route.fulfill({
+        status: 500,
+        json: { message: "Surface save failed" },
+      });
     });
+    const slider = page.getByRole("slider", {
+      name: control,
+      exact: true,
+    });
+    await slider.focus();
+    await page.keyboard.down("End");
+    await expect(slider).toHaveValue("100");
+    if (control === "Прозрачность панелей")
+      expect((await surface(page)).opacity).toBe("0");
+    else expect((await surface(page)).color).toBe("rgb(0, 0, 0)");
+    expect(requests).toHaveLength(0);
+    await page.keyboard.up("End");
+    await expect(page.getByRole("alert")).toContainText("500");
+    await expect(slider).toHaveValue("0");
+    expect(await surface(page)).toMatchObject({
+      opacity: original.opacity,
+      color: original.color,
+    });
+    expect(requests).toHaveLength(1);
   });
-  const slider = page.getByRole("slider", {
-    name: "Прозрачность панелей",
-    exact: true,
-  });
-  await slider.focus();
-  await page.keyboard.down("End");
-  await expect(slider).toHaveValue("100");
-  expect((await surface(page)).opacity).toBe("0");
-  expect(requests).toHaveLength(0);
-  await page.keyboard.up("End");
-  await expect(page.getByRole("alert")).toContainText("500");
-  await expect(slider).toHaveValue("0");
-  expect((await surface(page)).opacity).toBe("1");
-  expect(requests).toHaveLength(1);
-});
+}
