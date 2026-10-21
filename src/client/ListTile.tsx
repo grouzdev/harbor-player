@@ -7,7 +7,7 @@ type ListTileProps = {
   selected?: boolean;
   current?: boolean;
   related?: boolean;
-  playing?: boolean;
+  currentQueueItem?: boolean;
   statusIcon?: ReactNode;
   expanded?: boolean;
   disabled?: boolean;
@@ -35,7 +35,7 @@ export function ListTile({
   selected = false,
   current = false,
   related = false,
-  playing = false,
+  currentQueueItem = false,
   statusIcon,
   expanded,
   disabled = false,
@@ -57,7 +57,7 @@ export function ListTile({
 }: ListTileProps) {
   return (
     <div
-      className={`list-tile ${selected ? "selected" : ""} ${current ? "current" : ""} ${related ? "related" : ""} ${playing ? "playing" : ""} ${startAction ? "has-start-action" : ""} ${endAction ? "has-end-action" : ""} ${className}`}
+      className={`list-tile ${selected ? "selected" : ""} ${current ? "current" : ""} ${related ? "related" : ""} ${currentQueueItem ? "current-queue-item" : ""} ${startAction ? "has-start-action" : ""} ${endAction ? "has-end-action" : ""} ${className}`}
       style={style}
       data-testid={testId}
       data-format={dataFormat}

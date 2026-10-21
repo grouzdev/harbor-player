@@ -30,7 +30,6 @@ import {
 import { count, duration } from "./api";
 import { BookmarkToggle, type BookmarkChange } from "./BookmarkToggle";
 import { ListTile } from "./ListTile";
-import { showPlayingTrackIndicators } from "./feature-flags";
 import {
   resolveContextSelection,
   usePanelSelection,
@@ -296,15 +295,15 @@ export function ArtistList({
             hasFacetRelevance &&
             facetRelevance?.artists.includes(item.name) &&
             !checked &&
-            !(showPlayingTrackIndicators && current);
+            !current;
           return (
             <ListTile
               key={item.name}
               className="genre-row artist-row"
               title={label}
               selected={checked}
-              current={showPlayingTrackIndicators && current}
-              playing={showPlayingTrackIndicators && current}
+              current={current}
+              currentQueueItem={current}
               related={related}
               statusIcon={
                 current ? <Play size={13} fill="currentColor" /> : undefined
@@ -592,7 +591,7 @@ export function AlbumGrid({
                     return (
                       <div
                         key={album.id}
-                        className={`album-card ${highlighted.has(album.id) ? "selected" : ""} ${showPlayingTrackIndicators && currentAlbumId === album.id ? "playing" : ""}`}
+                        className={`album-card ${highlighted.has(album.id) ? "selected" : ""} ${currentAlbumId === album.id ? "current-queue-item" : ""}`}
                         data-selection-key={album.id}
                         draggable={playlistDragEnabled}
                         onDragStart={(event) => {
@@ -712,7 +711,7 @@ export function AlbumGrid({
                             )}
                             {currentAlbumId === album.id && (
                               <Play
-                                className="album-playing-icon"
+                                className="album-current-queue-icon"
                                 size={13}
                                 fill="currentColor"
                                 aria-hidden="true"
@@ -1008,7 +1007,7 @@ export function TrackList({
                 }
                 selectionKey={track.id}
                 current={currentId === track.id}
-                playing={currentId === track.id}
+                currentQueueItem={currentId === track.id}
                 statusIcon={
                   currentId === track.id ? (
                     <Play size={13} fill="currentColor" />

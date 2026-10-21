@@ -26,7 +26,6 @@ import type {
 import { count } from "./api";
 import { librarySelectionKey } from "./location-selection";
 import { ListTile } from "./ListTile";
-import { showPlayingTrackIndicators } from "./feature-flags";
 
 type LibraryPanelProps = {
   libraries: Library[];
@@ -127,9 +126,7 @@ export function LibraryPanel({
                   hasFacetRelevance &&
                   !!facetRelevance?.libraryIds.includes(library.id)
                 }
-                playing={
-                  showPlayingTrackIndicators && currentLibraryId === library.id
-                }
+                currentQueueItem={currentLibraryId === library.id}
                 statusIcon={
                   currentLibraryId === library.id ? (
                     <Play size={13} fill="currentColor" />
@@ -322,7 +319,7 @@ export function GenrePanel({
       >
         {genres.map((genre) => {
           const label = genre.name || "Без жанра";
-          const playing = currentPlayerGenres.has(genre.name);
+          const currentQueueItem = currentPlayerGenres.has(genre.name);
           return (
             <ListTile
               key={genre.name}
@@ -331,9 +328,11 @@ export function GenrePanel({
                 hasFacetRelevance &&
                 !!facetRelevance?.genres.includes(genre.name)
               }
-              playing={showPlayingTrackIndicators && playing}
+              currentQueueItem={currentQueueItem}
               statusIcon={
-                playing ? <Play size={13} fill="currentColor" /> : undefined
+                currentQueueItem ? (
+                  <Play size={13} fill="currentColor" />
+                ) : undefined
               }
               selected={highlightedGenres.has(genre.name)}
               selectionKey={genre.name}

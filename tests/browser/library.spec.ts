@@ -2959,17 +2959,48 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     )
     .toBeGreaterThanOrEqual(2);
   const currentTrack = page.getByTestId("track-row").first();
-  await expect(currentTrack).not.toHaveClass(/playing/);
+  await page
+    .locator("audio")
+    .evaluate((audio: HTMLAudioElement) => audio.pause());
+  await expect(currentTrack).toHaveClass(/current-queue-item/);
+  await expect(
+    currentTrack.locator(".list-tile-status-icon svg"),
+  ).toBeVisible();
   await currentTrack.locator(".list-tile-main").click();
   await expect(currentTrack).toHaveClass(/selected/);
-  await expect(libraryTile).not.toHaveClass(/playing/);
-  await expect(page.locator(".albums-panel .album-card.playing")).toHaveCount(
-    0,
-  );
-  await expect(page.locator(".genres-panel .list-tile.playing")).toHaveCount(0);
-  await expect(page.locator(".artists-panel .artist-row.playing")).toHaveCount(
-    0,
-  );
+  await expect
+    .poll(() =>
+      currentTrack.evaluate((row) => {
+        const marker = row.querySelector<HTMLElement>(
+          ".list-tile-related-marker",
+        );
+        const icon = row.querySelector<HTMLElement>(
+          ".list-tile-status-icon svg",
+        );
+        const label = row.querySelector<HTMLElement>(".list-tile-label");
+        if (!marker || !icon || !label) return false;
+        return (
+          getComputedStyle(marker).backgroundColor ===
+            getComputedStyle(icon).color &&
+          getComputedStyle(icon).color === getComputedStyle(label).color
+        );
+      }),
+    )
+    .toBe(true);
+  await expect(libraryTile).toHaveClass(/current-queue-item/);
+  await expect(libraryTile.locator(".list-tile-status-icon svg")).toBeVisible();
+  await expect(
+    page.locator(".albums-panel .album-card.current-queue-item"),
+  ).toHaveCount(1);
+  await expect(
+    page.locator(".albums-panel .album-current-queue-icon"),
+  ).toBeVisible();
+  await expect(
+    page.locator(".genres-panel .list-tile.current-queue-item"),
+  ).toHaveCount(1);
+  await expect(
+    page.locator(".artists-panel .artist-row.current-queue-item"),
+  ).toHaveCount(1);
 
   await expect(coverModeToggle).toHaveAttribute("aria-pressed", "false");
   await expect(coverModeToggle).toHaveCSS("width", "60px");

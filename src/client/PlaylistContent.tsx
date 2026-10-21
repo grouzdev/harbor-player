@@ -254,7 +254,7 @@ export function PlaylistContent({
                 suffix={duration(row.item.track.duration)}
                 selected={selected === row.key}
                 current={isCurrent}
-                playing={isCurrent}
+                currentQueueItem={isCurrent}
                 statusIcon={
                   isCurrent ? <Play size={13} fill="currentColor" /> : undefined
                 }
@@ -293,7 +293,7 @@ export function PlaylistContent({
                 key={row.key}
                 data-testid="playlist-entry"
                 data-entry-id={row.entry.id}
-                className={`playlist-item playlist-added-item playlist-entity-row ${selected === row.key ? "selected" : ""} ${isCurrent ? "current playing" : ""} ${dropBefore === row.entry.id ? "playlist-drop-before" : ""}`}
+                className={`playlist-item playlist-added-item playlist-entity-row ${selected === row.key ? "selected" : ""} ${isCurrent ? "current current-queue-item" : ""} ${dropBefore === row.entry.id ? "playlist-drop-before" : ""}`}
                 style={style}
                 role="group"
                 aria-label={title}
@@ -374,7 +374,7 @@ export function PlaylistContent({
               key={row.key}
               data-testid="playlist-album"
               data-entry-id={row.entry.id}
-              className={`playlist-item ${isCurrent ? "current playing" : ""}`}
+              className={`playlist-item ${isCurrent ? "current current-queue-item" : ""}`}
               style={style}
               role="group"
               aria-label={

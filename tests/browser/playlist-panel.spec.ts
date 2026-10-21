@@ -303,7 +303,7 @@ test("top-level entries are compact, keep type icons and put album year beside a
     "aria-expanded",
   );
   await track.locator(".playlist-entity-main").dblclick();
-  await expect(track).toHaveClass(/playing/);
+  await expect(track).toHaveClass(/current-queue-item/);
   await expect(
     track.locator(".playlist-entity-icon.lucide-music"),
   ).toBeVisible();

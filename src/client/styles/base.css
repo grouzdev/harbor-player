@@ -362,8 +362,8 @@ body.selection-dragging * {
   height: 5px;
   margin-right: 7px;
   border-radius: 50%;
-  background: #c6ca91;
-  box-shadow: 0 0 6px #c6ca91a6;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
 }
 .list-tile-status-icon {
   display: grid;
@@ -376,7 +376,7 @@ body.selection-dragging * {
 .list-tile-status-icon > svg {
   display: block;
 }
-.list-tile.related .list-tile-label {
+.list-tile.related .list-tile-value {
   color: #d7d9b2;
   text-shadow: 0 0 6px #c6ca915c;
 }
@@ -730,13 +730,13 @@ body.selection-dragging * {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #c6ca91;
-  box-shadow: 0 0 6px #c6ca91a6;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
 }
-.album-playing-icon {
+.album-current-queue-icon {
   flex: 0 0 13px;
 }
-.album-card.playing .album-main > strong {
+.album-card.current-queue-item .album-main > strong {
   color: #b9d4b7;
   text-shadow: 0 0 6px #b9d4b766;
 }
@@ -2920,12 +2920,12 @@ html[data-theme="light"] .topbar-brand::after {
 .playlist-entity-row.selected .playlist-entity-duration {
   color: #b2b681;
 }
-.playlist-entity-row.playing .playlist-entity-main,
-.playlist-entity-row.playing .playlist-entity-icon,
-.playlist-entity-row.playing .playlist-entity-duration {
+.playlist-entity-row.current-queue-item .playlist-entity-main,
+.playlist-entity-row.current-queue-item .playlist-entity-icon,
+.playlist-entity-row.current-queue-item .playlist-entity-duration {
   color: #b9d4b7;
 }
-.playlist-entity-row.playing .playlist-entity-title {
+.playlist-entity-row.current-queue-item .playlist-entity-title {
   text-shadow: 0 0 6px #b9d4b766;
 }
 .collapse-toggle {
@@ -3898,18 +3898,19 @@ select {
 .track-row .list-tile-main {
   color: var(--catalog-primary-text);
 }
-.list-tile.playing .list-tile-main,
-.list-tile.playing .list-tile-label,
-.list-tile.playing .list-tile-prefix,
-.list-tile.playing .list-tile-suffix,
-.list-tile.playing .list-tile-status-icon,
-.playlist-item.playing .track-album-copy strong,
-.playlist-item.playing .track-album-copy small,
-.playlist-item.playing .track-album-duration {
+.list-tile.current-queue-item .list-tile-main,
+.list-tile.current-queue-item .list-tile-value,
+.list-tile.current-queue-item .list-tile-label,
+.list-tile.current-queue-item .list-tile-prefix,
+.list-tile.current-queue-item .list-tile-suffix,
+.list-tile.current-queue-item .list-tile-status-icon,
+.playlist-item.current-queue-item .track-album-copy strong,
+.playlist-item.current-queue-item .track-album-copy small,
+.playlist-item.current-queue-item .track-album-duration {
   color: #b9d4b7;
 }
-.list-tile.playing .list-tile-label,
-.playlist-item.playing .track-album-copy strong {
+.list-tile.current-queue-item .list-tile-label,
+.playlist-item.current-queue-item .track-album-copy strong {
   text-shadow: 0 0 6px #b9d4b766;
 }
 .album-details > small {
