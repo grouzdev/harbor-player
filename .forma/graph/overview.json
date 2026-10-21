@@ -1,0 +1,249 @@
+{
+  "format": "forma-graph/0.2",
+  "sources": [
+    {
+      "id": "source.concept",
+      "locator": {
+        "path": "concept.md",
+        "lines": null,
+        "sha256": "d877752a97fd24d320e3fbb4dfc86c264dfabcfe916ce017e2ab458f46b776da"
+      }
+    },
+    {
+      "id": "source.readme",
+      "locator": {
+        "path": "README.md",
+        "lines": null,
+        "sha256": "35762e308a5c5ebc19db6ea9dce8c085b0c249254bdd1f9d18f52710a85b3a2d"
+      }
+    },
+    {
+      "id": "source.package",
+      "locator": {
+        "path": "package.json",
+        "lines": null,
+        "sha256": "b5f058624caf42f50d400e7375206854a23a8d5998d445e5d2502791392612e7"
+      }
+    },
+    {
+      "id": "source.overview",
+      "locator": {
+        "page": "project.overview",
+        "heading": "Личная музыкальная коллекция",
+        "sha256": "2f003e71377b07c782ff2a2bd03ee56a7425d9aad5cbb740055eede7bd49076c"
+      }
+    },
+    {
+      "id": "source.existing",
+      "locator": {
+        "page": "project.overview",
+        "heading": "Что существует",
+        "sha256": "2f003e71377b07c782ff2a2bd03ee56a7425d9aad5cbb740055eede7bd49076c"
+      }
+    },
+    {
+      "id": "source.gaps",
+      "locator": {
+        "page": "project.overview",
+        "heading": "Замысел и существенные пробелы",
+        "sha256": "2f003e71377b07c782ff2a2bd03ee56a7425d9aad5cbb740055eede7bd49076c"
+      }
+    }
+  ],
+  "scopes": [],
+  "entries": [
+    "harbor.collection",
+    "harbor.listening",
+    "harbor.organizing",
+    "harbor.pulse",
+    "harbor.beta"
+  ],
+  "nodes": [
+    {
+      "id": "harbor.collection",
+      "role": "concept",
+      "label": "Harbor Player — личная музыкальная коллекция",
+      "summary": {
+        "text": "Локальный плеер и каталогизатор для человека, который хранит музыку на компьютере. Текущие дистрибутивы предназначены для Windows; кроссплатформенность и стриминг остаются направлениями развития.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.concept",
+            "source.readme"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.overview",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.concept",
+          "source.readme"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    },
+    {
+      "id": "harbor.listening",
+      "role": "concept",
+      "label": "От папок к прослушиванию",
+      "summary": {
+        "text": "Подключение музыкальных папок, отбор по жанрам, исполнителям и альбомам, запуск треков и работа с очередью. Фильтры каталога позволяют искать следующую музыку во время воспроизведения.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.readme",
+            "source.browsing",
+            "source.player"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.overview",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.readme",
+          "source.browsing",
+          "source.player"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    },
+    {
+      "id": "harbor.organizing",
+      "role": "concept",
+      "label": "Порядок в коллекции",
+      "summary": {
+        "text": "Пакетная правка тегов, поиск сведений и обложек через MusicBrainz, перенос и удаление файлов с предварительным просмотром и журналом. Восстановление зависит от сохранённых копий и настроек recovery.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.readme",
+            "source.operations-preview",
+            "source.operations-write"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.overview",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.readme",
+          "source.operations-preview",
+          "source.operations-write"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    },
+    {
+      "id": "harbor.pulse",
+      "role": "concept",
+      "label": "Пульс — история прослушивания",
+      "summary": {
+        "text": "Локальная история альбомов по дням и статистика фактического времени воспроизведения. По проектным документам первый этап принят для beta.2 с сохранёнными ограничениями надёжности и ручной проверки.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.readme",
+            "source.pulse-acceptance",
+            "source.backlog"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.existing",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.readme",
+          "source.pulse-acceptance",
+          "source.backlog"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    },
+    {
+      "id": "harbor.beta",
+      "role": "concept",
+      "label": "Бета и дальнейшее развитие",
+      "summary": {
+        "text": "Реализованы Windows-приложение, обновления и сайт. Подписанный stable ещё требует фактической проверки; сайт относит плейлисты к планам, хотя в приложении уже существует их реализация.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.readme",
+            "source.backlog",
+            "source.website-copy",
+            "source.playlist-api"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.gaps",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.readme",
+          "source.backlog",
+          "source.website-copy",
+          "source.playlist-api"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    }
+  ],
+  "edges": []
+}

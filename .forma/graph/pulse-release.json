@@ -1,0 +1,663 @@
+{
+  "format": "forma-graph/0.2",
+  "sources": [
+    {
+      "id": "source.app-modes",
+      "locator": {
+        "path": "src/client/App.tsx",
+        "lines": {
+          "start": 3839,
+          "end": 3883
+        },
+        "sha256": "067930dec5b70c72abb60e4ca92c9f8e421f80bad2a9dc166beeda44a1058039"
+      }
+    },
+    {
+      "id": "source.recorder",
+      "locator": {
+        "path": "src/client/pulse-recorder.ts",
+        "lines": {
+          "start": 1,
+          "end": 75
+        },
+        "sha256": "d1f8c4f7356ea22b464e73209fa288a39065fc103defe0bf8c89a9b77df79ac4"
+      }
+    },
+    {
+      "id": "source.pulse-store",
+      "locator": {
+        "path": "src/server/pulse.ts",
+        "lines": {
+          "start": 86,
+          "end": 150
+        },
+        "sha256": "c1c662b96553ea45c87129a063dce7ce3d1799d9be785d0e8eb278f86709c5fc"
+      }
+    },
+    {
+      "id": "source.pulse-ingest",
+      "locator": {
+        "path": "src/server/pulse.ts",
+        "lines": {
+          "start": 213,
+          "end": 242
+        },
+        "sha256": "c1c662b96553ea45c87129a063dce7ce3d1799d9be785d0e8eb278f86709c5fc"
+      }
+    },
+    {
+      "id": "source.pulse-reference",
+      "locator": {
+        "path": "docs/pulse/reference.md",
+        "lines": {
+          "start": 1,
+          "end": 65
+        },
+        "sha256": "8485adeadd804be3e3d338d4b7f49cb739c554abdaa445aeddf2a86d17bc9534"
+      }
+    },
+    {
+      "id": "source.pulse-acceptance",
+      "locator": {
+        "path": "docs/pulse-next-steps.md",
+        "lines": null,
+        "sha256": "c990ef478a5ddd6634d999891c14078e37a6b3b7bc6aafa853e43bd9f570cb8d"
+      }
+    },
+    {
+      "id": "source.backlog",
+      "locator": {
+        "path": "docs/backlog.md",
+        "lines": null,
+        "sha256": "635f793735b4962bd8ee585d11fe4126b7bd54685e2e4d70837166f0ee1a4f32"
+      }
+    },
+    {
+      "id": "source.pulse-tests",
+      "locator": {
+        "path": "tests/pulse-recorder.test.ts",
+        "lines": {
+          "start": 40,
+          "end": 115
+        },
+        "sha256": "081b3594b31f3135fd2c8aff71f41f1a7e4956eea15dcf46b0567961f3ef91f8"
+      }
+    },
+    {
+      "id": "source.desktop",
+      "locator": {
+        "path": "src/desktop/main.ts",
+        "lines": {
+          "start": 175,
+          "end": 250
+        },
+        "sha256": "6068fa8bd53a6d5765ea4a5f4d06b820abadb2692fe99e64391c8b40b4e85fd5"
+      }
+    },
+    {
+      "id": "source.updater",
+      "locator": {
+        "path": "src/desktop/update-controller.ts",
+        "lines": {
+          "start": 125,
+          "end": 205
+        },
+        "sha256": "43eb8064547dbbdb1611fe0522979d1bafa35834d3efecbc6fc206550b2938ad"
+      }
+    },
+    {
+      "id": "source.website-readme",
+      "locator": {
+        "path": "website/README.md",
+        "lines": null,
+        "sha256": "f7629a43d610745a83da8ddf3522aa603facb38f8df5d0fa5352734c689b35b4"
+      }
+    },
+    {
+      "id": "source.website-copy",
+      "locator": {
+        "path": "website/src/content/copy.ts",
+        "lines": null,
+        "sha256": "70e4612ca9fb1972cb3ffe93cf1cfe8646643d9ce77e1ecb47d78d398a389ede"
+      }
+    },
+    {
+      "id": "source.website-release",
+      "locator": {
+        "path": "website/src/config/release.ts",
+        "lines": null,
+        "sha256": "2a6f9deac903124650250c80f925378c1a01c9d7c667402f40524c52a083ea99"
+      }
+    }
+  ],
+  "scopes": [],
+  "entries": [],
+  "nodes": [
+    {
+      "id": "pulse.recording",
+      "role": "implementation",
+      "label": "Учёт подтверждённого времени",
+      "summary": {
+        "text": "Recorder рядом с audio накапливает реальное время подтверждённого воспроизведения; пауза и seek не добавляют его. Доставка использует IndexedDB outbox и накопительные revisions; checkpoint выполняется примерно раз в 15 секунд.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.recorder",
+            "source.player",
+            "source.pulse-reference"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.pulse-reference",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.recorder",
+          "source.player",
+          "source.pulse-reference"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    },
+    {
+      "id": "pulse.storage",
+      "role": "implementation",
+      "label": "История и очистка в SQLite",
+      "summary": {
+        "text": "API сохраняет интервалы и агрегаты в SQLite. Смена поколения при очистке отвергает старые ожидающие события. Часовой пояс фиксируется; изменение уже выбранной зоны явно отклоняется.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.pulse-store",
+            "source.pulse-ingest",
+            "source.pulse-reference"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.pulse-store",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.pulse-store",
+          "source.pulse-ingest",
+          "source.pulse-reference"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    },
+    {
+      "id": "pulse.acceptance",
+      "role": "observation",
+      "label": "Первый этап принят с ограничениями",
+      "summary": {
+        "text": "Документ pulse-next-steps фиксирует пользовательскую приёмку на 0.4.0-beta.2. Это историческое утверждение проекта о принятой бете с исключениями; обзор не выдаёт его за новый прогон или приёмку stable.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.pulse-acceptance",
+            "source.backlog"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.pulse-acceptance",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.pulse-acceptance",
+          "source.backlog"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    },
+    {
+      "id": "pulse.limitations",
+      "role": "observation",
+      "label": "Остаточные риски Пульса",
+      "summary": {
+        "text": "В backlog сохранены необъяснённые process timeout и Edge startup tail, NOT RUN управляемого silent worker exit и частичная ручная приёмка. Ошибка хранения может привести к потере несохранённого хвоста; принятие риска не означает исправления.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.backlog",
+            "source.readme"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.backlog",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.backlog",
+          "source.readme"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    },
+    {
+      "id": "pulse.tests",
+      "role": "check",
+      "label": "Тесты накопления времени",
+      "summary": {
+        "text": "Тесты recorder проверяют реальное время при 0.5×, 1× и 2×, влияние jitter и отклонение длинного разрыва часов. В этом обзоре прочитаны ожидания тестов; запуска и нового PASS нет.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.pulse-tests"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.pulse-tests",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.pulse-tests"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    },
+    {
+      "id": "desktop.shell",
+      "role": "implementation",
+      "label": "Windows-окно и обновления",
+      "summary": {
+        "text": "Electron запускает backend в utility process. Контроллер обновлений отдельно выполняет проверку, загрузку и установку; autoDownload и autoInstallOnAppQuit отключены, действия подтверждает пользователь.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.desktop",
+            "source.updater",
+            "source.readme"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.desktop",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.desktop",
+          "source.updater",
+          "source.readme"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    },
+    {
+      "id": "website.landing",
+      "role": "implementation",
+      "label": "Сайт на двух языках",
+      "summary": {
+        "text": "Отдельный Astro-сайт содержит английскую и русскую страницы и конфигурацию скачивания. Локально release channel равен unreleased, версия и ссылки равны null; download links не выдаются. Публикация не проверялась.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.website-readme",
+            "source.website-release"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.website-readme",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.website-readme",
+          "source.website-release"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    },
+    {
+      "id": "website.playlist-gap",
+      "role": "observation",
+      "label": "Roadmap сайта расходится с приложением",
+      "summary": {
+        "text": "Обе языковые версии текста сайта называют плейлисты будущим этапом. В исходниках приложения уже есть UI, API, импорт/экспорт и тесты плейлистов. Обзор фиксирует расхождение, не меняя сайт и продуктовые обещания.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.website-copy",
+            "source.playlist-api",
+            "source.playlist-ui",
+            "source.playlist-tests"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.website-copy",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.website-copy",
+          "source.playlist-api",
+          "source.playlist-ui",
+          "source.playlist-tests"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    },
+    {
+      "id": "release.stable-gap",
+      "role": "observation",
+      "label": "Первый signed stable ещё не подтверждён",
+      "summary": {
+        "text": "RELEASE-01 в backlog оставляет NOT RUN фактически подписанного stable и проверки на чистой Windows VM. Наличие release workflow не подтверждает выдачу подписи. Другие ОС и сетевой доступ к библиотеке остаются за пределами текущей проверенной версии.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.backlog",
+            "source.readme",
+            "source.concept"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.backlog",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.backlog",
+          "source.readme",
+          "source.concept"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge.harbor.pulse.elaborates.harbor.collection",
+      "from": "harbor.pulse",
+      "to": "harbor.collection",
+      "relation": "elaborates",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.readme"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.harbor.beta.elaborates.harbor.collection",
+      "from": "harbor.beta",
+      "to": "harbor.collection",
+      "relation": "elaborates",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.readme"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.pulse.recording.about.harbor.pulse",
+      "from": "pulse.recording",
+      "to": "harbor.pulse",
+      "relation": "about",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.pulse-reference",
+          "source.recorder"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.pulse.storage.about.harbor.pulse",
+      "from": "pulse.storage",
+      "to": "harbor.pulse",
+      "relation": "about",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.pulse-store",
+          "source.pulse-ingest"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.pulse.acceptance.about.harbor.pulse",
+      "from": "pulse.acceptance",
+      "to": "harbor.pulse",
+      "relation": "about",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.pulse-acceptance"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.pulse.limitations.about.harbor.pulse",
+      "from": "pulse.limitations",
+      "to": "harbor.pulse",
+      "relation": "about",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.backlog",
+          "source.readme"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.pulse.tests.about.harbor.pulse",
+      "from": "pulse.tests",
+      "to": "harbor.pulse",
+      "relation": "about",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.pulse-tests"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.desktop.shell.about.harbor.beta",
+      "from": "desktop.shell",
+      "to": "harbor.beta",
+      "relation": "about",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.desktop",
+          "source.updater"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.website.landing.about.harbor.beta",
+      "from": "website.landing",
+      "to": "harbor.beta",
+      "relation": "about",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.website-readme",
+          "source.website-release"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.website.playlist-gap.about.harbor.beta",
+      "from": "website.playlist-gap",
+      "to": "harbor.beta",
+      "relation": "about",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.website-copy",
+          "source.playlist-api"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.website.playlist-gap.about.collection.playlists",
+      "from": "website.playlist-gap",
+      "to": "collection.playlists",
+      "relation": "about",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.website-copy",
+          "source.playlist-api"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.release.stable-gap.about.harbor.beta",
+      "from": "release.stable-gap",
+      "to": "harbor.beta",
+      "relation": "about",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.backlog"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    }
+  ]
+}

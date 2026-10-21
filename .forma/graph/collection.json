@@ -1,0 +1,591 @@
+{
+  "format": "forma-graph/0.2",
+  "sources": [
+    {
+      "id": "source.browsing",
+      "locator": {
+        "path": "src/client/useCatalogBrowsing.ts",
+        "lines": {
+          "start": 1,
+          "end": 130
+        },
+        "sha256": "212910e2f4a6415b3f2bf00149438be96f5ce7d008b38f5917e952c18df27f03"
+      }
+    },
+    {
+      "id": "source.player",
+      "locator": {
+        "path": "src/client/Player.tsx",
+        "lines": {
+          "start": 1,
+          "end": 135
+        },
+        "sha256": "b8c03271ea4b2245bb7d3037865e4d6545f247a6d6c493d604653cc08bbbcbca"
+      }
+    },
+    {
+      "id": "source.scanner",
+      "locator": {
+        "path": "src/server/library-scanner.ts",
+        "lines": {
+          "start": 1,
+          "end": 100
+        },
+        "sha256": "e57d456596c89538686ee68d0da492b23b46aaca5767e8ade27dff34f4a74513"
+      }
+    },
+    {
+      "id": "source.operations-preview",
+      "locator": {
+        "path": "src/server/service.ts",
+        "lines": {
+          "start": 518,
+          "end": 642
+        },
+        "sha256": "7a6fafa6ab13705b9f76167542602c77822f433d288277aa7cedcaa32cf54c9c"
+      }
+    },
+    {
+      "id": "source.operations-write",
+      "locator": {
+        "path": "src/server/service.ts",
+        "lines": {
+          "start": 1161,
+          "end": 1285
+        },
+        "sha256": "7a6fafa6ab13705b9f76167542602c77822f433d288277aa7cedcaa32cf54c9c"
+      }
+    },
+    {
+      "id": "source.orchestrator",
+      "locator": {
+        "path": "src/server/operation-orchestrator.ts",
+        "lines": null,
+        "sha256": "7c4a84b6c016c56c505ffb5e9956b7e7d5c7e367c2dd6082dc9cf0fc3c62c184"
+      }
+    },
+    {
+      "id": "source.playlist-ui",
+      "locator": {
+        "path": "src/client/PlaylistPanel.tsx",
+        "lines": {
+          "start": 1,
+          "end": 90
+        },
+        "sha256": "c75ae31956aa3979d1e9ecde6cd1e748f9282d590b7ae9a09952fd89c485e475"
+      }
+    },
+    {
+      "id": "source.playlist-api",
+      "locator": {
+        "path": "src/server/app.ts",
+        "lines": {
+          "start": 651,
+          "end": 760
+        },
+        "sha256": "ed849a6c5f9b9044cf2bf604413c5289e4dcf5c17e39489ed8e3719d47222d88"
+      }
+    },
+    {
+      "id": "source.playlist-formats",
+      "locator": {
+        "path": "src/server/playlist-formats.ts",
+        "lines": {
+          "start": 1,
+          "end": 90
+        },
+        "sha256": "809bea4eefd932f4d36c59dad998762c5b11e4caebc5736a4286fd38bff469ed"
+      }
+    },
+    {
+      "id": "source.playlist-tests",
+      "locator": {
+        "path": "tests/playlists.test.ts",
+        "lines": {
+          "start": 56,
+          "end": 135
+        },
+        "sha256": "7c1cc1e2f26fcec51f9fce65dd8e3839a2b2bd36ea43adfcc2625b469db36fce"
+      }
+    },
+    {
+      "id": "source.service-tests",
+      "locator": {
+        "path": "tests/service.test.ts",
+        "lines": {
+          "start": 75,
+          "end": 169
+        },
+        "sha256": "cd0041bd4bee07e95552d71de4b300864e44540dc8b55743e4d9d0849052a3e0"
+      }
+    }
+  ],
+  "scopes": [],
+  "entries": [],
+  "nodes": [
+    {
+      "id": "catalog.scanning",
+      "role": "implementation",
+      "label": "Музыка из подключённых папок",
+      "summary": {
+        "text": "Сканер обходит подключённую папку, читает метаданные и обновляет каталог. Неизменённые файлы распознаёт по размеру и mtime; недоступная библиотека не сканируется.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.scanner"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.scanner",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.scanner"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    },
+    {
+      "id": "catalog.browsing",
+      "role": "scenario",
+      "label": "Выбрать музыку в панелях",
+      "summary": {
+        "text": "Человек последовательно выбирает библиотеку, жанр, исполнителя и альбом, затем запускает трек. Глобальный поиск работает поверх сохранённого контекста; очередь фиксируется при запуске.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.readme",
+            "source.browsing"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.readme",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.readme",
+          "source.browsing"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    },
+    {
+      "id": "player.audio",
+      "role": "implementation",
+      "label": "Постоянный плеер и очередь",
+      "summary": {
+        "text": "Плеер использует HTML audio и серверную очередь, поддерживает shuffle/repeat и передачу событий Пульсу. Экран истории и режим обложки подключены рядом с постоянным плеером.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.player",
+            "source.app-modes"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.player",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.player",
+          "source.app-modes"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    },
+    {
+      "id": "operations.files",
+      "role": "implementation",
+      "label": "Preview, запись и восстановление",
+      "summary": {
+        "text": "Операция сначала формирует preview. При полной записи используются staging, проверка исходника и резервной копии; занятое назначение блокирует перенос. Восстановление возможно при наличии сохранённой копии.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.operations-preview",
+            "source.operations-write",
+            "source.orchestrator"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.operations-preview",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.operations-preview",
+          "source.operations-write",
+          "source.orchestrator"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    },
+    {
+      "id": "metadata.lookup",
+      "role": "implementation",
+      "label": "Выбрать издание MusicBrainz",
+      "summary": {
+        "text": "Поиск для трека или альбома предлагает издания; человек выбирает подходящее и поля для замены. Обложки берутся из Cover Art Archive. Запросы внешних сервисов в этом обзоре не выполнялись.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.readme"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.readme",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.readme"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    },
+    {
+      "id": "collection.playlists",
+      "role": "concept",
+      "label": "Подборки, к которым можно вернуться",
+      "summary": {
+        "text": "Плейлисты уже представлены в приложении: записи могут ссылаться на трек, альбом, исполнителя, жанр или папку. Существуют импорт, экспорт и синхронизация в папку.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.playlist-ui",
+            "source.playlist-api",
+            "source.playlist-tests"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.playlist-api",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.playlist-ui",
+          "source.playlist-api",
+          "source.playlist-tests"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    },
+    {
+      "id": "playlists.implementation",
+      "role": "implementation",
+      "label": "Редактирование и обмен плейлистами",
+      "summary": {
+        "text": "UI и API позволяют создавать подборки, менять записи и их порядок, настраивать синхронизацию и экспорт. Парсер принимает M3U/M3U8, XSPF и PLS. Это свидетельство реализации, без нового runtime-прогона.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.playlist-ui",
+            "source.playlist-api",
+            "source.playlist-formats"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.playlist-api",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.playlist-ui",
+          "source.playlist-api",
+          "source.playlist-formats"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    },
+    {
+      "id": "catalog.tests",
+      "role": "check",
+      "label": "Тесты каталога и записей плейлистов",
+      "summary": {
+        "text": "Существующие тесты проверяют отключение библиотеки без удаления файлов, наследование закладок и снимки записей разных видов в плейлистах. В обзоре эти тесты прочитаны, но не запускались.",
+        "provenance": {
+          "recordedBy": "Codex",
+          "recordedAt": "2026-10-20T23:24:58Z",
+          "basis": "sourced",
+          "evidence": [
+            "source.service-tests",
+            "source.playlist-tests"
+          ],
+          "reviewedBy": null,
+          "reviewedAt": null
+        }
+      },
+      "scope": null,
+      "content": "source.service-tests",
+      "author": null,
+      "acceptance": "not-applicable",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.service-tests",
+          "source.playlist-tests"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      },
+      "run": null
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge.harbor.listening.elaborates.harbor.collection",
+      "from": "harbor.listening",
+      "to": "harbor.collection",
+      "relation": "elaborates",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.readme"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.harbor.organizing.elaborates.harbor.collection",
+      "from": "harbor.organizing",
+      "to": "harbor.collection",
+      "relation": "elaborates",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.concept"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.collection.playlists.elaborates.harbor.listening",
+      "from": "collection.playlists",
+      "to": "harbor.listening",
+      "relation": "elaborates",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.playlist-api",
+          "source.playlist-tests"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.catalog.scanning.about.harbor.listening",
+      "from": "catalog.scanning",
+      "to": "harbor.listening",
+      "relation": "about",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.scanner"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.catalog.browsing.about.harbor.listening",
+      "from": "catalog.browsing",
+      "to": "harbor.listening",
+      "relation": "about",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.readme",
+          "source.browsing"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.player.audio.about.harbor.listening",
+      "from": "player.audio",
+      "to": "harbor.listening",
+      "relation": "about",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.player",
+          "source.app-modes"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.operations.files.about.harbor.organizing",
+      "from": "operations.files",
+      "to": "harbor.organizing",
+      "relation": "about",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.operations-preview",
+          "source.operations-write"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.metadata.lookup.about.harbor.organizing",
+      "from": "metadata.lookup",
+      "to": "harbor.organizing",
+      "relation": "about",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.readme"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.playlists.implementation.about.collection.playlists",
+      "from": "playlists.implementation",
+      "to": "collection.playlists",
+      "relation": "about",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.playlist-api"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.catalog.tests.about.collection.playlists",
+      "from": "catalog.tests",
+      "to": "collection.playlists",
+      "relation": "about",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.playlist-tests"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    },
+    {
+      "id": "edge.catalog.tests.about.harbor.organizing",
+      "from": "catalog.tests",
+      "to": "harbor.organizing",
+      "relation": "about",
+      "provenance": {
+        "recordedBy": "Codex",
+        "recordedAt": "2026-10-20T23:24:58Z",
+        "basis": "sourced",
+        "evidence": [
+          "source.service-tests"
+        ],
+        "reviewedBy": null,
+        "reviewedAt": null
+      }
+    }
+  ]
+}
