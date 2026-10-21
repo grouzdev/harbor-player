@@ -2,6 +2,40 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import { pulseDayKey, pulseFixtureInstant } from "./pulse-test-dates";
+import {
+  PulseLayout,
+  type PulseDayLayout,
+  DAY_MS,
+} from "../../src/client/pulse-layout";
+
+async function jumpToDate(page: Page, date: string) {
+  const range = await (
+    await page.request.get("/api/pulse/history-range")
+  ).json();
+  const entries: PulseDayLayout[] = [];
+  for (
+    let start = Date.parse(range.firstDay);
+    start <= Date.parse(date);
+    start += 366 * DAY_MS
+  ) {
+    const from = new Date(start).toISOString().slice(0, 10);
+    const to = new Date(Math.min(Date.parse(date), start + 365 * DAY_MS))
+      .toISOString()
+      .slice(0, 10);
+    const response = await page.request.get(
+      `/api/pulse/layout?from=${from}&to=${to}`,
+    );
+    expect(response.ok(), await response.text()).toBe(true);
+    const result = (await response.json()) as {
+      days: (Omit<PulseDayLayout, "date"> & { dayKey: string })[];
+    };
+    entries.push(...result.days.map((day) => ({ ...day, date: day.dayKey })));
+  }
+  const layout = new PulseLayout(range.firstDay, date, entries);
+  await page
+    .getByRole("slider", { name: "Дата на таймлайне" })
+    .fill(String(layout.start(layout.index(date))));
+}
 
 async function historyToday(page: Page) {
   expect((await page.request.get("/api/session")).ok()).toBe(true);
@@ -95,6 +129,132 @@ async function prepareHistory(
   }
   return { busyDate };
 }
+
+test("Pulse scroll handle follows both edges and restores position only within a launch", async ({
+  page,
+}) => {
+  const today = await historyToday(page);
+  // A short history makes the old day-index handle visibly miss the right edge.
+  const first = new Date(Date.parse(today) - 12 * DAY_MS)
+    .toISOString()
+    .slice(0, 10);
+  await prepareHistory(page, 20, first, today, {
+    title: "Pulse album",
+    artist: "Pulse artist",
+    artistForAlbum: (album) => `Artist ${album}`,
+  });
+  await page.goto("/");
+  const open = () =>
+    page.getByRole("button", { name: "Открыть Пульс", exact: true }).click();
+  await open();
+  const rail = page.locator(".pulse-rail");
+  const slider = page.getByRole("slider", { name: "Дата на таймлайне" });
+  const expectRight = async () => {
+    await expect
+      .poll(() =>
+        rail.evaluate((el) => el.scrollWidth - el.clientWidth - el.scrollLeft),
+      )
+      .toBeLessThanOrEqual(1);
+    await expect
+      .poll(
+        async () =>
+          Number(await slider.inputValue()) -
+          Number(await slider.getAttribute("max")),
+      )
+      .toBe(0);
+  };
+  await expect(rail).toBeVisible();
+  await expectRight();
+  await rail.focus();
+  await page.keyboard.press("Home");
+  await expect(slider).toHaveValue("0");
+  await page.keyboard.press("End");
+  await expectRight();
+  await slider.fill("200");
+  await expect.poll(() => rail.evaluate((el) => el.scrollLeft)).toBe(200);
+  await page
+    .getByRole("button", { name: "Вернуться к панелям", exact: true })
+    .click();
+  await open();
+  await expect.poll(() => rail.evaluate((el) => el.scrollLeft)).toBe(200);
+  await page.setViewportSize({ width: 800, height: 700 });
+  await expect
+    .poll(async () => Number(await slider.getAttribute("max")))
+    .toBe(await rail.evaluate((el) => el.scrollWidth - el.clientWidth));
+  await slider.focus();
+  await page.keyboard.press("End");
+  await expectRight();
+  await slider.fill("0");
+  await expect.poll(() => rail.evaluate((el) => el.scrollLeft)).toBe(0);
+  await page.reload();
+  if (!(await rail.isVisible())) await open();
+  await expect(rail).toBeVisible();
+  await expectRight();
+});
+
+test("Pulse disables scrolling when all history fits", async ({ page }) => {
+  const today = await historyToday(page);
+  await prepareHistory(page, 0, today, today);
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Открыть Пульс", exact: true })
+    .click();
+  const slider = page.getByRole("slider", { name: "Дата на таймлайне" });
+  await expect(slider).toBeDisabled();
+  await expect(slider).toHaveValue("0");
+  await page.setViewportSize({ width: 700, height: 600 });
+  await expect(slider).toBeDisabled();
+  expect(
+    await page.locator(".pulse-rail").evaluate((el) => el.scrollLeft),
+  ).toBe(0);
+});
+
+test("Pulse double clicks target the displayed cover and individual grouped albums", async ({
+  page,
+}) => {
+  const today = await historyToday(page);
+  await prepareHistory(page, 2, today, today);
+  const requests: string[] = [];
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === "/api/queue"
+    )
+      requests.push(request.postDataJSON().pulseAlbumId);
+  });
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Открыть Пульс", exact: true })
+    .click();
+  const strips = page.locator(".pulse-album-strip");
+  await expect(strips).toHaveCount(3);
+  const firstId = await strips.first().getAttribute("data-album-id");
+  await strips.first().click();
+  await expect(strips.first()).toHaveCSS("box-shadow", "none");
+  await expect(strips.first()).toHaveAttribute("aria-pressed", "true");
+  expect(requests).toEqual([]);
+  await strips.first().dblclick();
+  await expect.poll(() => requests.length).toBe(1);
+  expect(requests[0]).toBe(firstId);
+  const cover = page.locator(".pulse-album-latest");
+  await expect(cover).toHaveAttribute("data-album-id", firstId!);
+  await cover.dblclick();
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[1]).toBe(firstId);
+  const lastId = await strips.last().getAttribute("data-album-id");
+  await strips.last().dblclick();
+  await expect.poll(() => requests.length).toBe(3);
+  expect(requests[2]).toBe(lastId);
+  // Dragging the background must not submit a playback request.
+  const bounds = (await page.locator(".pulse-rail").boundingBox())!;
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width / 2 - 100, bounds.y + 10, {
+    steps: 5,
+  });
+  await page.mouse.up();
+  expect(requests).toHaveLength(3);
+});
 
 test("Pulse has its own button and preserves the mounted catalog", async ({
   page,
@@ -234,11 +394,7 @@ test("Pulse bounds busy-day DOM and supports wheel, drag and year navigation", a
   });
   const slider = page.getByRole("slider", { name: "Дата на таймлайне" });
   await expect(rail).toBeVisible();
-  const firstDayIndex = Math.round(
-    (Date.parse(`${busyDate}T00:00:00Z`) - Date.parse("2023-01-01T00:00:00Z")) /
-      86_400_000,
-  );
-  await slider.fill(String(firstDayIndex));
+  await jumpToDate(page, busyDate);
   await expect(slider).toHaveAttribute("aria-valuetext", busyDate);
   await expect
     .poll(() => rail.evaluate((element) => element.scrollLeft))
@@ -397,14 +553,7 @@ test("Pulse recovers the selected artwork after a failed image", async ({
   await page
     .getByRole("button", { name: "Открыть Пульс", exact: true })
     .click();
-  const range = await (
-    await page.request.get("/api/pulse/history-range")
-  ).json();
-  const dayIndex =
-    (Date.parse(busyDate) - Date.parse(range.firstDay)) / 86_400_000;
-  await page
-    .getByRole("slider", { name: "Дата на таймлайне" })
-    .fill(String(dayIndex));
+  await jumpToDate(page, busyDate);
   const image = page.locator(".pulse-selected img");
   await page
     .getByRole("button", { name: `${titles[0]},` })
@@ -500,16 +649,7 @@ test("Pulse decodes wide PNG and portrait JPEG and keeps metadata after truncate
   await page
     .getByRole("button", { name: "Открыть Пульс", exact: true })
     .click();
-  const history = await (
-    await page.request.get("/api/pulse/history-range")
-  ).json();
-  await page
-    .getByRole("slider", { name: "Дата на таймлайне" })
-    .fill(
-      String(
-        (Date.parse(busyDate) - Date.parse(history.firstDay)) / 86_400_000,
-      ),
-    );
+  await jumpToDate(page, busyDate);
   for (const fixture of fixtures) {
     await page
       .getByRole("button", { name: `${fixture.title},` })
@@ -618,6 +758,31 @@ test("Pulse records real audio and mode switches preserve playback", async ({
       { timeout: 20_000 },
     )
     .toBeGreaterThan(500);
+  // Resolve the historical UUID back to the real catalog album and start it.
+  await page.getByRole("button", { name: "Пауза", exact: true }).click();
+  await expect
+    .poll(() =>
+      page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.paused),
+    )
+    .toBe(true);
+  const cover = page.locator(".pulse-album-latest").last();
+  await expect(cover).toBeVisible();
+  const started = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/api/queue",
+  );
+  await cover.dblclick();
+  expect((await started).ok()).toBe(true);
+  await expect
+    .poll(() =>
+      page
+        .locator("audio")
+        .evaluate(
+          (audio: HTMLAudioElement) => !audio.paused && audio.currentTime > 0,
+        ),
+    )
+    .toBe(true);
   await page
     .getByRole("button", { name: "Вернуться к панелям", exact: true })
     .click();
@@ -682,16 +847,7 @@ test("all 1000 busy-day ranks are keyboard reachable with bounded DOM", async ({
   // Range input jumps to the start of the busy day; no programmatic scroll
   // or direct focus on an unmounted album is used to enter or traverse the day.
   await slider.focus();
-  await slider.fill(
-    String(
-      Math.round(
-        (Date.parse(`${busyDate}T00:00:00Z`) -
-          Date.parse(`${firstDay}T00:00:00Z`)) /
-          86_400_000,
-      ),
-    ),
-  );
-  await page.keyboard.press("End");
+  await jumpToDate(page, busyDate);
   await expect(slider).toHaveAttribute("aria-valuetext", busyDate);
   await expect(page.locator('.pulse-album[data-rank="0"]')).toBeVisible();
   await page.keyboard.press("Shift+Tab");
@@ -800,15 +956,7 @@ test("clear wins over delayed pages and statistics", async ({ page }) => {
     .click();
   const slider = page.getByRole("slider", { name: "Дата на таймлайне" });
   await expect(slider).toBeVisible();
-  await slider.fill(
-    String(
-      Math.round(
-        (Date.parse(`${busyDate}T00:00:00Z`) -
-          Date.parse("2023-01-01T00:00:00Z")) /
-          86_400_000,
-      ),
-    ),
-  );
+  await jumpToDate(page, busyDate);
   await expect.poll(() => delayed.pages).toBeGreaterThan(0);
   await expect.poll(() => delayed.statistics).toBeGreaterThan(0);
   await page
@@ -1085,9 +1233,7 @@ test("Pulse delayed prior navigation pages cannot restore the old date", async (
       .getByRole("button", { name: "Открыть Пульс", exact: true })
       .click();
     const slider = page.getByRole("slider", { name: "Дата на таймлайне" });
-    await slider.fill(
-      String((Date.parse(busyDate) - Date.parse("2023-01-01")) / 86_400_000),
-    );
+    await jumpToDate(page, busyDate);
     await expect.poll(() => requested).toBeGreaterThan(0);
     await slider.fill("0");
     const rail = page.locator(".pulse-rail");

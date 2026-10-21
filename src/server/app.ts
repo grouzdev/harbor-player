@@ -973,10 +973,11 @@ async function configureApp(
     service.previewRestore(idParam.parse(request.params).id),
   );
   app.post("/api/queue", async (request) => {
-    const body = z
+    const input = z
       .union([
         z.object({ filter: filterSchema, startId: z.string().optional() }),
         z.object({ albumId: z.string(), startId: z.string().optional() }),
+        z.object({ pulseAlbumId: z.string().min(1).max(500) }),
         z.object({
           playlistId: z.string(),
           startId: z.string().optional(),
@@ -984,6 +985,12 @@ async function configureApp(
         }),
       ])
       .parse(request.body);
+    const body =
+      "pulseAlbumId" in input
+        ? {
+            albumId: service.catalog.pulse.playbackAlbumKey(input.pulseAlbumId),
+          }
+        : input;
     const items =
       "playlistId" in body
         ? service.catalog.playlistQueueItems(body.playlistId)

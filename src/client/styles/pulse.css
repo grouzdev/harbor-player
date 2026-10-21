@@ -222,7 +222,6 @@
 }
 .pulse-album-strip[aria-pressed="true"] {
   background: #c3dbc16a;
-  box-shadow: inset 2px 0 var(--pulse-accent);
 }
 .pulse-album-strip:focus-visible {
   position: relative;

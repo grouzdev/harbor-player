@@ -134,6 +134,7 @@ export interface PulseModeProps {
   adapter?: PulseAdapter;
   initialState?: PulseViewState;
   onStateChange?: (state: PulseViewState) => void;
+  onPlayAlbum?: (albumId: string) => void;
   settingsControls?: ReactNode;
   onSettings?: () => void;
 }
@@ -366,6 +367,7 @@ function AlbumDay({
   adapter,
   selected,
   select,
+  onPlayAlbum,
   showMenu,
 }: {
   layout: PulseLayout;
@@ -377,6 +379,7 @@ function AlbumDay({
   adapter: PulseAdapter;
   selected?: string;
   select: (album: PulseAlbumCard, day: string) => void;
+  onPlayAlbum?: (albumId: string) => void;
   showMenu: (event: MouseEvent, day: string, albums: PulseAlbumCard[]) => void;
 }) {
   const day = layout.date(index);
@@ -520,6 +523,7 @@ function AlbumDay({
                       aria-label={`${latest.title}, ${latest.artist}, ${duration(latest.playedMs)}, ${dateFormat.format(date)}`}
                       title={`${latest.title} — ${latest.artist}`}
                       onClick={() => select(latest, day)}
+                      onDoubleClick={() => onPlayAlbum?.(latest.albumId)}
                       onContextMenu={(event) => showMenu(event, day, [latest])}
                       onFocus={() => {
                         focusedGroup.current = { rank, group };
@@ -578,6 +582,7 @@ function AlbumDay({
                             }));
                             select(album, day);
                           }}
+                          onDoubleClick={() => onPlayAlbum?.(album.albumId)}
                           onContextMenu={(event) =>
                             showMenu(event, day, [album])
                           }
@@ -630,6 +635,7 @@ export function PulseMode({
   adapter = defaultPulseAdapter,
   initialState,
   onStateChange,
+  onPlayAlbum,
   settingsControls,
   onSettings,
 }: PulseModeProps) {
@@ -819,7 +825,7 @@ export function PulseMode({
         width: element.clientWidth,
         height: element.clientHeight,
       });
-      setSlider(located.index);
+      setSlider(element.scrollLeft);
       notify.current?.(next);
     };
     const schedule = () => {
@@ -902,15 +908,16 @@ export function PulseMode({
     undefined,
   );
   useEffect(() => () => clearTimeout(jumpTimer.current), []);
-  function jump(index: number, immediate = false) {
-    setSlider(index);
+  function jump(left: number, immediate = false) {
+    setSlider(left);
     clearTimeout(jumpTimer.current);
     const apply = () => {
-      if (layout && rail.current) rail.current.scrollLeft = layout.start(index);
+      if (rail.current) rail.current.scrollLeft = left;
     };
     if (immediate) apply();
     else jumpTimer.current = setTimeout(apply, 70);
   }
+  const maxScroll = Math.max(0, (layout?.totalWidth ?? 0) - position.width);
   const album = selection?.album ?? stats?.album;
   const years: { year: number; index: number }[] = [];
   if (layout) {
@@ -1150,6 +1157,7 @@ export function PulseMode({
                 adapter={adapter}
                 selected={selection?.albumId}
                 select={select}
+                onPlayAlbum={onPlayAlbum}
                 showMenu={showMenu}
               />
             ))}
@@ -1164,11 +1172,12 @@ export function PulseMode({
           <input
             type="range"
             min={0}
-            max={layout.count - 1}
+            max={maxScroll}
             step={1}
-            value={slider}
+            value={Math.min(slider, maxScroll)}
+            disabled={maxScroll === 0}
             aria-label="Дата на таймлайне"
-            aria-valuetext={layout.date(slider)}
+            aria-valuetext={layout.date(layout.locate(slider).index)}
             onChange={(event) => jump(Number(event.target.value))}
             onPointerUp={(event) =>
               jump(Number(event.currentTarget.value), true)
@@ -1194,7 +1203,7 @@ export function PulseMode({
               key={year}
               className="pulse-year"
               style={{
-                left: `${(index / Math.max(1, layout.count - 1)) * 100}%`,
+                left: `${(Math.min(layout.start(index), maxScroll) / Math.max(1, maxScroll)) * 100}%`,
               }}
             >
               {year}

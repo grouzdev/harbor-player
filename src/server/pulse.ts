@@ -88,6 +88,33 @@ export class PulseStore {
     private readonly dataDir: string,
   ) {}
 
+  /** History IDs survive catalog changes. Resolve only linked, available music,
+   * never an unrelated album with matching title/artist metadata. */
+  playbackAlbumKey(albumId: string): string {
+    const row = this.db
+      .prepare(
+        `SELECT t.albumKey FROM pulse_track_aliases a
+         JOIN tracks t ON t.id=a.trackId
+         JOIN libraries l ON l.id=t.libraryId
+         WHERE a.albumId=? AND t.available=1 AND l.available=1
+         ORDER BY t.id LIMIT 1`,
+      )
+      .get(albumId) as { albumKey: string } | undefined;
+    if (row) return row.albumKey;
+    const fallback = this.db
+      .prepare(
+        `SELECT t.albumKey FROM pulse_album_aliases a
+         JOIN tracks t ON t.albumKey=a.albumKey
+         JOIN libraries l ON l.id=t.libraryId
+         WHERE a.albumId=? AND t.available=1 AND l.available=1
+         ORDER BY t.albumKey LIMIT 1`,
+      )
+      .get(albumId) as { albumKey: string } | undefined;
+    if (!fallback)
+      throw conflict("Альбом из истории больше не доступен в коллекции");
+    return fallback.albumKey;
+  }
+
   settings(): PulseSettings {
     const row = this.db
       .prepare(

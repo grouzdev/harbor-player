@@ -236,8 +236,11 @@ describe("Pulse storage", () => {
     );
     catalog.upsert(track);
     const albumId = (await send(event())).acknowledgements[0].albumId;
+    expect(albumId).not.toBe(track.albumKey);
+    expect(catalog.pulse.playbackAlbumKey(albumId)).toBe("album");
     catalog.renameLibrary(library.id, "Renamed library");
     catalog.upsert({ ...track, albumKey: "retagged", albumTitle: "Retagged" });
+    expect(catalog.pulse.playbackAlbumKey(albumId)).toBe("retagged");
     expect(
       (
         await send(
@@ -264,8 +267,24 @@ describe("Pulse storage", () => {
       (await send(event({ eventId: "moved", albumKey: "retagged" })))
         .acknowledgements[0].albumId,
     ).toBe(albumId);
+    db().prepare("UPDATE tracks SET available=0 WHERE id=?").run(track.id);
+    expect(() => catalog.pulse.playbackAlbumKey(albumId)).toThrow(
+      "Альбом из истории больше не доступен в коллекции",
+    );
+    db().prepare("UPDATE tracks SET available=1 WHERE id=?").run(track.id);
+    // Older history may only carry an album alias, without a track identity.
+    db()
+      .prepare("DELETE FROM pulse_track_aliases WHERE albumId=?")
+      .run(albumId);
+    expect(catalog.pulse.playbackAlbumKey(albumId)).toBe("retagged");
+    db()
+      .prepare("INSERT INTO pulse_track_aliases(trackId,albumId) VALUES (?,?)")
+      .run(track.id, albumId);
     catalog.removeLibrary(library.id);
     expect(catalog.track("track")).toBeUndefined();
+    expect(() => catalog.pulse.playbackAlbumKey(albumId)).toThrow(
+      "Альбом из истории больше не доступен в коллекции",
+    );
     catalog.close();
     catalog = new Catalog(root);
     expect(catalog.pulse.albumStats(albumId)).toMatchObject({

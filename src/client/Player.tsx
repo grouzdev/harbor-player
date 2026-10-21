@@ -297,6 +297,7 @@ export function usePlayer(notify: (message: string) => void) {
     body:
       | { filter: CatalogFilter; startId?: string }
       | { albumId: string; startId?: string }
+      | { pulseAlbumId: string }
       | { playlistId: string; startId?: string; startEntryId?: string },
     play = true,
   ) => {
@@ -325,6 +326,7 @@ export function usePlayer(notify: (message: string) => void) {
     loadQueue({ filter, startId });
   const startAlbum = (albumId: string, startId?: string) =>
     loadQueue({ albumId, startId });
+  const startPulseAlbum = (pulseAlbumId: string) => loadQueue({ pulseAlbumId });
   const startPlaylist = (
     playlistId: string,
     startId?: string,
@@ -492,6 +494,7 @@ export function usePlayer(notify: (message: string) => void) {
     show,
     startFilter,
     startAlbum,
+    startPulseAlbum,
     startPlaylist,
     toggle,
     step,

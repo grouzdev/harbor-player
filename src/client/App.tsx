@@ -3847,6 +3847,7 @@ export function App() {
           onStateChange={(state) => {
             pulseState.current = state;
           }}
+          onPlayAlbum={(albumId) => void player.startPulseAlbum(albumId)}
           settingsControls={<PulseSettingsControl />}
         />
       )}
