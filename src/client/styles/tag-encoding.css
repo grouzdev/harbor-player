@@ -1,0 +1,64 @@
+.encoding-table-scroll {
+  max-height: 52vh;
+  overflow: auto;
+}
+
+.encoding-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.encoding-table th,
+.encoding-table td {
+  padding: 10px 8px;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.encoding-table th:first-child,
+.encoding-table td:first-child {
+  width: 78px;
+}
+
+.encoding-table th:nth-child(2) {
+  width: 22%;
+}
+
+.encoding-table th:nth-child(3) {
+  width: 25%;
+}
+
+.encoding-table td strong,
+.encoding-table td span,
+.encoding-table td small {
+  display: block;
+}
+
+.encoding-table td small {
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+.encoding-table select {
+  width: 100%;
+  min-width: 0;
+}
+
+.encoding-result {
+  margin-top: 8px;
+  white-space: pre-wrap;
+}
+
+.encoding-original {
+  white-space: pre-wrap;
+}
+
+.encoding-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+}

@@ -24,6 +24,7 @@ import type {
 import { MusicService } from "./service.js";
 import { errorMessage } from "./config.js";
 import { normalizeWebpCover } from "./cover-image.js";
+import { analyzeTagEncoding } from "./tag-encoding.js";
 import { badRequest, conflict, HttpError, notFound } from "./http-error.js";
 import { openInExplorer, type ExplorerLauncher } from "./explorer.js";
 import type { MusicBrainzOptions } from "./musicbrainz.js";
@@ -789,6 +790,13 @@ async function configureApp(
   app.delete("/api/path-templates/:id", async (request) => {
     service.catalog.deletePathTemplate(idParam.parse(request.params).id);
     return { ok: true as const };
+  });
+  app.post("/api/metadata/encoding/analyze", async (request) => {
+    const { selection } = z
+      .object({ selection: selectionSchema })
+      .strict()
+      .parse(request.body);
+    return analyzeTagEncoding(service, selection);
   });
   app.post("/api/selection-summary", async (request) => {
     const selection = selectionSchema.parse(request.body);

@@ -43,6 +43,15 @@ import {
 import { AutocompleteInput } from "./AutocompleteInput";
 import { Modal } from "./Modal";
 import { activateDialogPrimaryOnEnter } from "./dialog-keyboard";
+import {
+  EncodingRepairPanel,
+  type EncodingSelections,
+} from "./EncodingRepairPanel";
+import {
+  encodingPatches,
+  mergeEncodingPatches,
+  type EncodingChoice,
+} from "../shared/tag-encoding";
 import "./styles/history-panel.css";
 
 function genreSegment(value: string, caret: number) {
@@ -118,6 +127,20 @@ export function ActionDialog({
   const [error, setError] = useState("");
   const [musicBrainzTitle, setMusicBrainzTitle] = useState("");
   const [musicBrainzArtist, setMusicBrainzArtist] = useState("");
+  const [musicBrainzTitleEdited, setMusicBrainzTitleEdited] = useState(false);
+  const [musicBrainzArtistEdited, setMusicBrainzArtistEdited] = useState(false);
+  const [encodingOpen, setEncodingOpen] = useState(false);
+  const [encodingSelections, setEncodingSelections] =
+    useState<EncodingSelections>({});
+  const [encodingChoices, setEncodingChoices] = useState<EncodingChoice[]>([]);
+  const [encodingChanges, setEncodingChanges] = useState<
+    Record<string, PerTrackTagPatch>
+  >({});
+  const encodingButtonRef = useRef<HTMLButtonElement>(null);
+  const closeEncoding = () => {
+    setEncodingOpen(false);
+    requestAnimationFrame(() => encodingButtonRef.current?.focus());
+  };
   const [musicBrainzCandidates, setMusicBrainzCandidates] = useState<
     MusicBrainzCandidate[] | null
   >(null);
@@ -172,7 +195,7 @@ export function ActionDialog({
               : null
             : values[key];
       if (cover !== undefined) patch.cover = cover;
-      const itemPatches: Record<string, PerTrackTagPatch> = {};
+      let itemPatches: Record<string, PerTrackTagPatch> = {};
       if (musicBrainzProposal)
         for (const item of musicBrainzProposal.items) {
           if (!item.patch) continue;
@@ -184,6 +207,7 @@ export function ActionDialog({
           if (Object.keys(proposed).length)
             itemPatches[item.trackId] = proposed as PerTrackTagPatch;
         }
+      itemPatches = mergeEncodingPatches(itemPatches, encodingChanges, touched);
       const remoteCover =
         cover === undefined &&
         proposalFields.has("cover") &&
@@ -226,6 +250,59 @@ export function ActionDialog({
         0,
       )
     : 0;
+  const subtitle = summary.data
+    ? `Выбрано треков: ${count(summary.data.count)}`
+    : "Проверяем выбранные треки…";
+  if (encodingOpen)
+    return (
+      <Modal
+        title="Исправление кодировки"
+        subtitle={subtitle}
+        wide
+        onClose={closeEncoding}
+      >
+        <EncodingRepairPanel
+          selection={selection}
+          initial={encodingSelections}
+          onBack={closeEncoding}
+          onUse={(analysis, choices, selections) => {
+            const patches = encodingPatches(analysis, choices);
+            setEncodingChanges(patches);
+            setEncodingChoices(choices);
+            setEncodingSelections(selections);
+            const updateSearch = (current: string, fields: string[]) => {
+              let next = current;
+              for (const { row, value } of choices) {
+                if (!fields.includes(row.field)) continue;
+                if (next === row.original) next = value;
+                else
+                  next = next
+                    .split("; ")
+                    .map((part) => (part === row.original ? value : part))
+                    .join("; ");
+              }
+              return next;
+            };
+            if (!musicBrainzTitleEdited)
+              setMusicBrainzTitle(
+                updateSearch(summary.data?.musicBrainz.title || "", [
+                  summary.data?.musicBrainz.mode === "album"
+                    ? "albumTitle"
+                    : "title",
+                ]),
+              );
+            if (!musicBrainzArtistEdited)
+              setMusicBrainzArtist(
+                updateSearch(summary.data?.musicBrainz.artist || "", [
+                  "artists",
+                  "albumArtists",
+                ]),
+              );
+            closeEncoding();
+          }}
+        />
+      </Modal>
+    );
   return (
     <Modal
       title={
@@ -235,11 +312,7 @@ export function ActionDialog({
             ? "Перенести в библиотеку"
             : "Удалить из библиотеки"
       }
-      subtitle={
-        summary.data
-          ? `Выбрано треков: ${count(summary.data.count)}`
-          : "Проверяем выбранные треки…"
-      }
+      subtitle={subtitle}
       onClose={onClose}
       onKeyDown={(event) =>
         activateDialogPrimaryOnEnter(event, primaryButtonRef.current)
@@ -252,6 +325,48 @@ export function ActionDialog({
             Применяются только отмеченные поля. Несколько исполнителей и жанров
             разделяйте точкой с запятой.
           </p>
+          <div className="encoding-summary">
+            <button
+              ref={encodingButtonRef}
+              className="button secondary"
+              disabled={busy || !summary.data}
+              onClick={() => setEncodingOpen(true)}
+            >
+              Исправить кодировку…
+            </button>
+            {!!encodingChoices.length && (
+              <>
+                <span>
+                  Подготовлено исправлений: {encodingChoices.length}, треков:{" "}
+                  {Object.keys(encodingChanges).length}.
+                </span>
+                <button
+                  className="text-button"
+                  onClick={() => {
+                    setEncodingChanges({});
+                    setEncodingChoices([]);
+                    setEncodingSelections({});
+                    if (!musicBrainzTitleEdited)
+                      setMusicBrainzTitle(
+                        summary.data?.musicBrainz.title || "",
+                      );
+                    if (!musicBrainzArtistEdited)
+                      setMusicBrainzArtist(
+                        summary.data?.musicBrainz.artist || "",
+                      );
+                  }}
+                >
+                  Сбросить исправления
+                </button>
+              </>
+            )}
+          </div>
+          {encodingChoices.some(({ row }) => touched.has(row.field)) && (
+            <p className="hint">
+              Отмеченные ручные поля перекрывают индивидуальные исправления
+              кодировки.
+            </p>
+          )}
           <section className="musicbrainz-panel">
             <div className="musicbrainz-heading">
               <div>
@@ -270,9 +385,10 @@ export function ActionDialog({
                     <input
                       aria-label="Название для поиска MusicBrainz"
                       value={musicBrainzTitle}
-                      onChange={(event) =>
-                        setMusicBrainzTitle(event.target.value)
-                      }
+                      onChange={(event) => {
+                        setMusicBrainzTitleEdited(true);
+                        setMusicBrainzTitle(event.target.value);
+                      }}
                     />
                   </label>
                   <label>
@@ -280,9 +396,10 @@ export function ActionDialog({
                     <input
                       aria-label="Исполнитель для поиска MusicBrainz"
                       value={musicBrainzArtist}
-                      onChange={(event) =>
-                        setMusicBrainzArtist(event.target.value)
-                      }
+                      onChange={(event) => {
+                        setMusicBrainzArtistEdited(true);
+                        setMusicBrainzArtist(event.target.value);
+                      }}
                     />
                   </label>
                   <button
@@ -663,7 +780,8 @@ export function ActionDialog({
             (kind === "tags" &&
               !touched.size &&
               cover === undefined &&
-              !selectedProposalCount)
+              !selectedProposalCount &&
+              !encodingChoices.some(({ row }) => !touched.has(row.field)))
           }
           onClick={submit}
         >

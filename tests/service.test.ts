@@ -28,7 +28,10 @@ import { emptyFilter } from "../src/shared/contracts.js";
 import { compareArtistNames } from "../src/shared/artist-grouping.js";
 import { audioDigest } from "../src/server/audio-digest.js";
 import { writeTagsIsolated } from "../dist/server/isolated-tag-writer.js";
-import { parseFile } from "music-metadata";
+import { parseBuffer, parseFile } from "music-metadata";
+import iconv from "iconv-lite";
+import { analyzeTagEncoding } from "../dist/server/tag-encoding.js";
+import { encodingPatches } from "../src/shared/tag-encoding.js";
 
 let root: string;
 let external: string | undefined;
@@ -73,6 +76,106 @@ async function library(name: string, extension = "flac") {
 const tracks = () => service.catalog.tracks(emptyFilter).items;
 
 describe("catalog and safe filesystem operations", () => {
+  it("repairs ten individual titles from fresh file tags without changing audio or other fields", async () => {
+    const lib = await library("Encoding", "mp3");
+    const folder = path.join(lib.path, "Album");
+    for (let index = 1; index < 10; index++)
+      await copyFile(
+        path.join(fixtures, "sample.mp3"),
+        path.join(folder, "track" + index + ".mp3"),
+      );
+    service.scan(lib.id);
+    await service.idle();
+    const selected = tracks();
+    const originalCatalogTitles = selected.map((track) => track.title);
+    const before = new Map<string, Buffer>();
+    const digests = new Map<string, string>();
+    const expected = new Map<string, string>();
+    const corrupt = (text: string) =>
+      iconv.decode(iconv.encode(text, "windows-1251"), "latin1");
+    for (let index = 0; index < selected.length; index++) {
+      const track = selected[index];
+      const file = path.join(lib.path, track.relativePath);
+      const title = "Любимые песни " + (index + 1);
+      await writeTagsIsolated(file, {
+        title: corrupt(title),
+        artists: [corrupt("Виктор Цой"), "Beyoncé"],
+      });
+      expected.set(track.id, title);
+      before.set(file, await readFile(file));
+      digests.set(file, await audioDigest(file));
+    }
+    expect(tracks().map((track) => track.title)).toEqual(originalCatalogTitles);
+    const selection = { trackIds: selected.map((track) => track.id) };
+    const analysis = await analyzeTagEncoding(service, selection);
+    expect(analysis.errors).toEqual([]);
+    expect(analysis.rows).toHaveLength(20);
+    for (const [file, bytes] of before)
+      expect(await readFile(file)).toEqual(bytes);
+    const choices = analysis.rows.flatMap((row) =>
+      row.recommended === undefined
+        ? []
+        : [{ row, value: row.candidates[row.recommended].value }],
+    );
+    expect(choices).toHaveLength(20);
+    const patches = encodingPatches(analysis, choices);
+    // Fresh analysis does not bypass the existing stale-catalog write guard.
+    service.scan(lib.id);
+    await service.idle();
+    const op = await service.preview(
+      "tags",
+      selection,
+      undefined,
+      {},
+      true,
+      patches,
+    );
+    for (const [file, bytes] of before)
+      expect(await readFile(file)).toEqual(bytes);
+    const job = service.execute(op.id);
+    await service.idle();
+    expect(job.errors).toEqual([]);
+    for (const track of tracks()) {
+      const file = path.join(lib.path, track.relativePath);
+      const after = await parseFile(file);
+      const original = await parseBuffer(before.get(file)!);
+      expect(after.common.title).toBe(expected.get(track.id));
+      expect(after.common.artists).toEqual(["Виктор Цой", "Beyoncé"]);
+      expect(track.title).toBe(expected.get(track.id));
+      expect(await audioDigest(file)).toBe(digests.get(file));
+      for (const key of [
+        "album",
+        "albumartist",
+        "genre",
+        "year",
+        "track",
+        "disk",
+        "picture",
+      ] as const)
+        expect(after.common[key]).toEqual(original.common[key]);
+    }
+  });
+
+  it("continues encoding analysis after an unreadable file and omits filename fallbacks", async () => {
+    const lib = await library("EncodingErrors", "flac");
+    const source = path.join(lib.path, "Album", "track.flac");
+    await writeTagsIsolated(source, { title: "" });
+    await copyFile(source, path.join(lib.path, "Album", "missing.flac"));
+    service.scan(lib.id);
+    await service.idle();
+    const selected = tracks();
+    const missing = selected.find((track) =>
+      track.relativePath.endsWith("missing.flac"),
+    )!;
+    await rm(path.join(lib.path, missing.relativePath));
+    const analysis = await analyzeTagEncoding(service, {
+      trackIds: selected.map((track) => track.id),
+    });
+    expect(analysis.errors).toHaveLength(1);
+    expect(analysis.tracks).toHaveLength(1);
+    expect(analysis.tracks[0].values.title).toBe("");
+    expect(analysis.rows).toEqual([]);
+  });
   it("disconnects a library after scans without removing its source files", async () => {
     const lib = await library("Disconnect");
     const source = path.join(lib.path, "Album", "track.flac");

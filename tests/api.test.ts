@@ -28,6 +28,46 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 describe("HTTP boundary", () => {
+  it("validates the read-only encoding analysis selection and response contract", async () => {
+    const session = await context.app.inject({
+      url: "/api/session",
+      headers: { host: "127.0.0.1:4317" },
+    });
+    const headers = {
+      host: "127.0.0.1:4317",
+      cookie: String(session.headers["set-cookie"]).split(";")[0],
+      "x-csrf-token": session.json().csrf,
+    };
+    const request = (payload: object) =>
+      context.app.inject({
+        method: "POST",
+        url: "/api/metadata/encoding/analyze",
+        headers,
+        payload,
+      });
+    expect((await request({ selection: { trackIds: [] } })).statusCode).toBe(
+      400,
+    );
+    expect(
+      (
+        await request({
+          selection: { trackIds: ["unknown"] },
+          file: "C:/outside.mp3",
+        })
+      ).statusCode,
+    ).toBe(400);
+    const response = await request({ selection: { filter: {} } });
+    expect(response.statusCode).toBe(200);
+    expect(
+      apiResponseContract("POST", "/api/metadata/encoding/analyze")!.parse(
+        response.json(),
+      ),
+    ).toEqual({
+      tracks: [],
+      rows: [],
+      errors: [],
+    });
+  });
   it("accepts numeric presets, rejects invalid values, and clears selection without image uploads", async () => {
     const session = await context.app.inject({
       url: "/api/session",

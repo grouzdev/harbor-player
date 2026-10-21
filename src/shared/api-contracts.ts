@@ -13,6 +13,7 @@ import {
 } from "./contracts.js";
 import { scanSettingsSchema } from "./scan-settings.js";
 import { recoveryStatusSchema } from "./recovery-settings.js";
+import { encodingAnalysisSchema } from "./tag-encoding.js";
 import {
   pulseSettingsSchema,
   pulseHistoryRangeSchema,
@@ -337,6 +338,8 @@ export const apiResponseSchemas = {
 /** Returns the JSON contract for a successful client API response. */
 export function apiResponseContract(method: string, pathname: string) {
   if (pathname === "/api/session") return sessionResponseSchema;
+  if (pathname === "/api/metadata/encoding/analyze")
+    return encodingAnalysisSchema;
   if (pathname === "/api/pulse/settings" || pathname === "/api/pulse/clear")
     return pulseSettingsSchema;
   if (pathname === "/api/pulse/history-range") return pulseHistoryRangeSchema;
