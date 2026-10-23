@@ -350,11 +350,12 @@ export class Catalog {
         size: number;
         mtimeMs: number;
         missingTagFields: string | null;
+        available: number;
       }
     | undefined {
     return this.db
       .prepare(
-        "SELECT id,size,mtimeMs,missingTagFields FROM tracks WHERE libraryId=? AND relativePath=?",
+        "SELECT id,size,mtimeMs,missingTagFields,available FROM tracks WHERE libraryId=? AND relativePath=?",
       )
       .get(libraryId, relativePath) as
       | {
@@ -362,6 +363,7 @@ export class Catalog {
           size: number;
           mtimeMs: number;
           missingTagFields: string | null;
+          available: number;
         }
       | undefined;
   }

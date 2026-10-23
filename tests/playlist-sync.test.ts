@@ -3,6 +3,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  rename,
   rm,
   stat,
   copyFile,
@@ -52,17 +53,113 @@ describe("playlist folder sync", () => {
     return { library, track: service.catalog.knownTracks()[0]! };
   }
 
-  it("does not queue auto-sync after an unchanged scan", async () => {
+  it.each([false, true])(
+    "does not queue auto-sync after an unchanged scan (force=%s)",
+    async (force) => {
+      const source = path.join(root, "music", "Artist", "Album", "song.flac");
+      const { library, track } = await scannedTrack(source);
+      const playlistId = await autoSyncPlaylistFor("Device", track.id);
+      service.catalog.updatePlaylistSyncSettings(playlistId, {
+        state: "synced",
+        message: "Синхронизировано",
+        lastSyncedAt: "2026-10-01T12:00:00.000Z",
+      });
+      const settings = service.catalog.playlistSyncSettings(playlistId);
+      const schedule = vi.spyOn(service, "schedulePlaylistSync");
+      const scan = vi.spyOn(service.scanner, "scan");
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const job = service.scan(library.id, force);
+        await service.idle();
+        expect(job.status).toBe("done");
+        expect(await scan.mock.results[attempt]!.value).toEqual(new Set());
+      }
+
+      expect(schedule).not.toHaveBeenCalled();
+      expect(service.catalog.playlistSyncSettings(playlistId)).toEqual(
+        settings,
+      );
+      expect(
+        service.catalog.jobs().some((job) => job.kind === "playlist-sync"),
+      ).toBe(false);
+    },
+  );
+
+  it("queues a folder playlist when a new file appears, but not for files outside it", async () => {
     const source = path.join(root, "music", "Artist", "Album", "song.flac");
     const { library, track } = await scannedTrack(source);
-    await autoSyncPlaylistFor("Device", track.id);
-    const schedule = vi.spyOn(service, "schedulePlaylistSync");
+    const playlistId = await autoSyncPlaylistFor("Device", track.id);
+    service.catalog.removePlaylistEntry(
+      playlistId,
+      service.catalog.playlist(playlistId).entries[0]!.id,
+    );
+    service.catalog.addPlaylistEntries(playlistId, "folder", [
+      JSON.stringify([library.id, path.join("Artist", "Album")]),
+    ]);
+    const schedule = vi
+      .spyOn(service, "schedulePlaylistSync")
+      .mockImplementation(() => {});
 
+    await copyFile(source, path.join(path.dirname(source), "new.flac"));
     service.scan(library.id);
     await service.idle();
+    expect(schedule).toHaveBeenCalledExactlyOnceWith(playlistId);
 
+    schedule.mockClear();
+    await copyFile(source, path.join(root, "music", "outside.flac"));
+    service.scan(library.id, true);
+    await service.idle();
     expect(schedule).not.toHaveBeenCalled();
   });
+
+  it("queues sync when a track disappears and returns with the same file stats", async () => {
+    const source = path.join(root, "music", "Artist", "Album", "song.flac");
+    const { library, track } = await scannedTrack(source);
+    const playlistId = await autoSyncPlaylistFor("Device", track.id);
+    const schedule = vi
+      .spyOn(service, "schedulePlaylistSync")
+      .mockImplementation(() => {});
+    const parked = path.join(root, "parked.flac");
+    await rename(source, parked);
+    service.scan(library.id);
+    await service.idle();
+    expect(service.catalog.track(track.id)!.available).toBe(false);
+    expect(schedule).toHaveBeenCalledExactlyOnceWith(playlistId);
+
+    schedule.mockClear();
+    await rename(parked, source);
+    service.scan(library.id);
+    await service.idle();
+    expect(service.catalog.track(track.id)!.available).toBe(true);
+    expect(schedule).toHaveBeenCalledExactlyOnceWith(playlistId);
+  });
+
+  it.each([
+    ["catalog-only metadata", { genres: ["New genre"] }, false],
+    ["rendered destination", { albumTitle: "New album" }, true],
+  ] as const)(
+    "compares the output plan after rereading %s",
+    async (_name, patch, shouldSync) => {
+      const source = path.join(root, "music", "Artist", "Album", "song.flac");
+      const { library, track } = await scannedTrack(source);
+      const playlistId = await autoSyncPlaylistFor("Device", track.id);
+      // Model a metadata parser correction without changing the source bytes.
+      vi.spyOn(service.workers, "run").mockResolvedValue({
+        ...track,
+        ...patch,
+      });
+      const schedule = vi
+        .spyOn(service, "schedulePlaylistSync")
+        .mockImplementation(() => {});
+
+      const job = service.scan(library.id, true);
+      await service.idle();
+      expect(job.status).toBe("done");
+      if (shouldSync)
+        expect(schedule).toHaveBeenCalledExactlyOnceWith(playlistId);
+      else expect(schedule).not.toHaveBeenCalled();
+    },
+  );
 
   it("queues only auto-sync playlists affected by a scan", async () => {
     const source = path.join(root, "music", "Artist", "Album", "song.flac");

@@ -329,19 +329,13 @@ export class MusicService extends EventEmitter {
   }
   removeLibrary(libraryId: string): Job {
     const library = this.catalog.library(libraryId);
-    const before = this.autoSyncPlaylistTrackIds();
-    const changedTrackIds = new Set(
-      this.catalog
-        .knownTracks()
-        .filter((track) => track.libraryId === libraryId)
-        .map((track) => track.id),
-    );
     return this.enqueue(
       "library",
       `Отключение библиотеки: ${library.name}`,
       async () => {
+        const before = this.autoSyncPlaylistPlans();
         this.catalog.removeLibrary(libraryId);
-        this.scheduleAutoSyncForChangedTracks(changedTrackIds, before);
+        this.scheduleAutoSyncForChangedPlans(before);
       },
     );
   }
@@ -395,34 +389,60 @@ export class MusicService extends EventEmitter {
     });
     return job;
   }
-  private autoSyncPlaylistTrackIds(): Map<string, Set<string>> {
+  private playlistSyncFiles(tracks: Track[], templateId: string) {
+    const template = this.catalog.pathTemplate(templateId);
+    const desired = new Map<string, { relativePath: string; track: Track }>();
+    for (const track of tracks) {
+      if (!track.available) continue;
+      const relativePath = renderTrackPath(template, track);
+      const key = this.normalizedFileKey(relativePath);
+      if (!desired.has(key)) desired.set(key, { relativePath, track });
+    }
+    return desired;
+  }
+  private autoSyncPlaylistPlans(): Map<string, string> {
     return new Map(
-      this.catalog
-        .autoSyncPlaylistIds()
-        .map((playlistId) => [
+      this.catalog.autoSyncPlaylistIds().map((playlistId) => {
+        const settings = this.catalog.playlistSyncSettings(playlistId);
+        const resolved = this.catalog.playlistTracks(
           playlistId,
-          new Set(
-            this.catalog
-              .playlistTracks(playlistId, 0, 100000)
-              .items.map(({ track }) => track.id),
-          ),
-        ]),
+          0,
+          Number.MAX_SAFE_INTEGER,
+        );
+        const tracks = resolved.items.map(({ track }) => track);
+        const files = this.playlistSyncFiles(tracks, settings.templateId);
+        return [
+          playlistId,
+          // Use the same collision winner and rendered path as the writer.
+          // Ignore catalog-only metadata and bookkeeping.
+          JSON.stringify({
+            targetPath: settings.targetPath,
+            unavailableCount: resolved.unavailableCount,
+            skippedCollisions:
+              tracks.filter((track) => track.available).length - files.size,
+            files: [...files.entries()]
+              .sort(([left], [right]) => left.localeCompare(right))
+              .map(([key, { relativePath, track }]) => [
+                key,
+                relativePath,
+                track.id,
+                this.catalog.library(track.libraryId).path,
+                track.relativePath,
+                track.size,
+                track.mtimeMs,
+              ]),
+          }),
+        ];
+      }),
     );
   }
-  private scheduleAutoSyncForChangedTracks(
-    changedTrackIds: Set<string>,
-    before: Map<string, Set<string>>,
-  ): void {
-    if (!changedTrackIds.size) return;
-    const after = this.autoSyncPlaylistTrackIds();
+  private scheduleAutoSyncForChangedPlans(before: Map<string, string>): void {
+    const after = this.autoSyncPlaylistPlans();
     const playlistIds = new Set([...before.keys(), ...after.keys()]);
     for (const playlistId of playlistIds) {
-      const beforeTracks = before.get(playlistId) || new Set<string>();
-      const afterTracks = after.get(playlistId) || new Set<string>();
       if (
-        [...changedTrackIds].some(
-          (trackId) => beforeTracks.has(trackId) || afterTracks.has(trackId),
-        )
+        after.has(playlistId) &&
+        before.get(playlistId) !== after.get(playlistId)
       )
         this.schedulePlaylistSync(playlistId);
     }
@@ -440,14 +460,9 @@ export class MusicService extends EventEmitter {
       "scan",
       `Сканирование: ${this.catalog.library(libraryId).name}`,
       async (job) => {
-        const before = this.autoSyncPlaylistTrackIds();
-        const changedTrackIds = await this.scanner.scan(
-          libraryId,
-          job,
-          force,
-          () => this.publish(job),
-        );
-        this.scheduleAutoSyncForChangedTracks(changedTrackIds, before);
+        const before = this.autoSyncPlaylistPlans();
+        await this.scanner.scan(libraryId, job, force, () => this.publish(job));
+        this.scheduleAutoSyncForChangedPlans(before);
       },
     );
   }
@@ -1052,8 +1067,7 @@ export class MusicService extends EventEmitter {
             restore: "Восстановление",
           }[op.kind],
       async (job) => {
-        const before = this.autoSyncPlaylistTrackIds();
-        const changedTrackIds = new Set<string>();
+        const before = this.autoSyncPlaylistPlans();
         try {
           job.total = op.items.length;
           const ids = op.items.filter((i) => i.trackId).map((i) => i.trackId!);
@@ -1083,7 +1097,6 @@ export class MusicService extends EventEmitter {
                 continue;
               }
               await this.applyItem(op, item);
-              if (item.trackId) changedTrackIds.add(item.trackId);
               item.phase = "done";
               item.error = undefined;
             } catch (e) {
@@ -1097,7 +1110,7 @@ export class MusicService extends EventEmitter {
           }
           op.status = "done";
           this.catalog.saveOperation(op);
-          this.scheduleAutoSyncForChangedTracks(changedTrackIds, before);
+          this.scheduleAutoSyncForChangedPlans(before);
         } finally {
           this.active.delete(id);
           this.publishEvent({ type: "operation-finished", operationId: id });
@@ -1603,8 +1616,11 @@ export class MusicService extends EventEmitter {
     try {
       const targetPath = await this.validateSyncRoot(settings.targetPath!);
       await mkdir(targetPath, { recursive: true });
-      const template = this.catalog.pathTemplate(settings.templateId);
-      const resolved = this.catalog.playlistTracks(playlistId, 0, 100000);
+      const resolved = this.catalog.playlistTracks(
+        playlistId,
+        0,
+        Number.MAX_SAFE_INTEGER,
+      );
       const available = resolved.items.filter((item) => item.track.available);
       const oldManifest = this.catalog.playlistSyncManifest(
         playlistId,
@@ -1616,12 +1632,11 @@ export class MusicService extends EventEmitter {
           row,
         ]),
       );
-      const desired = new Map<string, { relativePath: string; track: Track }>();
-      for (const { track } of available) {
-        const relativePath = renderTrackPath(template, track);
-        const key = this.normalizedFileKey(relativePath);
-        if (desired.has(key)) continue;
-        desired.set(key, { relativePath, track });
+      const desired = this.playlistSyncFiles(
+        available.map(({ track }) => track),
+        settings.templateId,
+      );
+      for (const [key, { relativePath }] of desired) {
         const destination = path.join(targetPath, relativePath);
         if (!inside(targetPath, destination))
           throw conflict("Шаблон создаёт путь вне папки сборки");

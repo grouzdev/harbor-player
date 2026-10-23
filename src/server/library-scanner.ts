@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import type { Job, Track } from "../shared/contracts.js";
 import { audioExtensions, errorMessage } from "./config.js";
 import { Catalog } from "./database.js";
@@ -53,9 +54,10 @@ export class LibraryScanner {
           old.size === info.size &&
           old.mtimeMs === info.mtimeMs &&
           old.missingTagFields !== null
-        )
-          this.catalog.markTrackScanned(old.id, scanId);
-        else {
+        ) {
+          this.catalog.markTrackScanned(old.id, scanId, true);
+          if (!old.available) changedTrackIds.add(old.id);
+        } else {
           const args = {
             file,
             libraryId,
@@ -79,8 +81,21 @@ export class LibraryScanner {
               args.dataDir,
             );
           }
+          const previous = old ? this.catalog.track(old.id) : undefined;
+          // Compare parser output, not stored bookkeeping such as scanId.
+          // Ratings and viewed state belong to the user, not the file.
+          const changed =
+            !previous ||
+            (Object.keys(track) as (keyof Track)[]).some(
+              (field) =>
+                !["rating", "albumRating", "albumViewed"].includes(field) &&
+                !isDeepStrictEqual(
+                  previous[field] ?? null,
+                  track[field] ?? null,
+                ),
+            );
           this.catalog.upsert(track, scanId);
-          changedTrackIds.add(track.id);
+          if (changed) changedTrackIds.add(track.id);
         }
       } catch (error) {
         if (old) this.catalog.markTrackScanned(old.id, scanId);
