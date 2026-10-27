@@ -40,6 +40,7 @@ import { usePanelScrollResolver } from "./panel-scroll";
 import { AlbumHeader } from "./AlbumHeader";
 import { DiscHeader } from "./DiscHeader";
 import { CatalogStateIndicators } from "./CatalogStateIndicators";
+import { resolveDragIds, startCatalogDrag } from "./catalog-drag";
 
 const virtualPanelTopInset = 14;
 
@@ -311,11 +312,20 @@ export function ArtistList({
               selectionKey={item.name}
               draggable={playlistDragEnabled}
               onDragStart={(event) => {
-                if (!selected.includes(item.name))
-                  onSelectionChange([item.name]);
-                event.dataTransfer.setData(
-                  "application/x-harbor-catalog-selection",
-                  "artist",
+                const ids = resolveDragIds(
+                  items.map((entry) => entry.name),
+                  selected,
+                  item.name,
+                );
+                startCatalogDrag(
+                  event,
+                  { kind: "artist", ids },
+                  ids.map((id) => ({
+                    kind: "artist",
+                    title: isMissingArtistName(id)
+                      ? "Неизвестный исполнитель"
+                      : id,
+                  })),
                 );
               }}
               value={label}
@@ -595,11 +605,23 @@ export function AlbumGrid({
                         data-selection-key={album.id}
                         draggable={playlistDragEnabled}
                         onDragStart={(event) => {
-                          if (!selected.includes(album.id))
-                            onSelectionChange([album.id]);
-                          event.dataTransfer.setData(
-                            "application/x-harbor-catalog-selection",
-                            "album",
+                          const ids = resolveDragIds(
+                            albums.map((entry) => entry.id),
+                            selected,
+                            album.id,
+                          );
+                          startCatalogDrag(
+                            event,
+                            { kind: "album", ids },
+                            ids.map((id) => {
+                              const entry = albumById.get(id)!;
+                              return {
+                                kind: "album",
+                                title: entry.title || "Без альбома",
+                                subtitle: copyArtistLabel(entry.artists),
+                                year: entry.year,
+                              };
+                            }),
                           );
                         }}
                         title={`${album.title || "Без альбома"} · ${album.artists.join(", ")}`}
@@ -1028,10 +1050,26 @@ export function TrackList({
                 }
                 draggable={playlistDragEnabled}
                 onDragStart={(event) => {
-                  if (!selected.has(track.id)) onSelectionChange([track.id]);
-                  event.dataTransfer.setData(
-                    "application/x-harbor-catalog-selection",
-                    "track",
+                  const ids = resolveDragIds(
+                    tracks.map((entry) => entry.id),
+                    [...selected],
+                    track.id,
+                  );
+                  startCatalogDrag(
+                    event,
+                    { kind: "track", ids },
+                    ids.map((id) => {
+                      const entry = trackById.get(id)!;
+                      return {
+                        kind: "track",
+                        title: entry.title || "Без названия",
+                        subtitle: (entry.albumArtists.length
+                          ? entry.albumArtists
+                          : entry.artists
+                        ).join(", "),
+                        seconds: entry.duration,
+                      };
+                    }),
                   );
                 }}
                 style={{

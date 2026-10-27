@@ -2814,48 +2814,6 @@ export function App() {
     },
     [renamePlaylist, deletePlaylist],
   );
-  const addCurrentSelectionToPlaylist = useCallback(
-    async (beforeEntryId?: string) => {
-      if (!activePlaylistId) {
-        notify("Сначала выберите плейлист");
-        return;
-      }
-      const bodies: unknown[] = [];
-      if (filter.genres.length)
-        bodies.push({ kind: "genre", ids: filter.genres, beforeEntryId });
-      if (selectedArtists.length)
-        bodies.push({ kind: "artist", ids: selectedArtists, beforeEntryId });
-      if (selectedAlbums.length)
-        bodies.push({ kind: "album", ids: selectedAlbums, beforeEntryId });
-      if (selected.size)
-        bodies.push({
-          kind: "track",
-          selection: { trackIds: [...selected] },
-          beforeEntryId,
-        });
-      if (!bodies.length) {
-        notify("Выберите исполнителя, альбом или трек");
-        return;
-      }
-      try {
-        for (const body of bodies)
-          await api(`/playlists/${activePlaylistId}/entries`, body);
-        await refreshPlaylists();
-        notify("Добавлено в плейлист");
-      } catch (error) {
-        notify((error as Error).message);
-      }
-    },
-    [
-      activePlaylistId,
-      notify,
-      refreshPlaylists,
-      selected,
-      selectedAlbums,
-      selectedArtists,
-      filter.genres,
-    ],
-  );
   const showPreview = (p: OperationPreview) => {
     setModal((current) =>
       current === "settings" || current === "history" ? current : null,
@@ -3405,7 +3363,6 @@ export function App() {
           {panelVisibility.playlists && !portraitWorkspaceLayout && (
             <PlaylistPanel
               playlistId={activePlaylistId}
-              onAddSelection={addCurrentSelectionToPlaylist}
               onPlay={(id, startId, entryId) =>
                 void player.startPlaylist(id, startId, entryId)
               }
@@ -3496,10 +3453,6 @@ export function App() {
               playlistDragEnabled={Boolean(
                 activePlaylistId && panelVisibility.playlists,
               )}
-              onGenreDragStart={(genre) => {
-                if (!filter.genres.includes(genre))
-                  setFilter((current) => ({ ...current, genres: [genre] }));
-              }}
               onReset={() =>
                 preserveSelectedAlbumVisibility({ ...filter, genres: [] })
               }
@@ -3604,7 +3557,6 @@ export function App() {
           {panelVisibility.playlists && portraitWorkspaceLayout && (
             <PlaylistPanel
               playlistId={activePlaylistId}
-              onAddSelection={addCurrentSelectionToPlaylist}
               onPlay={(id, startId, entryId) =>
                 void player.startPlaylist(id, startId, entryId)
               }

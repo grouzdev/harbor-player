@@ -26,6 +26,7 @@ import type {
 import { count } from "./api";
 import { librarySelectionKey } from "./location-selection";
 import { ListTile } from "./ListTile";
+import { resolveDragIds, startCatalogDrag } from "./catalog-drag";
 
 type LibraryPanelProps = {
   libraries: Library[];
@@ -246,7 +247,6 @@ type GenrePanelProps = {
   onPlay: (genre: string) => void;
   onContextMenu: (event: React.MouseEvent, genre: string) => void;
   playlistDragEnabled?: boolean;
-  onGenreDragStart: (genre: string) => void;
   scrollTarget: { genre: string; requestId: number; filterKey: string } | null;
   onClose: () => void;
 };
@@ -266,7 +266,6 @@ export function GenrePanel({
   onPlay,
   onContextMenu,
   playlistDragEnabled = false,
-  onGenreDragStart,
   scrollTarget,
   onClose,
 }: GenrePanelProps) {
@@ -338,10 +337,18 @@ export function GenrePanel({
               selectionKey={genre.name}
               draggable={playlistDragEnabled}
               onDragStart={(event) => {
-                onGenreDragStart(genre.name);
-                event.dataTransfer.setData(
-                  "application/x-harbor-catalog-selection",
-                  "genre",
+                const ids = resolveDragIds(
+                  genres.map((entry) => entry.name),
+                  filter.genres,
+                  genre.name,
+                );
+                startCatalogDrag(
+                  event,
+                  { kind: "genre", ids },
+                  ids.map((id) => ({
+                    kind: "genre",
+                    title: id || "Без жанра",
+                  })),
                 );
               }}
               value={label}

@@ -438,6 +438,71 @@ test("dropping an added entity onto a nested track moves it before the owning en
   await transfer.dispose();
 });
 
+test("catalog insertion shares the mutation lock and clears cancelled drop markers", async ({
+  page,
+}) => {
+  const { panel, requests } = await playlistFixture(page);
+  const folder = panel.locator(
+    '[data-testid="playlist-entry"][data-entry-id="entry-folder"]',
+  );
+  const nested = panel.getByTestId("playlist-track-row").first();
+  const transfer = await page.evaluateHandle(() => {
+    const data = new DataTransfer();
+    data.setData(
+      "application/x-harbor-catalog-selection",
+      JSON.stringify({ kind: "track", ids: ["song-0"] }),
+    );
+    return data;
+  });
+  await nested.dispatchEvent("dragover", { dataTransfer: transfer });
+  await expect(folder).toHaveClass(/playlist-drop-before/);
+  await page
+    .locator("body")
+    .dispatchEvent("dragend", { dataTransfer: transfer });
+  await expect(folder).not.toHaveClass(/playlist-drop-before/);
+  const foreign = await page.evaluateHandle(() => {
+    const data = new DataTransfer();
+    data.setData("text/plain", "not a playlist item");
+    return data;
+  });
+  await nested.dispatchEvent("dragover", { dataTransfer: foreign });
+  await expect(folder).not.toHaveClass(/playlist-drop-before/);
+  await nested.dispatchEvent("drop", { dataTransfer: foreign });
+  const writes: unknown[] = [];
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/playlists/redesign/entries", async (route) => {
+    writes.push(route.request().postDataJSON());
+    await pending;
+    await route.fulfill({ json: {} });
+  });
+  await nested.dispatchEvent("drop", { dataTransfer: transfer });
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]).toEqual({
+    kind: "track",
+    selection: { trackIds: ["song-0"] },
+    beforeEntryId: "entry-folder",
+  });
+  try {
+    await expect(folder).toHaveAttribute("draggable", "false");
+    await folder.click({ button: "right" });
+    await expect(
+      page.getByRole("menuitem", { name: "Удалить из плейлиста" }),
+    ).toBeDisabled();
+    await panel.dispatchEvent("drop", { dataTransfer: transfer });
+    await page.keyboard.press("Escape");
+  } finally {
+    release();
+  }
+  await expect(folder).toHaveAttribute("draggable", "true");
+  expect(writes).toHaveLength(1);
+  expect(requests).toHaveLength(0);
+  await transfer.dispose();
+  await foreign.dispose();
+});
+
 test("management actions remain disabled until reorder and refresh finish", async ({
   page,
 }) => {

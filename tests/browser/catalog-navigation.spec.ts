@@ -429,6 +429,174 @@ async function filterArtist(page: Page, name: string) {
 const count = (page: Page, panel: string) =>
   page.locator(`.${panel}-panel .panel-heading .panel-count`);
 
+test("playlist drag snapshots only the source panel and keeps list order", async ({
+  page,
+}) => {
+  await catalog(page);
+  await page
+    .locator(".libraries-panel")
+    .getByText("В дорогу", { exact: true })
+    .click();
+  await page
+    .locator('.genres-panel [data-selection-key="Rock"] .list-tile-main')
+    .click();
+  await artist(page, "Queen").locator(".list-tile-main").click();
+  await page.locator('.album-card[data-selection-key="Queen-0"]').click();
+  const track = (index: number) =>
+    page.locator(`.catalog-track-row[data-selection-key="Queen-0-${index}"]`);
+  // Ctrl-click order intentionally differs from list order.
+  await track(2)
+    .locator(".list-tile-main")
+    .click({ modifiers: ["Control"] });
+  await track(0)
+    .locator(".list-tile-main")
+    .click({ modifiers: ["Control"] });
+  const writes: unknown[] = [];
+  await page.route("**/api/playlists/road-trip/entries", async (route) => {
+    writes.push(route.request().postDataJSON());
+    await route.fulfill({ json: {} });
+  });
+  const transfer = await page.evaluateHandle(() => new DataTransfer());
+  await track(0).dispatchEvent("dragstart", { dataTransfer: transfer });
+  const payload = await transfer.evaluate((data) =>
+    JSON.parse(data.getData("application/x-harbor-catalog-selection")),
+  );
+  expect(payload).toEqual({ kind: "track", ids: ["Queen-0-0", "Queen-0-2"] });
+  // Changing live selection after dragstart cannot change the drop payload.
+  await track(1).locator(".list-tile-main").click();
+  await page
+    .locator(".playlist-content")
+    .dispatchEvent("drop", { dataTransfer: transfer });
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]).toEqual({
+    kind: "track",
+    selection: { trackIds: payload.ids },
+  });
+  await transfer.dispose();
+
+  for (const [kind, source, id] of [
+    ["genre", '.genres-panel [data-selection-key="Rock"]', "Rock"],
+    ["artist", '.artists-panel [data-selection-key="Queen"]', "Queen"],
+    ["album", '.album-card[data-selection-key="Queen-0"]', "Queen-0"],
+  ]) {
+    const data = await page.evaluateHandle(() => new DataTransfer());
+    await page
+      .locator(source)
+      .dispatchEvent("dragstart", { dataTransfer: data });
+    expect(
+      await data.evaluate((value) =>
+        JSON.parse(value.getData("application/x-harbor-catalog-selection")),
+      ),
+    ).toEqual({ kind, ids: [id] });
+    await page
+      .locator(".playlist-content")
+      .dispatchEvent("drop", { dataTransfer: data });
+    await expect
+      .poll(() => writes.length)
+      .toBe(["genre", "artist", "album"].indexOf(kind) + 2);
+    expect(writes.at(-1)).toEqual({ kind, ids: [id] });
+    await data.dispose();
+  }
+});
+
+test("native playlist drag renders entity preview without starting a marquee", async ({
+  page,
+}) => {
+  await catalog(page);
+  await page
+    .locator(".libraries-panel")
+    .getByText("В дорогу", { exact: true })
+    .click();
+  await page.evaluate(() => {
+    const original = DataTransfer.prototype.setDragImage;
+    DataTransfer.prototype.setDragImage = function (element, x, y) {
+      document.documentElement.dataset.dragPreview = document.querySelector(
+        ".catalog-drag-preview",
+      )!.outerHTML;
+      original.call(this, element, x, y);
+    };
+  });
+  const writes: unknown[] = [];
+  await page.route("**/api/playlists/road-trip/entries", async (route) => {
+    writes.push(route.request().postDataJSON());
+    await route.fulfill({ json: {} });
+  });
+  const source = page.locator(".catalog-track-row").first();
+  const id = await source.getAttribute("data-selection-key");
+  const from = (await source.boundingBox())!;
+  const to = (await page.locator(".playlist-heading").boundingBox())!;
+  await page.mouse.move(from.x + 80, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 90, from.y + from.height / 2, { steps: 5 });
+  await page.mouse.move(to.x + 80, to.y + to.height / 2, { steps: 10 });
+  const preview = page.locator(".catalog-drag-preview");
+  await expect(preview).toBeVisible();
+  await expect(preview.locator(".catalog-drag-heading")).toHaveCount(0);
+  expect(
+    await preview.evaluate((element) => {
+      const title = element.querySelector(".playlist-entity-title")!;
+      return {
+        background: getComputedStyle(element).backgroundColor,
+        opacity: getComputedStyle(element).opacity,
+        text: getComputedStyle(title).color,
+      };
+    }),
+  ).toEqual({
+    background: "rgb(37, 46, 41)",
+    opacity: "1",
+    text: "rgb(255, 255, 255)",
+  });
+  if (process.env.HARBOR_DRAG_SCREENSHOT)
+    await page.screenshot({ path: process.env.HARBOR_DRAG_SCREENSHOT });
+  await page.mouse.up();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]).toEqual({ kind: "track", selection: { trackIds: [id] } });
+  const markup = await page.locator("html").getAttribute("data-drag-preview");
+  expect(markup).toContain("lucide-music");
+  expect(markup).toContain("playlist-entity-title");
+  await expect(page.locator("body")).not.toHaveClass(/selection-dragging/);
+  await expect(page.locator(".catalog-drag-preview")).toHaveCount(0);
+  const rows = page.locator(".catalog-track-row");
+  const ids: string[] = [];
+  for (let index = 4; index >= 0; index--) {
+    ids.unshift((await rows.nth(index).getAttribute("data-selection-key"))!);
+    await rows
+      .nth(index)
+      .locator(".list-tile-main")
+      .click({ modifiers: ["Control"] });
+  }
+  await source.dragTo(page.locator(".playlist-heading"));
+  await expect.poll(() => writes.length).toBe(2);
+  expect(writes[1]).toEqual({ kind: "track", selection: { trackIds: ids } });
+  const multiple = await page.locator("html").getAttribute("data-drag-preview");
+  expect(multiple?.match(/playlist-entity-title/g)).toHaveLength(5);
+  expect(multiple).not.toContain("Ещё");
+  ids.push((await rows.nth(5).getAttribute("data-selection-key"))!);
+  await rows
+    .nth(5)
+    .locator(".list-tile-main")
+    .click({ modifiers: ["Control"] });
+  await source.dragTo(page.locator(".playlist-heading"));
+  await expect.poll(() => writes.length).toBe(3);
+  expect(writes[2]).toEqual({ kind: "track", selection: { trackIds: ids } });
+  const collapsed = await page
+    .locator("html")
+    .getAttribute("data-drag-preview");
+  expect(collapsed?.match(/playlist-entity-title/g)).toHaveLength(5);
+  expect(collapsed).toContain("Ещё 1");
+  const cancelled = await page.evaluateHandle(() => new DataTransfer());
+  await source.dispatchEvent("dragstart", { dataTransfer: cancelled });
+  await expect(preview).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(preview).toHaveCount(0);
+  await source.dispatchEvent("dragstart", { dataTransfer: cancelled });
+  await page
+    .locator("body")
+    .dispatchEvent("dragend", { dataTransfer: cancelled });
+  await expect(preview).toHaveCount(0);
+  await cancelled.dispose();
+});
+
 test("artist selection minimally reveals its first genre without selecting it or moving the artist", async ({
   page,
 }) => {

@@ -283,12 +283,19 @@ export function usePanelSelection({
       document.body.classList.remove("selection-dragging");
       finish(false);
     };
+    const onDragStart = () => {
+      document.body.classList.remove("selection-dragging");
+      finish(false);
+      suppressClickRef.current = false;
+    };
+    window.addEventListener("dragstart", onDragStart);
     window.addEventListener("pointermove", onMove, { passive: false });
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onCancel);
     window.addEventListener("keydown", onKeyDown);
     return () => {
       document.body.classList.remove("selection-dragging");
+      window.removeEventListener("dragstart", onDragStart);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
@@ -301,6 +308,14 @@ export function usePanelSelection({
       if (event.button !== 0 || gestureRef.current) return;
       const target = event.target as HTMLElement;
       const candidate = target.closest<HTMLElement>("[data-selection-key]");
+      // A draggable row owns this gesture; marquee selection starts elsewhere.
+      if (
+        candidate?.draggable &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey
+      )
+        return;
       if (
         target.closest("[data-selection-ignore]") ||
         (!candidate &&

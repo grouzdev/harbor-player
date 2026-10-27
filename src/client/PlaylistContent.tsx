@@ -12,17 +12,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import {
-  ArrowDown,
-  ArrowUp,
-  CircleUserRound,
-  DiscAlbum,
-  Drama,
-  FolderOpen,
-  Music,
-  Play,
-  Trash2,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, Play, Trash2 } from "lucide-react";
 import type { PlaylistEntry, ResolvedPlaylistTrack } from "../shared/playlists";
 import { AlbumHeader } from "./AlbumHeader";
 import { DiscHeader } from "./DiscHeader";
@@ -30,21 +20,19 @@ import { ListTile } from "./ListTile";
 import { ContextMenu, type ContextMenuState } from "./ContextMenu";
 import { CollapseToggle } from "./CollapseToggle";
 import { duration } from "./api";
+import { PlaylistEntityCopy } from "./PlaylistEntityCopy";
+import {
+  acceptsPlaylistDrop,
+  playlistDragType,
+  readCatalogDrag,
+  type CatalogDragPayload,
+} from "./catalog-drag";
 import {
   buildPlaylistRows,
   findPlaylistOccurrence,
   visiblePlaylistRows,
   type PlaylistRow,
 } from "./playlist-grouping";
-
-const playlistDragType = "application/x-harbor-playlist-entry";
-const entryIcons = {
-  folder: FolderOpen,
-  genre: Drama,
-  artist: CircleUserRound,
-  album: DiscAlbum,
-  track: Music,
-};
 
 export type PlaylistCurrentTrack = {
   entryId?: string;
@@ -73,11 +61,23 @@ export function PlaylistContent({
   onPlay: (entryId: string, trackId: string) => void;
   onReorder: (entryId: string, beforeId: string | null) => void;
   onRemove: (entryId: string) => void;
-  onAddSelection: (beforeEntryId?: string) => Promise<void>;
+  onAddSelection: (
+    payload: CatalogDragPayload,
+    beforeEntryId?: string,
+  ) => Promise<void>;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [dropBefore, setDropBefore] = useState<string | null>(null);
+  useEffect(() => {
+    const clearDrop = () => setDropBefore(null);
+    window.addEventListener("dragend", clearDrop);
+    window.addEventListener("drop", clearDrop);
+    return () => {
+      window.removeEventListener("dragend", clearDrop);
+      window.removeEventListener("drop", clearDrop);
+    };
+  }, []);
   const [context, setContext] = useState<{
     entryId: string;
     x: number;
@@ -187,22 +187,28 @@ export function PlaylistContent({
     setContext({ entryId, x: event.clientX, y: event.clientY });
   };
   const dropOn = (entryId: string) => (event: DragEvent<HTMLDivElement>) => {
+    if (!acceptsPlaylistDrop(event.dataTransfer)) return;
     event.preventDefault();
     event.stopPropagation();
     setDropBefore(null);
+    if (editingDisabled) return;
     const dragged = event.dataTransfer.getData(playlistDragType);
     if (dragged) {
-      if (!editingDisabled) onReorder(dragged, entryId);
-    } else if (
-      event.dataTransfer.types.includes(
-        "application/x-harbor-catalog-selection",
-      )
-    ) {
-      void onAddSelection(entryId);
+      onReorder(dragged, entryId);
+    } else {
+      const payload = readCatalogDrag(event.dataTransfer);
+      if (payload) void onAddSelection(payload, entryId);
     }
   };
   const dragOver = (entryId: string) => (event: DragEvent<HTMLDivElement>) => {
+    if (editingDisabled || !acceptsPlaylistDrop(event.dataTransfer)) return;
     event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = event.dataTransfer.types.includes(
+      playlistDragType,
+    )
+      ? "move"
+      : "copy";
     setDropBefore(entryId);
   };
 
@@ -211,14 +217,31 @@ export function PlaylistContent({
       ref={ref}
       className="track-scroll playlist-content"
       aria-label="Содержимое плейлиста"
-      onDragOver={(event) => event.preventDefault()}
+      onDragOver={(event) => {
+        if (editingDisabled || !acceptsPlaylistDrop(event.dataTransfer)) return;
+        event.preventDefault();
+        setDropBefore(null);
+      }}
+      onDragLeave={(event) => {
+        if (
+          !(event.relatedTarget instanceof Node) ||
+          !event.currentTarget.contains(event.relatedTarget)
+        )
+          setDropBefore(null);
+      }}
+      onDragEnd={() => setDropBefore(null)}
       onDrop={(event) => {
-        const dragged = event.dataTransfer.getData(playlistDragType);
-        if (!dragged) return;
+        if (!acceptsPlaylistDrop(event.dataTransfer)) return;
         event.preventDefault();
         event.stopPropagation();
         setDropBefore(null);
-        if (!editingDisabled) onReorder(dragged, null);
+        if (editingDisabled) return;
+        const dragged = event.dataTransfer.getData(playlistDragType);
+        if (dragged) onReorder(dragged, null);
+        else {
+          const payload = readCatalogDrag(event.dataTransfer);
+          if (payload) void onAddSelection(payload);
+        }
       }}
     >
       <div style={{ height: virtual.getTotalSize(), position: "relative" }}>
@@ -277,7 +300,6 @@ export function PlaylistContent({
             );
 
           if (row.type === "entry") {
-            const KindIcon = entryIcons[row.entry.kind];
             const album = row.album;
             const title = album?.track.albumTitle || row.entry.snapshot.title;
             const hasSubtitle = ["track", "album", "folder"].includes(
@@ -344,27 +366,13 @@ export function PlaylistContent({
                     }
                   }}
                 >
-                  <KindIcon
-                    size={16}
-                    className="playlist-entity-icon"
-                    aria-hidden="true"
+                  <PlaylistEntityCopy
+                    kind={row.entry.kind}
+                    title={title}
+                    subtitle={subtitle}
+                    year={year}
+                    seconds={row.duration}
                   />
-                  <span className="playlist-entity-copy">
-                    {hasSubtitle && (subtitle || year) ? (
-                      <span className="playlist-entity-subtitle">
-                        <span title={subtitle}>{subtitle}</span>
-                        {year ? (
-                          <span className="playlist-entity-year">{year}</span>
-                        ) : null}
-                      </span>
-                    ) : null}
-                    <span className="playlist-entity-title" title={title}>
-                      {title}
-                    </span>
-                  </span>
-                  <span className="playlist-entity-duration">
-                    {duration(row.duration)}
-                  </span>
                 </button>
               </div>
             );

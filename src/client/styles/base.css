@@ -2851,6 +2851,45 @@ html[data-theme="light"] .topbar-brand::after {
 .playlist-added-item {
   cursor: grab;
 }
+.catalog-drag-preview {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10000;
+  width: 320px;
+  pointer-events: none;
+  background: #252e29;
+  color: #fff;
+  border: 1px solid #657168;
+  border-radius: 8px;
+  box-shadow:
+    0 8px 28px #000b,
+    0 0 0 1px #000;
+  overflow: hidden;
+}
+.catalog-drag-preview .playlist-entity-main {
+  height: 44px;
+  padding: 0 12px;
+  color: #fff;
+}
+.catalog-drag-preview .playlist-entity-icon,
+.catalog-drag-preview .playlist-entity-duration {
+  color: #e1ecc5;
+}
+.catalog-drag-preview .playlist-entity-subtitle,
+.catalog-drag-preview .playlist-entity-year {
+  color: #c9d5cd;
+}
+.catalog-drag-preview .playlist-entity-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+.catalog-drag-more {
+  padding: 8px 12px;
+  border-top: 1px solid #46534a;
+  color: #c9d5cd;
+  font-size: 13px;
+}
 .playlist-drop-before {
   box-shadow: inset 0 2px var(--accent);
 }

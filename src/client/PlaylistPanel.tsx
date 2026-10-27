@@ -13,6 +13,11 @@ import type {
 import { api, count, duration } from "./api";
 import { Modal } from "./Modal";
 import { PlaylistContent, type PlaylistCurrentTrack } from "./PlaylistContent";
+import {
+  catalogDragType,
+  readCatalogDrag,
+  type CatalogDragPayload,
+} from "./catalog-drag";
 
 const templateFieldLabels: Record<PathTemplateField, string> = {
   albumArtist: "Исполнитель альбома",
@@ -400,14 +405,12 @@ export function PlaylistSettingsDialog({
 
 export function PlaylistPanel({
   playlistId,
-  onAddSelection,
   onPlay,
   current,
   notify,
   onClose,
 }: {
   playlistId: string | null;
-  onAddSelection: (beforeEntryId?: string) => Promise<void>;
   onPlay: (id: string, startId?: string, startEntryId?: string) => void;
   current?: PlaylistCurrentTrack;
   notify: (message: string) => void;
@@ -467,6 +470,18 @@ export function PlaylistPanel({
     ids.splice(from < to ? to - 1 : to, 0, entryId);
     await mutate(`/playlists/${playlistId}/reorder`, { entryIds: ids });
   };
+  const addSelection = async (
+    payload: CatalogDragPayload,
+    beforeEntryId?: string,
+  ) => {
+    await mutate(`/playlists/${playlistId}/entries`, {
+      kind: payload.kind,
+      ...(payload.kind === "track"
+        ? { selection: { trackIds: payload.ids } }
+        : { ids: payload.ids }),
+      ...(beforeEntryId ? { beforeEntryId } : {}),
+    });
+  };
   if (!playlistId)
     return (
       <section
@@ -496,14 +511,18 @@ export function PlaylistPanel({
     <section
       className="panel tracks-panel playlist-panel"
       data-panel-id="playlists"
-      onDragOver={(event) => event.preventDefault()}
+      onDragOver={(event) => {
+        if (mutating || !event.dataTransfer.types.includes(catalogDragType))
+          return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+      }}
       onDrop={(event) => {
-        if (
-          event.dataTransfer.types.includes(
-            "application/x-harbor-catalog-selection",
-          )
-        )
-          void onAddSelection();
+        if (!event.dataTransfer.types.includes(catalogDragType)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const payload = readCatalogDrag(event.dataTransfer);
+        if (payload) void addSelection(payload);
       }}
     >
       <div className="panel-heading playlist-heading">
@@ -559,7 +578,7 @@ export function PlaylistPanel({
               "DELETE",
             )
           }
-          onAddSelection={onAddSelection}
+          onAddSelection={addSelection}
         />
       ) : (
         <div className="empty-small track-empty playlist-empty">
