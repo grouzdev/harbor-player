@@ -145,7 +145,12 @@ async function playlistFixture(page: Page, long = false, allKinds = false) {
   await page.getByRole("button", { name: /^Playlist redesign / }).click();
   const panel = page.locator('[data-panel-id="playlists"]');
   await expect(panel.getByTestId("playlist-entry").first()).toBeVisible();
-  return { panel, requests, tracks };
+  return {
+    panel,
+    requests,
+    tracks,
+    detail: () => ({ playlist: summary(), entries }),
+  };
 }
 
 test("catalog playback does not page through a different filtered track result", async ({
@@ -441,7 +446,7 @@ test("dropping an added entity onto a nested track moves it before the owning en
 test("catalog insertion shares the mutation lock and clears cancelled drop markers", async ({
   page,
 }) => {
-  const { panel, requests } = await playlistFixture(page);
+  const { panel, requests, detail } = await playlistFixture(page);
   const folder = panel.locator(
     '[data-testid="playlist-entry"][data-entry-id="entry-folder"]',
   );
@@ -476,7 +481,7 @@ test("catalog insertion shares the mutation lock and clears cancelled drop marke
   await page.route("**/api/playlists/redesign/entries", async (route) => {
     writes.push(route.request().postDataJSON());
     await pending;
-    await route.fulfill({ json: {} });
+    await route.fulfill({ json: detail() });
   });
   await nested.dispatchEvent("drop", { dataTransfer: transfer });
   await expect.poll(() => writes.length).toBe(1);
@@ -518,6 +523,19 @@ test("management actions remain disabled until reorder and refresh finish", asyn
   const received = new Promise<void>((resolve) => {
     arrived = resolve;
   });
+  let releaseRefresh!: () => void;
+  let refreshArrived!: () => void;
+  const refreshing = new Promise<void>((resolve) => {
+    refreshArrived = resolve;
+  });
+  const refreshGate = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  await page.route("**/api/playlists/redesign/tracks?*", async (route) => {
+    refreshArrived();
+    await refreshGate;
+    await route.fallback();
+  });
   await page.route("**/api/playlists/redesign/reorder", async (route) => {
     arrived();
     await pending;
@@ -537,6 +555,15 @@ test("management actions remain disabled until reorder and refresh finish", asyn
     await expect(folder).toHaveAttribute("draggable", "false");
   } finally {
     release();
+  }
+  try {
+    await refreshing;
+    await expect(
+      page.getByRole("menuitem", { name: "Удалить из плейлиста" }),
+    ).toBeDisabled();
+    await expect(folder).toHaveAttribute("draggable", "false");
+  } finally {
+    releaseRefresh();
   }
   await expect(
     page.getByRole("menuitem", { name: "Переместить вверх" }),

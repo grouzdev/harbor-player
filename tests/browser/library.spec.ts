@@ -1985,7 +1985,9 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await expect(artistRow).not.toHaveClass(/selected/);
   await expect(firstAlbum).not.toHaveClass(/selected/);
   await artistButton.dispatchEvent("click");
+  await expect(artistRow).toHaveClass(/selected/);
   await firstAlbumButton.dispatchEvent("click");
+  await expect(firstAlbum).toHaveClass(/selected/);
   await page
     .locator(".genres-panel")
     .getByRole("button", { name: "Сбросить жанры" })
@@ -2015,12 +2017,14 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await expect(firstAlbum).not.toHaveClass(/selected/);
   await expect(downloadsTile).toHaveClass(/selected/);
   await firstAlbumButton.dispatchEvent("click", { ctrlKey: true });
+  await expect(firstAlbum).toHaveClass(/selected/);
   await expect(page.locator(".artists-panel .panel-count")).toContainText(
     /^1\/\d+$/,
   );
   await artistButton.dispatchEvent("click", { ctrlKey: true });
   await expect(artistRow).not.toHaveClass(/selected/);
   await artistButton.dispatchEvent("click", { ctrlKey: true });
+  await expect(artistRow).toHaveClass(/selected/);
   await page
     .locator(".artists-panel")
     .getByRole("button", { name: "Сбросить исполнителей" })
@@ -2032,6 +2036,8 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await expect(firstAlbum).not.toHaveClass(/selected/);
 
   await artistButton.dispatchEvent("click", { ctrlKey: true });
+  await expect(artistRow).toHaveClass(/selected/);
+  await expect(secondArtistRow).not.toHaveClass(/selected/);
   await secondArtistRow
     .locator(".list-tile-main")
     .dispatchEvent("click", { ctrlKey: true });
@@ -2068,6 +2074,8 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   );
   const secondAlbumButton = secondAlbum.locator(".album-main");
   await firstAlbumButton.dispatchEvent("click");
+  await expect(firstAlbum).toHaveClass(/selected/);
+  await expect(secondAlbum).not.toHaveClass(/selected/);
   await secondAlbumButton.dispatchEvent("click", { ctrlKey: true });
   await expect(firstAlbum).toHaveClass(/selected/);
   await expect(secondAlbum).toHaveClass(/selected/);
@@ -2322,23 +2330,31 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   );
   await page.unroute("**/api/bookmarks");
   await downloadsTile.locator(".list-tile-main").dispatchEvent("click");
+  await expect(page.locator(".album-scroll")).toHaveAttribute(
+    "aria-busy",
+    "false",
+  );
 
   const explorerRequests: { kind: string; id: string }[] = [];
   await page.route("**/api/explorer", async (route) => {
     explorerRequests.push(route.request().postDataJSON());
     await route.fulfill({ json: { ok: true } });
   });
-  expect(
-    await firstAlbum.evaluate((element) => {
-      const event = new MouseEvent("contextmenu", {
-        bubbles: true,
-        cancelable: true,
-        clientX: 300,
-        clientY: 300,
-      });
-      return !element.dispatchEvent(event);
-    }),
-  ).toBe(true);
+  const contextPrevented = page.evaluate(() => {
+    return new Promise<boolean>((resolve) => {
+      document.addEventListener(
+        "contextmenu",
+        (event) => {
+          queueMicrotask(() => resolve(event.defaultPrevented));
+        },
+        { once: true },
+      );
+    });
+  });
+  // Use a real visible, settled target rather than dispatching a synthetic
+  // contextmenu on a retained row while a library change is still loading.
+  await firstAlbum.click({ button: "right" });
+  expect(await contextPrevented).toBe(true);
   await expect(
     page.getByRole("menu", { name: "Контекстное меню" }),
   ).toBeVisible();
@@ -2957,6 +2973,26 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   await coverModeToggle.click();
   await expect(coverMode).toBeHidden();
   await page.unroute("**/api/queue/*/album-block?*");
+  // Reproduce readiness preceding the player's loadedmetadata handler, without
+  // a wall-clock sleep. Releasing this gate must actually start playback.
+  await page.evaluate(() => {
+    const metadata = new Promise<HTMLAudioElement>((resolve) => {
+      document.addEventListener(
+        "loadedmetadata",
+        (event) => {
+          event.stopImmediatePropagation();
+          resolve(event.target as HTMLAudioElement);
+        },
+        { capture: true, once: true },
+      );
+    });
+    (
+      window as unknown as { releaseMetadata: () => Promise<void> }
+    ).releaseMetadata = async () => {
+      const audio = await metadata;
+      audio.dispatchEvent(new Event("loadedmetadata"));
+    };
+  });
   await page.getByTestId("track-row").first().dblclick();
   await expect
     .poll(() =>
@@ -2966,9 +3002,30 @@ test("cover mode shows the album, artwork and quick playback search", async ({
     )
     .toBeGreaterThanOrEqual(2);
   const currentTrack = page.getByTestId("track-row").first();
-  await page
-    .locator("audio")
-    .evaluate((audio: HTMLAudioElement) => audio.pause());
+  await expect
+    .poll(() =>
+      page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.paused),
+    )
+    .toBe(true);
+  await page.evaluate(() =>
+    (
+      window as unknown as { releaseMetadata: () => Promise<void> }
+    ).releaseMetadata(),
+  );
+  // readyState can advance before loadedmetadata's autoplay handler runs.
+  // Wait for playback itself before pausing, or a late play() can restart the
+  // three-second fixture and advance the queue during navigation assertions.
+  await expect
+    .poll(() =>
+      page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.paused),
+    )
+    .toBe(false);
+  await page.getByRole("button", { name: "Пауза", exact: true }).click();
+  await expect
+    .poll(() =>
+      page.locator("audio").evaluate((audio: HTMLAudioElement) => audio.paused),
+    )
+    .toBe(true);
   await expect(currentTrack).toHaveClass(/current-queue-item/);
   await expect(
     currentTrack.locator(".list-tile-status-icon svg"),

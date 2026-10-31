@@ -114,6 +114,25 @@ async function catalog(
     trackCount: 3,
     unavailableCount: 0,
   };
+  const playlistDetail = {
+    playlist,
+    entries: [
+      {
+        id: "road-trip-album",
+        playlistId: playlist.id,
+        kind: "album",
+        targetId: "Queen-0",
+        position: 0,
+        snapshot: {
+          title: "Queen album 000",
+          subtitle: "Queen",
+          coverId: null,
+        },
+        resolvedCount: 3,
+        unavailableCount: 0,
+      },
+    ],
+  };
   let delayed = "";
   let releaseDelay: (() => void) | undefined;
   const matches = (filter: CatalogFilter) =>
@@ -180,26 +199,7 @@ async function catalog(
       }
     }
     if (endpoint === "playlists") body = [playlist];
-    else if (endpoint === "playlists/road-trip")
-      body = {
-        playlist,
-        entries: [
-          {
-            id: "road-trip-album",
-            playlistId: playlist.id,
-            kind: "album",
-            targetId: "Queen-0",
-            position: 0,
-            snapshot: {
-              title: "Queen album 000",
-              subtitle: "Queen",
-              coverId: null,
-            },
-            resolvedCount: 3,
-            unavailableCount: 0,
-          },
-        ],
-      };
+    else if (endpoint === "playlists/road-trip") body = playlistDetail;
     else if (endpoint === "playlists/road-trip/tracks")
       body = {
         items: tracks
@@ -403,6 +403,7 @@ async function catalog(
   );
   return {
     requests,
+    playlistDetail,
     summaries,
     mergeContexts,
     mergePreviews,
@@ -432,7 +433,7 @@ const count = (page: Page, panel: string) =>
 test("playlist drag snapshots only the source panel and keeps list order", async ({
   page,
 }) => {
-  await catalog(page);
+  const { playlistDetail } = await catalog(page);
   await page
     .locator(".libraries-panel")
     .getByText("В дорогу", { exact: true })
@@ -452,9 +453,26 @@ test("playlist drag snapshots only the source panel and keeps list order", async
     .locator(".list-tile-main")
     .click({ modifiers: ["Control"] });
   const writes: unknown[] = [];
+  let releaseRefresh!: () => void;
+  const refreshGate = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  let refreshStarted!: () => void;
+  const refreshing = new Promise<void>((resolve) => {
+    refreshStarted = resolve;
+  });
+  // A successful POST is not the end of the mutation: snapshot refresh still
+  // holds the lock. Keep it pending explicitly instead of relying on latency.
+  await page.route("**/api/playlists/road-trip", async (route) => {
+    if (writes.length === 1) {
+      refreshStarted();
+      await refreshGate;
+    }
+    await route.fallback();
+  });
   await page.route("**/api/playlists/road-trip/entries", async (route) => {
     writes.push(route.request().postDataJSON());
-    await route.fulfill({ json: {} });
+    await route.fulfill({ json: playlistDetail });
   });
   const transfer = await page.evaluateHandle(() => new DataTransfer());
   await track(0).dispatchEvent("dragstart", { dataTransfer: transfer });
@@ -472,6 +490,14 @@ test("playlist drag snapshots only the source panel and keeps list order", async
     kind: "track",
     selection: { trackIds: payload.ids },
   });
+  const entry = page.getByTestId("playlist-entry").first();
+  try {
+    await refreshing;
+    await expect(entry).toHaveAttribute("draggable", "false");
+  } finally {
+    releaseRefresh();
+  }
+  await expect(entry).toHaveAttribute("draggable", "true");
   await transfer.dispose();
 
   for (const [kind, source, id] of [
@@ -495,14 +521,39 @@ test("playlist drag snapshots only the source panel and keeps list order", async
       .poll(() => writes.length)
       .toBe(["genre", "artist", "album"].indexOf(kind) + 2);
     expect(writes.at(-1)).toEqual({ kind, ids: [id] });
+    await expect(entry).toHaveAttribute("draggable", "true");
     await data.dispose();
   }
+});
+
+test("catalog menu survives programmatic panel scrolling but closes on outside wheel", async ({
+  page,
+}) => {
+  await catalog(page, { extraRockArtists: 100 });
+  await page.locator(".album-card").first().click({ button: "right" });
+  const menu = page.getByRole("menu", {
+    name: "Контекстное меню",
+    exact: true,
+  });
+  await expect(
+    menu.getByRole("menuitem", { name: "Открыть в проводнике", exact: true }),
+  ).toBeVisible();
+  // Selection/relevance and position restoration can scroll other panels after
+  // an RMB selection. Those updates must not dismiss the menu just opened.
+  const artists = page.locator(".artists-panel .selection-surface");
+  await artists.evaluate((element) => {
+    element.scrollTop = 100;
+    element.dispatchEvent(new Event("scroll"));
+  });
+  await expect(menu).toBeVisible();
+  await artists.dispatchEvent("wheel", { deltaY: 100 });
+  await expect(menu).toHaveCount(0);
 });
 
 test("native playlist drag renders entity preview without starting a marquee", async ({
   page,
 }) => {
-  await catalog(page);
+  const { playlistDetail } = await catalog(page);
   await page
     .locator(".libraries-panel")
     .getByText("В дорогу", { exact: true })
@@ -519,7 +570,7 @@ test("native playlist drag renders entity preview without starting a marquee", a
   const writes: unknown[] = [];
   await page.route("**/api/playlists/road-trip/entries", async (route) => {
     writes.push(route.request().postDataJSON());
-    await route.fulfill({ json: {} });
+    await route.fulfill({ json: playlistDetail });
   });
   const source = page.locator(".catalog-track-row").first();
   const id = await source.getAttribute("data-selection-key");
@@ -551,6 +602,8 @@ test("native playlist drag renders entity preview without starting a marquee", a
   await page.mouse.up();
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0]).toEqual({ kind: "track", selection: { trackIds: [id] } });
+  const entry = page.getByTestId("playlist-entry").first();
+  await expect(entry).toHaveAttribute("draggable", "true");
   const markup = await page.locator("html").getAttribute("data-drag-preview");
   expect(markup).toContain("lucide-music");
   expect(markup).toContain("playlist-entity-title");
@@ -568,6 +621,7 @@ test("native playlist drag renders entity preview without starting a marquee", a
   await source.dragTo(page.locator(".playlist-heading"));
   await expect.poll(() => writes.length).toBe(2);
   expect(writes[1]).toEqual({ kind: "track", selection: { trackIds: ids } });
+  await expect(entry).toHaveAttribute("draggable", "true");
   const multiple = await page.locator("html").getAttribute("data-drag-preview");
   expect(multiple?.match(/playlist-entity-title/g)).toHaveLength(5);
   expect(multiple).not.toContain("Ещё");
@@ -579,6 +633,7 @@ test("native playlist drag renders entity preview without starting a marquee", a
   await source.dragTo(page.locator(".playlist-heading"));
   await expect.poll(() => writes.length).toBe(3);
   expect(writes[2]).toEqual({ kind: "track", selection: { trackIds: ids } });
+  await expect(entry).toHaveAttribute("draggable", "true");
   const collapsed = await page
     .locator("html")
     .getAttribute("data-drag-preview");

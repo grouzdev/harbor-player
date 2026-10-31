@@ -556,6 +556,7 @@ export function AlbumGrid({
     <div
       ref={ref}
       className="album-scroll selection-surface"
+      aria-busy={loading}
       {...selection.surfaceProps}
     >
       {!albums.length ? (

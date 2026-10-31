@@ -41,7 +41,9 @@ export function ContextMenu({
     if (!menu) return;
     setOpenSubmenu(null);
     setSubmenuSide("right");
-    const frame = requestAnimationFrame(() => firstItemRef.current?.focus());
+    const frame = requestAnimationFrame(() =>
+      firstItemRef.current?.focus({ preventScroll: true }),
+    );
     return () => cancelAnimationFrame(frame);
   }, [menu]);
 
@@ -55,14 +57,23 @@ export function ContextMenu({
     const closeForKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
+    const closeForWheel = (event: WheelEvent) => {
+      if (!ref.current?.contains(event.target as Node)) onClose();
+    };
     document.addEventListener("pointerdown", closeForOutsidePress, true);
     document.addEventListener("keydown", closeForKey);
-    window.addEventListener("scroll", onClose, true);
+    // Scroll events also come from asynchronous selection/relevance updates.
+    // Dismiss for user input, not for automatic panel position restoration.
+    // Scrollbar dragging is already covered by outside pointerdown.
+    window.addEventListener("wheel", closeForWheel, {
+      capture: true,
+      passive: true,
+    });
     window.addEventListener("resize", onClose);
     return () => {
       document.removeEventListener("pointerdown", closeForOutsidePress, true);
       document.removeEventListener("keydown", closeForKey);
-      window.removeEventListener("scroll", onClose, true);
+      window.removeEventListener("wheel", closeForWheel, true);
       window.removeEventListener("resize", onClose);
     };
   }, [menu, onClose]);
@@ -71,7 +82,7 @@ export function ContextMenu({
     if (!openSubmenu || !submenuRef.current) return;
     const box = submenuRef.current.getBoundingClientRect();
     setSubmenuSide(box.right > window.innerWidth - 8 ? "left" : "right");
-    submenuFirstItemRef.current?.focus();
+    submenuFirstItemRef.current?.focus({ preventScroll: true });
   }, [openSubmenu]);
 
   useLayoutEffect(() => {
@@ -171,7 +182,7 @@ export function ContextMenu({
                             ?.querySelector<HTMLButtonElement>(
                               `[aria-expanded="true"]`,
                             )
-                            ?.focus();
+                            ?.focus({ preventScroll: true });
                         }
                       }}
                     >
