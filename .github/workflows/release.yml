@@ -47,6 +47,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/verify-release.mjs --channel=beta --artifacts --published
+      - name: Preserve beta browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta-browser-evidence-${{ github.run_attempt }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
 
   publish-stable:
     if: "!contains(github.ref_name, '-beta.')"
@@ -182,3 +192,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/verify-release.mjs --channel=stable --artifacts --published
+      - name: Preserve stable browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stable-browser-evidence-${{ github.run_attempt }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7

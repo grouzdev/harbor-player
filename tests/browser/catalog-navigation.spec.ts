@@ -1,5 +1,5 @@
 import { addCatalogFilter } from "./catalog-filter-helpers";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 import {
   emptyFilter,
   type CatalogFilter,

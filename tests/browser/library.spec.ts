@@ -1,5 +1,5 @@
 import { addCatalogFilter } from "./catalog-filter-helpers";
-import { test, expect, type Page as PlaywrightPage } from "@playwright/test";
+import { test, expect, type Page as PlaywrightPage } from "./fixtures";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { emptyFilter, type Album, type Page } from "../../src/shared/contracts";
