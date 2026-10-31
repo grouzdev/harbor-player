@@ -10,14 +10,19 @@ export function acquireInstanceLock(dataDir: string): () => void {
   mkdirSync(dataDir, { recursive: true });
   const file = path.join(dataDir, "server.lock");
   const db = new Database(path.join(dataDir, "server-ownership.sqlite"), {
-    timeout: 0,
+    // Connection initialization briefly takes SHARED locks. With no busy wait
+    // simultaneous upgrades can all fail even though no service owns the DB.
+    // SQLite's bounded busy handler lets these readers drain; a live owner
+    // still excludes contenders. This is a busy budget, not a wall-clock SLA.
+    timeout: 1000,
   });
   try {
     // Rollback-journal EXCLUSIVE holds the OS-managed lock until close, including
     // in an otherwise empty database. WAL would not provide this exclusion.
+    // Acquire before inspecting the mode to avoid a separate read/upgrade step.
+    db.exec("BEGIN EXCLUSIVE");
     if (db.pragma("journal_mode", { simple: true }) !== "delete")
       throw new Error("Неожиданный journal_mode блокировки каталога");
-    db.exec("BEGIN EXCLUSIVE");
     try {
       writeFileSync(file, marker, { flag: "wx" });
     } catch (error) {

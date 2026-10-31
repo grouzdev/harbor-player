@@ -8,6 +8,7 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import Database from "better-sqlite3";
 import { afterEach, expect, test } from "vitest";
 import { acquireInstanceLock } from "../src/server/instance-lock.js";
 
@@ -152,6 +153,23 @@ test("unreadable marker fails closed without removing it", () => {
   expect(() => acquireInstanceLock(dir)).toThrow();
 });
 
+test("WAL ownership files are rejected without creating a protocol marker", () => {
+  const dir = directory();
+  const file = path.join(dir, "server-ownership.sqlite");
+  const db = new Database(file);
+  db.pragma("journal_mode = wal");
+  db.exec("CREATE TABLE probe (id INTEGER)");
+  db.close();
+  expect(() => acquireInstanceLock(dir)).toThrow("Неожиданный journal_mode");
+  expect(() => readFileSync(path.join(dir, "server.lock"))).toThrow();
+  const check = new Database(file);
+  try {
+    expect(check.pragma("journal_mode", { simple: true })).toBe("wal");
+  } finally {
+    check.close();
+  }
+});
+
 test("barrier-released simultaneous starts have exactly one owner", async () => {
   const dir = directory();
   const peers = Array.from({ length: 6 }, () => contender(dir, "start"));
@@ -159,11 +177,45 @@ test("barrier-released simultaneous starts have exactly one owner", async () => 
     await Promise.all(peers.map(async (peer) => (await peer.next()).event)),
   ).toEqual(Array(6).fill("ready"));
   for (const peer of peers) peer.child.send("start");
-  const outcomes = await Promise.all(
-    peers.map(async (peer) => (await peer.next()).event),
-  );
-  expect(outcomes.filter((event) => event === "owned")).toHaveLength(1);
-  expect(outcomes.filter((event) => event === "denied")).toHaveLength(5);
+  const outcomes = await Promise.all(peers.map((peer) => peer.next()));
+  expect(
+    outcomes.filter(({ event }) => event === "owned"),
+    JSON.stringify(outcomes),
+  ).toHaveLength(1);
+  expect(
+    outcomes.filter(({ event }) => event === "denied"),
+    JSON.stringify(outcomes),
+  ).toHaveLength(5);
+});
+
+test("brief initialization readers do not make every contender report a live owner", async () => {
+  const dir = directory();
+  const reader = new Database(path.join(dir, "server-ownership.sqlite"));
+  reader.exec("CREATE TABLE probe (id INTEGER)");
+  const peers = Array.from({ length: 6 }, () => contender(dir, "start"));
+  let close: ReturnType<typeof setTimeout> | undefined;
+  try {
+    expect(
+      await Promise.all(peers.map(async (peer) => (await peer.next()).event)),
+    ).toEqual(Array(6).fill("ready"));
+    // SQLite takes short SHARED locks while initializing connections. Model a
+    // slower reader without any actual service owner, then release it.
+    reader.exec("BEGIN; SELECT * FROM probe");
+    for (const peer of peers) peer.child.send("start");
+    close = setTimeout(() => reader.close(), 150);
+    const outcomes = await Promise.all(peers.map((peer) => peer.next()));
+    expect(
+      outcomes.filter(({ event }) => event === "owned"),
+      JSON.stringify(outcomes),
+    ).toHaveLength(1);
+    expect(
+      outcomes.filter(({ event }) => event === "denied"),
+      JSON.stringify(outcomes),
+    ).toHaveLength(5);
+  } finally {
+    clearTimeout(close);
+    if (reader.open) reader.close();
+  }
 });
 
 test.each(["before-marker", "partial-marker"])(

@@ -2,7 +2,7 @@
 
 `MusicService` acquires ownership before opening the catalog, workers, or recovery.
 The lifetime handle is a dedicated `better-sqlite3` connection to
-`server-ownership.sqlite`, with timeout zero, rollback-journal (`delete`) mode,
+`server-ownership.sqlite`, with a bounded 1000 ms busy timeout, rollback-journal (`delete`) mode,
 and an open `BEGIN EXCLUSIVE` transaction. Closing that connection releases
 ownership; process death releases the operating-system locks. There is no
 PID-liveness decision, stale-file deletion, lease, or heartbeat.
@@ -67,3 +67,14 @@ a later new process may retry. Crashing after a partial marker write releases
 the OS lock but leaves startup blocked for explicit operator investigation.
 
 This protocol does not implement staging recovery.
+
+## Конкуренция при первом открытии
+
+Нулевой busy timeout мог приводить к отказу всех одновременно стартующих
+процессов: краткие SHARED-блокировки инициализации SQLite мешали получению
+EXCLUSIVE, хотя владельца сервиса не было. Используется штатный busy handler
+SQLite с пределом 1000 мс; режим журнала проверяется уже после `BEGIN EXCLUSIVE`.
+WAL по-прежнему запрещён, протокол marker и правила ручной миграции не меняются.
+Ожидание не является PID-проверкой, lease или takeover и не удаляет файлы.
+При долгой конкуренции возможен отказ по тайм-ауту; безопасность исключения
+владельцев не ослабляется и не означает безусловной гарантии успешного старта.

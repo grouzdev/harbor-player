@@ -5,6 +5,8 @@ import { pulseDayKey, pulseFixtureInstant } from "./pulse-test-dates";
 import {
   PulseLayout,
   type PulseDayLayout,
+  ALBUM_WIDTH,
+  DAY_PADDING,
   DAY_MS,
 } from "../../src/client/pulse-layout";
 
@@ -796,6 +798,84 @@ test("Pulse records real audio and mode switches preserve playback", async ({
   await expect(page.locator(".cover-mode")).toHaveCount(0);
   await page.locator(".cover-mode-toggle").click();
   await expect(page.locator(".cover-mode")).toBeVisible();
+});
+
+test("Pulse completes pending keyboard focus when a cached rank mounts after scrolling", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 480, height: 700 });
+  const today = await historyToday(page);
+  await prepareHistory(page, 39, today, today, {
+    title: "Cached album",
+    artist: "Cached artist",
+    artistForAlbum: (album) => `Cached artist ${album}`,
+  });
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Открыть Пульс", exact: true })
+    .click();
+  const rail = page.locator(".pulse-rail");
+  await expect(rail).toBeVisible();
+  await rail.evaluate((element) => {
+    element.scrollLeft = 0;
+  });
+  const first = page.locator('.pulse-album[data-rank="0"]');
+  await expect(first).toBeVisible();
+  await first.focus();
+  const step = await rail.evaluate(
+    (element, width) => Math.max(1, Math.floor(element.clientWidth / width)),
+    ALBUM_WIDTH,
+  );
+  // Both windows use the same loaded page (0..19), but the destination is
+  // outside the mounted window. The old focused rank remains pinned.
+  await rail.evaluate(
+    (element, { step, padding, width }) => {
+      element.scrollLeft = padding + (step + 4) * width;
+    },
+    { step, padding: DAY_PADDING, width: ALBUM_WIDTH },
+  );
+  await expect(
+    page.locator(`.pulse-album[data-rank="${step + 4}"]`),
+  ).toBeVisible();
+  const target = page.locator(`.pulse-album[data-rank="${step}"]`);
+  await expect(target).toHaveCount(0);
+  await expect(first).toBeFocused();
+  const groupRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/artist-groups?"))
+      groupRequests.push(request.url());
+  });
+  // Delay the scroll notification, not the key event or React update. This
+  // deterministically places the focus attempt before the target DOM mounts.
+  await rail.evaluate((element) => {
+    element.addEventListener(
+      "scroll",
+      (event) => event.stopImmediatePropagation(),
+      {
+        capture: true,
+        signal: ((
+          window as unknown as { pulseScrollGate: AbortController }
+        ).pulseScrollGate = new AbortController()).signal,
+      },
+    );
+  });
+  await page.keyboard.press("PageDown");
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  await expect(target).toHaveCount(0);
+  await rail.evaluate((element) => {
+    (
+      window as unknown as { pulseScrollGate: AbortController }
+    ).pulseScrollGate.abort();
+    element.dispatchEvent(new Event("scroll"));
+  });
+  await expect(target).toBeFocused();
+  expect(groupRequests).toEqual([]);
+  expect(await page.locator(".pulse-album").count()).toBeLessThan(50);
 });
 
 test("all 1000 busy-day ranks are keyboard reachable with bounded DOM", async ({

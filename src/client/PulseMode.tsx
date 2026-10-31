@@ -450,7 +450,9 @@ function AlbumDay({
       button.focus({ preventScroll: true });
       setPendingRank(null);
     }
-  }, [groups, pendingRank]);
+    // Scroll/resize can mount a cached rank without changing the loaded page.
+    // Retry when that mounted range changes, not only when data arrives.
+  }, [groups, pendingRank, first, last]);
   const date = new Date(`${day}T00:00:00Z`);
   const labelLeft = Math.max(
     8,
