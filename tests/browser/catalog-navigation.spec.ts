@@ -1229,28 +1229,34 @@ test("selecting an album keeps the album grid in place while another album plays
       page.locator(".album-scroll").evaluate((node) => node.scrollTop),
     )
     .toBeGreaterThan(0);
+  const visibleAlbumId = () =>
+    page.locator(".album-card").evaluateAll((cards) => {
+      const scroll = document.querySelector(".album-scroll")!;
+      const bounds = scroll.getBoundingClientRect();
+      const target = cards
+        .map((card) => {
+          const box = card.getBoundingClientRect();
+          return {
+            card,
+            visible: box.top < bounds.bottom && box.bottom > bounds.top,
+            distance: Math.abs(
+              (box.top + box.bottom) / 2 - (bounds.top + bounds.bottom) / 2,
+            ),
+          };
+        })
+        .filter((item) => item.visible)
+        .sort((left, right) => left.distance - right.distance)[0];
+      return target?.card.getAttribute("data-selection-key") || null;
+    });
+  // Old overscan cards can still exist while the virtualizer is committing the
+  // new viewport. Wait for a visible card, not merely a nonempty mounted DOM.
+  let albumId: string | null = null;
   await expect
-    .poll(() => page.locator(".album-card").count())
-    .toBeGreaterThan(0);
-  const albumId = await page.locator(".album-card").evaluateAll((cards) => {
-    const scroll = document.querySelector(".album-scroll")!;
-    const bounds = scroll.getBoundingClientRect();
-    const target = cards
-      .map((card) => {
-        const box = card.getBoundingClientRect();
-        return {
-          card,
-          visible: box.top < bounds.bottom && box.bottom > bounds.top,
-          distance: Math.abs(
-            (box.top + box.bottom) / 2 - (bounds.top + bounds.bottom) / 2,
-          ),
-        };
-      })
-      .filter((item) => item.visible)
-      .sort((left, right) => left.distance - right.distance)[0];
-    return target?.card.getAttribute("data-selection-key") || null;
-  });
-  expect(albumId).toBeTruthy();
+    .poll(async () => {
+      albumId = await visibleAlbumId();
+      return albumId;
+    })
+    .not.toBeNull();
   expect(albumId).not.toBe("Queen-0");
   const selected = page.locator(`.album-card[data-selection-key="${albumId}"]`);
   const before = await page
