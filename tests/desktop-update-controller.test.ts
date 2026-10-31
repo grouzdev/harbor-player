@@ -52,6 +52,23 @@ function fixture(initial: UpdatePreferences = { automaticChecks: true }) {
 }
 
 describe("desktop updater operations", () => {
+  it("distinguishes missing published metadata without exposing raw errors", async () => {
+    const { updater, controller } = fixture();
+    updater.checkForUpdates.mockRejectedValueOnce(
+      Object.assign(new Error("https://user:secret@example.com/private"), {
+        code: "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND",
+      }),
+    );
+    await controller.check(true);
+    expect(controller.getState()).toMatchObject({
+      status: "error",
+      stage: "check",
+      message: "Файлы опубликованного обновления недоступны. Попробуйте позже.",
+      retryable: true,
+    });
+    expect(JSON.stringify(controller.getState())).not.toContain("secret");
+  });
+
   it("blocks concurrent checks and downloads until the current promise settles", async () => {
     const { updater, controller } = fixture();
     let resolve!: () => void;

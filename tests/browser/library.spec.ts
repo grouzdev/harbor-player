@@ -127,7 +127,7 @@ test("topbar groups catalog controls and sidebar holds hidden panels", async ({
   await page.goto("/");
   const search = page.locator(".catalog-search");
   const add = page.getByRole("button", {
-    name: "Добавить фильтр",
+    name: "Добавить фильтр «Закладки»",
     exact: true,
   });
   await expect(search).toHaveClass(/is-collapsed/);
@@ -169,8 +169,8 @@ test("topbar groups catalog controls and sidebar holds hidden panels", async ({
   await addCatalogFilter(page, "Закладки");
   await addCatalogFilter(page, "Не просмотрено");
   await expect(page.locator(".catalog-filter-chip")).toHaveText([
-    "Добавлено 1 день назад",
     "Закладки",
+    "Добавлено 1 день назад",
     "Не просмотрено",
   ]);
   expect(await firstSectionControl.boundingBox()).toEqual(
@@ -1879,7 +1879,8 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     .getByRole("button", { name: "Закрыть", exact: true })
     .click();
   await expect(afterCoverSelectionDialog).not.toBeVisible();
-  const albumArtistLink = firstAlbum.getByRole("button", {
+  // Artist links live on the shared artist-group heading, not on each card.
+  const albumArtistLink = page.locator(".albums-panel").getByRole("button", {
     name: "Выбрать исполнителя «Исполнитель альбома»",
   });
   await albumArtistLink.dispatchEvent("click");
@@ -2224,13 +2225,19 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
   await page.getByLabel("Поиск музыки").fill("Несуществующая композиция");
   await expect(page.getByTestId("track-row")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Добавить фильтр", exact: true }),
+    page.getByRole("button", {
+      name: "Добавить фильтр «Закладки»",
+      exact: true,
+    }),
   ).toBeDisabled();
   await page
     .getByRole("button", { name: "Очистить поиск" })
     .dispatchEvent("click");
   await expect(
-    page.getByRole("button", { name: "Добавить фильтр", exact: true }),
+    page.getByRole("button", {
+      name: "Добавить фильтр «Закладки»",
+      exact: true,
+    }),
   ).toBeEnabled();
   await expect(page.getByLabel("Поиск музыки")).toHaveValue("");
   expect(await page.getByTestId("track-row").count()).toBeGreaterThan(0);
@@ -3108,9 +3115,7 @@ test("cover mode shows the album, artwork and quick playback search", async ({
   await expect(page.locator(".panel-visibility-controls")).toHaveCount(0);
   await expect(page.locator(".topbar")).toBeVisible();
   await expect(page.locator(".player")).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Добавить фильтр", exact: true }),
-  ).toHaveCount(0);
+  await expect(page.locator(".catalog-filter-add")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Открыть настройки" }),
   ).toHaveCount(1);

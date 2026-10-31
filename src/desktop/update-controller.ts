@@ -3,6 +3,7 @@ import type {
   UpdateStage,
   UpdateState,
 } from "../shared/desktop-contract.js";
+import { safeUpdateCode } from "./update-log.js";
 
 export interface UpdateDriver {
   autoDownload: boolean;
@@ -81,7 +82,11 @@ export function createUpdateController(options: {
           ? "Не удалось скачать обновление. Повторите попытку."
           : stage === "install"
             ? "Не удалось установить обновление."
-            : "Не удалось проверить обновления. Повторите попытку.",
+            : safeUpdateCode(error) === "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND"
+              ? "Файлы опубликованного обновления недоступны. Попробуйте позже."
+              : safeUpdateCode(error) === "ERR_UPDATER_NO_PUBLISHED_VERSIONS"
+                ? "В этом канале пока нет опубликованных версий."
+                : "Не удалось проверить обновления. Повторите попытку.",
       stage,
       version,
       retryable: stage !== "install",

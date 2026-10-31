@@ -199,9 +199,11 @@ test("edits the accent code separately and shows compact desktop updates", async
   await expect(olderNotes).not.toHaveAttribute("open");
   await olderNotes.locator("summary").click();
   await expect(olderNotes).toHaveAttribute("open", "");
-  await expect(
-    olderNotes.getByRole("heading", { name: "Новое" }),
-  ).toBeVisible();
+  // A release may contain only fixes; empty changelog groups are omitted.
+  await expect(olderNotes.getByRole("heading").first()).toHaveText(
+    /^(Новое|Улучшения|Исправления)$/,
+  );
+  await expect(olderNotes.getByRole("listitem").first()).toBeVisible();
 });
 
 test("desktop background chooser imports its selection without a path form", async ({

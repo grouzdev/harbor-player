@@ -43,6 +43,10 @@ jobs:
         run: |
           $version = node -p "require('./package.json').version"
           gh release create "$env:GITHUB_REF_NAME" "release/Harbor Player-$version-x64-unsigned-Setup.exe" "release/Harbor Player-$version-x64-unsigned-Setup.exe.blockmap" "release/Harbor Player-$version-x64-unsigned-portable.exe" "release/beta.yml" --prerelease --title "Harbor Player $env:GITHUB_REF_NAME (unsigned beta)" --notes "Unsigned beta release. Windows SmartScreen may show a warning. This release updates the beta channel only."
+      - name: Verify published beta release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/verify-release.mjs --channel=beta --artifacts --published
 
   publish-stable:
     if: "!contains(github.ref_name, '-beta.')"
@@ -174,3 +178,7 @@ jobs:
         run: |
           $version = node -p "require('./package.json').version"
           gh release create "$env:GITHUB_REF_NAME" "release/Harbor Player-$version-x64-Setup.exe" "release/Harbor Player-$version-x64-portable.exe" "release/latest.yml" --title "Harbor Player $env:GITHUB_REF_NAME" --notes "Signed stable release. Publisher: SignPath Foundation."
+      - name: Verify published stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/verify-release.mjs --channel=stable --artifacts --published

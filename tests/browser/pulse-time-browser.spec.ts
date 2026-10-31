@@ -328,8 +328,12 @@ test("historical album title and time remain visible when both cover copies are 
     await page
       .getByRole("button", { name: "Открыть Пульс", exact: true })
       .click();
-    await expect(page.locator(".pulse-album")).toHaveCount(1);
-    await page.locator(".pulse-album").click();
+    // The same album also has a strip button in its artist group.
+    const cover = page.locator(
+      `.pulse-album-latest[data-album-id="${albumId}"]`,
+    );
+    await expect(cover).toHaveCount(1);
+    await cover.click();
     await expect(page.locator(".pulse-copy")).toContainText(
       fixture.track.albumTitle,
     );
@@ -338,10 +342,7 @@ test("historical album title and time remain visible when both cover copies are 
       await page.request.get(`/api/pulse/albums/${albumId}/stats`)
     ).json();
     expect(stats.playedMs).toBe(total);
-    await expect(page.locator(".pulse-album img")).toHaveCSS(
-      "visibility",
-      "hidden",
-    );
+    await expect(cover.locator("img")).toHaveCSS("visibility", "hidden");
   } finally {
     for (const file of moved) await rename(`${file}.unavailable`, file);
   }

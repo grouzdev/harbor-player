@@ -1,4 +1,5 @@
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, stat } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 
 const packageInfo = JSON.parse(await readFile("package.json", "utf8"));
@@ -7,6 +8,7 @@ const tag =
   process.argv.slice(2).find((argument) => argument.startsWith("v")) ||
   process.env.GITHUB_REF_NAME;
 const verifyArtifacts = process.argv.includes("--artifacts");
+const verifyPublished = process.argv.includes("--published");
 const channelArgument = process.argv
   .slice(2)
   .find((argument) => argument.startsWith("--channel="));
@@ -23,6 +25,8 @@ if (channel === "stable" && !isStable)
   throw new Error(`Stable releases require x.y.z, got ${version}`);
 if (tag !== `v${version}`)
   throw new Error(`Tag ${tag} must exactly match v${version}`);
+if (verifyPublished && !verifyArtifacts)
+  throw new Error("--published requires --artifacts");
 
 if (verifyArtifacts) {
   const artifacts =
@@ -51,6 +55,59 @@ if (verifyArtifacts) {
       throw new Error(
         `beta.yml must reference the published setup asset ${publishedSetup}`,
       );
+  }
+  if (verifyPublished) {
+    const repository = "grouzdev/harbor-player";
+    const gh = (...args) =>
+      execFileSync("gh", args, { encoding: "utf8", windowsHide: true });
+    const release = JSON.parse(
+      gh(
+        "release",
+        "view",
+        tag,
+        "--repo",
+        repository,
+        "--json",
+        "tagName,isDraft,isPrerelease,assets,url",
+      ),
+    );
+    if (
+      release.tagName !== tag ||
+      release.isDraft ||
+      release.isPrerelease !== (channel === "beta")
+    )
+      throw new Error(
+        "The expected release has not been published in its channel",
+      );
+    for (const file of artifacts) {
+      const name = file.replaceAll(" ", ".");
+      const asset = release.assets.find((item) => item.name === name);
+      const local = await stat(path.join("release", file));
+      if (!asset || asset.state !== "uploaded" || asset.size !== local.size)
+        throw new Error(`Published asset missing or wrong size: ${name}`);
+    }
+    const metadataName = channel === "beta" ? "beta.yml" : "latest.yml";
+    const publishedMetadata = gh(
+      "release",
+      "download",
+      tag,
+      "--repo",
+      repository,
+      "--pattern",
+      metadataName,
+      "--output",
+      "-",
+    );
+    if (
+      publishedMetadata !==
+      (await readFile(path.join("release", metadataName), "utf8"))
+    )
+      throw new Error(
+        "Published updater metadata differs from the checked build",
+      );
+    console.log(
+      `Published release and uploaded assets verified: ${release.url}`,
+    );
   }
 }
 

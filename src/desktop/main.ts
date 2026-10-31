@@ -19,6 +19,7 @@ import { appName, dataDirectory } from "../shared/app-paths.js";
 import { createUpdateLog } from "./update-log.js";
 import { updatePreferencesStore } from "./update-preferences.js";
 import { createUpdateController } from "./update-controller.js";
+import { PublishedReleaseProvider } from "./published-release-provider.js";
 import type {
   BackendToMainMessage,
   MainToBackendMessage,
@@ -109,6 +110,10 @@ async function reportStartupBenchmark() {
 }
 
 function configureUpdates() {
+  autoUpdater.setFeedURL({
+    provider: "custom",
+    updateProvider: PublishedReleaseProvider,
+  });
   updates = createUpdateController({
     updater: autoUpdater,
     portable: isPortable,

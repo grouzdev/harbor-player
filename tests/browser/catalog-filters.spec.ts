@@ -13,32 +13,25 @@ test("catalog search expands on click and Tab, collapses empty, and preserves en
   });
   const open = page.getByRole("button", { name: "Открыть поиск", exact: true });
   const add = page.getByRole("button", {
-    name: "Добавить фильтр",
+    name: "Добавить фильтр «Закладки»",
     exact: true,
   });
   await expect(open).toBeVisible();
   await expect(
     page.locator(".catalog-search button, .catalog-filter-add"),
-  ).toHaveCount(2);
-  for (const button of [open, add]) {
+  ).toHaveCount(5);
+  for (const button of [
+    open,
+    ...(await page.locator(".catalog-filter-add").all()),
+  ]) {
     await expect(button).toHaveClass(/icon-button/);
     await expect(button).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   }
   await open.click();
   await expect(search).toBeFocused();
   await expect(shell).toHaveCSS("width", "220px");
-  await add.click();
+  await page.locator(".topbar").click({ position: { x: 500, y: 10 } });
   await expect(shell).toHaveClass(/is-collapsed/);
-  await expect
-    .poll(async () => {
-      const menuBox = await page
-        .getByRole("menu", { name: "Добавить фильтр", exact: true })
-        .boundingBox();
-      const triggerBox = await add.boundingBox();
-      return Math.abs(menuBox!.x - triggerBox!.x);
-    })
-    .toBeLessThan(1);
-  await page.keyboard.press("Escape");
   await search.focus();
   await search.fill("test");
   await page.locator(".topbar").click({ position: { x: 500, y: 10 } });
@@ -55,45 +48,38 @@ test("catalog search expands on click and Tab, collapses empty, and preserves en
   await expect(shell).not.toHaveClass(/is-collapsed/);
 });
 
-test("filter menu excludes active filters and restores removed filters", async ({
+test("filter buttons keep their order and return when filters are removed", async ({
   page,
 }) => {
   await page.goto("/");
-  const add = page.getByRole("button", {
-    name: "Добавить фильтр",
-    exact: true,
-  });
-  const menu = page.getByRole("menu", { name: "Добавить фильтр", exact: true });
-  await add.click();
-  await expect(menu.getByRole("menuitem")).toHaveText([
-    "Закладки",
-    "Не просмотрено",
-    "Рейтинг",
-    "Недавние",
+  const buttons = page.locator(".catalog-filter-add");
+  expect(
+    await buttons.evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute("aria-label")),
+    ),
+  ).toEqual([
+    "Добавить фильтр «Закладки»",
+    "Добавить фильтр «Недавние»",
+    "Добавить фильтр «Не просмотрено»",
+    "Добавить фильтр «Рейтинг»",
   ]);
-  await page.keyboard.press("Escape");
-  await expect(menu).toHaveCount(0);
-  await add.click();
-  await page.locator(".topbar").click({ position: { x: 500, y: 10 } });
-  await expect(menu).toHaveCount(0);
   await addCatalogFilter(page, "Недавние");
   await expect(page.locator(".catalog-filter-editor")).toHaveCount(0);
   for (const label of ["Не просмотрено", "Закладки"])
     await addCatalogFilter(page, label);
-  await add.click();
-  await expect(menu.getByRole("menuitem")).toHaveText(["Рейтинг"]);
-  await menu.getByRole("menuitem", { name: "Рейтинг", exact: true }).click();
-  await expect(add).toBeDisabled();
+  await expect(buttons).toHaveCount(1);
+  await addCatalogFilter(page, "Рейтинг");
+  await expect(buttons).toHaveCount(0);
   await page
     .getByRole("button", { name: "Закрыть изменение рейтинга" })
     .click();
   await expect(page.locator(".catalog-filter-chip")).toHaveText([
+    "Закладки",
     "Добавлено 1 день назад",
     "Не просмотрено",
-    "Закладки",
     "Рейтинг: от 0 до 5",
   ]);
-  await expect(add).toBeDisabled();
+  await expect(buttons).toHaveCount(0);
   await page.getByLabel("Поиск музыки", { exact: true }).fill("global");
   await expect(
     page.getByRole("button", { name: "Удалить фильтр «Рейтинг»" }),
@@ -103,10 +89,9 @@ test("filter menu excludes active filters and restores removed filters", async (
   await page
     .getByRole("button", { name: "Удалить фильтр «Не просмотрено»" })
     .click();
-  await add.click();
-  await expect(menu.getByRole("menuitem")).toHaveText(["Не просмотрено"]);
-  await menu.getByRole("menuitem").click();
-  await expect(page.locator(".catalog-filter-chip").last()).toHaveText(
+  await expect(buttons).toHaveCount(1);
+  await addCatalogFilter(page, "Не просмотрено");
+  await expect(page.locator(".catalog-filter-chip").nth(2)).toHaveText(
     "Не просмотрено",
   );
   for (const label of ["Недавние", "Закладки", "Рейтинг", "Не просмотрено"]) {
@@ -115,7 +100,8 @@ test("filter menu excludes active filters and restores removed filters", async (
       .click();
   }
   await expect(page.locator(".catalog-filter-chip")).toHaveCount(0);
-  await expect(add).toBeEnabled();
+  await expect(buttons).toHaveCount(4);
+  for (const button of await buttons.all()) await expect(button).toBeEnabled();
 });
 
 test("rating filter applies changes immediately", async ({ page }) => {
@@ -164,10 +150,7 @@ test("recent filter applies its period immediately", async ({ page }) => {
   });
   await page.goto("/");
   await expect.poll(() => requests.length).toBeGreaterThan(0);
-  await page
-    .getByRole("button", { name: "Добавить фильтр", exact: true })
-    .click();
-  await page.getByRole("menuitem", { name: "Недавние", exact: true }).click();
+  await addCatalogFilter(page, "Недавние");
   const period = page.getByRole("slider", {
     name: "Период недавнего добавления",
     exact: true,
@@ -316,15 +299,15 @@ for (const theme of ["dark", "light"]) {
     await page
       .getByRole("button", { name: "Удалить фильтр «Рейтинг»" })
       .click();
-    await page
-      .getByRole("button", { name: "Добавить фильтр", exact: true })
-      .click();
-    const menu = (await page
-      .getByRole("menu", { name: "Добавить фильтр" })
-      .boundingBox())!;
-    expect(menu.x).toBeGreaterThanOrEqual(8);
-    expect(menu.x + menu.width).toBeLessThanOrEqual(592);
-    await page.screenshot({ path: info.outputPath(`${theme}-menu.png`) });
+    const add = page.getByRole("button", {
+      name: "Добавить фильтр «Рейтинг»",
+      exact: true,
+    });
+    const bounds = (await add.boundingBox())!;
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(600);
+    await add.click();
+    await expect(page.locator(".catalog-filter-editor")).toBeVisible();
   });
 }
 
@@ -340,11 +323,8 @@ test("bookmark filter retries a failed load and follows external reset", async (
     });
   });
   await page.goto("/");
-  await page
-    .getByRole("button", { name: "Добавить фильтр", exact: true })
-    .click();
-  const retry = page.getByRole("menuitem", {
-    name: "Закладки: повторить загрузку",
+  const retry = page.getByRole("button", {
+    name: "Повторить загрузку закладок",
     exact: true,
   });
   await expect(retry).toBeEnabled();
@@ -354,8 +334,8 @@ test("bookmark filter retries a failed load and follows external reset", async (
   ).toHaveCount(0);
   fail = false;
   await retry.click();
-  const bookmarks = page.getByRole("menuitem", {
-    name: "Закладки",
+  const bookmarks = page.getByRole("button", {
+    name: "Добавить фильтр «Закладки»",
     exact: true,
   });
   await expect(bookmarks).toBeEnabled();
@@ -372,8 +352,5 @@ test("bookmark filter retries a failed load and follows external reset", async (
     .getByRole("button", { name: "Показать всю музыку", exact: true })
     .click();
   await expect(page.locator('[data-filter="bookmarks"]')).toHaveCount(0);
-  await page
-    .getByRole("button", { name: "Добавить фильтр", exact: true })
-    .click();
   await expect(bookmarks).toBeEnabled();
 });
