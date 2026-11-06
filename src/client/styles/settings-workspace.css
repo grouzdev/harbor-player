@@ -46,19 +46,19 @@
   z-index: 2;
   cursor: col-resize;
   touch-action: none;
-  background: #ffffff06;
+  background: var(--panel-divider-shading);
 }
 
 .settings-workspace-resizer::before {
   content: "";
   position: absolute;
-  inset: 0 -3px;
+  inset: 0 -6px;
 }
 
 .settings-workspace-resizer:hover,
 .settings-workspace-resizer:focus-visible,
 .is-resizing .settings-workspace-resizer {
-  background: var(--accent);
+  background: var(--panel-divider-highlight);
 }
 
 .settings-workspace-scroll.is-resizing {

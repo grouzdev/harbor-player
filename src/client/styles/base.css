@@ -296,14 +296,20 @@ body.selection-dragging * {
   color: #63727c;
 }
 .resizer {
+  position: relative;
+  z-index: 2;
   background: #ffffff06;
   cursor: col-resize;
   touch-action: none;
-  transition: background 0.15s;
+}
+.resizer::before {
+  content: "";
+  position: absolute;
+  inset: 0 -6px;
 }
 .resizer:hover,
 .resizer:active {
-  background: #8bae9980;
+  background: var(--panel-divider-highlight);
 }
 .libraries-panel {
   background: #181e23;
@@ -3487,7 +3493,24 @@ html[data-theme="light"] .topbar-brand::after {
   --metal-edge: #e9e9d91c;
   --metal-line: #f0f0e40d;
   --metal-shadow: #010101bd;
+  --panel-divider-edge: #191a18;
+  --panel-divider-well: #090a09;
+  --panel-divider-hover-well: #4b4e37;
+  --panel-divider-highlight: linear-gradient(
+    90deg,
+    var(--panel-divider-edge),
+    var(--panel-divider-hover-well) 45%,
+    var(--panel-divider-hover-well) 55%,
+    var(--panel-divider-edge)
+  );
   --panel-divider-shading: linear-gradient(
+    90deg,
+    var(--panel-divider-edge),
+    var(--panel-divider-well) 45%,
+    var(--panel-divider-well) 55%,
+    var(--panel-divider-edge)
+  );
+  --row-divider-shading: linear-gradient(
     90deg,
     #0000005e,
     #eeeee209,
@@ -3836,13 +3859,14 @@ select {
   background-clip: padding-box;
 }
 
-.resizer,
-.row-resizer {
+.resizer {
   background: var(--panel-divider-shading);
 }
 
-.resizer:hover,
-.resizer:active,
+.row-resizer {
+  background: var(--row-divider-shading);
+}
+
 .row-resizer:hover,
 .row-resizer:active {
   background: #b5b98072;
@@ -4170,6 +4194,9 @@ html[data-theme="light"] {
   --metal-2: #e2e7e3;
   --metal-line: #2631291b;
   --metal-edge: #ffffffbb;
+  --panel-divider-edge: #e2e7e3;
+  --panel-divider-well: #858d85;
+  --panel-divider-hover-well: #a0aa87;
   --muted: #637069;
   --line: #26312918;
   --panel: #f6f8f6;
