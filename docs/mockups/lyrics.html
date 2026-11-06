@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HARBOR — текст песни</title>
+  <style>
+    @import url("../../src/client/fonts.css");
+    :root { color-scheme: dark; font-family: "Fira Sans Condensed", sans-serif; color: #dce2df; background: #141b1e; --accent: #bdc58f; --muted: #91a09b; --line: #ffffff10; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    button, input, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; border: 0; border-radius: 4px; background: transparent; padding: 9px 12px; }
+    button:hover { background: #ffffff09; }
+    button:disabled { opacity: .35; cursor: default; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    [hidden] { display: none !important; }
+    h1, h2, p { margin: 0; }
+    .shell { height: 100dvh; min-height: 520px; display: flex; flex-direction: column; }
+    .top { height: 66px; display: grid; place-items: center; border-bottom: 1px solid var(--line); color: #b8c5bc70; letter-spacing: 8px; font-size: 22px; }
+    .catalog { flex: 1; overflow: auto; padding: 48px max(28px, calc((100vw - 1000px) / 2)); background: radial-gradient(ellipse at 20% 0, #33514d55, transparent 65%); }
+    .album { display: flex; align-items: center; gap: 28px; margin-bottom: 36px; }
+    .art { width: 160px; aspect-ratio: 1; background: linear-gradient(155deg, #829688, #324b4a 45%, #15292d 46%, #4f6762 75%, #1a3136); box-shadow: 0 16px 35px #0005; }
+    h1 { font-size: 34px; font-weight: 400; margin: 8px 0; }
+    .muted { color: var(--muted); }
+    .track { display: grid; grid-template-columns: 24px 1fr 40px; gap: 16px; padding: 16px 12px; border-bottom: 1px solid var(--line); }
+    .track.active { color: var(--accent); background: #bdc58f0c; }
+    .track small { color: var(--muted); }
+    .player { min-height: 80px; display: flex; align-items: center; gap: 24px; padding: 16px 28px; border-top: 1px solid var(--line); background: #111a1d; }
+    .now { font-size: 15px; }
+    .now small { display: block; margin-top: 4px; color: var(--muted); }
+    .rail { flex: 1; height: 3px; background: #ffffff15; }
+    .rail::before { content: ""; display: block; width: 36%; height: 100%; background: var(--accent); }
+    .primary { color: var(--accent); background: #bdc58f17; }
+    dialog { color: inherit; background: #1b2527; border: 1px solid #ffffff18; border-radius: 9px; padding: 0; box-shadow: 0 28px 100px #0008; }
+    dialog::backdrop { background: #080f12a8; backdrop-filter: blur(5px); }
+    #lyrics { width: min(540px, calc(100vw - 32px)); max-height: min(780px, calc(100dvh - 48px)); }
+    .popup { display: flex; flex-direction: column; max-height: min(778px, calc(100dvh - 50px)); }
+    .heading { display: flex; align-items: center; gap: 12px; padding: 22px 24px 16px; }
+    .heading h2 { font-size: 23px; font-weight: 400; }
+    .heading p { font-size: 14px; color: var(--muted); margin-top: 5px; }
+    .heading > button { margin-left: auto; align-self: flex-start; color: var(--muted); }
+    .body { overflow: auto; min-height: 0; padding: 12px 32px 28px; }
+    #poem { white-space: pre-wrap; font-size: 19px; line-height: 1.9; }
+    .actions { display: flex; align-items: center; gap: 4px; padding: 12px 20px; border-top: 1px solid var(--line); }
+    .actions button { font-size: 14px; }
+    .actions .primary { margin-left: auto; }
+    .icon { width: 36px; height: 36px; display: inline-grid; place-items: center; padding: 8px; color: var(--muted); }
+    svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    input, textarea { min-width: 0; width: 100%; background: #111a1c; border: 1px solid #ffffff18; border-radius: 4px; padding: 10px 12px; }
+    form { display: grid; grid-template-columns: 1fr 1fr 38px; gap: 8px; margin-bottom: 20px; }
+    .result { width: 100%; display: block; text-align: left; padding: 14px 10px; border-bottom: 1px solid var(--line); border-radius: 0; }
+    .result strong { display: block; font-weight: 400; margin-bottom: 6px; }
+    .result small { color: var(--muted); }
+    textarea { height: 380px; line-height: 1.8; resize: vertical; }
+    #message { padding: 45px 0; color: var(--muted); text-align: center; }
+    #confirm { width: min(390px, calc(100vw - 32px)); padding: 24px; }
+    #confirm h2 { font-size: 22px; font-weight: 400; margin-bottom: 22px; }
+    .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+    @media (max-width: 600px) { .album { align-items: flex-start; gap: 16px; } .art { width: 90px; } h1 { font-size: 25px; } .catalog { padding: 28px 20px; } .player { gap: 16px; padding: 16px; } .heading { padding: 20px; } .body { padding: 12px 24px 24px; } .actions { padding: 12px; } form { grid-template-columns: 1fr 38px; } form input:first-child { grid-column: 1 / -1; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="top">HARBOR</header>
+    <main class="catalog">
+      <div class="album"><div class="art" aria-hidden="true"></div><div><p class="muted">Тихие гавани</p><h1>По ту сторону воды</h1><p class="muted">2025 · FLAC</p></div></div>
+      <div class="track"><small>1</small><span>Первый паром</span><small>3:42</small></div>
+      <div class="track active"><span>Ⅱ</span><span>Оставь маяк</span><small>4:18</small></div>
+      <div class="track"><small>3</small><span>На другом берегу</span><small>3:56</small></div>
+      <div class="track"><small>4</small><span>Письма к морю</span><small>5:02</small></div>
+      <div class="track"><small>5</small><span>Течение</span><small>2:47</small></div>
+    </main>
+    <footer class="player"><div class="now">Оставь маяк<small>Тихие гавани</small></div><div class="rail" aria-hidden="true"></div><button id="open" class="primary" aria-haspopup="dialog">Текст</button></footer>
+  </div>
+  <dialog id="lyrics" aria-labelledby="song-title">
+    <div class="popup">
+      <header class="heading"><div><h2 id="song-title">Оставь маяк</h2><p>Тихие гавани</p></div><button id="close" class="icon" aria-label="Закрыть">✕</button></header>
+      <div class="body">
+        <div id="reading"><div id="poem"></div></div>
+        <div id="search" hidden>
+          <form id="search-form">
+            <input id="artist" value="Тихие гавани" aria-label="Исполнитель" placeholder="Исполнитель" required>
+            <input id="title" value="Оставь маяк" aria-label="Название" placeholder="Название" required>
+            <button class="icon primary" aria-label="Найти в LRCLIB" title="Найти в LRCLIB"><svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg></button>
+          </form>
+          <div id="results" hidden>
+            <button class="result" data-result="0"><strong>Оставь маяк</strong><small>По ту сторону воды · 4:18</small></button>
+            <button class="result" data-result="1"><strong>Оставь маяк</strong><small>Сингл · 4:16</small></button>
+            <button class="result" data-result="2"><strong>Оставь маяк (Live)</strong><small>Концерт у воды · 5:07</small></button>
+          </div>
+          <p id="message" role="status" hidden></p>
+        </div>
+        <textarea id="draft" aria-label="Текст песни" hidden></textarea>
+      </div>
+      <footer class="actions">
+        <button id="find" class="icon" aria-label="Найти другой текст" title="Найти другой текст"><svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg></button>
+        <button id="edit" class="icon" aria-label="Редактировать текст" title="Редактировать текст"><svg viewBox="0 0 24 24"><path d="m4 16 12-12 4 4L8 20H4zM13 7l4 4"/></svg></button>
+        <button id="local" title="Сохранить в Harbor">В Harbor</button>
+        <button id="save" class="primary">В файл…</button>
+        <button id="cancel-edit" hidden>Отмена</button>
+        <button id="apply" class="primary" hidden>Готово</button>
+      </footer>
+    </div>
+  </dialog>
+  <dialog id="confirm" aria-labelledby="confirm-title">
+    <h2 id="confirm-title">Записать текст в файл?</h2>
+    <div class="confirm-actions"><button id="cancel-save">Отмена</button><button id="confirm-save" class="primary">Записать</button></div>
+  </dialog>
+  <script>
+    // Автономный макет: вымышленные данные, никаких сетевых запросов и записи файлов.
+    const $ = (id) => document.getElementById(id);
+    const demoText = `Пустой причал считает наши шаги,\nИ ветер прячет голоса в карманах.\nМы обещали друг друга беречь\nНа самых незнакомых меридианах.\n\nОставь маяк на той стороне,\nПусть свет ложится на тёмную воду.\nЯ возвращаюсь не к тишине —\nЯ возвращаюсь к нашему дому.\n\nВ окне качается далёкий огонь,\nИ ночь становится чуть-чуть короче.\nПускай ещё не виден горизонт,\nНо берег рядом — я знаю точно.`;
+    let text = demoText;
+    let embedded = false;
+    function view(mode) {
+      $("reading").hidden = mode !== "reading";
+      $("search").hidden = mode !== "search";
+      $("draft").hidden = mode !== "edit";
+      for (const id of ["find", "edit", "local", "save"]) $(id).hidden = mode === "edit";
+      for (const id of ["cancel-edit", "apply"]) $(id).hidden = mode !== "edit";
+      $("local").disabled = mode !== "reading" || !text.trim();
+      $("save").disabled = mode !== "reading" || !text.trim();
+      $("poem").textContent = text;
+    }
+    $("open").onclick = () => $("lyrics").showModal();
+    $("close").onclick = () => $("lyrics").close();
+    // Нажатие на затемнение закрывает только при начале и завершении жеста вне попапа.
+    let backdropStart = false;
+    $("lyrics").addEventListener("pointerdown", (event) => { backdropStart = event.target === $("lyrics"); });
+    $("lyrics").addEventListener("click", (event) => {
+      if (backdropStart && event.target === $("lyrics")) $("lyrics").close();
+      backdropStart = false;
+    });
+    $("find").onclick = () => {
+      view("search");
+      $("results").hidden = true;
+      $("message").hidden = true;
+      $("artist").focus();
+    };
+    $("search-form").onsubmit = (event) => {
+      event.preventDefault();
+      $("results").hidden = false;
+      $("message").hidden = true;
+      document.querySelector(".result").focus();
+    };
+    document.querySelectorAll("[data-result]").forEach((button) => {
+      button.onclick = () => {
+        text = demoText + (button.dataset.result === "2" ? "\n\nОставь маяк на той стороне…" : "");
+        $("local").textContent = "В Harbor";
+        $("save").textContent = "В файл…";
+        view("reading");
+        $("find").focus();
+      };
+    });
+    $("edit").onclick = () => { $("draft").value = text; view("edit"); $("draft").focus(); };
+    $("cancel-edit").onclick = () => view("reading");
+    $("apply").onclick = () => {
+      if (!$("draft").value.trim()) { $("draft").setCustomValidity("Введите текст"); $("draft").reportValidity(); return; }
+      text = $("draft").value;
+      $("local").textContent = "В Harbor";
+      $("save").textContent = "В файл…";
+      view("reading");
+      $("edit").focus();
+    };
+    $("draft").oninput = () => $("draft").setCustomValidity("");
+    $("local").onclick = () => { $("local").textContent = "Сохранено ✓"; };
+    $("save").onclick = () => {
+      $("confirm-title").textContent = embedded ? "Заменить текст в файле?" : "Записать текст в файл?";
+      $("confirm").showModal();
+    };
+    $("cancel-save").onclick = () => $("confirm").close();
+    $("confirm-save").onclick = () => {
+      embedded = true;
+      $("confirm").close();
+      $("save").textContent = "Записано ✓";
+    };
+    view("reading");
+    $("lyrics").showModal();
+  </script>
+</body>
+</html>

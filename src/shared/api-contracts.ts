@@ -15,6 +15,11 @@ import { scanSettingsSchema } from "./scan-settings.js";
 import { recoveryStatusSchema } from "./recovery-settings.js";
 import { encodingAnalysisSchema } from "./tag-encoding.js";
 import {
+  automaticLyricsSchema,
+  lyricsCandidatesSchema,
+  trackLyricsSchema,
+} from "./lyrics.js";
+import {
   pulseSettingsSchema,
   pulseHistoryRangeSchema,
   pulseLayoutSchema,
@@ -337,6 +342,11 @@ export const apiResponseSchemas = {
 
 /** Returns the JSON contract for a successful client API response. */
 export function apiResponseContract(method: string, pathname: string) {
+  if (/^\/api\/tracks\/[^/]+\/lyrics\/(auto|fill)$/.test(pathname))
+    return automaticLyricsSchema;
+  if (pathname === "/api/lyrics/search") return lyricsCandidatesSchema;
+  if (/^\/api\/tracks\/[^/]+\/lyrics$/.test(pathname))
+    return method === "GET" ? trackLyricsSchema : okSchema;
   if (pathname === "/api/session") return sessionResponseSchema;
   if (pathname === "/api/metadata/encoding/analyze")
     return encodingAnalysisSchema;

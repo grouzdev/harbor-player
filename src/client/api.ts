@@ -114,6 +114,7 @@ export const fieldLabels: Record<string, string> = {
   trackNumber: "Номер трека",
   discNumber: "Номер диска",
   cover: "Обложка",
+  lyrics: "Текст песни",
 };
 export const operationLabels = {
   move: "Перенос",

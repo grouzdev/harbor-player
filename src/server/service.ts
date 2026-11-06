@@ -29,6 +29,7 @@ import { errorMessage, inside } from "./config.js";
 import { badRequest, conflict, unavailable } from "./http-error.js";
 import { LibraryScanner } from "./library-scanner.js";
 import { readTrack } from "./metadata.js";
+import { readEmbeddedLyrics } from "./lyrics.js";
 import { normalizedAlbumFolder } from "./album-identity.js";
 import { MusicBrainzService, type MusicBrainzOptions } from "./musicbrainz.js";
 import {
@@ -535,6 +536,21 @@ export class MusicService extends EventEmitter {
   ): Promise<OperationPreview> {
     return this.operations.preview(...args);
   }
+  async previewMissingLyrics(
+    trackId: string,
+    text: string,
+  ): Promise<OperationPreview> {
+    const op = await this.preview(
+      "tags",
+      { trackIds: [trackId] },
+      undefined,
+      { lyrics: text },
+      false,
+    );
+    op.lyricsOnlyIfMissing = true;
+    this.catalog.saveOperation(op);
+    return op;
+  }
   private async previewInternal(
     kind: Exclude<OperationKind, "restore">,
     selection: Selection,
@@ -807,6 +823,14 @@ export class MusicService extends EventEmitter {
                 );
               if (
                 kind === "tags" &&
+                this.effectiveTagPatch(op, item).lyrics !== undefined &&
+                !["mp3", "flac"].includes(track.format)
+              )
+                throw new Error(
+                  "Запись текста поддерживается только для MP3 и FLAC",
+                );
+              if (
+                kind === "tags" &&
                 Object.keys(this.effectiveTagPatch(op, item)).length > 0 &&
                 !this.capabilities.writableFormats.includes(track.format)
               )
@@ -1023,7 +1047,8 @@ export class MusicService extends EventEmitter {
       itemPatches,
       original.coverTrackIds?.filter((trackId) => trackIds.includes(trackId)),
     );
-    if (original.intent) {
+    if (original.lyricsOnlyIfMissing) retry.lyricsOnlyIfMissing = true;
+    if (original.intent || original.lyricsOnlyIfMissing) {
       retry.intent = original.intent;
       this.catalog.saveOperation(retry);
     }
@@ -1253,6 +1278,14 @@ export class MusicService extends EventEmitter {
       try {
         if ((await this.fingerprint(stage, "stage")).hash !== item.hash)
           throw new Error("Временная копия не прошла проверку");
+        if (
+          op.lyricsOnlyIfMissing &&
+          ((item.trackId && this.catalog.localLyrics(item.trackId)?.trim()) ||
+            (await readEmbeddedLyrics(stage)))
+        )
+          throw new Error(
+            "Текст уже появился. Автоматическая замена отменена.",
+          );
         if (op.kind === "tags")
           await this.tagWriter.write(stage, this.effectiveTagPatch(op, item));
         item.producedHash = (await this.fingerprint(stage, "stage")).hash;
@@ -1282,6 +1315,14 @@ export class MusicService extends EventEmitter {
           item.restoreExpectedHash
         )
           throw new Error("Файл изменился перед заменой");
+        if (
+          op.lyricsOnlyIfMissing &&
+          item.trackId &&
+          this.catalog.localLyrics(item.trackId)?.trim()
+        )
+          throw new Error(
+            "Текст уже появился. Автоматическая замена отменена.",
+          );
         // rename replaces atomically on the local filesystem; the original is already backed up.
         await rename(stage, item.destination);
         item.phase = "copied";
@@ -1384,6 +1425,13 @@ export class MusicService extends EventEmitter {
         );
         if (!track) throw new Error("Обработчик не вернул данные трека");
         this.catalog.upsert(track);
+        // A previous local choice must not shadow a newer, explicitly saved text.
+        const lyrics =
+          op.kind === "tags"
+            ? this.effectiveTagPatch(op, item).lyrics
+            : undefined;
+        if (lyrics !== undefined && this.catalog.localLyrics(old.id) !== null)
+          this.catalog.saveLocalLyrics(old.id, lyrics);
       } catch (error) {
         const restoringTags =
           op.kind === "restore" &&

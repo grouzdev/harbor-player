@@ -22,6 +22,9 @@ import type {
   Track,
 } from "../shared/contracts.js";
 import { MusicService } from "./service.js";
+import { LyricsSearch, readEmbeddedLyrics } from "./lyrics.js";
+import { AutomaticLyricsService } from "./automatic-lyrics.js";
+import { lyricsSearchSchema, lyricsTextSchema } from "../shared/lyrics.js";
 import { errorMessage } from "./config.js";
 import { normalizeWebpCover } from "./cover-image.js";
 import { analyzeTagEncoding } from "./tag-encoding.js";
@@ -90,6 +93,7 @@ type AppOptions = {
   openExplorer?: ExplorerLauncher;
   musicBrainz?: MusicBrainzOptions;
   tagWriter?: TagWriter;
+  lyricsFetch?: typeof fetch;
 };
 export async function createApp(options: AppOptions) {
   const app = Fastify({
@@ -122,6 +126,8 @@ async function configureApp(
 ) {
   const scanScheduler = new AutoScanScheduler(service);
   const openExplorer = options.openExplorer || openInExplorer;
+  const lyricsSearch = new LyricsSearch(options.lyricsFetch);
+  const automaticLyrics = new AutomaticLyricsService(service, lyricsSearch);
   await service.initialize();
   const port = options.port ?? 4317;
   const hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
@@ -464,6 +470,62 @@ async function configureApp(
       service.catalog.track(idParam.parse(request.params).id) ||
       reply.code(404).send({ error: "Трек не найден" }),
   );
+  app.get("/api/tracks/:id/lyrics", async (request) => {
+    const id = idParam.parse(request.params).id;
+    const track = service.catalog.track(id);
+    if (!track) throw notFound("Трек не найден");
+    const local = service.catalog.localLyrics(id);
+    let embedded: string | null = null;
+    let readable = track.available;
+    if (track.available) {
+      const file = path.join(
+        service.catalog.library(track.libraryId).path,
+        track.relativePath,
+      );
+      try {
+        await service.safePath(file);
+        embedded = await readEmbeddedLyrics(file);
+      } catch (error) {
+        if (local === null) throw error;
+        readable = false;
+      }
+    }
+    return {
+      local,
+      embedded,
+      writable:
+        readable &&
+        ["mp3", "flac"].includes(track.format) &&
+        service.capabilities.writableFormats.includes(track.format),
+    };
+  });
+  app.post("/api/tracks/:id/lyrics", async (request) => {
+    const id = idParam.parse(request.params).id;
+    if (!service.catalog.track(id)) throw notFound("Трек не найден");
+    const { text } = z
+      .object({ text: lyricsTextSchema })
+      .strict()
+      .parse(request.body);
+    service.catalog.saveLocalLyrics(id, text);
+    return { ok: true };
+  });
+  app.post("/api/lyrics/search", async (request) => {
+    const { artist, title } = lyricsSearchSchema.parse(request.body);
+    return lyricsSearch.search(artist, title);
+  });
+  app.post("/api/tracks/:id/lyrics/auto", async (request) => {
+    z.object({}).strict().parse(request.body);
+    return automaticLyrics.open(idParam.parse(request.params).id);
+  });
+  app.post("/api/tracks/:id/lyrics/fill", async (request) => {
+    const { text } = z
+      .object({
+        text: lyricsTextSchema.refine((value) => Boolean(value.trim())),
+      })
+      .strict()
+      .parse(request.body);
+    return automaticLyrics.fill(idParam.parse(request.params).id, text);
+  });
   app.post("/api/explorer", async (request) => {
     const body = z
       .object({

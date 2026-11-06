@@ -405,7 +405,7 @@ export class MusicBrainzService {
           warning: "Трек не удалось надёжно сопоставить с выбранным изданием.",
         };
       const candidate = remote[found.index];
-      const patch: PerTrackTagPatch = {};
+      const patch: Omit<PerTrackTagPatch, "lyrics"> = {};
       if (candidate.title) patch.title = candidate.title;
       if (candidate.artists.length) patch.artists = candidate.artists;
       if (release.title) patch.albumTitle = release.title;
@@ -415,7 +415,7 @@ export class MusicBrainzService {
       if (candidate.trackNumber) patch.trackNumber = candidate.trackNumber;
       if (candidate.discNumber) patch.discNumber = candidate.discNumber;
       const changedFields = (
-        Object.keys(patch) as (keyof PerTrackTagPatch)[]
+        Object.keys(patch) as (keyof typeof patch)[]
       ).filter(
         (field) =>
           JSON.stringify(track[field]) !== JSON.stringify(patch[field]),

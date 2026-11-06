@@ -26,6 +26,7 @@ const fields: Record<string, string[]> = {
   year: ["year", "date"],
   trackNumber: ["track"],
   discNumber: ["disk"],
+  lyrics: ["lyrics"],
   cover: ["picture"],
 };
 
@@ -86,6 +87,11 @@ function unchangedCommon(
 
 /** Loaded only in the short-lived child process: node-taglib-sharp must never share state between files. */
 export async function writeTags(file: string, patch: TagPatch): Promise<void> {
+  if (
+    patch.lyrics !== undefined &&
+    ![".mp3", ".flac"].includes(path.extname(file).toLowerCase())
+  )
+    throw new Error("Запись текста поддерживается только для MP3 и FLAC");
   if (patch.cover) {
     const data = Buffer.from(patch.cover.data, "base64");
     const png = data
@@ -137,6 +143,7 @@ export async function writeTags(file: string, patch: TagPatch): Promise<void> {
         tagged.tag.track = patch.trackNumber || 0;
       if (patch.discNumber !== undefined)
         tagged.tag.disc = patch.discNumber || 0;
+      if (patch.lyrics !== undefined) tagged.tag.lyrics = patch.lyrics;
       if (path.extname(file).toLowerCase() === ".m4a") {
         const apple = tagged.getTag(TagTypes.Apple, true) as Mpeg4AppleTag;
         for (const [values, box] of [
@@ -195,6 +202,8 @@ export async function writeTags(file: string, patch: TagPatch): Promise<void> {
     year: c.year || null,
     trackNumber: c.track.no || null,
     discNumber: c.disk.no || null,
+    lyrics:
+      c.lyrics?.find((entry) => entry.text)?.text?.replace(/^\uFEFF/, "") || "",
   };
   for (const [key, value] of Object.entries(patch)) {
     if (key === "cover") {
@@ -223,6 +232,7 @@ export async function writeTags(file: string, patch: TagPatch): Promise<void> {
       year: ["TYER", "TDRC", "DATE", "YEAR", "©day", "ICRD"],
       trackNumber: ["TRCK", "TRACKNUMBER", "TRACK", "trkn", "ITRK", "IPRT"],
       discNumber: ["TPOS", "DISCNUMBER", "DISC", "disk"],
+      lyrics: ["USLT", "LYRICS"],
       cover: ["APIC", "METADATA_BLOCK_PICTURE", "covr"],
     };
     return nativeFields[key] || [];

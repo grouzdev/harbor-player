@@ -46,6 +46,7 @@ import {
   EyeOff,
   Star,
   Tag,
+  Text,
   Trash2,
   X,
 } from "lucide-react";
@@ -181,6 +182,10 @@ const AlbumMergeDialog = lazy(() =>
   import("./AlbumMergeDialog").then((module) => ({
     default: module.AlbumMergeDialog,
   })),
+);
+
+const LyricsDialog = lazy(() =>
+  import("./LyricsDialog").then((module) => ({ default: module.LyricsDialog })),
 );
 
 function LazyDialogFallback() {
@@ -627,6 +632,7 @@ export function App() {
   const [droppedCover, setDroppedCover] = useState<DroppedCover | null>(null);
   const [toast, setToast] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [lyricsTrack, setLyricsTrack] = useState<Track | null>(null);
   const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
   const [playlistForSettings, setPlaylistForSettings] =
     useState<Playlist | null>(null);
@@ -1578,6 +1584,25 @@ export function App() {
         x: event.clientX,
         y: event.clientY,
         items: [
+          ...(kind === "track"
+            ? [
+                {
+                  label: "Текст",
+                  icon: <Text size={16} />,
+                  onSelect: async () => {
+                    try {
+                      setLyricsTrack(
+                        await api<Track>(`/tracks/${encodeURIComponent(id)}`),
+                      );
+                    } catch (error) {
+                      notify(
+                        error instanceof Error ? error.message : String(error),
+                      );
+                    }
+                  },
+                },
+              ]
+            : []),
           ...(kind === "artist" || kind === "album"
             ? [
                 {
@@ -3841,7 +3866,17 @@ export function App() {
         coverModeAvailable={canOpenCoverMode}
         onUserStateChange={changeUserState}
         pendingUserStateKeys={pendingUserStateKeys}
+        onOpenLyrics={setLyricsTrack}
       />
+      {lyricsTrack && (
+        <Suspense fallback={null}>
+          <LyricsDialog
+            key={lyricsTrack.id}
+            track={lyricsTrack}
+            onClose={() => setLyricsTrack(null)}
+          />
+        </Suspense>
+      )}
       <ContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
       {playlistForSettings && (
         <PlaylistSettingsDialog

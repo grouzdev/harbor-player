@@ -1,6 +1,6 @@
 export class HttpError extends Error {
   constructor(
-    readonly statusCode: 400 | 404 | 409 | 503,
+    readonly statusCode: 400 | 404 | 409 | 429 | 502 | 503,
     message: string,
   ) {
     super(message);

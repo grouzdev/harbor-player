@@ -39,12 +39,22 @@ the background and opens the Releases page only on explicit user request.
 MusicBrainz search runs only after the user selects Search: the service receives
 the title and artist entered by the user. After a release is selected, the
 application may request its artwork from Cover Art Archive. Results are cached
-locally. All other catalog work, playback, editing, and file operations require
-no network access.
+locally.
+
+При открытии попапа без сохранённого текста запускается поиск в LRCLIB:
+сервис получает исполнителя и название, а также обычные данные HTTPS,
+включая IP-адрес. Музыкальные файлы не передаются. Однозначный результат
+автоматически записывается в теги MP3/FLAC, существующий текст не заменяется.
+При неоднозначности пользователь выбирает вариант, затем он сохраняется.
+Уже сохранённый текст читается без сети. Доступен также ручной поиск.
+Результаты поиска кешируются в памяти на пять минут.
+Остальная работа с каталогом, воспроизведение и файловые операции не требуют сети.
+Условия лицензирования самих текстов для публичного выпуска требуют уточнения.
 
 Third-party policies: [GitHub Privacy Statement](https://docs.github.com/site-policy/privacy-policies/github-privacy-statement),
 [MusicBrainz](https://musicbrainz.org/doc/MusicBrainz_API), and
-[Cover Art Archive](https://musicbrainz.org/doc/Cover_Art_Archive).
+[Cover Art Archive](https://musicbrainz.org/doc/Cover_Art_Archive),
+[LRCLIB API](https://lrclib.net/docs.txt).
 
 ## System changes and uninstallation
 

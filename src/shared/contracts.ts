@@ -160,6 +160,7 @@ export const tagPatchSchema = z
     year: z.number().int().min(0).max(9999).nullable().optional(),
     trackNumber: z.number().int().min(0).max(99999).nullable().optional(),
     discNumber: z.number().int().min(0).max(9999).nullable().optional(),
+    lyrics: z.string().max(100_000).optional(),
     cover: z
       .object({
         data: z.string().max(14_000_000),
@@ -220,6 +221,7 @@ export const operationPreviewSchema = z
     items: z.array(operationItemSchema),
     patch: tagPatchSchema.optional(),
     coverTrackIds: z.array(z.string()).optional(),
+    lyricsOnlyIfMissing: z.boolean().optional(),
     targetLibraryId: z.string().optional(),
     restoreOf: z.string().optional(),
     recoverable: z.boolean().optional(),

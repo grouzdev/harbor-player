@@ -183,6 +183,21 @@ export class Catalog {
       throw error;
     }
   }
+  localLyrics(trackId: string): string | null {
+    const row = this.db
+      .prepare("SELECT text FROM track_lyrics WHERE trackId=?")
+      .get(trackId) as { text: string } | undefined;
+    return row?.text ?? null;
+  }
+  saveLocalLyrics(trackId: string, text: string): void {
+    if (!this.track(trackId)) throw new Error("Трек не найден");
+    this.db
+      .prepare(
+        `INSERT INTO track_lyrics(trackId,text) VALUES (?,?)
+      ON CONFLICT(trackId) DO UPDATE SET text=excluded.text`,
+      )
+      .run(trackId, text);
+  }
   libraries(filter: CatalogFilter = emptyFilter): Library[] {
     const { sql, args } = this.where(filter);
     const search = searchKey(filter.search.trim());

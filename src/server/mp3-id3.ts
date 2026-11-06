@@ -223,6 +223,26 @@ function textFrame(id: string, values: string[], version: Version) {
   return frame(id, body, version);
 }
 
+function lyricsFrame(text: string, version: Version) {
+  return frame(
+    "USLT",
+    version === 4
+      ? Buffer.concat([
+          Buffer.from([3]),
+          Buffer.from("und"),
+          Buffer.from([0]),
+          Buffer.from(text, "utf8"),
+        ])
+      : Buffer.concat([
+          Buffer.from([1]),
+          Buffer.from("und"),
+          Buffer.from([255, 254, 0, 0, 255, 254]),
+          Buffer.from(text, "utf16le"),
+        ]),
+    version,
+  );
+}
+
 function frontCover(frameBytes: Buffer, version: Version) {
   if (frameBytes.subarray(0, 4).toString("latin1") !== "APIC") return false;
   const size =
@@ -384,6 +404,7 @@ export async function writeMp3TagsLosslessly(
     let current = frames(data, offset, tag).filter((entry) => {
       const id = entry.subarray(0, 4).toString("latin1");
       return (
+        !(patch.lyrics !== undefined && id === "USLT") &&
         !replace.has(id) &&
         !(patch.cover !== undefined && frontCover(entry, tag.version))
       );
@@ -411,6 +432,7 @@ export async function writeMp3TagsLosslessly(
           ];
       current.push(textFrame(id, values, tag.version));
     }
+    if (patch.lyrics) current.push(lyricsFrame(patch.lyrics, tag.version));
     if (patch.cover) current.push(coverFrame(patch.cover, tag.version));
     const body = Buffer.concat(current);
     const padding = Buffer.alloc(Math.max(1024, 4096 - body.length));

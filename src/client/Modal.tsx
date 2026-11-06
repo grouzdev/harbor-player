@@ -15,6 +15,8 @@ export function Modal({
   onClose,
   wide = false,
   onKeyDown,
+  className = "",
+  closeOnBackdrop = false,
 }: {
   title: string;
   subtitle?: string;
@@ -22,9 +24,12 @@ export function Modal({
   onClose: () => void;
   wide?: boolean;
   onKeyDown?: KeyboardEventHandler<HTMLDialogElement>;
+  className?: string;
+  closeOnBackdrop?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const backdropStart = useRef(false);
   useEffect(() => {
     const dialog = ref.current!;
     const opener = document.activeElement;
@@ -44,7 +49,19 @@ export function Modal({
   return (
     <dialog
       ref={ref}
-      className={wide ? "modal wide" : "modal"}
+      className={`${wide ? "modal wide" : "modal"} ${className}`.trim()}
+      onPointerDown={(event) => {
+        backdropStart.current = event.target === event.currentTarget;
+      }}
+      onClick={(event) => {
+        if (
+          closeOnBackdrop &&
+          backdropStart.current &&
+          event.target === event.currentTarget
+        )
+          onClose();
+        backdropStart.current = false;
+      }}
       aria-labelledby={titleId}
       tabIndex={-1}
       onKeyDown={onKeyDown}

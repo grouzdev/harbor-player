@@ -47,6 +47,8 @@ export async function writeId3InPlace(
 ): Promise<{ fast: boolean; reason?: string }> {
   if (patch.cover !== undefined)
     return { fast: false, reason: "обложка обрабатывается отдельно" };
+  if (patch.lyrics !== undefined)
+    return { fast: false, reason: "текст записывается с полной проверкой" };
   // A genre edit must update every existing ID3 representation (including a
   // possible second ID3v2 tag and ID3v1). The fixed-size writer only sees the
   // first ID3v2 block, so use the verified full writer for genre changes.

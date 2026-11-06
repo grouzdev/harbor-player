@@ -120,6 +120,26 @@ for (const browser of ["chrome", "edge"]) {
 const { app } = await createApp({
   dataDir: path.join(root, "data"),
   port: 4327,
+  // Browser tests never send track metadata to the real lyrics provider.
+  lyricsFetch: async (input) => {
+    const title = new URL(input).searchParams.get("track_name");
+    const base = {
+      id: 100,
+      trackName: title,
+      artistName: "Исполнитель",
+      albumName: "Тестовый альбом",
+      duration: 3,
+      instrumental: false,
+      plainLyrics: "Автоматически найденный текст",
+    };
+    return Response.json(
+      title === "Автопесня"
+        ? [base]
+        : title === "Неоднозначная песня"
+          ? [base, { ...base, id: 101, plainLyrics: "Другой текст" }]
+          : [],
+    );
+  },
   musicBrainz: {
     fetch: musicBrainzFetch,
     apiBase: "https://musicbrainz.test/ws/2",

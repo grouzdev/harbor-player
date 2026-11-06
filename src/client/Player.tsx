@@ -9,6 +9,7 @@ import {
   SkipForward,
   Volume2,
   VolumeX,
+  Text,
 } from "lucide-react";
 import { CoverPlaceholder } from "./CoverPlaceholder";
 import type { CatalogFilter, Track } from "../shared/contracts";
@@ -520,6 +521,7 @@ export function Player({
   coverModeAvailable,
   onUserStateChange,
   pendingUserStateKeys,
+  onOpenLyrics,
 }: {
   player: ReturnType<typeof usePlayer>;
   onNavigateToAlbum: (albumId: string, albumArtists: string[]) => void;
@@ -529,6 +531,7 @@ export function Player({
   coverModeAvailable: boolean;
   onUserStateChange: UserStateChange;
   pendingUserStateKeys: Set<string>;
+  onOpenLyrics: (track: Track) => void;
 }) {
   const track = player.queue?.track;
   const albumArtists = track?.albumArtists.length
@@ -610,6 +613,15 @@ export function Player({
               onChange={onUserStateChange}
             />
           )}
+          <button
+            className="icon-button player-lyrics-button"
+            aria-label="Текст песни"
+            title="Текст песни"
+            disabled={!track}
+            onClick={() => track && onOpenLyrics(track)}
+          >
+            <Text size={18} />
+          </button>
         </div>
         <div className="transport">
           <div className="transport-buttons">
