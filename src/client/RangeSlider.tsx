@@ -133,11 +133,12 @@ export function RangeSlider(props: RangeSliderProps) {
       if (!slider) return props.value;
       return valueAtRatio(ratioAtPointer(event, slider));
     };
-    const beginSingleDrag = (event: PointerEvent<HTMLSpanElement>) => {
+    const beginSingleDrag = (event: PointerEvent<HTMLDivElement>) => {
       const slider = sliderRef.current;
-      if (props.disabled || !slider) return;
+      if (props.disabled || !slider || event.button !== 0) return;
       event.preventDefault();
       event.stopPropagation();
+      slider.querySelector("input")?.focus({ preventScroll: true });
       slider.setPointerCapture(event.pointerId);
       setIsSingleDragging(true);
       props.onChange(valueAtPointer(event));
@@ -151,6 +152,8 @@ export function RangeSlider(props: RangeSliderProps) {
         }
         onPointerEnter={showPreview}
         onPointerLeave={leavePreview}
+        onPointerDown={beginSingleDrag}
+        onLostPointerCapture={() => setIsSingleDragging(false)}
         onPointerMove={(event) => {
           showPreview(event);
           if (
@@ -193,7 +196,6 @@ export function RangeSlider(props: RangeSliderProps) {
             } as CSSProperties
           }
           aria-hidden="true"
-          onPointerDown={beginSingleDrag}
         />
         {bubble}
       </div>

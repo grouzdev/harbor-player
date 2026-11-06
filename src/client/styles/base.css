@@ -1209,7 +1209,7 @@ body.selection-dragging * {
 }
 .range-slider::before {
   position: absolute;
-  top: 6.5px;
+  top: calc(50% - 2.5px);
   right: var(--range-end);
   left: var(--range-start);
   height: 5px;
@@ -1246,6 +1246,24 @@ body.selection-dragging * {
   width: clamp(64px, 7vw, 104px);
   min-width: 64px;
   flex: 0 1 auto;
+}
+.player .transport,
+.player .seek,
+.player .volume,
+.player .range-slider {
+  height: 100%;
+}
+.player .range-slider {
+  border-radius: 0;
+}
+.range-slider--single {
+  touch-action: none;
+}
+.range-slider--single:has(input:disabled) {
+  cursor: default;
+}
+.range-slider--single:has(input:disabled) .range-slider-thumb {
+  cursor: default;
 }
 .queue-count {
   font-size: var(--type-caption);
@@ -4032,7 +4050,7 @@ input[type="range"] {
   background: transparent;
 }
 
-.range-slider:has(input:hover),
+.range-slider--single:has(input:enabled):hover,
 .range-slider:has(input:focus-visible),
 .range-slider--double.is-hovered {
   filter: drop-shadow(0 0 4px #c3dbc17a);
@@ -4053,7 +4071,7 @@ input[type="range"] {
   background: transparent;
 }
 
-.range-slider--double .range-slider-input {
+.range-slider .range-slider-input {
   opacity: 0;
   pointer-events: none;
 }
@@ -4096,10 +4114,8 @@ input[type="range"] {
   cursor: grab;
 }
 
-.range-slider-input:hover::-webkit-slider-thumb,
-.range-slider-input:focus-visible::-webkit-slider-thumb,
-.range-slider-input:hover::-moz-range-thumb,
-.range-slider-input:focus-visible::-moz-range-thumb {
+.range-slider--single:has(input:enabled):hover .range-slider-thumb,
+.range-slider--single:has(input:focus-visible) .range-slider-thumb {
   box-shadow: 0 0 5px #c3dbc18a;
 }
 
