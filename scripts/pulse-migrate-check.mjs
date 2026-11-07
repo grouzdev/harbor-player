@@ -19,10 +19,12 @@ await mkdir(testRoot, { recursive: true });
 const root = await mkdtemp(path.join(testRoot, "pulse-real-v12-"));
 const copy = path.join(root, "data");
 await mkdir(copy);
+// Compare v12 catalog tables exactly; separately verify tables added by later
+// migrations. Their existence is not a mutation of the original catalog rows.
 const tables = (db) =>
   db
     .prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'pulse_%' AND name != 'operation_history_hidden' ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'pulse_%' AND name NOT IN ('operation_history_hidden', 'track_lyrics') ORDER BY name",
     )
     .all()
     .map((row) => row.name);
@@ -32,7 +34,7 @@ const digest = (db) => {
     JSON.stringify(
       db
         .prepare(
-          "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE tbl_name NOT LIKE 'pulse_%' AND tbl_name != 'operation_history_hidden' ORDER BY type,name",
+          "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE tbl_name NOT LIKE 'pulse_%' AND tbl_name NOT IN ('operation_history_hidden', 'track_lyrics') ORDER BY type,name",
         )
         .all(),
     ),
@@ -102,6 +104,7 @@ try {
           db.prepare("SELECT * FROM operation_history_hidden").all(),
           [],
         );
+        assert.deepEqual(db.prepare("SELECT * FROM track_lyrics").all(), []);
         integrity(db);
         assert.equal(
           digest(db),

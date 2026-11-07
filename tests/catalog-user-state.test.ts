@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { Catalog } from "../dist/server/database.js";
+import { catalogSchemaVersion } from "../dist/server/catalog-migrations.js";
 import { emptyFilter, type Track } from "../src/shared/contracts.js";
 
 let root: string;
@@ -227,7 +228,9 @@ describe("catalog user state", () => {
     db.close();
     catalog = new Catalog(root);
     const migrated = (catalog as unknown as { db: Database.Database }).db;
-    expect(migrated.pragma("user_version", { simple: true })).toBe(14);
+    expect(migrated.pragma("user_version", { simple: true })).toBe(
+      catalogSchemaVersion,
+    );
     expect(() =>
       migrated
         .prepare("INSERT INTO catalog_user_state VALUES ('track','x',6,0)")

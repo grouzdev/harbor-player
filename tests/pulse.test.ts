@@ -12,6 +12,7 @@ import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import type Database from "better-sqlite3";
 import { Catalog } from "../dist/server/database.js";
+import { catalogSchemaVersion } from "../dist/server/catalog-migrations.js";
 import { splitPulseInterval } from "../dist/server/pulse.js";
 import { createApp } from "../dist/server/app.js";
 import type { PulseEvent } from "../src/shared/pulse.js";
@@ -675,7 +676,9 @@ describe("Pulse storage", () => {
   );
 
   it("migrates to the current version and retains exact milliseconds through retries and checkpoints", async () => {
-    expect(db().pragma("user_version", { simple: true })).toBe(14);
+    expect(db().pragma("user_version", { simple: true })).toBe(
+      catalogSchemaVersion,
+    );
     const albumId = (await send(event())).acknowledgements[0].albumId;
     await send(event());
     await send(

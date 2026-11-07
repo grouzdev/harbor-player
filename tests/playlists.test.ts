@@ -3,6 +3,7 @@ import Database from "better-sqlite3";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Catalog } from "../dist/server/database.js";
+import { catalogSchemaVersion } from "../dist/server/catalog-migrations.js";
 import type { Track } from "../src/shared/contracts.js";
 import {
   parsePlaylistFile,
@@ -361,7 +362,7 @@ describe("playlists", () => {
         "user_version",
         { simple: true },
       ),
-    ).toBe(14);
+    ).toBe(catalogSchemaVersion);
   });
 
   it("retains unavailable entries and reports them", () => {

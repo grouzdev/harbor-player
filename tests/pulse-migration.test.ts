@@ -26,7 +26,7 @@ let baselineSchema: unknown;
 const snapshot = (db: Database.Database) => {
   const tables = db
     .prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'pulse_%' AND name != 'operation_history_hidden' ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'pulse_%' AND name NOT IN ('operation_history_hidden', 'track_lyrics') ORDER BY name",
     )
     .all() as { name: string }[];
   return Object.fromEntries(
@@ -40,11 +40,13 @@ const check = (db: Database.Database, version: number) => {
   expect(db.pragma("user_version", { simple: true })).toBe(version);
   expect(db.pragma("integrity_check")).toEqual([{ integrity_check: "ok" }]);
   expect(db.pragma("foreign_key_check")).toEqual([]);
+  if (version >= 15)
+    expect(db.prepare("SELECT * FROM track_lyrics").all()).toEqual([]);
   expect(snapshot(db)).toEqual(baseline);
   expect(
     db
       .prepare(
-        "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE tbl_name NOT LIKE 'pulse_%' AND tbl_name != 'operation_history_hidden' ORDER BY type,name",
+        "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE tbl_name NOT LIKE 'pulse_%' AND tbl_name NOT IN ('operation_history_hidden', 'track_lyrics') ORDER BY type,name",
       )
       .all(),
   ).toEqual(baselineSchema);

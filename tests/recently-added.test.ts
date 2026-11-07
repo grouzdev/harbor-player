@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { Catalog } from "../dist/server/database.js";
+import { catalogSchemaVersion } from "../dist/server/catalog-migrations.js";
 import { emptyFilter, type Track } from "../src/shared/contracts.js";
 
 let root: string;
@@ -55,7 +56,9 @@ describe("recently added catalog filter", () => {
 
     catalog = new Catalog(root);
     const db = (catalog as unknown as { db: Database.Database }).db;
-    expect(db.pragma("user_version", { simple: true })).toBe(14);
+    expect(db.pragma("user_version", { simple: true })).toBe(
+      catalogSchemaVersion,
+    );
     expect(
       (db.pragma("table_info(tracks)") as { name: string }[]).map(
         (column) => column.name,
