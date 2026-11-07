@@ -1,5 +1,5 @@
 import path from "node:path";
-import { copyFile, mkdir } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp } from "node:fs/promises";
 import { test, expect, type Page } from "./fixtures";
 
 async function flush(page: Page) {
@@ -170,12 +170,10 @@ test("restores playback seconds paused and does not reopen settings", async ({
 test("restores a virtualized track anchor after slow loading and a window resize", async ({
   page,
 }, info) => {
-  const source = path.resolve(
-    ".test-data/browser",
-    info.project.name,
-    "session-scroll",
+  const source = await mkdtemp(
+    path.resolve(".test-data/browser", info.project.name, "session-scroll-"),
   );
-  await mkdir(source, { recursive: true });
+  const name = `Session scroll ${info.project.name} ${path.basename(source)}`;
   await Promise.all(
     Array.from({ length: 160 }, (_, index) =>
       copyFile(
@@ -187,13 +185,12 @@ test("restores a virtualized track anchor after slow loading and a window resize
   await page.goto("/");
   await page.locator(".add-library").click();
   await page.getByLabel("Путь к папке", { exact: true }).fill(source);
-  await page
-    .getByLabel("Название библиотеки")
-    .fill(`Session scroll ${info.project.name}`);
+  await page.getByLabel("Название библиотеки").fill(name);
   await page.getByRole("button", { name: "Подключить", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await page
     .locator(".libraries-panel .list-tile-main")
-    .filter({ hasText: `Session scroll ${info.project.name}` })
+    .filter({ hasText: name })
     .click();
   const surface = page.locator(".tracks-panel .selection-surface");
   await expect
@@ -205,6 +202,21 @@ test("restores a virtualized track anchor after slow loading and a window resize
   await expect
     .poll(() => surface.evaluate((node) => node.scrollTop))
     .toBe(1400);
+  // scrollTop changes synchronously; the virtualizer mounts the new viewport
+  // on a later frame. Do not checkpoint the gap between those two operations.
+  await expect
+    .poll(() =>
+      surface.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return [
+          ...node.querySelectorAll<HTMLElement>("[data-selection-key]"),
+        ].some((item) => {
+          const row = item.getBoundingClientRect();
+          return row.bottom > box.top && row.top < box.bottom;
+        });
+      }),
+    )
+    .toBe(true);
   await flush(page);
   const position = (await saved(page)).catalog.positions.find(
     (p: { id: string }) => p.id === "tracks",
