@@ -423,9 +423,23 @@ test("Pulse bounds busy-day DOM and supports wheel, drag and year navigation", a
     .toBeGreaterThan(initial);
   const bounds = (await rail.boundingBox())!;
   const afterWheel = await rail.evaluate((element) => element.scrollLeft);
-  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + 20);
+  // The top of a busy day can contain a cover. Drag the empty date-axis area,
+  // not an album button (which deliberately owns clicks instead of panning).
+  const dragY = bounds.y + bounds.height - 4;
+  expect(
+    await page.evaluate(
+      ({ x, y }) =>
+        Boolean(
+          document
+            .elementFromPoint(x, y)
+            ?.closest(".pulse-album, .pulse-time, button"),
+        ),
+      { x: bounds.x + bounds.width / 2, y: dragY },
+    ),
+  ).toBe(false);
+  await page.mouse.move(bounds.x + bounds.width / 2, dragY);
   await page.mouse.down();
-  await page.mouse.move(bounds.x + bounds.width / 2 - 200, bounds.y + 20, {
+  await page.mouse.move(bounds.x + bounds.width / 2 - 200, dragY, {
     steps: 5,
   });
   await page.mouse.up();

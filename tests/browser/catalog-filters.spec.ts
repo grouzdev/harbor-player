@@ -224,10 +224,8 @@ test("recent filter applies its period immediately", async ({ page }) => {
   await expect(period).toHaveCount(0);
   await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBe(30);
 
+  await page.evaluate(() => window.harborPlayerFlushSession?.());
   await page.reload();
-  await expect(recent).toHaveCount(0);
-  await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBeNull();
-  await addCatalogFilter(page, "Недавние");
   await expect(recent).toContainText("Добавлено 30 дней назад");
   await expect(period).toHaveCount(0);
   await expect.poll(() => requests.at(-1)?.recentlyAddedDays).toBe(30);

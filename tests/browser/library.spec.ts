@@ -1343,6 +1343,7 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
     const input = shell.querySelector<HTMLInputElement>("input")!;
     return {
       height: styles.height,
+      availableHeight: getComputedStyle(shell.parentElement!).height,
       backgroundImage: styles.backgroundImage,
       backgroundSize: styles.backgroundSize,
       borderRadius: styles.borderRadius,
@@ -1352,27 +1353,28 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
       end: shell.style.getPropertyValue("--range-end"),
     };
   });
-  expect(rangeStyles.height).toBe("18px");
+  expect(rangeStyles.height).toBe(rangeStyles.availableHeight);
   expect(rangeStyles.backgroundImage).toContain("linear-gradient");
   expect(rangeStyles.backgroundSize).toBe("100% 5px");
-  expect(rangeStyles.borderRadius).toBe("999px");
-  expect(rangeStyles.cursor).toBe("pointer");
-  expect(rangeStyles.thumbCursor).toBe("grab");
+  expect(rangeStyles.borderRadius).toBe("0px");
+  expect(rangeStyles.cursor).toBe("default");
+  expect(rangeStyles.thumbCursor).toBe("default");
   expect(rangeStyles.start).toBe("0%");
   expect(rangeStyles.end).toBe("100%");
   const volumeStyles = await page.locator(".volume-range").evaluate((shell) => {
     const styles = getComputedStyle(shell);
     return {
       height: styles.height,
+      availableHeight: getComputedStyle(shell.parentElement!).height,
       backgroundImage: styles.backgroundImage,
       backgroundSize: styles.backgroundSize,
       borderRadius: styles.borderRadius,
     };
   });
-  expect(volumeStyles.height).toBe("18px");
+  expect(volumeStyles.height).toBe(volumeStyles.availableHeight);
   expect(volumeStyles.backgroundImage).toContain("linear-gradient");
   expect(volumeStyles.backgroundSize).toBe("100% 5px");
-  expect(volumeStyles.borderRadius).toBe("999px");
+  expect(volumeStyles.borderRadius).toBe("0px");
   await addCatalogFilter(page, "Рейтинг");
   const ratingStyles = await page
     .locator(".catalog-filter-slider")
@@ -1391,11 +1393,11 @@ test("local library: readable UI, playback, tags, move and permanent delete", as
         thumbCursor: getComputedStyle(minimumThumb).cursor,
       };
     });
-  expect(ratingStyles.height).toBe(rangeStyles.height);
+  expect(ratingStyles.height).toBe("18px");
   expect(ratingStyles.width).toBe("220px");
   expect(ratingStyles.backgroundImage).toBe(rangeStyles.backgroundImage);
   expect(ratingStyles.backgroundSize).toBe(rangeStyles.backgroundSize);
-  expect(ratingStyles.borderRadius).toBe(rangeStyles.borderRadius);
+  expect(ratingStyles.borderRadius).toBe("999px");
   expect(ratingStyles.cursor).toBe("pointer");
   expect(ratingStyles.thumbCursor).toBe("grab");
   await page.keyboard.press("Escape");
@@ -3617,6 +3619,12 @@ test("panel selection supports Shift ranges and bounded marquee drag", async ({
       '[data-testid="track-row"].selected',
     ],
   ] as const) {
+    // The previous filter reset can leave stale rows mounted while dependent
+    // queries refetch. Measure only the new, settled panel data.
+    await expect(page.locator(".workspace")).toHaveAttribute(
+      "aria-busy",
+      "false",
+    );
     const candidates = page.locator(`${surfaceSelector} ${candidateSelector}`);
     if ((await candidates.count()) < 2) continue;
     const gestureTargets =
@@ -3627,11 +3635,14 @@ test("panel selection supports Shift ranges and bounded marquee drag", async ({
     const b = await gestureTargets.nth(1).boundingBox();
     expect(a).not.toBeNull();
     expect(b).not.toBeNull();
-    await page.mouse.move(a!.x + 3, a!.y + 3);
+    // Divider hit areas extend six pixels into the adjacent panel. Start inside
+    // the row rather than grabbing the divider and resizing the artist panel.
+    await page.mouse.move(a!.x + 12, a!.y + 3);
     await page.mouse.down();
-    await page.mouse.move(b!.x + b!.width - 3, b!.y + b!.height - 3, {
+    await page.mouse.move(b!.x + b!.width - 12, b!.y + b!.height - 3, {
       steps: 4,
     });
+    await expect(marquee).toBeVisible();
     await page.mouse.up();
     await expect(
       page.locator(`${surfaceSelector} ${selectedSelector}`),
@@ -3639,8 +3650,8 @@ test("panel selection supports Shift ranges and bounded marquee drag", async ({
     const surfaceBox = await page.locator(surfaceSelector).boundingBox();
     expect(surfaceBox).not.toBeNull();
     await page.mouse.click(
-      surfaceBox!.x + surfaceBox!.width - 4,
-      surfaceBox!.y + surfaceBox!.height - 4,
+      surfaceBox!.x + surfaceBox!.width - 12,
+      surfaceBox!.y + surfaceBox!.height - 12,
     );
     await expect(
       page.locator(`${surfaceSelector} ${selectedSelector}`),

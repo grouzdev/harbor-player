@@ -15,13 +15,24 @@ test("restores search, multi-selection and pre-search context in a fresh browser
   await page.goto("/");
   const name = `Session ${info.project.name}`;
   await page.locator(".add-library").click();
-  await page
-    .getByLabel("Путь к папке", { exact: true })
-    .fill(
-      path.resolve(".test-data/browser", info.project.name, "search", "Tree"),
-    );
+  const source = path.resolve(
+    ".test-data/browser",
+    info.project.name,
+    "session-search",
+  );
+  await mkdir(source, { recursive: true });
+  await Promise.all(
+    ["album", "live", "jazz"].map((title) =>
+      copyFile(
+        path.resolve(".fixtures/sample.flac"),
+        path.join(source, `${title}.flac`),
+      ),
+    ),
+  );
+  await page.getByLabel("Путь к папке", { exact: true }).fill(source);
   await page.getByLabel("Название библиотеки").fill(name);
   await page.getByRole("button", { name: "Подключить", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await page
     .locator(".libraries-panel .list-tile-main")
     .filter({ hasText: name })
@@ -92,20 +103,27 @@ test("restores playback seconds paused and does not reopen settings", async ({
 }, info) => {
   await page.goto("/");
   await page.locator(".add-library").click();
-  await page
-    .getByLabel("Путь к папке", { exact: true })
-    .fill(
-      path.resolve(
-        ".test-data/browser",
-        info.project.name,
-        "player",
-        "Downloads",
-      ),
-    );
+  const source = path.resolve(
+    ".test-data/browser",
+    info.project.name,
+    "session-audio",
+  );
+  await mkdir(source, { recursive: true });
+  await copyFile(
+    path.resolve(".fixtures/sample.flac"),
+    path.join(source, "sample.flac"),
+  );
+  await page.getByLabel("Путь к папке", { exact: true }).fill(source);
   await page
     .getByLabel("Название библиотеки")
     .fill(`Session audio ${info.project.name}`);
   await page.getByRole("button", { name: "Подключить", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page
+    .locator(".libraries-panel .list-tile-main")
+    .filter({ hasText: `Session audio ${info.project.name}` })
+    .click();
+  await expect(page.getByTestId("track-row")).toHaveCount(1);
   await expect(page.getByTestId("track-row").first()).toBeVisible();
   await page.getByTestId("track-row").first().dblclick();
   await expect
