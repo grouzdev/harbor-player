@@ -30,12 +30,13 @@ export async function api<T>(
   method: "GET" | "POST" | "PATCH" | "DELETE" = body === undefined
     ? "GET"
     : "POST",
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; keepalive?: boolean },
 ): Promise<T> {
   const request = () =>
     fetch(`/api${url}`, {
       method,
       signal: options?.signal,
+      keepalive: options?.keepalive,
       headers:
         method === "GET"
           ? {}

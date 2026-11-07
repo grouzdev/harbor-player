@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./fixtures";
 import { pulseDayKey, pulseFixtureInstant } from "./pulse-test-dates";
 import {
   PulseLayout,
@@ -132,7 +132,7 @@ async function prepareHistory(
   return { busyDate };
 }
 
-test("Pulse scroll handle follows both edges and restores position only within a launch", async ({
+test("Pulse scroll handle restores past positions across launches and follows the latest edge", async ({
   page,
 }) => {
   const today = await historyToday(page);
@@ -188,9 +188,19 @@ test("Pulse scroll handle follows both edges and restores position only within a
   await expectRight();
   await slider.fill("0");
   await expect.poll(() => rail.evaluate((el) => el.scrollLeft)).toBe(0);
+  await page.evaluate(() => window.harborPlayerFlushSession?.());
   await page.reload();
-  if (!(await rail.isVisible())) await open();
   await expect(rail).toBeVisible();
+  await expect.poll(() => rail.evaluate((el) => el.scrollLeft)).toBe(0);
+  await slider.focus();
+  await page.keyboard.press("End");
+  await expectRight();
+  await page.evaluate(() => window.harborPlayerFlushSession?.());
+  await page.reload();
+  await expectRight();
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.evaluate(() => window.harborPlayerFlushSession?.());
+  await page.reload();
   await expectRight();
 });
 
@@ -360,10 +370,8 @@ test("deletes a section, the displayed cover and a whole column through RMB menu
   await expect(
     page.getByText("История прослушивания пока пуста", { exact: true }),
   ).toBeVisible();
+  await page.evaluate(() => window.harborPlayerFlushSession?.());
   await page.reload();
-  await page
-    .getByRole("button", { name: "Открыть Пульс", exact: true })
-    .click();
   await expect(
     page.getByText("История прослушивания пока пуста", { exact: true }),
   ).toBeVisible();

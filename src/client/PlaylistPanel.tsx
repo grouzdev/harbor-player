@@ -13,6 +13,7 @@ import type {
 import { api, count, duration } from "./api";
 import { Modal } from "./Modal";
 import { PlaylistContent, type PlaylistCurrentTrack } from "./PlaylistContent";
+import { readSession, useSessionWriter } from "./workspace-session";
 import {
   catalogDragType,
   readCatalogDrag,
@@ -421,7 +422,19 @@ export function PlaylistPanel({
   const [mutating, setMutating] = useState(false);
   const [collapsedByPlaylist, setCollapsedByPlaylist] = useState<
     Record<string, Set<string>>
-  >({});
+  >(() =>
+    Object.fromEntries(
+      Object.entries(readSession("playlists") ?? {}).map(([id, keys]) => [
+        id,
+        new Set(keys),
+      ]),
+    ),
+  );
+  useSessionWriter("playlists", () =>
+    Object.fromEntries(
+      Object.entries(collapsedByPlaylist).map(([id, keys]) => [id, [...keys]]),
+    ),
+  );
   const detail = useQuery({
     queryKey: ["playlist", playlistId],
     enabled: Boolean(playlistId),

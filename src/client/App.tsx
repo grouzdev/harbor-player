@@ -89,6 +89,11 @@ import {
 } from "./api";
 import { readMigratedStorageValue } from "./storage";
 import {
+  readSession,
+  useSessionWriter,
+  writeSession,
+} from "./workspace-session";
+import {
   applyAppearance,
   cacheAppearance,
   normalizeAppearance,
@@ -559,6 +564,9 @@ export function App() {
   const queryClient = useQueryClient();
   const [ready, setReady] = useState(false);
   const [startupError, setStartupError] = useState("");
+  const [workspaceMode, setWorkspaceMode] = useState<
+    "panels" | "cover" | "pulse"
+  >(() => readSession("workspace")?.mode ?? "panels");
   const [capabilities, setCapabilities] = useState<Capabilities>({
     writableFormats: [],
     verificationDate: null,
@@ -593,7 +601,7 @@ export function App() {
     setExpandedLibraryIds,
     expandedFolderKeys,
     setExpandedFolderKeys,
-  } = useCatalogBrowsing();
+  } = useCatalogBrowsing(ready, workspaceMode === "panels");
   const [panelVisibility, setPanelVisibility] =
     useState<PanelVisibility>(readPanelVisibility);
   const [appearance, setAppearance] = useState<AppearanceSettings>(() => {
@@ -633,7 +641,9 @@ export function App() {
   const [toast, setToast] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [lyricsTrack, setLyricsTrack] = useState<Track | null>(null);
-  const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
+  const [activePlaylistId, setActivePlaylistId] = useState<string | null>(
+    () => readSession("workspace")?.activePlaylistId ?? null,
+  );
   const [playlistForSettings, setPlaylistForSettings] =
     useState<Playlist | null>(null);
   const [pendingBookmarkKeys, setPendingBookmarkKeys] = useState<Set<string>>(
@@ -669,24 +679,31 @@ export function App() {
     useState<FullscreenWindowMode>("default");
   const [fullscreenWindowBounds, setFullscreenWindowBounds] =
     useState<FullscreenWindowBounds | null>(null);
-  const [workspaceMode, setWorkspaceMode] = useState<
-    "panels" | "cover" | "pulse"
-  >("panels");
   const coverMode = workspaceMode === "cover";
   const pulseMode = workspaceMode === "pulse";
   const setCoverMode = useCallback((enabled: boolean) => {
     setWorkspaceMode(enabled ? "cover" : "panels");
   }, []);
-  const pulseState = useRef<PulseViewState | undefined>(undefined);
+  const pulseState = useRef<PulseViewState | undefined>(readSession("pulse"));
+  useSessionWriter("workspace", () => ({
+    mode: workspaceMode,
+    activePlaylistId,
+  }));
   const catalogFocus = useRef<HTMLElement | null>(null);
   const previousWorkspaceMode = useRef(workspaceMode);
   useEffect(() => {
     const cleared = () => {
       pulseState.current = undefined;
+      writeSession("pulse", undefined);
     };
     window.addEventListener("harbor-pulse-cleared", cleared);
     return () => window.removeEventListener("harbor-pulse-cleared", cleared);
   }, []);
+  useEffect(() => {
+    const failed = () => notify("Не удалось сохранить рабочую сессию");
+    window.addEventListener("harbor-session-error", failed);
+    return () => window.removeEventListener("harbor-session-error", failed);
+  }, [notify]);
   useEffect(() => {
     const previous = previousWorkspaceMode.current;
     previousWorkspaceMode.current = workspaceMode;
@@ -1204,11 +1221,11 @@ export function App() {
       .catch((e) => setStartupError(e.message));
   }, []);
   useEffect(() => {
-    if (!player.queue?.track) {
-      setCoverMode(false);
+    if (!player.restoring && !player.queue?.track) {
+      setWorkspaceMode((current) => (current === "cover" ? "panels" : current));
       setCoverSearch("");
     }
-  }, [player.queue?.track]);
+  }, [player.queue?.track, player.restoring]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(""), 9000);
@@ -3823,6 +3840,7 @@ export function App() {
           initialState={pulseState.current}
           onStateChange={(state) => {
             pulseState.current = state;
+            writeSession("pulse", state);
           }}
           onPlayAlbum={(albumId) => void player.startPulseAlbum(albumId)}
           settingsControls={<PulseSettingsControl />}

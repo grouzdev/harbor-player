@@ -38,6 +38,7 @@ import { readScanSettings } from "./scan-settings.js";
 import { scanSettingsSchema } from "../shared/scan-settings.js";
 import { recoverySettingsSchema } from "../shared/recovery-settings.js";
 import { registerPulseRoutes } from "./pulse-routes.js";
+import { workspaceSessionStore } from "./workspace-session.js";
 import {
   pathTemplatePatternSchema,
   playlistEntryInputSchema,
@@ -248,6 +249,11 @@ async function configureApp(
     })
     .strict();
   app.get("/api/appearance", async () => readAppearance(service.dataDir));
+  const workspaceSession = workspaceSessionStore(service.dataDir);
+  app.get("/api/workspace-session", async () => workspaceSession.get());
+  app.post("/api/workspace-session", async (request) =>
+    workspaceSession.set(request.body),
+  );
   app.get("/api/scan-settings", async () => readScanSettings(service.dataDir));
   app.post("/api/scan-settings", async (request) =>
     scanScheduler.update(scanSettingsSchema.parse(request.body)),

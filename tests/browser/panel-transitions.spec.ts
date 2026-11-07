@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 
 const idle = (page: Page) =>
   expect(page.locator(".workspace")).not.toHaveAttribute(

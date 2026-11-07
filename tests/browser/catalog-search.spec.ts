@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import path from "node:path";
 
 test("catalog search filters every panel from one result set", async ({

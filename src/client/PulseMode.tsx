@@ -126,6 +126,7 @@ export async function readPulseLayout(
 export interface PulseViewState {
   date: string;
   offset: number;
+  atEnd?: boolean;
   generation?: string | number;
   selectedAlbumId?: string;
   selectedDay?: string;
@@ -806,10 +807,11 @@ export function PulseMode({
     const element = rail.current;
     if (!element || !layout) return;
     const saved = state.current;
-    element.scrollLeft = saved
-      ? layout.start(layout.index(saved.date)) +
-        Math.min(saved.offset, layout.width(layout.index(saved.date)) - 1)
-      : Math.max(0, layout.totalWidth - element.clientWidth);
+    element.scrollLeft =
+      saved && !saved.atEnd
+        ? layout.start(layout.index(saved.date)) +
+          Math.min(saved.offset, layout.width(layout.index(saved.date)) - 1)
+        : Math.max(0, layout.totalWidth - element.clientWidth);
     let frame = 0;
     const update = () => {
       frame = 0;
@@ -817,6 +819,8 @@ export function PulseMode({
       const next = {
         date: layout.date(located.index),
         offset: located.offset,
+        atEnd:
+          layout.totalWidth - element.clientWidth - element.scrollLeft <= 2,
         selectedAlbumId: state.current?.selectedAlbumId,
         selectedDay: state.current?.selectedDay,
         generation: historyGeneration.current,

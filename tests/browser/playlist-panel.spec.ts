@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 import { emptyFilter, type Track } from "../../src/shared/contracts";
 import type {
   PlaylistEntry,
@@ -677,7 +677,7 @@ test("automatic next opens collapsed ancestors and scrolls to the exact occurren
   ).toBeInViewport();
 });
 
-test("playlist header keeps only hide control in landscape, portrait and empty state", async ({
+test("playlist header keeps only hide control and restores its active playlist after reload", async ({
   page,
 }) => {
   const { panel } = await playlistFixture(page);
@@ -694,13 +694,55 @@ test("playlist header keeps only hide control in landscape, portrait and empty s
       panel.getByRole("heading", { name: "Playlist redesign" }),
     ).toBeVisible();
   }
+  await page.evaluate(() => window.harborPlayerFlushSession?.());
   await page.reload();
-  await expect(panel.getByText("Выберите или создайте плейлист")).toBeVisible();
+  await expect(
+    panel.getByRole("heading", { name: "Playlist redesign" }),
+  ).toBeVisible();
   await expect(panel.locator(".panel-heading button")).toHaveCount(1);
   await panel
     .getByRole("button", { name: "Закрыть панель «Плейлист»" })
     .click();
   await expect(panel).toHaveCount(0);
+});
+
+test("playlist restores collapsed groups and its viewport after restart", async ({
+  page,
+}) => {
+  const { panel } = await playlistFixture(page, true);
+  await expect(page.locator(".workspace")).not.toHaveAttribute(
+    "data-panel-transition",
+  );
+  const folder = panel
+    .getByTestId("playlist-entry")
+    .filter({ hasText: "folder entry" });
+  await folder.locator(".playlist-entity-main").click();
+  await expect(folder.locator(".playlist-entity-main")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  const surface = panel.locator(".playlist-content");
+  await expect
+    .poll(() =>
+      surface.evaluate((node) => node.scrollHeight - node.clientHeight),
+    )
+    .toBeGreaterThan(800);
+  // A real wheel gesture cancels any pending layout-preservation scroll.
+  await surface.hover();
+  await page.mouse.wheel(0, 800);
+  await expect.poll(() => surface.evaluate((node) => node.scrollTop)).toBe(800);
+  await page.evaluate(() => window.harborPlayerFlushSession?.());
+  await page.reload();
+  await expect
+    .poll(() => surface.evaluate((node) => node.scrollTop))
+    .toBeCloseTo(800, 0);
+  await surface.evaluate((node) => {
+    node.scrollTop = 0;
+  });
+  await expect(folder.locator(".playlist-entity-main")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
 });
 
 async function playlistManagementFixture(page: Page) {

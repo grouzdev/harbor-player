@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 
 async function prepareOutboxModule(page: Page) {
   await page.route("http://pulse.test/**", (route) =>

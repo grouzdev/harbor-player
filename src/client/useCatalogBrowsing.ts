@@ -9,12 +9,24 @@ import {
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { emptyFilter, type CatalogFilter } from "../shared/contracts";
 import {
+  emptyCatalogSession,
+  type PanelPosition,
+} from "../shared/workspace-session";
+import { readSession, useSessionWriter } from "./workspace-session";
+import {
   panelScrollResolvers,
   preservedScrollTop,
   type ViewportAnchor,
 } from "./panel-scroll";
 
-const panelIds = ["libraries", "genres", "artists", "albums", "tracks"];
+const panelIds = [
+  "libraries",
+  "genres",
+  "artists",
+  "albums",
+  "tracks",
+  "playlists",
+] as const;
 const catalogQueries = new Set([
   "libraries",
   "library-folders",
@@ -22,18 +34,13 @@ const catalogQueries = new Set([
   "artists",
   "albums",
   "tracks",
+  "playlist",
+  "playlist-tracks",
 ]);
 const panelSurface = (id: string) =>
   document.querySelector<HTMLElement>(
     `[data-panel-id="${id}"] .selection-surface`,
   );
-type PanelPosition = {
-  id: string;
-  top: number;
-  left: number;
-  anchorKey?: string;
-  anchorY?: number;
-};
 type SearchSelectionRestore = {
   requestId: number;
   artist: string | null;
@@ -81,20 +88,33 @@ export function effectiveCatalogFilter(
   return search.trim() ? { ...emptyFilter, search: search.trim() } : saved;
 }
 
-export function useCatalogBrowsing() {
+export function useCatalogBrowsing(ready = true, visible = true) {
   const queryClient = useQueryClient();
-  const [savedFilter, setSavedFilter] = useState<CatalogFilter>(emptyFilter);
-  const [search, setSearchText] = useState("");
-  const [settledSearch, setSettledSearch] = useState("");
-  const [selectedArtists, setSelectedArtists] = useState<string[]>([]);
-  const [selectedAlbums, setSelectedAlbums] = useState<string[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
+  const [initial] = useState(
+    () => readSession("catalog") ?? emptyCatalogSession(),
+  );
+  const [savedFilter, setSavedFilter] = useState<CatalogFilter>(
+    initial.savedFilter,
+  );
+  const [search, setSearchText] = useState(initial.search);
+  const [settledSearch, setSettledSearch] = useState(initial.search.trim());
+  const [selectedArtists, setSelectedArtists] = useState<string[]>(
+    initial.selectedArtists,
+  );
+  const [selectedAlbums, setSelectedAlbums] = useState<string[]>(
+    initial.selectedAlbums,
+  );
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(initial.selected),
+  );
+  const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(
+    initial.selectedAlbumId,
+  );
   const [expandedLibraryIds, setExpandedLibraryIds] = useState<Set<string>>(
-    new Set(),
+    () => new Set(initial.expandedLibraryIds),
   );
   const [expandedFolderKeys, setExpandedFolderKeys] = useState<Set<string>>(
-    new Set(),
+    () => new Set(initial.expandedFolderKeys),
   );
   const isSearching = Boolean(search.trim());
   const searchPending = isSearching && settledSearch !== search.trim();
@@ -114,11 +134,26 @@ export function useCatalogBrowsing() {
     expandedFolderKeys: Set<string>;
     positions: PanelPosition[];
     queries: { key: QueryKey; data: unknown; updatedAt: number }[];
-  } | null>(null);
+  } | null>(
+    initial.beforeSearch
+      ? {
+          ...initial.beforeSearch,
+          selected: new Set(initial.beforeSearch.selected),
+          expandedLibraryIds: new Set(initial.beforeSearch.expandedLibraryIds),
+          expandedFolderKeys: new Set(initial.beforeSearch.expandedFolderKeys),
+          searchSelectedTracks: initial.beforeSearch.searchSelectedTracks
+            ? new Set(initial.beforeSearch.searchSelectedTracks)
+            : null,
+          queries: [],
+        }
+      : null,
+  );
   const restorePositions = useRef<
     NonNullable<typeof snapshot.current>["positions"] | null
-  >(null);
+  >(initial.positions.length ? initial.positions : null);
   const pendingSearchTrackSelection = useRef<Set<string> | null>(null);
+  const selectionFilter = useRef(savedFilter);
+  const sessionPositions = useRef(initial.positions);
   const [navigationEpoch, setNavigationEpoch] = useState(0);
   const [searchSelectionRestore, setSearchSelectionRestore] =
     useState<SearchSelectionRestore | null>(null);
@@ -149,12 +184,72 @@ export function useCatalogBrowsing() {
     [],
   );
 
+  useSessionWriter("catalog", () => {
+    // Never checkpoint temporary zero offsets while queries or restoration are
+    // laying out. Hidden/unmounted panels retain their last visible position.
+    if (ready && visible && !restorePositions.current) {
+      const positions = panelPositions().filter((p) => {
+        const node = panelSurface(p.id);
+        if (!node?.clientHeight) return false;
+        const box = node.getBoundingClientRect();
+        const anchor = [
+          ...node.querySelectorAll<HTMLElement>("[data-selection-key]"),
+        ].find(
+          (item) =>
+            item.getBoundingClientRect().bottom > box.top &&
+            item.getBoundingClientRect().top < box.bottom,
+        );
+        if (anchor) {
+          p.anchorKey = anchor.dataset.selectionKey;
+          p.anchorY = anchor.getBoundingClientRect().top - box.top;
+        }
+        return true;
+      });
+      sessionPositions.current = [
+        ...sessionPositions.current.filter(
+          (p) => !positions.some((next) => next.id === p.id),
+        ),
+        ...positions,
+      ];
+    }
+    const before = snapshot.current;
+    return {
+      savedFilter,
+      search,
+      selectedArtists,
+      selectedAlbums,
+      selected: [...selected],
+      selectedAlbumId,
+      expandedLibraryIds: [...expandedLibraryIds],
+      expandedFolderKeys: [...expandedFolderKeys],
+      positions: restorePositions.current ?? sessionPositions.current,
+      beforeSearch: before
+        ? {
+            selectedArtists: before.selectedArtists,
+            selectedAlbums: before.selectedAlbums,
+            selected: [...before.selected],
+            selectedAlbumId: before.selectedAlbumId,
+            expandedLibraryIds: [...before.expandedLibraryIds],
+            expandedFolderKeys: [...before.expandedFolderKeys],
+            positions: before.positions,
+            searchSelectedArtists: before.searchSelectedArtists,
+            searchSelectedAlbums: before.searchSelectedAlbums,
+            searchSelectedTracks: before.searchSelectedTracks
+              ? [...before.searchSelectedTracks]
+              : null,
+          }
+        : null,
+    };
+  });
+
   useEffect(() => {
     const timer = setTimeout(() => setSettledSearch(search.trim()), 200);
     return () => clearTimeout(timer);
   }, [search]);
 
   useEffect(() => {
+    if (selectionFilter.current === savedFilter) return;
+    selectionFilter.current = savedFilter;
     if (pendingSearchTrackSelection.current) {
       setSelected(pendingSearchTrackSelection.current);
       pendingSearchTrackSelection.current = null;
@@ -304,7 +399,7 @@ export function useCatalogBrowsing() {
   // Cached pages are retained in the snapshot even if a long search lets them expire.
   // Allow the virtualizers and folder queries to lay out before restoring offsets.
   useEffect(() => {
-    if (!restorePositions.current) return;
+    if (!ready || !visible || !restorePositions.current) return;
     let frame = 0;
     let stableFrames = 0;
     let settledFrames = 0;
@@ -315,7 +410,7 @@ export function useCatalogBrowsing() {
       let complete = true;
       for (const position of positions) {
         const node = panelSurface(position.id);
-        if (!node) continue;
+        if (!node?.clientHeight) continue;
         const anchor = position.anchorKey
           ? [
               ...node.querySelectorAll<HTMLElement>("[data-selection-key]"),
@@ -402,7 +497,7 @@ export function useCatalogBrowsing() {
       window.removeEventListener("keydown", cancel, true);
       window.removeEventListener("scroll", onScroll, true);
     };
-  }, [navigationEpoch, queryClient]);
+  }, [navigationEpoch, queryClient, ready, visible]);
 
   const setSearchArtistSelection = useCallback((artists: string[]) => {
     setSelectedArtists(artists);

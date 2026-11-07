@@ -15,6 +15,7 @@ import { CoverPlaceholder } from "./CoverPlaceholder";
 import type { CatalogFilter, Track } from "../shared/contracts";
 import { api, duration } from "./api";
 import { readMigratedStorageValue } from "./storage";
+import { readSession, useSessionWriter } from "./workspace-session";
 import { RatingControl, type UserStateChange } from "./RatingControl";
 import { RangeSlider } from "./RangeSlider";
 import { attachPulseRecorder, PulseRecorder } from "./pulse-recorder";
@@ -72,17 +73,24 @@ export function usePlayer(notify: (message: string) => void) {
   const pulseNotify = useRef(notify);
   pulseNotify.current = notify;
   const [queue, setQueue] = useState<Queue | null>(null);
+  const [restoring, setRestoring] = useState(true);
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(0);
   const [length, setLength] = useState(0);
   const [volume, setVolume] = useState(() => {
+    const saved = readSession("player");
+    if (saved) return saved.volume;
     const n = Number(
       readMigratedStorageValue("harbor-player-volume", "mml-volume") ?? 0.7,
     );
     return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0.7;
   });
-  const [shuffle, setShuffle] = useState(false);
-  const [repeat, setRepeat] = useState<"off" | "all" | "one">("off");
+  const [shuffle, setShuffle] = useState(
+    () => readSession("player")?.shuffle ?? false,
+  );
+  const [repeat, setRepeat] = useState<"off" | "all" | "one">(
+    () => readSession("player")?.repeat ?? "off",
+  );
   const shouldPlay = useRef(false);
   const seekAfterLoad = useRef(0);
   const interrupted = useRef<{
@@ -99,6 +107,21 @@ export function usePlayer(notify: (message: string) => void) {
   const trackAvailable = queue?.track?.available;
   const trackMtimeMs = queue?.track?.mtimeMs;
   const trackDuration = queue?.track?.duration;
+  useSessionWriter("player", () =>
+    queue
+      ? {
+          queueId: queue.id,
+          queuePosition: queue.position,
+          trackId: queue.track?.id ?? null,
+          seconds:
+            interrupted.current?.position ??
+            (seekAfterLoad.current || audio.current?.currentTime || 0),
+          volume,
+          shuffle,
+          repeat,
+        }
+      : readSession("player"),
+  );
   pulseTrack.current = queue?.track ?? null;
   useEffect(() => {
     const element = audio.current;
@@ -251,16 +274,45 @@ export function usePlayer(notify: (message: string) => void) {
     localStorage.setItem("harbor-player-volume", String(volume));
   }, [volume]);
   useEffect(() => {
-    const saved = readMigratedStorageValue("harbor-player-queue", "mml-queue");
-    if (!saved) return;
+    let disposed = false;
+    const revision = transition.current;
+    const saved = readSession("player");
     try {
-      const q = JSON.parse(saved);
-      api<Queue>(`/queue/${q.id}?position=${q.position}`)
-        .then(setQueue)
-        .catch(() => localStorage.removeItem("harbor-player-queue"));
+      const legacy = saved
+        ? null
+        : readMigratedStorageValue("harbor-player-queue", "mml-queue");
+      const q = saved
+        ? { id: saved.queueId, position: saved.queuePosition }
+        : legacy
+          ? JSON.parse(legacy)
+          : null;
+      if (!q) {
+        setRestoring(false);
+        return;
+      }
+      api<Queue>(`/queue/${encodeURIComponent(q.id)}?position=${q.position}`)
+        .then((restored) => {
+          // A late startup request must not replace a queue the user started.
+          if (disposed || revision !== transition.current) return;
+          shouldPlay.current = false;
+          seekAfterLoad.current =
+            saved && restored.track?.id === saved.trackId ? saved.seconds : 0;
+          setQueue(restored);
+        })
+        .catch(() => {
+          if (!disposed && revision === transition.current)
+            notify("Не удалось восстановить очередь воспроизведения");
+        })
+        .finally(() => {
+          if (!disposed) setRestoring(false);
+        });
     } catch {
       localStorage.removeItem("harbor-player-queue");
+      setRestoring(false);
     }
+    return () => {
+      disposed = true;
+    };
   }, []);
   useEffect(() => {
     const element = audio.current;
@@ -302,6 +354,7 @@ export function usePlayer(notify: (message: string) => void) {
       | { playlistId: string; startId?: string; startEntryId?: string },
     play = true,
   ) => {
+    setRestoring(false);
     const sequence = ++transition.current;
     try {
       const q = await api<Queue>("/queue", body);
@@ -483,6 +536,7 @@ export function usePlayer(notify: (message: string) => void) {
   );
   return {
     queue,
+    restoring,
     playing,
     position,
     length,

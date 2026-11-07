@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 import { copyFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { writeTagsIsolated } from "../../dist/server/isolated-tag-writer.js";

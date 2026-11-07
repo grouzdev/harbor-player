@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import type { OperationSummary } from "../../src/shared/contracts";
 
 test("history supports single, successful and full removal without deleting active actions", async ({

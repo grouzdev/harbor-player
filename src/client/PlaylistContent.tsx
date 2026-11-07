@@ -21,6 +21,8 @@ import { ContextMenu, type ContextMenuState } from "./ContextMenu";
 import { CollapseToggle } from "./CollapseToggle";
 import { duration } from "./api";
 import { PlaylistEntityCopy } from "./PlaylistEntityCopy";
+import { usePanelScrollResolver } from "./panel-scroll";
+import { readSession } from "./workspace-session";
 import {
   acceptsPlaylistDrop,
   playlistDragType,
@@ -105,9 +107,38 @@ export function PlaylistContent({
     paddingEnd: 14,
     overscan: 8,
   });
+  usePanelScrollResolver(
+    ref,
+    (key) => {
+      const index = visible.findIndex((row) => row.key === key);
+      if (index < 0) return undefined;
+      return (
+        14 +
+        visible
+          .slice(0, index)
+          .reduce((top, row) => top + (row.type === "album" ? 78 : 36), 0)
+      );
+    },
+    visible.length,
+    visible.length,
+    false,
+    () => {},
+  );
+  const restoringSession = useRef(
+    Boolean(
+      readSession("catalog")?.positions.some(
+        (position) => position.id === "playlists",
+      ),
+    ),
+  );
   const followed = useRef<string | null>(null);
   useEffect(() => {
     if (!target || !current || followed.current === current.requestKey) return;
+    if (restoringSession.current) {
+      restoringSession.current = false;
+      followed.current = current.requestKey;
+      return;
+    }
     if (target.parents.some((key) => collapsed.has(key))) {
       setCollapsed((previous) => {
         const next = new Set(previous);
@@ -215,7 +246,7 @@ export function PlaylistContent({
   return (
     <div
       ref={ref}
-      className="track-scroll playlist-content"
+      className="track-scroll playlist-content selection-surface"
       aria-label="Содержимое плейлиста"
       onDragOver={(event) => {
         if (editingDisabled || !acceptsPlaylistDrop(event.dataTransfer)) return;
@@ -269,6 +300,7 @@ export function PlaylistContent({
             return (
               <ListTile
                 key={row.key}
+                selectionKey={row.key}
                 testId="playlist-track-row"
                 className="track-row"
                 style={style}
@@ -314,6 +346,7 @@ export function PlaylistContent({
               <div
                 key={row.key}
                 data-testid="playlist-entry"
+                data-selection-key={row.key}
                 data-entry-id={row.entry.id}
                 className={`playlist-item playlist-added-item playlist-entity-row ${selected === row.key ? "selected" : ""} ${isCurrent ? "current current-queue-item" : ""} ${dropBefore === row.entry.id ? "playlist-drop-before" : ""}`}
                 style={style}

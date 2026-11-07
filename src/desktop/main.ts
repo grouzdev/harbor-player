@@ -5,6 +5,7 @@ import {
   ipcMain,
   Menu,
   Notification,
+  screen,
   session,
   shell,
   Tray,
@@ -18,6 +19,7 @@ import electronUpdater from "electron-updater";
 import { appName, dataDirectory } from "../shared/app-paths.js";
 import { createUpdateLog } from "./update-log.js";
 import { updatePreferencesStore } from "./update-preferences.js";
+import { fitWindowBounds, windowStateStore } from "./window-state.js";
 import { createUpdateController } from "./update-controller.js";
 import { PublishedReleaseProvider } from "./published-release-provider.js";
 import type {
@@ -77,6 +79,8 @@ const updateLog = createUpdateLog(
   app.getVersion(),
 );
 const updatePreferences = updatePreferencesStore(electronData);
+const windowState = windowStateStore(electronData);
+let saveWindowState = () => {};
 let updates: ReturnType<typeof createUpdateController>;
 const startupStartedAt = process.hrtime.bigint();
 let startupReadyToShowMs: number | undefined;
@@ -282,6 +286,27 @@ async function quitApplication(exitCode = 0) {
       isQuitting = true;
       if (updateTimer) clearInterval(updateTimer);
       if (initialUpdateTimer) clearTimeout(initialUpdateTimer);
+      saveWindowState();
+      if (mainWindow && !mainWindow.webContents.isDestroyed()) {
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([
+            mainWindow.webContents.executeJavaScript(
+              "window.harborPlayerFlushSession?.()",
+            ),
+            new Promise((_, reject) => {
+              timeout = setTimeout(
+                () => reject(new Error("Session save timed out")),
+                3000,
+              );
+            }),
+          ]);
+        } catch (error) {
+          console.warn("workspace-session-save-failed", errorText(error));
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
       await stopBackend();
       for (const writer of tagProcesses) writer.kill();
       tagProcesses.clear();
@@ -308,9 +333,15 @@ function showWindow() {
 }
 
 function createWindow(url: string) {
+  const saved = windowState.get();
+  const bounds = saved
+    ? fitWindowBounds(
+        saved.bounds,
+        screen.getDisplayMatching(saved.bounds).workArea,
+      )
+    : { width: 1440, height: 920 };
   mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 920,
+    ...bounds,
     minWidth: 900,
     minHeight: 640,
     show: false,
@@ -322,6 +353,34 @@ function createWindow(url: string) {
       sandbox: true,
     },
   });
+  if (saved?.maximized) mainWindow.maximize();
+  let windowStateTimer: ReturnType<typeof setTimeout> | undefined;
+  saveWindowState = () => {
+    clearTimeout(windowStateTimer);
+    if (
+      !mainWindow ||
+      mainWindow.isDestroyed() ||
+      mainWindow.isFullScreen() ||
+      mainWindow.isMinimized()
+    )
+      return;
+    try {
+      windowState.set({
+        bounds: mainWindow.getNormalBounds(),
+        maximized: mainWindow.isMaximized(),
+      });
+    } catch (error) {
+      console.warn("window-state-save-failed", errorText(error));
+    }
+  };
+  const scheduleWindowState = () => {
+    clearTimeout(windowStateTimer);
+    windowStateTimer = setTimeout(saveWindowState, 200);
+  };
+  mainWindow.on("move", scheduleWindowState);
+  mainWindow.on("resize", scheduleWindowState);
+  mainWindow.on("maximize", scheduleWindowState);
+  mainWindow.on("unmaximize", scheduleWindowState);
   const sendFullscreenState = () => {
     mainWindow?.webContents.send(
       "desktop:window-fullscreen",

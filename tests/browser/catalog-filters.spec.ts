@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { addCatalogFilter } from "./catalog-filter-helpers";
 import type { CatalogFilter } from "../../src/shared/contracts";
 
