@@ -3647,12 +3647,36 @@ test("panel selection supports Shift ranges and bounded marquee drag", async ({
     await expect(
       page.locator(`${surfaceSelector} ${selectedSelector}`),
     ).toHaveCount(2);
-    const surfaceBox = await page.locator(surfaceSelector).boundingBox();
-    expect(surfaceBox).not.toBeNull();
-    await page.mouse.click(
-      surfaceBox!.x + surfaceBox!.width - 12,
-      surfaceBox!.y + surfaceBox!.height - 12,
-    );
+    // The full suite can leave enough tracks to fill the viewport. A bottom
+    // corner then belongs to a row, not empty space. Find a real empty hit target
+    // (including the virtual list's top inset), outside divider hit areas.
+    const panelSurface = page.locator(surfaceSelector);
+    await panelSurface.evaluate((node) => {
+      node.scrollTop = 0;
+    });
+    const emptyPoint = await panelSurface.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      for (let y = box.top + 4; y < box.bottom - 8; y += 8) {
+        for (const x of [
+          box.left + box.width / 2,
+          box.left + 12,
+          box.right - 20,
+        ]) {
+          const target = document.elementFromPoint(x, y);
+          if (
+            target &&
+            node.contains(target) &&
+            !target.closest(
+              "[data-selection-key], [data-selection-ignore], button, a, input, textarea, select, [role=button]",
+            )
+          )
+            return { x, y };
+        }
+      }
+      return null;
+    });
+    expect(emptyPoint, `empty space in ${surfaceSelector}`).not.toBeNull();
+    await page.mouse.click(emptyPoint!.x, emptyPoint!.y);
     await expect(
       page.locator(`${surfaceSelector} ${selectedSelector}`),
     ).toHaveCount(0);
