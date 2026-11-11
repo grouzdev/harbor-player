@@ -173,6 +173,13 @@ Stable workflow сначала подписывает EXE/DLL в Electron bundle
 
 Все файловые тесты используют созданные тестовые аудиофайлы и отдельные каталоги. Пользовательские библиотеки в них не участвуют.
 
+Когда и что запускается автоматически, чем локальный smoke отличается от полного
+набора и какие проверки остаются ручными — в [карте проверок](docs/testing.md).
+
+`npm run check:fast` — частая проверка (основной Vitest и Chrome).
+`npm run check:full` — весь Vitest, Chrome + Edge и packaged Electron smoke.
+В CI режим выбирается консервативно по изменённым файлам; релиз всегда полный.
+
 ```powershell
 npm run fixtures
 npm run verify:tags

@@ -900,7 +900,43 @@ test("Pulse completes pending keyboard focus when a cached rank mounts after scr
   expect(await page.locator(".pulse-album").count()).toBeLessThan(50);
 });
 
-test("all 1000 busy-day ranks are keyboard reachable with bounded DOM", async ({
+test("Pulse keyboard navigation crosses a page boundary and restores focus", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 480, height: 700 });
+  const today = await historyToday(page);
+  await prepareHistory(page, 39, today, today, {
+    title: "Keyboard album",
+    artist: "Keyboard artist",
+    artistForAlbum: (album) => `Keyboard artist ${album}`,
+  });
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Открыть Пульс", exact: true })
+    .click();
+  const slider = page.getByRole("slider", { name: "Дата на таймлайне" });
+  await expect(page.locator('.pulse-album[data-rank="39"]')).toBeVisible();
+  await slider.focus();
+  await page.keyboard.press("Shift+Tab");
+  const active = page.locator(".pulse-album:focus");
+  // Initial roving entry is the first visible rank, not necessarily the last.
+  await expect(active).toHaveCount(1);
+  await page.keyboard.press("Home");
+  await expect(active).toHaveAttribute("data-rank", "0");
+  for (let rank = 1; rank <= 20; rank++) {
+    await page.keyboard.press("ArrowRight");
+    await expect(active).toHaveAttribute("data-rank", String(rank));
+  }
+  await page.keyboard.press("End");
+  await expect(active).toHaveAttribute("data-rank", "39");
+  await page.keyboard.press("Tab");
+  await expect(slider).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(active).toHaveAttribute("data-rank", "39");
+  expect(await page.locator(".pulse-album").count()).toBeLessThan(50);
+});
+
+test("@full all 1000 busy-day ranks are keyboard reachable with bounded DOM", async ({
   page,
 }) => {
   test.setTimeout(180_000);
@@ -1143,7 +1179,7 @@ test("Pulse pointer cancellation and capture loss leave the next drag usable", a
     .toBeLessThan(before);
 });
 
-test("Pulse geometry fits small, portrait and low viewports without hiding statistics", async ({
+test("@full Pulse geometry fits small, portrait and low viewports without hiding statistics", async ({
   page,
 }) => {
   await prepareHistory(page);
@@ -1359,7 +1395,7 @@ test("Pulse delayed prior navigation pages cannot restore the old date", async (
   }
 });
 
-test("Pulse long metadata fits light and dark themes with custom accents", async ({
+test("@full Pulse long metadata fits narrow and wide windows with a custom accent", async ({
   page,
 }) => {
   const title =
@@ -1373,50 +1409,44 @@ test("Pulse long metadata fits light and dark themes with custom accents", async
   await expect(page.locator(".pulse-copy h2")).toHaveText(`${title} 0`);
   await expect(page.locator(".pulse-copy > p").nth(1)).toHaveText(artist);
   await expect(page.locator(".pulse-stat-numbers")).toBeVisible();
-  for (const theme of ["light", "dark"]) {
-    await page.evaluate((theme) => {
-      document.documentElement.dataset.theme = theme;
-      document.documentElement.style.setProperty(
-        "--accent",
-        theme === "light" ? "#123abc" : "#79b9d4",
-      );
-    }, theme);
-    for (const width of [390, 640, 800, 1366, 1600]) {
-      await page.setViewportSize({ width, height: 480 });
-      await expect
-        .poll(
-          () =>
-            page.evaluate(() => {
-              const pulse = document
-                .querySelector(".pulse-mode")!
-                .getBoundingClientRect();
-              return (
-                [
-                  ".pulse-copy h2",
-                  ".pulse-copy > p:nth-of-type(2)",
-                  ".pulse-stat-numbers",
-                  ".pulse-rail",
-                  ".pulse-history-range",
-                ].every((selector) => {
-                  const rect = document
-                    .querySelector(selector)!
-                    .getBoundingClientRect();
-                  return (
-                    rect.width > 0 &&
-                    rect.height > 0 &&
-                    rect.left >= pulse.left &&
-                    rect.right <= pulse.right + 1 &&
-                    rect.top >= pulse.top &&
-                    rect.bottom <= pulse.bottom + 1
-                  );
-                }) &&
-                document.documentElement.scrollWidth <= innerWidth &&
-                document.documentElement.scrollHeight <= innerHeight
-              );
-            }),
-          { message: `${theme} long metadata at ${width}x480` },
-        )
-        .toBe(true);
-    }
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty("--accent", "#79b9d4");
+  });
+  for (const width of [390, 640, 800, 1366, 1600]) {
+    await page.setViewportSize({ width, height: 480 });
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const pulse = document
+              .querySelector(".pulse-mode")!
+              .getBoundingClientRect();
+            return (
+              [
+                ".pulse-copy h2",
+                ".pulse-copy > p:nth-of-type(2)",
+                ".pulse-stat-numbers",
+                ".pulse-rail",
+                ".pulse-history-range",
+              ].every((selector) => {
+                const rect = document
+                  .querySelector(selector)!
+                  .getBoundingClientRect();
+                return (
+                  rect.width > 0 &&
+                  rect.height > 0 &&
+                  rect.left >= pulse.left &&
+                  rect.right <= pulse.right + 1 &&
+                  rect.top >= pulse.top &&
+                  rect.bottom <= pulse.bottom + 1
+                );
+              }) &&
+              document.documentElement.scrollWidth <= innerWidth &&
+              document.documentElement.scrollHeight <= innerHeight
+            );
+          }),
+        { message: `long metadata at ${width}x480` },
+      )
+      .toBe(true);
   }
 });

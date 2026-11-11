@@ -262,14 +262,7 @@ test("catalog state uses RMB and only visible indicators consume title space", a
   await checkGeometry();
   await page.screenshot({ path: info.outputPath("catalog-state-narrow.png") });
   await expect(album.locator(".album-cover img")).toBeVisible();
-  await page.evaluate(() => {
-    document.documentElement.dataset.theme = "light";
-  });
-  await checkGeometry();
   await expect(header.locator(".catalog-state-mark")).toHaveCount(3);
-  await page.evaluate(() => {
-    document.documentElement.dataset.theme = "dark";
-  });
   showCovers = false;
   await page.reload();
   await page

@@ -30,10 +30,11 @@ jobs:
       - run: npm run fixtures
       - run: npm run verify:tags
       - run: npm test
-      - run: npm run test:e2e
-      - run: npm run desktop:pack
+      - run: npm run build
+      - run: npm run test:e2e:built
+      # The distributable build also produces win-unpacked. Smoke that exact app.
+      - run: npm run desktop:dist:built
       - run: npm run test:desktop:smoke
-      - run: npm run desktop:dist
       - run: npm run test:desktop:smoke:portable
       - run: node scripts/verify-release.mjs --channel=beta --artifacts
       - name: Create GitHub prerelease
@@ -90,9 +91,9 @@ jobs:
       - run: npm run fixtures
       - run: npm run verify:tags
       - run: npm test
-      - run: npm run test:e2e
-      - run: npm run desktop:prepare
       - run: npm run build
+      - run: npm run test:e2e:built
+      - run: npm run desktop:prepare
       - name: Build unpacked stable application
         run: npx electron-builder --win --x64 --dir
       - name: Archive unpacked application for SignPath

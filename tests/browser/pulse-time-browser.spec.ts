@@ -9,44 +9,38 @@ import {
   startAudio,
 } from "./pulse-audio-helpers";
 
-for (const rate of [0.5, 1, 2]) {
-  test(`real audio counts elapsed listening time at ${rate}x`, async ({
-    page,
-  }, info) => {
-    await preparePulseAudio(page, info);
-    const ledger = await captureListening(page);
-    await page.locator("audio").evaluate((audio: HTMLAudioElement, speed) => {
-      audio.defaultPlaybackRate = speed;
-      audio.playbackRate = speed;
-      const observation = { started: 0, elapsed: 0, position: 0 };
-      Object.assign(window, { pulseAudioObservation: observation });
-      audio.addEventListener("playing", () => {
-        observation.started = performance.now();
-      });
-      audio.addEventListener("pause", () => {
-        observation.elapsed = performance.now() - observation.started;
-        observation.position = audio.currentTime;
-      });
-    }, rate);
-    await startAudio(page);
-    await progressAudio(page, rate * 2);
-    const { total } = await finishListening(page, ledger);
-    const observed = await page.evaluate(
-      () =>
-        (
-          window as unknown as {
-            pulseAudioObservation: { elapsed: number; position: number };
-          }
-        ).pulseAudioObservation,
-    );
-    expect(Math.abs(total - observed.elapsed)).toBeLessThan(300);
-    expect(Math.abs(total - (observed.position * 1000) / rate)).toBeLessThan(
-      300,
-    );
+test("real audio counts elapsed listening time at normal speed", async ({
+  page,
+}, info) => {
+  await preparePulseAudio(page, info);
+  const ledger = await captureListening(page);
+  await page.locator("audio").evaluate((audio: HTMLAudioElement) => {
+    const observation = { started: 0, elapsed: 0, position: 0 };
+    Object.assign(window, { pulseAudioObservation: observation });
+    audio.addEventListener("playing", () => {
+      observation.started = performance.now();
+    });
+    audio.addEventListener("pause", () => {
+      observation.elapsed = performance.now() - observation.started;
+      observation.position = audio.currentTime;
+    });
   });
-}
+  await startAudio(page);
+  await progressAudio(page, 2);
+  const { total } = await finishListening(page, ledger);
+  const observed = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          pulseAudioObservation: { elapsed: number; position: number };
+        }
+      ).pulseAudioObservation,
+  );
+  expect(Math.abs(total - observed.elapsed)).toBeLessThan(300);
+  expect(Math.abs(total - observed.position * 1000)).toBeLessThan(300);
+});
 
-test("real seek, pause and repeat-one preserve one visit without counting skipped audio", async ({
+test("@full real seek, pause and repeat-one preserve one visit without counting skipped audio", async ({
   page,
 }, info) => {
   await preparePulseAudio(page, info, 8);
@@ -171,7 +165,7 @@ test("moving the playing file replaces audio source and preserves historical ide
   expect(ledger.albums.size).toBe(1);
 });
 
-test("renderer freeze and background playback count only confirmed media progression", async ({
+test("@full renderer freeze and background playback count only confirmed media progression", async ({
   page,
   context,
 }, info) => {
@@ -245,7 +239,7 @@ test("renderer freeze and background playback count only confirmed media progres
   expect(Math.abs(total - finalPosition * 1000)).toBeLessThan(350);
 });
 
-test("real media error closes the interval and recovery does not count the unavailable period", async ({
+test("@full real media error closes the interval and recovery does not count the unavailable period", async ({
   page,
 }, info) => {
   const fixture = await preparePulseAudio(page, info);

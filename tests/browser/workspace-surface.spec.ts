@@ -27,7 +27,7 @@ async function surface(page: Page) {
   });
 }
 
-test("shares the catalog texture, transparency and background blur across all modes", async ({
+test("@full shares the catalog texture, transparency and background blur across all modes", async ({
   page,
 }, info) => {
   await page.goto("/");
@@ -210,7 +210,7 @@ test("shares the catalog texture, transparency and background blur across all mo
 });
 
 for (const control of ["Прозрачность панелей", "Затемнение панелей"]) {
-  test(`${control} previews until interaction ends, saves once and rolls back failed saves`, async ({
+  test(`@full ${control} previews until interaction ends, saves once and rolls back failed saves`, async ({
     page,
   }) => {
     await page.goto("/");
