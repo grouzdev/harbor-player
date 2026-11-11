@@ -40,7 +40,7 @@ test("real audio counts elapsed listening time at normal speed", async ({
   expect(Math.abs(total - observed.position * 1000)).toBeLessThan(300);
 });
 
-test("real seek, pause and repeat-one preserve one visit without counting skipped audio", async ({
+test("@full real seek, pause and repeat-one preserve one visit without counting skipped audio", async ({
   page,
 }, info) => {
   await preparePulseAudio(page, info, 8);
@@ -165,7 +165,7 @@ test("moving the playing file replaces audio source and preserves historical ide
   expect(ledger.albums.size).toBe(1);
 });
 
-test("renderer freeze and background playback count only confirmed media progression", async ({
+test("@full renderer freeze and background playback count only confirmed media progression", async ({
   page,
   context,
 }, info) => {
@@ -239,7 +239,7 @@ test("renderer freeze and background playback count only confirmed media progres
   expect(Math.abs(total - finalPosition * 1000)).toBeLessThan(350);
 });
 
-test("real media error closes the interval and recovery does not count the unavailable period", async ({
+test("@full real media error closes the interval and recovery does not count the unavailable period", async ({
   page,
 }, info) => {
   const fixture = await preparePulseAudio(page, info);

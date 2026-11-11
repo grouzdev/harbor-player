@@ -86,7 +86,7 @@ test("settings panels allow native Tab navigation to actions", async ({
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
-test("topbar keeps the settings logo centered and its hover geometry stable", async ({
+test("@full topbar keeps the settings logo centered and its hover geometry stable", async ({
   page,
 }) => {
   await page.goto("/");
@@ -460,7 +460,7 @@ test("fullscreen resize transitions do not overwrite saved window bounds", async
   });
 });
 
-test("fullscreen window adapts to its own orientation and reaches screen edges", async ({
+test("@full fullscreen window adapts to its own orientation and reaches screen edges", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1300, height: 900 });
@@ -532,7 +532,7 @@ test("fullscreen window adapts to its own orientation and reaches screen edges",
   expect(narrowWorkspaceTops[0]).toBeLessThan(narrowWorkspaceTops[3]);
 });
 
-test("workspace switches to rows below the fixed visible-panel width threshold", async ({
+test("@full workspace switches to rows below the fixed visible-panel width threshold", async ({
   page,
 }) => {
   const panels = ["libraries", "genres", "artists", "albums", "tracks"];
@@ -575,7 +575,7 @@ test("workspace switches to rows below the fixed visible-panel width threshold",
   }
 });
 
-test("catalog panels have equal widths by default", async ({ page }) => {
+test("@full catalog panels have equal widths by default", async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.removeItem("harbor-player-panel-weights-v1");
     localStorage.removeItem("mml-panel-weights-v1");
@@ -638,7 +638,7 @@ test("double-clicking a panel divider restores and saves default widths", async 
   ).toBe(true);
 });
 
-test("portrait workspace uses two independently resizable rows", async ({
+test("@full portrait workspace uses two independently resizable rows", async ({
   page,
 }) => {
   await page.goto("/");
@@ -970,7 +970,7 @@ test("playlist panel and its visibility button are first", async ({ page }) => {
   expect(playlist!.x).toBe(Math.min(...positions.map(({ x }) => x)));
 });
 
-test("portrait workspace places the playlist before albums without reordering sidebar controls", async ({
+test("@full portrait workspace places the playlist before albums without reordering sidebar controls", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1000, height: 1200 });

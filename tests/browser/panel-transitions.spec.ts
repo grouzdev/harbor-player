@@ -21,7 +21,7 @@ async function finish(page: Page) {
   await idle(page);
 }
 
-test("sidebar geometry and surfaces align with the application shell", async ({
+test("@full sidebar geometry and surfaces align with the application shell", async ({
   page,
 }) => {
   await page.goto("/");
@@ -108,7 +108,7 @@ for (const [layout, viewport] of [
   ["horizontal", { width: 1600, height: 900 }],
   ["portrait", { width: 1000, height: 1200 }],
 ] as const) {
-  test(`${layout} panels shrink and reveal smoothly without an end jump`, async ({
+  test(`@full ${layout} panels shrink and reveal smoothly without an end jump`, async ({
     page,
   }) => {
     await page.setViewportSize(viewport);
@@ -151,7 +151,7 @@ for (const [layout, viewport] of [
   });
 }
 
-test("resize and mode changes settle an active panel transition", async ({
+test("@full resize and mode changes settle an active panel transition", async ({
   page,
 }) => {
   await page.goto("/");
@@ -173,7 +173,7 @@ test("resize and mode changes settle an active panel transition", async ({
   await expect(page.locator(".genres-panel")).toBeVisible();
 });
 
-test("reduced motion and first load do not animate panel visibility", async ({
+test("@full reduced motion and first load do not animate panel visibility", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });

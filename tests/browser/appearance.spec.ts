@@ -140,7 +140,7 @@ test("starts ordinary and full scans from settings", async ({ page }) => {
     .toEqual([{ force: false }, { force: true }]);
 });
 
-test("selects numbered bundled backgrounds and persists the selection", async ({
+test("@full selects numbered bundled backgrounds and persists the selection", async ({
   page,
 }) => {
   await page.goto("/");
@@ -174,7 +174,7 @@ test("selects numbered bundled backgrounds and persists the selection", async ({
   await expect(preset).toHaveAttribute("aria-pressed", "false");
 });
 
-test("edits the accent code separately and shows compact desktop updates", async ({
+test("@full edits the accent code separately and shows compact desktop updates", async ({
   page,
 }) => {
   await page.goto("/");
@@ -206,7 +206,7 @@ test("edits the accent code separately and shows compact desktop updates", async
   await expect(olderNotes.getByRole("listitem").first()).toBeVisible();
 });
 
-test("desktop background chooser imports its selection without a path form", async ({
+test("@full desktop background chooser imports its selection without a path form", async ({
   page,
 }) => {
   await page.goto("/");

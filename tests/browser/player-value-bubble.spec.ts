@@ -90,7 +90,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("volume hover previews percentages without changing volume and hides on leave", async ({
+test("@full volume hover previews percentages without changing volume and hides on leave", async ({
   page,
 }) => {
   await page.goto("/");
@@ -118,7 +118,7 @@ test("volume hover previews percentages without changing volume and hides on lea
   await expect(bubble(page)).toBeHidden();
 });
 
-test("volume hover shows both endpoints with the entire bubble inside the viewport", async ({
+test("@full volume hover shows both endpoints with the entire bubble inside the viewport", async ({
   page,
 }) => {
   await page.goto("/");
@@ -136,7 +136,7 @@ test("volume hover shows both endpoints with the entire bubble inside the viewpo
   }
 });
 
-test("dragging the volume thumb updates its bubble and keeps it visible outside the track", async ({
+test("@full dragging the volume thumb updates its bubble and keeps it visible outside the track", async ({
   page,
 }) => {
   await page.goto("/");
@@ -167,7 +167,7 @@ test("dragging the volume thumb updates its bubble and keeps it visible outside 
   await expect(bubble(page)).toBeHidden();
 });
 
-test("disabled seek does not show a value bubble", async ({ page }) => {
+test("@full disabled seek does not show a value bubble", async ({ page }) => {
   await page.goto("/");
   await expect(
     page.getByRole("slider", { name: "Позиция воспроизведения", exact: true }),
@@ -256,7 +256,7 @@ test("seek accepts full-height clicks in wide and compact layouts", async ({
   }
 });
 
-test("seek hover previews formatted time without seeking a real audio track", async ({
+test("@full seek hover previews formatted time without seeking a real audio track", async ({
   page,
 }, info) => {
   await preparePulseAudio(page, info, 120);

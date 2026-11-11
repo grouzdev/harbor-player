@@ -254,7 +254,33 @@ test("recent filter reaches every catalog panel", async ({ page }) => {
       .toBe(true);
 });
 
-test("catalog filter layout fits wide and narrow windows", async ({
+test("catalog actions remain reachable in ordinary and compact windows", async ({
+  page,
+}) => {
+  await page.goto("/");
+  for (const width of [1600, 600]) {
+    await page.setViewportSize({ width, height: 900 });
+    const search = page.getByRole("button", { name: "Открыть поиск" });
+    await search.click();
+    await expect(page.getByLabel("Поиск музыки")).toBeVisible();
+    await page.getByLabel("Поиск музыки").press("Escape");
+    const fullscreen = page.getByRole("button", {
+      name: "Развернуть окно на весь экран",
+      exact: true,
+    });
+    await expect(fullscreen).toBeInViewport();
+    const settings = page
+      .locator(".catalog-sidebar")
+      .getByRole("button", { name: "Настройки", exact: true });
+    await expect(settings).toBeInViewport();
+    await settings.click();
+    await expect(page.getByRole("main", { name: "Настройки" })).toBeVisible();
+    await settings.click();
+    await expect(page.locator(".workspace")).toBeVisible();
+  }
+});
+
+test("@full catalog filter layout fits wide and narrow windows", async ({
   page,
 }, info) => {
   await page.goto("/");

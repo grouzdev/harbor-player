@@ -900,7 +900,43 @@ test("Pulse completes pending keyboard focus when a cached rank mounts after scr
   expect(await page.locator(".pulse-album").count()).toBeLessThan(50);
 });
 
-test("all 1000 busy-day ranks are keyboard reachable with bounded DOM", async ({
+test("Pulse keyboard navigation crosses a page boundary and restores focus", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 480, height: 700 });
+  const today = await historyToday(page);
+  await prepareHistory(page, 39, today, today, {
+    title: "Keyboard album",
+    artist: "Keyboard artist",
+    artistForAlbum: (album) => `Keyboard artist ${album}`,
+  });
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Открыть Пульс", exact: true })
+    .click();
+  const slider = page.getByRole("slider", { name: "Дата на таймлайне" });
+  await expect(page.locator('.pulse-album[data-rank="39"]')).toBeVisible();
+  await slider.focus();
+  await page.keyboard.press("Shift+Tab");
+  const active = page.locator(".pulse-album:focus");
+  // Initial roving entry is the first visible rank, not necessarily the last.
+  await expect(active).toHaveCount(1);
+  await page.keyboard.press("Home");
+  await expect(active).toHaveAttribute("data-rank", "0");
+  for (let rank = 1; rank <= 20; rank++) {
+    await page.keyboard.press("ArrowRight");
+    await expect(active).toHaveAttribute("data-rank", String(rank));
+  }
+  await page.keyboard.press("End");
+  await expect(active).toHaveAttribute("data-rank", "39");
+  await page.keyboard.press("Tab");
+  await expect(slider).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(active).toHaveAttribute("data-rank", "39");
+  expect(await page.locator(".pulse-album").count()).toBeLessThan(50);
+});
+
+test("@full all 1000 busy-day ranks are keyboard reachable with bounded DOM", async ({
   page,
 }) => {
   test.setTimeout(180_000);
@@ -1143,7 +1179,7 @@ test("Pulse pointer cancellation and capture loss leave the next drag usable", a
     .toBeLessThan(before);
 });
 
-test("Pulse geometry fits small, portrait and low viewports without hiding statistics", async ({
+test("@full Pulse geometry fits small, portrait and low viewports without hiding statistics", async ({
   page,
 }) => {
   await prepareHistory(page);
@@ -1359,7 +1395,7 @@ test("Pulse delayed prior navigation pages cannot restore the old date", async (
   }
 });
 
-test("Pulse long metadata fits narrow and wide windows with a custom accent", async ({
+test("@full Pulse long metadata fits narrow and wide windows with a custom accent", async ({
   page,
 }) => {
   const title =

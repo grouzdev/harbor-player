@@ -266,7 +266,7 @@ test("settings broadcast refreshes another paused window with empty outbox", asy
   await other.close();
 });
 
-test("real audio retries an offline checkpoint and excludes disabled playback after re-enable", async ({
+test("@full real audio retries an offline checkpoint and excludes disabled playback after re-enable", async ({
   page,
 }, info) => {
   const generation = await initializeCollection(page);

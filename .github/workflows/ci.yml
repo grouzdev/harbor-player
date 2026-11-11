@@ -6,6 +6,13 @@ on:
     branches:
       - main
       - "fix/ci-*"
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Test suite
+        type: choice
+        options: [full, fast]
+        default: full
 
 permissions:
   contents: read
@@ -24,16 +31,33 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Select test suite
+        id: suite
+        run: node scripts/select-test-mode.mjs
+        env:
+          CI_EVENT: ${{ github.event_name }}
+          CI_REF: ${{ github.ref }}
+          CI_REQUESTED_MODE: ${{ inputs.suite }}
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       - run: npm run fixtures
       - run: npm run format:check
       - run: npm run lint
       - run: npm run verify:tags
       - run: npm test
+        if: steps.suite.outputs.mode != 'fast'
+      - run: npm run test:unit:fast
+        if: steps.suite.outputs.mode == 'fast'
       # Build includes typecheck; reuse this output for browsers and Electron.
       - run: npm run build
       - run: npm run test:e2e:built
+        if: steps.suite.outputs.mode != 'fast'
+      - run: npm run test:e2e:fast:built
+        if: steps.suite.outputs.mode == 'fast'
       - run: npm run desktop:pack:built
+        if: steps.suite.outputs.mode != 'fast'
       - run: npm run test:desktop:smoke
+        if: steps.suite.outputs.mode != 'fast'
       - name: Preserve browser evidence
         if: always()
         uses: actions/upload-artifact@v4
