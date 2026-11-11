@@ -27,12 +27,12 @@ jobs:
       - run: npm run fixtures
       - run: npm run format:check
       - run: npm run lint
-      - run: npm run typecheck
       - run: npm run verify:tags
       - run: npm test
-      - run: npm run test:e2e:smoke
-      - run: npm run test:e2e
-      - run: npm run desktop:pack
+      # Build includes typecheck; reuse this output for browsers and Electron.
+      - run: npm run build
+      - run: npm run test:e2e:built
+      - run: npm run desktop:pack:built
       - run: npm run test:desktop:smoke
       - name: Preserve browser evidence
         if: always()
