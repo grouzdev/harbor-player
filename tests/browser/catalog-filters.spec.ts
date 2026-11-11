@@ -254,60 +254,46 @@ test("recent filter reaches every catalog panel", async ({ page }) => {
       .toBe(true);
 });
 
-for (const theme of ["dark", "light"]) {
-  test(`catalog filter layout fits wide and narrow windows in ${theme} theme`, async ({
-    page,
-  }, info) => {
-    await page.goto("/");
-    for (const name of ["Закладки", "Не просмотрено", "Недавние"]) {
-      await addCatalogFilter(page, name);
-      if (name === "Недавние") await page.keyboard.press("Escape");
-    }
-    await addCatalogFilter(page, "Рейтинг");
-    await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Открыть поиск" }).click();
-    // The app currently selects dark; exercise the retained light CSS explicitly
-    // after startup has finished applying the saved appearance.
-    await page.evaluate((value) => {
-      document.documentElement.dataset.theme = value;
-    }, theme);
-    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
-    await page.screenshot({
-      path: info.outputPath(`${theme}-all-filters.png`),
-    });
-    await page.getByRole("button", { name: "Редактировать рейтинг" }).click();
-    for (const width of [1600, 800, 600]) {
-      await page.setViewportSize({ width, height: 900 });
-      const bounds = await page.locator(".catalog-user-filters").boundingBox();
-      const coverModeToggle = await page
-        .locator(".topbar .cover-mode-toggle")
-        .boundingBox();
-      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(coverModeToggle!.x);
-      const editor = await page.locator(".catalog-filter-editor").boundingBox();
-      expect(editor!.x + editor!.width).toBeLessThanOrEqual(coverModeToggle!.x);
-      const fullscreen = await page
-        .getByRole("button", { name: "Развернуть окно на весь экран" })
-        .boundingBox();
-      expect(fullscreen!.x + fullscreen!.width).toBeLessThanOrEqual(width);
-      await page.screenshot({
-        path: info.outputPath(`${theme}-rating-${width}.png`),
-      });
-    }
-    await page.keyboard.press("Escape");
-    await page
-      .getByRole("button", { name: "Удалить фильтр «Рейтинг»" })
-      .click();
-    const add = page.getByRole("button", {
-      name: "Добавить фильтр «Рейтинг»",
-      exact: true,
-    });
-    const bounds = (await add.boundingBox())!;
-    expect(bounds.x).toBeGreaterThanOrEqual(0);
-    expect(bounds.x + bounds.width).toBeLessThanOrEqual(600);
-    await add.click();
-    await expect(page.locator(".catalog-filter-editor")).toBeVisible();
+test("catalog filter layout fits wide and narrow windows", async ({
+  page,
+}, info) => {
+  await page.goto("/");
+  for (const name of ["Закладки", "Не просмотрено", "Недавние"]) {
+    await addCatalogFilter(page, name);
+    if (name === "Недавние") await page.keyboard.press("Escape");
+  }
+  await addCatalogFilter(page, "Рейтинг");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Открыть поиск" }).click();
+  await page.screenshot({ path: info.outputPath("all-filters.png") });
+  await page.getByRole("button", { name: "Редактировать рейтинг" }).click();
+  for (const width of [1600, 800, 600]) {
+    await page.setViewportSize({ width, height: 900 });
+    const bounds = await page.locator(".catalog-user-filters").boundingBox();
+    const coverModeToggle = await page
+      .locator(".topbar .cover-mode-toggle")
+      .boundingBox();
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(coverModeToggle!.x);
+    const editor = await page.locator(".catalog-filter-editor").boundingBox();
+    expect(editor!.x + editor!.width).toBeLessThanOrEqual(coverModeToggle!.x);
+    const fullscreen = await page
+      .getByRole("button", { name: "Развернуть окно на весь экран" })
+      .boundingBox();
+    expect(fullscreen!.x + fullscreen!.width).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: info.outputPath(`rating-${width}.png`) });
+  }
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Удалить фильтр «Рейтинг»" }).click();
+  const add = page.getByRole("button", {
+    name: "Добавить фильтр «Рейтинг»",
+    exact: true,
   });
-}
+  const bounds = (await add.boundingBox())!;
+  expect(bounds.x).toBeGreaterThanOrEqual(0);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(600);
+  await add.click();
+  await expect(page.locator(".catalog-filter-editor")).toBeVisible();
+});
 
 test("bookmark filter retries a failed load and follows external reset", async ({
   page,

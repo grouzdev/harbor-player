@@ -86,7 +86,9 @@ test("settings panels allow native Tab navigation to actions", async ({
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
-test("icon buttons keep their geometry on hover", async ({ page }) => {
+test("topbar keeps the settings logo centered and its hover geometry stable", async ({
+  page,
+}) => {
   await page.goto("/");
   const button = page.getByRole("button", { name: "Открыть настройки" });
   const before = await button.boundingBox();
@@ -98,10 +100,6 @@ test("icon buttons keep their geometry on hover", async ({ page }) => {
   expect(after).not.toBeNull();
   expect(after!.width).toBeCloseTo(before!.width, 5);
   expect(after!.height).toBeCloseTo(before!.height, 5);
-});
-
-test("topbar keeps the settings logo centered", async ({ page }) => {
-  await page.goto("/");
 
   const topbar = page.locator(".topbar");
   const brand = page.locator(".topbar-brand");
