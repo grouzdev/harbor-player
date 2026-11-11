@@ -9,7 +9,7 @@ describe("conservative CI suite selection", () => {
     "src/client/styles/panels.css",
     "README.md",
     "docs/testing.md",
-    ".forma/test-suites.md",
+    "docs/test-suites.md",
     "website/src/pages/index.astro",
   ])("permits fast for %s", (file) => {
     expect(modeForPaths([file]).mode).toBe("fast");

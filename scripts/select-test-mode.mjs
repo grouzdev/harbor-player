@@ -32,7 +32,7 @@ export function modeForPaths(paths) {
   const safe = paths.every((file) => {
     if (!file || file.includes("..") || file.includes("\\")) return false;
     return (
-      /^(docs\/|\.forma\/|website\/)/.test(file) ||
+      /^(docs\/|website\/)/.test(file) ||
       /^(README\.md|concept\.md|LICENSE|THIRD_PARTY_NOTICES\.md)$/.test(file) ||
       /^src\/client\/(?:styles\/[^/]+\.css|styles\.css|fonts\.css)$/.test(
         file,
